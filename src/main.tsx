@@ -7,6 +7,8 @@ import { EntryChange, JournalEntry, entryLabels } from './components/JournalEntr
 import { useEntryDrag } from './components/useEntryDrag';
 import { useListMotion } from './components/useListMotion';
 import { ShortcutHelp } from './components/ShortcutHelp';
+import { SettingsDialog } from './components/SettingsDialog';
+import { Settings, loadSettings, saveSettings } from './settings';
 import { adjacentText, focusText, titleInput } from './components/focus';
 import { entryKindOrder, orderEntries, moveEntry, moveEntryByOffset } from './entries';
 import '@fontsource/ibm-plex-sans/400.css';
@@ -51,6 +53,8 @@ function App() {
   const [newEntryId, setNewEntryId] = useState<string | null>(null);
   const [moveAnnouncement, setMoveAnnouncement] = useState('');
   const [help, setHelp] = useState(false);
+  const [settings, setSettings] = useState<Settings>(loadSettings);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const dateInputRef = useRef<HTMLInputElement>(null);
   const focusEntryId = useRef<string | null>(null);
   const focusMoveEntryId = useRef<string | null>(null);
@@ -168,7 +172,8 @@ function App() {
     const kinds: Record<string, EntryKind> = { KeyA: 'task', KeyE: 'event', KeyN: 'note' };
     if (ctrl && event.code === 'KeyS') save();
     else if (event.key === 'F1' || (event.key === '?' && !typing && !event.ctrlKey && !event.altKey)) setHelp(open => !open);
-    else if (help) return;
+    else if (ctrl && event.key === ',') setSettingsOpen(open => !open);
+    else if (help || settingsOpen) return;
     else if (alt && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) navigate(shiftDate(date, event.key === 'ArrowLeft' ? -1 : 1));
     else if (alt && event.code === 'KeyH') navigate(today);
     else if (alt && event.code in kinds) addEntry(kinds[event.code], target.closest<HTMLElement>('[data-entry-id]')?.dataset.entryId);
@@ -213,7 +218,7 @@ function App() {
   const entryCount = ready ? day.entries.length : 0;
   // A trace whose plan is already stored has created its target entries; only unsaved plans can be taken back.
   const savedTraces = new Set(ready ? journal.cached(day.date)?.entries.filter(entry => entry.plan).map(entry => entry.id) : []);
-  return <div className="app">
+  return <div className={`app actions-${settings.actionLayout}`}>
     <aside className="sidebar" aria-label="Journal-Navigation">
       <div className="brand"><span className="brand-mark"><Icon name="journal" /></span><strong>Journal</strong></div>
       <div className="side-section-label">JOURNAL</div>
@@ -258,7 +263,7 @@ function App() {
                 <span className="visually-hidden" id="entry-reorder-help">Innerhalb desselben Typs und derselben Priorität ziehen oder mit Alt und den Pfeiltasten nach oben und unten verschieben. Das funktioniert auch direkt im Text.</span>
                 <span className="visually-hidden" role="status">{moveAnnouncement}</span>
                 {day.entries.length === 0 && <div className="empty"><Icon name="journal" /><p>Ein neuer Tag. Platz für deine Gedanken.</p><span>Füge oben eine Aufgabe, Notiz oder ein Ereignis hinzu.</span></div>}
-                {day.entries.map((entry, index) => <JournalEntry key={entry.id} entry={entry} day={day.date} onCreate={addEntry} traceSaved={savedTraces.has(entry.id)} onNavigate={navigate} isNew={entry.id === newEntryId} isOpen={entry.id === openEntryId} focusEntryId={focusEntryId} focusMoveEntryId={focusMoveEntryId}
+                {day.entries.map((entry, index) => <JournalEntry key={entry.id} layout={settings.actionLayout} entry={entry} day={day.date} onCreate={addEntry} traceSaved={savedTraces.has(entry.id)} onNavigate={navigate} isNew={entry.id === newEntryId} isOpen={entry.id === openEntryId} focusEntryId={focusEntryId} focusMoveEntryId={focusMoveEntryId}
                   isGroupStart={index > 0 && day.entries[index - 1].kind !== entry.kind}
                   canMoveUp={index > 0 && day.entries[index - 1].kind === entry.kind && day.entries[index - 1].priority === entry.priority}
                   canMoveDown={index < day.entries.length - 1 && day.entries[index + 1].kind === entry.kind && day.entries[index + 1].priority === entry.priority}
@@ -273,10 +278,11 @@ function App() {
 
       <footer className="statusbar">
         <div className={`save-status${dirty ? ' is-dirty' : ''}`} role="status"><span key={savedCount} className={`status-dot${savedCount && !dirty ? ' just-saved' : ''}`} />{busy ? 'Wird gespeichert …' : dirty ? 'Ungespeicherte Änderungen' : ready ? 'Gespeichert' : 'Wird geöffnet …'}</div>
-        <div className="statusbar-actions"><button type="button" className="help-button" aria-label="Tastenkürzel" aria-keyshortcuts="F1" onClick={() => setHelp(true)}><span>?</span><kbd>F1</kbd></button><span className="toolbar-separator" /><span className="status-count">{entryCount} {entryCount === 1 ? 'Eintrag' : 'Einträge'}</span><span className="toolbar-separator" /><button type="button" className="save" disabled={!ready || !dirty || busy} onClick={() => { void save(); }}><Icon name="save" /><span>Speichern</span><kbd>Strg S</kbd></button></div>
+        <div className="statusbar-actions"><button type="button" className="help-button settings-button" aria-label="Einstellungen" aria-keyshortcuts="Control+," title="Einstellungen · Strg ," onClick={() => setSettingsOpen(true)}><Icon name="settings" /></button><button type="button" className="help-button" aria-label="Tastenkürzel" aria-keyshortcuts="F1" onClick={() => setHelp(true)}><span>?</span><kbd>F1</kbd></button><span className="toolbar-separator" /><span className="status-count">{entryCount} {entryCount === 1 ? 'Eintrag' : 'Einträge'}</span><span className="toolbar-separator" /><button type="button" className="save" disabled={!ready || !dirty || busy} onClick={() => { void save(); }}><Icon name="save" /><span>Speichern</span><kbd>Strg S</kbd></button></div>
       </footer>
     </main>
     {help && <ShortcutHelp onClose={() => setHelp(false)} />}
+    {settingsOpen && <SettingsDialog settings={settings} onClose={() => setSettingsOpen(false)} onChange={next => { setOpenEntryId(null); setSettings(next); saveSettings(next); }} />}
   </div>;
 }
 

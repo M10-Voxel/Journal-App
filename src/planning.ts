@@ -71,3 +71,21 @@ export function typeDigit({ time, mode, pending }: ClockTyping, digit: number): 
   if (pending === null) return { time: formatTime(hour, digit), mode, pending: digit * 10 > 59 ? null : digit };
   return { time: formatTime(hour, pending * 10 + digit), mode, pending: null };
 }
+
+/** Every date from `a` to `b` (inclusive, in either order). */
+export function datesBetween(a: string, b: string): string[] {
+  const [from, to] = [a, b].sort();
+  const dates: string[] = [];
+  for (let value = from; value <= to; value = shiftDate(value, 1)) dates.push(value);
+  return dates;
+}
+/**
+ * The days picked for "Mehrere Tage": the range between two left-clicked days, with right-clicked days flipped
+ * (taken out inside the range, added outside it). The entry's own day is never a target.
+ */
+export function pickedDays(range: { from: string; to: string } | null, toggled: readonly string[], day: string): string[] {
+  const inRange = new Set(range ? datesBetween(range.from, range.to) : []);
+  for (const date of toggled) if (inRange.has(date)) inRange.delete(date); else inRange.add(date);
+  inRange.delete(day);
+  return [...inRange].sort();
+}

@@ -81,3 +81,11 @@ test('typing digits fills hours, then minutes, reading a second digit only when 
   assert.deepEqual(type('128'), { time:'12:08', mode:'minute', pending:null }, '8 cannot start minutes above 59.');
   assert.deepEqual(typeDigit({ time:'10:15', mode:'minute', pending:null }, 4), { time:'10:04', mode:'minute', pending:4 });
 });
+test('several days: a range from two points, with single days flipped out of it or added outside', async () => {
+  const { datesBetween, pickedDays } = await import('../src/planning.ts');
+  assert.deepEqual(datesBetween('2026-11-02', '2026-10-30'), ['2026-10-30', '2026-10-31', '2026-11-01', '2026-11-02']);
+  const range = { from:'2026-10-28', to:'2026-11-01' };
+  assert.deepEqual(pickedDays(range, [], '2026-10-28'), ['2026-10-29', '2026-10-30', '2026-10-31', '2026-11-01'], 'The entry\'s own day is never a target.');
+  assert.deepEqual(pickedDays(range, ['2026-10-30', '2026-11-05'], '2026-10-28'), ['2026-10-29', '2026-10-31', '2026-11-01', '2026-11-05']);
+  assert.deepEqual(pickedDays(null, ['2026-11-05'], '2026-10-28'), ['2026-11-05']);
+});
