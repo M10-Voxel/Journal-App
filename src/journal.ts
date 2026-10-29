@@ -1,8 +1,26 @@
 import { invoke } from '@tauri-apps/api/core';
 
 export type EntryKind = 'task' | 'event' | 'note';
-export interface Entry { id: string; kind: EntryKind; text: string; done: boolean; cancelled: boolean }
-export interface Day { date: string; title: string; body: string; revision: number; entries: Entry[] }
+export type PlanVia = 'tomorrow' | 'date' | 'days';
+/** One planned occurrence: the date and the ID of the entry that saving creates there. */
+export interface PlanTarget { date: string; id: string }
+/** Set on the original entry once it was planned away; it then stays behind as a trace. */
+export interface Plan { via: PlanVia; targets: PlanTarget[]; time: string | null; reminder: boolean }
+export interface Entry {
+  id: string; kind: EntryKind; text: string; done: boolean; cancelled: boolean; priority: boolean;
+  /** Optional `HH:MM` on the entry's own day. */
+  time?: string | null;
+  /** The user wants to be reminded. Stored only; notifications are not implemented yet. */
+  reminder?: boolean;
+  plan?: Plan | null;
+  /** Date of the trace this entry was planned from (read-only, derived by the backend). */
+  origin?: string | null;
+}
+export interface Day {
+  date: string; title: string; body: string; revision: number; entries: Entry[];
+  /** Other days a save changed: planned entries created there, linked entries removed. */
+  touched?: string[];
+}
 
 // Persisted state per date. This window is the only writer, so a cached day stays valid until it is saved here.
 const cache = new Map<string, Promise<Day>>();
@@ -26,28 +44,10 @@ export const journal = {
     const saved = await invoke<Day>('save_day', { day });
     cache.set(saved.date, Promise.resolve(saved));
     settled.set(saved.date, saved);
+    // Planned entries are created and linked entries removed on other days, so their cached state is outdated.
+    for (const date of saved.touched ?? []) if (date !== saved.date) { cache.delete(date); settled.delete(date); }
     return saved;
   },
 };
 
-const longFormat = new Intl.DateTimeFormat('de-DE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-const weekdayFormat = new Intl.DateTimeFormat('de-DE', { weekday: 'short' });
-const noon = (date: string) => { const [year, month, day] = date.split('-').map(Number); return new Date(year, month - 1, day, 12); };
-
-export function localDate(date = new Date()): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
-export function shiftDate(date: string, amount: number): string {
-  const value = noon(date);
-  value.setDate(value.getDate() + amount);
-  return localDate(value);
-}
-export function formatDate(date: string): string { return longFormat.format(noon(date)); }
-export function formatWeekday(date: string): string { return weekdayFormat.format(noon(date)).slice(0, 2); }
-export function weekDates(date: string): string[] {
-  const monday = shiftDate(date, -((noon(date).getDay() + 6) % 7));
-  return Array.from({ length: 7 }, (_, index) => shiftDate(monday, index));
-}
+export { formatDate, formatShortDate, formatWeekday, localDate, shiftDate, weekDates } from './dates';

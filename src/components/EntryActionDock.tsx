@@ -1,57 +1,101 @@
 import { useLayoutEffect, useRef } from 'react';
+import type { CSSProperties, FocusEvent } from 'react';
 import type { Entry } from '../journal';
-import { Icon } from './Icon';
+import { Icon, IconName, priorityIcon, traceIcon } from './Icon';
+import { PlanCalendar } from './PlanCalendar';
+import { formatShortDate } from '../dates';
+import { Schedule, canPlan, planChange, tomorrowChange } from '../planning';
 
-type TaskStatus = 'open' | 'done' | 'cancelled';
+export type TaskStatus = 'open' | 'done' | 'cancelled';
+export type EntryPreview = TaskStatus | 'remove' | 'up' | 'down' | 'priority' | 'tomorrow' | 'unplan';
+export type PlanUpdate = Partial<Pick<Entry, 'time' | 'reminder' | 'plan'>>;
 
-export function EntryActionDock({ entry, label, isOpen, canMoveUp, canMoveDown, onStatusChange, onMove, onRemove, onClose }: {
-  entry: Entry; label: string; isOpen: boolean; canMoveUp: boolean; canMoveDown: boolean;
-  onStatusChange: (status: TaskStatus) => void; onMove: (offset: -1 | 1) => void; onRemove: () => void; onClose: () => void;
+const statusActions: { status: TaskStatus; icon: IconName; label: string; tip: string }[] = [
+  { status: 'open', icon: 'task', label: 'Wieder öffnen', tip: 'Offen' },
+  { status: 'done', icon: 'done', label: 'Als erledigt markieren', tip: 'Erledigt · Alt D' },
+  { status: 'cancelled', icon: 'cancel', label: 'Aufgabe abbrechen', tip: 'Abgebrochen · Alt X' },
+];
+const navigationKeys = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'];
+
+// A compact floating toolbar under the entry. It is icon-only: hovering or keyboard-focusing an action previews its effect on the entry itself.
+// Choosing "Datum" swaps the pill for a calendar in place; traces (planned-away entries) get jump/undo instead of status and planning.
+export function EntryActionDock({ entry, day, label, isOpen, planning, plannerView, traceSaved, canMoveUp, canMoveDown, onStatusChange, onPriorityChange, onMove, onRemove, onPreview, onPlanDatePreview, onPlanningChange, onPlan, onNavigate }: {
+  entry: Entry; day: string; label: string; isOpen: boolean; planning: boolean; plannerView: 'date' | 'time'; traceSaved: boolean; canMoveUp: boolean; canMoveDown: boolean;
+  onStatusChange: (status: TaskStatus) => void; onPriorityChange: () => void; onMove: (offset: -1 | 1) => void; onRemove: () => void; onPreview: (preview: EntryPreview | null) => void;
+  onPlanDatePreview: (date: string | null) => void; onPlanningChange: (planning: boolean) => void; onPlan: (change: PlanUpdate) => void; onNavigate: (date: string) => void;
 }) {
   const dockRef = useRef<HTMLDivElement>(null);
+  const wasPlanning = useRef(false);
+  const trace = entry.plan;
   const status: TaskStatus = entry.done ? 'done' : entry.cancelled ? 'cancelled' : 'open';
+  let order = 0;
+  const stagger = (): CSSProperties => ({ '--i': order++ } as CSSProperties);
+  const previewing = (preview: EntryPreview) => ({
+    // Pointer *movement* starts a preview, so a toolbar opening under a resting cursor does not fake one.
+    onPointerMove: () => onPreview(preview),
+    onPointerLeave: () => onPreview(null),
+    onFocus: (event: FocusEvent<HTMLButtonElement>) => { if (event.currentTarget.matches(':focus-visible')) onPreview(preview); },
+    onBlur: () => onPreview(null),
+  });
 
   useLayoutEffect(() => {
-    if (!isOpen) return;
-    const primary = dockRef.current?.querySelector<HTMLButtonElement>('[data-primary-action="true"]')
-      ?? dockRef.current?.querySelector<HTMLButtonElement>('.dock-order button:not(:disabled)')
-      ?? dockRef.current?.querySelector<HTMLButtonElement>('.dock-close');
-    primary?.focus({ preventScroll: true });
+    const dock = dockRef.current;
+    if (!isOpen || !dock) return;
+    const primary = dock.querySelector<HTMLButtonElement>('[data-primary-action="true"]');
+    (primary ?? dock).focus({ preventScroll: true });
+    dock.scrollIntoView({ block: 'nearest', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
   }, [isOpen]);
+  useLayoutEffect(() => {
+    if (wasPlanning.current && !planning && isOpen) dockRef.current?.querySelector<HTMLButtonElement>('.dock-plan-date')?.focus({ preventScroll: true });
+    wasPlanning.current = planning;
+  }, [planning]);
 
-  return <div ref={dockRef} className={`entry-dock-shell${isOpen ? ' is-open' : ''}`} inert={!isOpen} aria-hidden={!isOpen} role="group" aria-label={`Aktionen für ${label}`} onKeyDown={event => {
-    if (event.altKey || !['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+  if (planning) return <div ref={dockRef} className={`entry-dock-shell${isOpen ? ' is-open' : ''}`} inert={!isOpen} aria-hidden={!isOpen}>
+    <PlanCalendar day={day} initialView={plannerView} initial={{ date: day, time: entry.time ?? null, reminder: entry.reminder ?? false }} onPreview={onPlanDatePreview}
+      onCancel={() => onPlanningChange(false)} onConfirm={(date: string, schedule: Schedule) => onPlan(planChange(day, [date], schedule))} />
+  </div>;
+
+  return <div ref={dockRef} className={`entry-dock-shell${isOpen ? ' is-open' : ''}`} inert={!isOpen} aria-hidden={!isOpen} role="toolbar" aria-label={`Aktionen für ${label}`} tabIndex={-1} onKeyDown={event => {
+    if (event.altKey || !navigationKeys.includes(event.key) || (event.target as HTMLElement).tagName === 'INPUT') return;
     event.preventDefault();
-    const scope = event.key === 'ArrowLeft' || event.key === 'ArrowRight' ? (event.target as HTMLElement).closest('.status-track') ?? dockRef.current : dockRef.current;
-    const buttons = Array.from(scope?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') ?? []);
+    const buttons = Array.from(dockRef.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') ?? []);
     const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
-    const delta = event.key === 'ArrowUp' || event.key === 'ArrowLeft' ? -1 : 1;
-    buttons[(index + delta + buttons.length) % buttons.length]?.focus();
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1
+      : index + (event.key === 'ArrowUp' || event.key === 'ArrowLeft' ? -1 : 1);
+    buttons[(next + buttons.length) % buttons.length]?.focus();
   }}>
-    <div className="entry-dock-clip"><div className="entry-dock">
-      <div className="dock-command-row">
-        {entry.kind === 'task' ? <div className="status-track" data-status={status} role="group" aria-label="Status der Aufgabe">
-          <button type="button" aria-label="Wieder öffnen" aria-pressed={status === 'open'} data-primary-action={status !== 'open'} onClick={() => onStatusChange('open')}><Icon name="task" /><span>Offen</span></button>
-          <button type="button" aria-label="Als erledigt markieren" aria-pressed={status === 'done'} data-primary-action={status === 'open'} onClick={() => onStatusChange('done')}><Icon name="done" /><span>Erledigt</span></button>
-          <button type="button" aria-label="Aufgabe abbrechen" aria-pressed={status === 'cancelled'} onClick={() => onStatusChange('cancelled')}><Icon name="cancel" /><span>Abgebrochen</span></button>
-        </div> : <span className="dock-kind"><Icon name={entry.kind} />{label}</span>}
-        <div className="dock-utilities">
-          <div className="dock-order" role="group" aria-label="Reihenfolge">
-            <button type="button" aria-label="Nach oben" title="Nach oben · Alt + ↑" disabled={!canMoveUp} onClick={() => onMove(-1)}><Icon name="up" /></button>
-            <button type="button" aria-label="Nach unten" title="Nach unten · Alt + ↓" disabled={!canMoveDown} onClick={() => onMove(1)}><Icon name="down" /></button>
-          </div>
-          <span className="dock-divider" />
-          <button type="button" className="dock-remove" aria-label="Eintrag entfernen" title="Eintrag entfernen" onClick={onRemove}><Icon name="trash" /></button>
-          <button type="button" className="dock-close" aria-label="Aktionen schließen" title="Aktionen schließen · Escape" onClick={onClose}><kbd>Esc</kbd></button>
+    <div className="entry-dock">
+      {trace && <>
+        <button type="button" className="dock-jump" style={stagger()} aria-label={`Zum ${formatShortDate(trace.targets[0].date)} springen`} data-tip={formatShortDate(trace.targets[0].date)} data-primary-action="true" onClick={() => onNavigate(trace.targets[0].date)}><Icon name="jump" /></button>
+        {!traceSaved && <button type="button" className="dock-unplan" style={stagger()} aria-label="Planung zurücknehmen" data-tip="Zurücknehmen" {...previewing('unplan')} onClick={() => onPlan({ plan: null })}><Icon name="undo" /></button>}
+        <span className="dock-divider" />
+      </>}
+      {entry.kind === 'task' && !trace && <>
+        <div className="status-track" data-status={status} role="group" aria-label="Status der Aufgabe">
+          {statusActions.map(action => <button key={action.status} type="button" style={stagger()} aria-label={action.label} data-tip={action.tip} aria-pressed={status === action.status}
+            data-primary-action={action.status === (status === 'open' ? 'done' : 'open')} {...previewing(action.status)} onClick={() => onStatusChange(action.status)}>
+            <Icon name={action.icon} />
+          </button>)}
         </div>
+        <span className="dock-divider" />
+      </>}
+      {!trace && <><button type="button" className="dock-priority" style={stagger()} aria-label={entry.priority ? 'Priorität entfernen' : 'Als Priorität markieren'} data-tip={entry.priority ? 'Priorität entfernen · Alt P' : 'Hohe Priorität · Alt P'} aria-pressed={entry.priority}
+        {...previewing('priority')} onClick={onPriorityChange}><Icon name={priorityIcon(entry.kind)} /></button>
+      <span className="dock-divider" /></>}
+      <div className="dock-order" role="group" aria-label="Reihenfolge">
+        <button type="button" style={stagger()} aria-label="Nach oben" data-tip="Alt ↑" disabled={!canMoveUp} {...previewing('up')} onClick={() => onMove(-1)}><Icon name="up" /></button>
+        <button type="button" style={stagger()} aria-label="Nach unten" data-tip="Alt ↓" disabled={!canMoveDown} {...previewing('down')} onClick={() => onMove(1)}><Icon name="down" /></button>
       </div>
-      {entry.kind !== 'note' && <div className="dock-planning" role="group" aria-label="Planung – demnächst verfügbar">
-        <span className="planning-label">Planen</span>
-        {entry.kind === 'task' && <button type="button" disabled title="Auf morgen verschieben – demnächst verfügbar"><Icon name="right" />Morgen</button>}
-        <button type="button" disabled title="Datum auswählen – demnächst verfügbar"><Icon name="calendar" />Datum</button>
-        <button type="button" disabled title="Für mehrere Tage planen – demnächst verfügbar"><Icon name="date-range" />Mehrere Tage</button>
-        <span className="planning-soon">Demnächst</span>
-      </div>}
-    </div></div>
+      {canPlan(entry) && <>
+        <span className="dock-divider" />
+        <div className="dock-planning" role="group" aria-label="Planen">
+          {entry.kind === 'task' && <button type="button" className="dock-plan-tomorrow" style={stagger()} aria-label="Auf morgen verschieben" data-tip="Morgen · Alt M" {...previewing('tomorrow')} onClick={() => onPlan(tomorrowChange(entry, day))}><Icon name="migrated" /></button>}
+          <button type="button" className="dock-plan-date" style={stagger()} aria-label="Datum und Uhrzeit planen" aria-haspopup="dialog" data-tip="Planen · Alt T" onClick={() => onPlanningChange(true)}><Icon name="calendar" /></button>
+          <button type="button" className="dock-plan-days" style={stagger()} disabled aria-label="Mehrere Tage" data-tip="Mehrere Tage · bald"><Icon name={traceIcon({ kind: entry.kind, plan: { via: 'days', targets: [], time: null, reminder: false } })} /></button>
+        </div>
+      </>}
+      <span className="dock-divider" />
+      <button type="button" className="dock-remove" style={stagger()} aria-label="Eintrag entfernen" data-tip={trace ? `Entfernen · auch am ${trace.targets.map(target => formatShortDate(target.date)).join(', ')}` : entry.origin ? `Entfernen · auch die Spur am ${formatShortDate(entry.origin)}` : 'Entfernen · Alt Entf'} {...previewing('remove')} onClick={onRemove}><Icon name="trash" /></button>
+    </div>
   </div>;
 }
