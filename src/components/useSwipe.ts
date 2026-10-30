@@ -11,8 +11,12 @@ export type SwipeActions<P> = Record<SwipeDirection, SwipeAction<P>[]>;
 /** Pointer distance for each stage. */
 export const swipeStages: Record<'x' | 'y', number[]> = { x: [56, 125, 195], y: [30, 72] };
 const limit = 250;
+/** How far a sideways drag must stray up or down from the row before the vertical actions take over. */
+export const crossover = 40;
 
 export const directionOf = (axis: 'x' | 'y', distance: number): SwipeDirection => axis === 'x' ? distance > 0 ? 'right' : 'left' : distance > 0 ? 'down' : 'up';
+/** Whether a drag of `distance` along `axis` points to a direction that has any action at all. */
+const leadsSomewhere = <P>(actions: SwipeActions<P>, axis: 'x' | 'y', distance: number) => distance !== 0 && actions[directionOf(axis, distance)].length > 0;
 
 /** The action a drag of `distance` px along `axis` reaches, or null below the first stage. */
 export function swipeTarget<P>(actions: SwipeActions<P>, axis: 'x' | 'y', distance: number): { action: SwipeAction<P>; stage: number } | null {
@@ -29,7 +33,8 @@ export function resist(axis: 'x' | 'y', distance: number): number {
 }
 
 // Swipe gestures on an entry: drag its symbol in one of four directions (or swipe sideways on a trackpad) and release to act.
-// The axis locks after the first few pixels. A press without movement is a tap, however long it is held.
+// The axis locks after the first few pixels; a sideways drag still turns vertical once it strays `crossover` px up or down
+// (and back again). Directions without an action don't move. A press without movement is a tap, however long it is held.
 export function useSwipe<P>({ actions, onTap, onPreview }: { actions: SwipeActions<P>; onTap: () => void; onPreview: (preview: P | null) => void }) {
   const [axis, setAxis] = useState<'x' | 'y'>('x');
   const [distance, setDistance] = useState(0);
@@ -51,6 +56,7 @@ export function useSwipe<P>({ actions, onTap, onPreview }: { actions: SwipeActio
   function finish(reached: { action: SwipeAction<P> } | null, along: 'x' | 'y', signed: number) {
     latest.current.onPreview(null);
     wheelDistance.current = 0;
+    if (!reached && !signed) { setPhase('idle'); return; }
     if (reached?.action.leaves) {
       setPhase('leaving');
       setDistance(Math.sign(signed) * (along === 'x' ? 900 : 60));
@@ -76,7 +82,8 @@ export function useSwipe<P>({ actions, onTap, onPreview }: { actions: SwipeActio
   }
 
   return {
-    distance, axis, phase, target, direction: direction.current,
+    // Held at the start (or towards a direction without actions), nothing shows yet: the symbol stays as it is.
+    distance, axis, phase: phase === 'dragging' && !distance ? 'idle' : phase, target, direction: direction.current,
     /** Visual offset of the handle (the symbol); the row itself stays where it is. */
     offset: { x: axis === 'x' ? resist('x', distance) : 0, y: axis === 'y' ? resist('y', distance) : 0 },
     trigger,
@@ -89,14 +96,19 @@ export function useSwipe<P>({ actions, onTap, onPreview }: { actions: SwipeActio
       onPointerMove(event: ReactPointerEvent<HTMLElement>) {
         const drag = start.current;
         if (!drag || drag.pointer !== event.pointerId) return;
+        const { actions } = latest.current;
         const dx = event.clientX - drag.x, dy = event.clientY - drag.y;
         if (!drag.axis) {
           if (Math.hypot(dx, dy) < 7) return;
-          drag.axis = Math.abs(dx) >= Math.abs(dy) ? 'x' : 'y';
-          setAxis(drag.axis);
+          const main = Math.abs(dx) >= Math.abs(dy) ? 'x' : 'y', other = main === 'x' ? 'y' : 'x';
+          // Leaning towards a direction without actions picks the other axis if that one leads somewhere.
+          drag.axis = !leadsSomewhere(actions, main, main === 'x' ? dx : dy) && leadsSomewhere(actions, other, other === 'x' ? dx : dy) ? other : main;
         }
+        const along = drag.axis === 'x' && Math.abs(dy) >= crossover && leadsSomewhere(actions, 'y', dy) ? 'y' : drag.axis;
+        const moved = along === 'x' ? dx : dy;
+        setAxis(along);
         setPhase('dragging');
-        setDistance(drag.axis === 'x' ? dx : dy);
+        setDistance(leadsSomewhere(actions, along, moved) ? moved : 0);
       },
       onPointerUp(event: ReactPointerEvent<HTMLElement>) {
         const drag = start.current;
@@ -113,6 +125,7 @@ export function useSwipe<P>({ actions, onTap, onPreview }: { actions: SwipeActio
       setAxis('x');
       setPhase('dragging');
       wheelDistance.current -= deltaX;
+      if (!leadsSomewhere(latest.current.actions, 'x', wheelDistance.current)) wheelDistance.current = 0;
       setDistance(wheelDistance.current);
       window.clearTimeout(wheelTimer.current);
       wheelTimer.current = window.setTimeout(release, 160);

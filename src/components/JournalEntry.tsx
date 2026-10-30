@@ -194,12 +194,12 @@ export const JournalEntry = memo(function JournalEntry({ layout, entry, day, tra
       left: [removeAction], up: [], down: [],
     };
     const right: SwipeAction<EntryPreview>[] = canPlan(entry) ? [
-      { id: 'tomorrow', label: 'morgen', icon: 'migrated', color: '#C2DCE9', preview: 'tomorrow', run: () => plan(tomorrowChange(entry, day)) },
+      { id: 'tomorrow', label: 'morgen', icon: 'plan-tomorrow', color: '#C2DCE9', preview: 'tomorrow', run: () => plan(tomorrowChange(entry, day)) },
       { id: 'plan', label: 'planen', icon: 'calendar', color: '#569EFF', run: () => openPlanner('date') },
-      { id: 'days', label: 'mehrere tage', icon: traceIcon({ kind: entry.kind, plan: { via: 'days', targets: [], time: null, reminder: false } }), color: '#C69BFF', run: () => openPlanner('days') },
+      { id: 'days', label: 'mehrere tage', icon: 'plan-days', color: '#C69BFF', run: () => openPlanner('days') },
     ] : [];
     const reopen: SwipeAction<EntryPreview> = { id: 'open', label: 'wieder offen', icon: 'task', color: '#E2D7B7', preview: 'open', run: () => changeStatus('open') };
-    const done: SwipeAction<EntryPreview> = { id: 'done', label: 'erledigt', icon: 'done', color: '#76D982', preview: 'done', run: () => changeStatus('done') };
+    const done: SwipeAction<EntryPreview> = { id: 'done', label: 'erledigt', icon: 'check', color: '#76D982', preview: 'done', run: () => changeStatus('done') };
     const cancelled: SwipeAction<EntryPreview> = { id: 'cancelled', label: 'abbrechen', icon: 'cancel', color: '#AD4075', preview: 'cancelled', run: () => changeStatus('cancelled') };
     const down = status === 'open' ? [done, cancelled] : status === 'done' ? [reopen, cancelled] : status === 'cancelled' ? [reopen, done] : [];
     return { right, left: [removeAction], up: [priorityAction], down };

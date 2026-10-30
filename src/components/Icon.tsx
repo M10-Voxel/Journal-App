@@ -1,6 +1,6 @@
 import type { Entry, EntryKind } from '../journal';
 
-export type IconName = 'journal' | 'calendar' | 'date-range' | 'left' | 'right' | 'up' | 'down' | 'grip' | 'offline' | 'save' | 'task' | 'note' | 'event' | 'done' | 'cancel' | 'trash' | 'tomorrow' | 'priority' | 'priority-event' | 'priority-note'
+export type IconName = 'journal' | 'calendar' | 'plan-tomorrow' | 'plan-days' | 'date-range' | 'left' | 'right' | 'up' | 'down' | 'grip' | 'offline' | 'save' | 'task' | 'note' | 'event' | 'done' | 'cancel' | 'trash' | 'tomorrow' | 'priority' | 'priority-event' | 'priority-note'
   | 'migrated' | 'migrated-event' | 'scheduled' | 'scheduled-event' | 'scheduled-multi' | 'scheduled-multi-event' | 'clock' | 'bell' | 'check' | 'undo' | 'jump' | 'settings' | 'search';
 
 export const priorityIcon = (kind: EntryKind): IconName => kind === 'event' ? 'priority-event' : kind === 'note' ? 'priority-note' : 'priority';
@@ -18,6 +18,9 @@ export function Icon({ name, className = '' }: { name: IconName; className?: str
   return <svg className={`icon ${className}`} data-icon={name} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     {name === 'journal' && <><path d="M4 2.5h8.5v11H4a1.5 1.5 0 0 1-1.5-1.5V4A1.5 1.5 0 0 1 4 2.5Z" /><path d="M5.5 2.5v11M8 6h2M8 8.5h2" /></>}
     {name === 'calendar' && <><rect x="2.5" y="3.5" width="11" height="10" rx="1.5" /><path d="M5 2v3M11 2v3M2.5 7h11M5.5 10h2" /></>}
+    {/* The planning actions share the calendar: an arrow to the next day, a span over several days. */}
+    {name === 'plan-tomorrow' && <><rect x="2.5" y="3.5" width="11" height="10" rx="1.5" /><path d="M5 2v3M11 2v3M2.5 7h11M5 10.25h5.5M8.75 8.5l1.75 1.75L8.75 12" /></>}
+    {name === 'plan-days' && <><rect x="2.5" y="3.5" width="11" height="10" rx="1.5" /><path d="M5 2v3M11 2v3M2.5 7h11M5 9v2.5M11 9v2.5M5 10.25h6" /></>}
     {name === 'date-range' && <><path d="M3 5.5v-2h10v2M3 10.5v2h10v-2M2 8h12" /><path d="m4 6-2 2 2 2M12 6l2 2-2 2" /></>}
     {name === 'left' && <path d="m9.5 4-4 4 4 4" />}
     {name === 'right' && <path d="m6.5 4 4 4-4 4" />}

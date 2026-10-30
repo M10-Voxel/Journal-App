@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef } from 'react';
 import type { CSSProperties, FocusEvent } from 'react';
 import type { Entry } from '../journal';
-import { Icon, IconName, priorityIcon, traceIcon } from './Icon';
+import { Icon, IconName, priorityIcon } from './Icon';
 import { PlanCalendar } from './PlanCalendar';
 import type { PlannerView } from './PlanCalendar';
 import { ActionPalette } from './ActionPalette';
@@ -20,7 +20,7 @@ export type ActionLayout = 'bar' | 'orbit' | 'palette' | 'inline' | 'swipe';
 const statusActions: { status: TaskStatus; icon: IconName; label: string; tip: string; angle: number; bar: number }[] = [
   { status: 'cancelled', icon: 'cancel', label: 'Aufgabe abbrechen', tip: 'Abgebrochen · Alt X', angle: 135, bar: 2 },
   { status: 'open', icon: 'task', label: 'Wieder öffnen', tip: 'Offen', angle: 180, bar: 0 },
-  { status: 'done', icon: 'done', label: 'Als erledigt markieren', tip: 'Erledigt · Alt D', angle: 225, bar: 1 },
+  { status: 'done', icon: 'check', label: 'Als erledigt markieren', tip: 'Erledigt · Alt D', angle: 225, bar: 1 },
 ];
 const orbitRadius = 44;
 /** Position on the orbit around the entry symbol; 0° is right, 90° down (screen coordinates). */
@@ -76,9 +76,9 @@ export function EntryActionDock({ layout, swipeActions, onClose, entry, day, lab
     </button>)}
   </div>;
   const planningGroup = () => <div className="dock-planning" role="group" aria-label="Planen">
-    {entry.kind === 'task' && <button type="button" className="dock-plan-tomorrow" style={stagger()} aria-label="Auf morgen verschieben" data-tip="Morgen · Alt M" {...previewing('tomorrow')} onClick={() => onPlan(tomorrowChange(entry, day))}><Icon name="migrated" /></button>}
+    {entry.kind === 'task' && <button type="button" className="dock-plan-tomorrow" style={stagger()} aria-label="Auf morgen verschieben" data-tip="Morgen · Alt M" {...previewing('tomorrow')} onClick={() => onPlan(tomorrowChange(entry, day))}><Icon name="plan-tomorrow" /></button>}
     <button type="button" className="dock-plan-date" style={stagger()} aria-label="Datum und Uhrzeit planen" aria-haspopup="dialog" data-tip="Planen · Alt T" onClick={() => onPlanningChange(true)}><Icon name="calendar" /></button>
-    <button type="button" className="dock-plan-days" style={stagger()} aria-label="Mehrere Tage" aria-haspopup="dialog" data-tip="Mehrere Tage · Alt ⇧ T" onClick={() => onPlanningChange(true, 'days')}><Icon name={traceIcon({ kind: entry.kind, plan: { via: 'days', targets: [], time: null, reminder: false } })} /></button>
+    <button type="button" className="dock-plan-days" style={stagger()} aria-label="Mehrere Tage" aria-haspopup="dialog" data-tip="Mehrere Tage · Alt ⇧ T" onClick={() => onPlanningChange(true, 'days')}><Icon name="plan-days" /></button>
   </div>;
   const isTask = entry.kind === 'task' && !trace;
   // Inline groups reuse the palette's actions, with short, lower-case words as they read in a sentence.
@@ -98,15 +98,15 @@ export function EntryActionDock({ layout, swipeActions, onClose, entry, day, lab
       ...!traceSaved ? [{ id: 'unplan', label: 'Planung zurücknehmen', icon: 'undo' as const, keywords: 'rückgängig undo zurück', preview: 'unplan' as const, run: () => onPlan({ plan: null }) }] : [],
     ] : [],
     ...isTask ? [
-      { id: 'done', label: 'Erledigt', icon: 'done' as const, keywords: 'fertig done abhaken haken', hint: 'Alt D', preview: 'done' as const, current: status === 'done', run: () => onStatusChange('done') },
+      { id: 'done', label: 'Erledigt', icon: 'check' as const, keywords: 'fertig done abhaken haken', hint: 'Alt D', preview: 'done' as const, current: status === 'done', run: () => onStatusChange('done') },
       { id: 'cancelled', label: 'Abbrechen', icon: 'cancel' as const, keywords: 'abgebrochen streichen cancel verwerfen', hint: 'Alt X', preview: 'cancelled' as const, current: status === 'cancelled', run: () => onStatusChange('cancelled') },
       { id: 'open', label: 'Wieder öffnen', icon: 'task' as const, keywords: 'offen reopen zurücksetzen', preview: 'open' as const, current: status === 'open', run: () => onStatusChange('open') },
     ] : [],
     ...!trace ? [{ id: 'priority', label: entry.priority ? 'Priorität entfernen' : 'Hohe Priorität', icon: priorityIcon(entry.kind), keywords: 'wichtig stern priority markieren', hint: 'Alt P', preview: 'priority' as const, run: onPriorityChange }] : [],
     ...canPlan(entry) ? [
-      ...entry.kind === 'task' ? [{ id: 'tomorrow', label: 'Auf morgen', icon: 'migrated' as const, keywords: 'morgen verschieben tomorrow später', hint: 'Alt M', preview: 'tomorrow' as const, run: () => onPlan(tomorrowChange(entry, day)) }] : [],
+      ...entry.kind === 'task' ? [{ id: 'tomorrow', label: 'Auf morgen', icon: 'plan-tomorrow' as const, keywords: 'morgen verschieben tomorrow später', hint: 'Alt M', preview: 'tomorrow' as const, run: () => onPlan(tomorrowChange(entry, day)) }] : [],
       { id: 'plan', label: 'Planen …', icon: 'calendar' as const, keywords: 'datum termin kalender uhrzeit zeit erinnerung schedule', hint: 'Alt T', stays: true, run: () => onPlanningChange(true) },
-      { id: 'days', label: 'Mehrere Tage', icon: traceIcon({ kind: entry.kind, plan: { via: 'days', targets: [], time: null, reminder: false } }), keywords: 'zeitraum tage wiederholen woche', hint: 'Alt ⇧ T', stays: true, run: () => onPlanningChange(true, 'days') },
+      { id: 'days', label: 'Mehrere Tage', icon: 'plan-days' as const, keywords: 'zeitraum tage wiederholen woche', hint: 'Alt ⇧ T', stays: true, run: () => onPlanningChange(true, 'days') },
     ] : [],
     { id: 'up', label: 'Nach oben', icon: 'up' as const, keywords: 'verschieben hoch reihenfolge', hint: 'Alt ↑', preview: 'up' as const, disabled: !canMoveUp, run: () => onMove(-1) },
     { id: 'down', label: 'Nach unten', icon: 'down' as const, keywords: 'verschieben runter reihenfolge', hint: 'Alt ↓', preview: 'down' as const, disabled: !canMoveDown, run: () => onMove(1) },
