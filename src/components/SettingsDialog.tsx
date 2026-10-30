@@ -4,13 +4,11 @@ import type { ActionLayout } from './EntryActionDock';
 
 const layouts: { value: ActionLayout; title: string; text: string }[] = [
   { value: 'orbit', title: 'Orbit', text: 'Aktionen kreisen um den Punkt, Planen sitzt am Zeilenende.' },
-  { value: 'bar', title: 'Leiste', text: 'Eine kompakte Leiste unter der Zeile.' },
-  { value: 'palette', title: 'Palette', text: 'Suchen und per Enter ausführen, wie in einem Editor.' },
   { value: 'inline', title: 'Eingebettet', text: 'Eine Zeile Wörter im Text, ohne Fenster.' },
   { value: 'swipe', title: 'Wischen', text: 'Punkt zur Seite ziehen: rechts erledigen, links planen oder löschen. Antippen schaltet weiter.' },
 ];
 
-// Small previews of both layouts, drawn like the real thing: the entry's dot, a text line and its actions.
+// Small previews of the layouts, drawn like the real thing: the entry's dot, a text line and its actions.
 function Preview({ layout }: { layout: ActionLayout }) {
   return <svg className="settings-preview" viewBox="0 0 120 64" aria-hidden="true">
     <rect x="44" y="18" width="62" height="4" rx="2" className="preview-text" />
@@ -25,17 +23,10 @@ function Preview({ layout }: { layout: ActionLayout }) {
       <path d="M24 26v13.5h12" className="preview-thread" />
       {[40, 58, 76, 94].map((x, index) => <rect key={x} x={x} y="38" width={index === 0 ? 14 : 12} height="3" rx="1.5" className={index === 1 ? 'preview-satellite' : 'preview-text'} />)}
       <rect x="44" y="50" width="48" height="4" rx="2" className="preview-text" />
-    </> : layout === 'palette' ? <>
-      <rect x="40" y="27" width="66" height="34" rx="4" className="preview-pill" />
-      <rect x="44" y="30.5" width="58" height="6" rx="2" className="preview-text" />
-      {[0, 1, 2].map(index => <rect key={index} x="46" y={41 + index * 6.5} width={index === 0 ? 40 : 30} height="3" rx="1.5" className={index === 0 ? 'preview-satellite' : 'preview-text'} />)}
-    </> : layout === 'orbit' ? <>
+    </> : <>
       <circle cx="24" cy="20" r="14" className="preview-orbit" />
       {[270, 315, 45, 90, 135, 180, 225].map(angle => <circle key={angle} cx={24 + 14 * Math.cos(angle * Math.PI / 180)} cy={20 + 14 * Math.sin(angle * Math.PI / 180)} r="4" className="preview-satellite" />)}
       <rect x="82" y="30" width="24" height="9" rx="4.5" className="preview-pill" />
-    </> : <>
-      <rect x="14" y="31" width="92" height="13" rx="4" className="preview-pill" />
-      {[0, 1, 2, 3, 4, 5, 6, 7].map(index => <circle key={index} cx={22 + index * 11.4} cy="37.5" r="2.6" className="preview-satellite" />)}
     </>}
     <circle cx="24" cy="20" r="3.5" className="preview-dot" />
   </svg>;

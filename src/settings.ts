@@ -9,7 +9,7 @@ export const defaultSettings: Settings = { actionLayout: 'orbit' };
 export function loadSettings(): Settings {
   try {
     const stored = JSON.parse(localStorage.getItem(key) ?? '{}') as Partial<Settings>;
-    return { actionLayout: stored.actionLayout === 'bar' || stored.actionLayout === 'palette' || stored.actionLayout === 'inline' || stored.actionLayout === 'swipe' ? stored.actionLayout : defaultSettings.actionLayout };
+    return { actionLayout: stored.actionLayout === 'inline' || stored.actionLayout === 'swipe' ? stored.actionLayout : defaultSettings.actionLayout };
   } catch { return defaultSettings; }
 }
 export function saveSettings(settings: Settings) {

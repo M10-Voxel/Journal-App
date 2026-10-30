@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { canPlan, clockAngle, clockValue, isValidTime, nextFullHour, planChange, stepTime, tomorrowChange, typeDigit } from '../src/planning.ts';
+import { linkedScopes, canPlan, clockAngle, clockValue, isValidTime, nextFullHour, planChange, stepTime, tomorrowChange, typeDigit } from '../src/planning.ts';
 import { monthGrid, shiftMonth, shiftDate } from '../src/dates.ts';
 
 const entry = (kind, extra = {}) => ({ id:'e', kind, text:'Beispiel', done:false, cancelled:false, priority:false, time:null, reminder:false, plan:null, ...extra });
@@ -8,11 +8,11 @@ let counter = 0;
 const ids = () => `id-${++counter}`;
 
 test('planning on the same day only sets time and reminder', () => {
-  assert.deepEqual(planChange('2026-10-28', ['2026-10-28'], { time:'15:00', reminder:true }), { time:'15:00', reminder:true });
+  assert.deepEqual(planChange('2026-10-28', ['2026-10-28'], { time:'15:00', reminder:true }), { time:'15:00', end:null, reminder:true });
 });
 test('planning to another date turns the entry into a trace with one target', () => {
   const change = planChange('2026-10-28', ['2026-11-02'], { time:null, reminder:true }, undefined, ids);
-  assert.deepEqual(change, { plan: { via:'date', targets:[{ date:'2026-11-02', id:'id-1' }], time:null, reminder:true } });
+  assert.deepEqual(change, { plan: { via:'date', targets:[{ date:'2026-11-02', id:'id-1' }], time:null, end:null, reminder:true } });
 });
 test('several dates are sorted, deduplicated and marked as days, without the origin day', () => {
   const change = planChange('2026-10-28', ['2026-10-31', '2026-10-28', '2026-10-30', '2026-10-31'], { time:'08:00', reminder:false }, undefined, ids);
@@ -22,7 +22,7 @@ test('several dates are sorted, deduplicated and marked as days, without the ori
 });
 test('tomorrow keeps the existing schedule, also across month and year ends', () => {
   const change = tomorrowChange(entry('task', { time:'07:30', reminder:true }), '2026-12-31', ids);
-  assert.deepEqual(change.plan, { via:'tomorrow', targets:[{ date:'2027-01-01', id:change.plan.targets[0].id }], time:'07:30', reminder:true });
+  assert.deepEqual(change.plan, { via:'tomorrow', targets:[{ date:'2027-01-01', id:change.plan.targets[0].id }], time:'07:30', end:null, reminder:true });
 });
 test('only unplanned tasks and events can be planned', () => {
   assert.equal(canPlan(entry('task')), true);
@@ -88,4 +88,17 @@ test('several days: a range from two points, with single days flipped out of it 
   assert.deepEqual(pickedDays(range, [], '2026-10-28'), ['2026-10-29', '2026-10-30', '2026-10-31', '2026-11-01'], 'The entry\'s own day is never a target.');
   assert.deepEqual(pickedDays(range, ['2026-10-30', '2026-11-05'], '2026-10-28'), ['2026-10-29', '2026-10-31', '2026-11-01', '2026-11-05']);
   assert.deepEqual(pickedDays(null, ['2026-11-05'], '2026-10-28'), ['2026-11-05']);
+});
+
+test('actions on linked entries offer the following ones and, when removing or cancelling, all of them', () => {
+  const item = (id, date, extra = {}) => ({ id, date, kind:'task', done:false, cancelled:false, trace:false, ...extra });
+  const group = [item('a', '2026-10-28', { trace:true }), item('b', '2026-10-29'), item('c', '2026-10-30', { done:true }), item('d', '2026-10-31')];
+  const shape = options => options.map(option => `${option.scope}:${option.others.map(other => other.id).join('')}`);
+  assert.deepEqual(shape(linkedScopes(group, 'b', 'remove')), ['this:', 'following:cd', 'all:acd'], 'Removing reaches traces too.');
+  assert.deepEqual(shape(linkedScopes(group, 'b', 'done')), ['this:', 'following:d'], 'Finished tasks are left out; nothing earlier is finished along.');
+  assert.deepEqual(shape(linkedScopes(group, 'b', 'cancelled')), ['this:', 'following:cd'], 'The trace keeps no status, so cancelling all equals cancelling the following.');
+  assert.deepEqual(shape(linkedScopes(group, 'd', 'remove')), ['this:', 'all:abc']);
+  assert.deepEqual(shape(linkedScopes(group, 'd', 'done')), ['this:'], 'Nothing to ask.');
+  assert.deepEqual(shape(linkedScopes([], 'x', 'remove')), ['this:'], 'An unsaved entry has no group yet.');
+  assert.deepEqual(shape(linkedScopes([item('e', '2026-10-28', { kind:'event' }), item('f', '2026-10-29', { kind:'event' })], 'e', 'cancelled')), ['this:'], 'Events are never cancelled.');
 });

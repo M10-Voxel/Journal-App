@@ -1,7 +1,7 @@
 import type { Entry, EntryKind } from '../journal';
 
 export type IconName = 'journal' | 'calendar' | 'plan-tomorrow' | 'plan-days' | 'date-range' | 'left' | 'right' | 'up' | 'down' | 'grip' | 'offline' | 'save' | 'task' | 'note' | 'event' | 'done' | 'cancel' | 'trash' | 'tomorrow' | 'priority' | 'priority-event' | 'priority-note'
-  | 'migrated' | 'migrated-event' | 'scheduled' | 'scheduled-event' | 'scheduled-multi' | 'scheduled-multi-event' | 'clock' | 'bell' | 'check' | 'undo' | 'jump' | 'settings' | 'search';
+  | 'migrated' | 'migrated-event' | 'scheduled' | 'scheduled-event' | 'scheduled-multi' | 'scheduled-multi-event' | 'clock' | 'bell' | 'check' | 'undo' | 'jump' | 'settings' | 'search' | 'pin' | 'month';
 
 export const priorityIcon = (kind: EntryKind): IconName => kind === 'event' ? 'priority-event' : kind === 'note' ? 'priority-note' : 'priority';
 
@@ -51,6 +51,8 @@ export function Icon({ name, className = '' }: { name: IconName; className?: str
     {name === 'jump' && <><path d="M6.5 3.5h-3v9h9v-3" /><path d="M9 3h4v4M13 3 7.5 8.5" /></>}
     {name === 'settings' && <><circle cx="8" cy="8" r="2.2" /><path d="M8 1.8v1.8M8 12.4v1.8M1.8 8h1.8M12.4 8h1.8M3.6 3.6l1.3 1.3M11.1 11.1l1.3 1.3M3.6 12.4l1.3-1.3M11.1 4.9l1.3-1.3" /></>}
     {name === 'search' && <><circle cx="7" cy="7" r="4.2" /><path d="m10.2 10.2 3.3 3.3" /></>}
+    {name === 'month' && <><rect x="2.5" y="2.5" width="11" height="11" rx="2" /><g fill="currentColor" stroke="none">{[5.5, 8, 10.5].flatMap(y => [5.5, 8, 10.5].map(x => <circle key={`${x}-${y}`} cx={x} cy={y} r=".8" />))}</g></>}
+    {name === 'pin' && <><path d="m9.5 2.5 4 4-2 1-2.5 2.5.5 2.5-1 1-6-6 1-1 2.5.5L8.5 4.5Z" /><path d="m2.5 13.5 3.5-3.5" /></>}
     {name === 'trash' && <><path d="M2.5 4.5h11M6 4.5v-2h4v2M4 4.5l.5 9h7l.5-9M6.5 7v4M9.5 7v4" /></>}
   </svg>;
 }

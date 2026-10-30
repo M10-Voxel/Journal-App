@@ -1,11 +1,14 @@
-import type { Entry, Plan, PlanVia } from './journal';
+import type { Entry, LinkedEntry, Plan, PlanVia } from './journal';
 import { shiftDate } from './dates.ts';
 
-export interface Schedule { time: string | null; reminder: boolean }
-type PlanChange = Partial<Pick<Entry, 'time' | 'reminder' | 'plan'>>;
+/** `end` (optional) closes a time span that starts at `time`. */
+export interface Schedule { time: string | null; end?: string | null; reminder: boolean }
+type PlanChange = Partial<Pick<Entry, 'time' | 'end' | 'reminder' | 'plan'>>;
 
 export const canPlan = (entry: Entry) => entry.kind !== 'note' && !entry.plan;
 export const isTrace = (entry: Entry) => Boolean(entry.plan);
+/** Notes have no time, reminder or planning, so only an entry without them can become one. */
+export const canBeNote = (entry: Entry) => !entry.time && !entry.end && !entry.reminder && !entry.plan;
 
 /**
  * The change that planning an entry living on `day` to `dates` produces.
@@ -14,12 +17,24 @@ export const isTrace = (entry: Entry) => Boolean(entry.plan);
  */
 export function planChange(day: string, dates: readonly string[], schedule: Schedule, via: PlanVia = dates.length > 1 ? 'days' : 'date', newId: () => string = () => crypto.randomUUID()): PlanChange {
   const targets = [...new Set(dates)].filter(date => date !== day).sort();
-  if (targets.length === 0) return { time: schedule.time, reminder: schedule.reminder };
-  const plan: Plan = { via: targets.length > 1 ? 'days' : via === 'days' ? 'date' : via, targets: targets.map(date => ({ date, id: newId() })), time: schedule.time, reminder: schedule.reminder };
+  const end = schedule.time ? schedule.end ?? null : null;
+  if (targets.length === 0) return { time: schedule.time, end, reminder: schedule.reminder };
+  const plan: Plan = { via: targets.length > 1 ? 'days' : via === 'days' ? 'date' : via, targets: targets.map(date => ({ date, id: newId() })), time: schedule.time, end, reminder: schedule.reminder };
   return { plan };
 }
 export const tomorrowChange = (entry: Entry, day: string, newId?: () => string) =>
-  planChange(day, [shiftDate(day, 1)], { time: entry.time ?? null, reminder: entry.reminder ?? false }, 'tomorrow', newId);
+  planChange(day, [shiftDate(day, 1)], { time: entry.time ?? null, end: entry.end ?? null, reminder: entry.reminder ?? false }, 'tomorrow', newId);
+
+const minutes = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
+export const timeOfMinutes = (value: number) => formatTime(Math.floor(value / 60), value % 60);
+/** The end that keeps an entry's duration when it starts at `time` instead; none if it would pass midnight. */
+export function keepDuration(entry: Pick<Entry, 'time' | 'end'>, time: string | null): string | null {
+  if (!time || !entry.time || !entry.end) return null;
+  const end = minutes(time) + minutes(entry.end) - minutes(entry.time);
+  return end < 24 * 60 ? timeOfMinutes(end) : null;
+}
+/** "09:00", or "09:00–10:30" for a span. */
+export const formatSpan = (time: string | null | undefined, end?: string | null) => time ? end ? `${time}–${end}` : time : '';
 
 export function isValidTime(time: string | null | undefined): boolean {
   return time == null || /^([01]\d|2[0-3]):[0-5]\d$/.test(time);
@@ -88,4 +103,26 @@ export function pickedDays(range: { from: string; to: string } | null, toggled: 
   for (const date of toggled) if (inRange.has(date)) inRange.delete(date); else inRange.add(date);
   inRange.delete(day);
   return [...inRange].sort();
+}
+
+/** Removing, finishing or cancelling an entry that belongs to a linked group may reach more of it. */
+export type ScopeAction = 'remove' | 'done' | 'cancelled';
+export type Scope = 'this' | 'following' | 'all';
+export interface ScopeOption { scope: Scope; others: Pick<LinkedEntry, 'id' | 'date'>[] }
+/**
+ * The choices an action on `id` offers within its linked group (in date order): only this entry, also the following
+ * ones, and – when removing or cancelling – all of them, the earlier ones included. Only choices that reach more than
+ * the one before are offered; a single choice means there is nothing to ask. Removing reaches traces too; finishing and
+ * cancelling only tasks that are not traces and not in that state already.
+ */
+export function linkedScopes(group: readonly LinkedEntry[], id: string, action: ScopeAction): ScopeOption[] {
+  const index = group.findIndex(item => item.id === id);
+  if (index < 0) return [{ scope: 'this', others: [] }];
+  const reached = (item: LinkedEntry) => item.id !== id && (action === 'remove' || (item.kind === 'task' && !item.trace && !(action === 'done' ? item.done : item.cancelled)));
+  const pick = (items: readonly LinkedEntry[]) => items.filter(reached).map(({ id, date }) => ({ id, date }));
+  const following = pick(group.slice(index + 1)), earlier = pick(group.slice(0, index));
+  const options: ScopeOption[] = [{ scope: 'this', others: [] }];
+  if (following.length) options.push({ scope: 'following', others: following });
+  if (action !== 'done' && earlier.length) options.push({ scope: 'all', others: [...earlier, ...following] });
+  return options;
 }

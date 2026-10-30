@@ -6,7 +6,8 @@ import { useEffect, useRef } from 'react';
 export const shortcutGroups: { title: string; items: [keys: string[], label: string][] }[] = [
   { title: 'Tage', items: [
     [['Alt', '←'], 'Vorheriger Tag'], [['Alt', '→'], 'Nächster Tag'], [['Alt', 'H'], 'Heute'],
-    [['Strg', 'G'], 'Gehe zu Datum'], [['Strg', 'S'], 'Speichern'], [['Strg', ','], 'Einstellungen'],
+    [['Strg', 'G'], 'Gehe zu Datum'], [['Wischen', '⇧ Mausrad'], 'Tag zurück / weiter'],
+    [['Strg', 'S'], 'Sofort speichern (sonst von selbst)'], [['Strg', ','], 'Einstellungen'],
   ] },
   { title: 'Einträge', items: [
     [['Alt', 'A'], 'Neue Aufgabe'], [['Alt', 'E'], 'Neues Ereignis'], [['Alt', 'N'], 'Neue Notiz'],
@@ -16,7 +17,7 @@ export const shortcutGroups: { title: string; items: [keys: string[], label: str
   { title: 'Aktueller Eintrag', items: [
     [['Alt', 'D'], 'Erledigt'], [['Alt', 'X'], 'Abbrechen'], [['Alt', 'P'], 'Priorität'],
     [['Alt', 'M'], 'Auf morgen'], [['Alt', 'T'], 'Planen · zur Spur springen'], [['Alt', '⇧', 'T'], 'Mehrere Tage'], [['Alt', 'U'], 'Uhrzeit'],
-    [['Alt', 'Enter'], 'Aktionen öffnen'], [['Alt', 'Entf'], 'Löschen'], [['→', '⇧ →', 'Strg ⇧ →'], 'Wischen: morgen · planen · mehrere Tage'], [['↓', '⇧ ↓'], 'Wischen: erledigt · abbrechen'], [['↑', '⇧ ←'], 'Wischen: Priorität · löschen'],
+    [['Alt', '⇧', 'E / A / N'], 'Als Ereignis · Aufgabe · Notiz'], [['Alt', 'Enter'], 'Aktionen öffnen'], [['Alt', 'Entf'], 'Löschen (verknüpfte: Leiste fragt, ← → Enter)'], [['→', '⇧ →', 'Strg ⇧ →'], 'Wischen: morgen · planen · mehrere Tage'], [['↓', '⇧ ↓'], 'Wischen: erledigt · abbrechen'], [['↑', '⇧ ←'], 'Wischen: Priorität · löschen'],
   ] },
   { title: 'Text', items: [
     [['Strg', 'B'], '**Fett**'], [['Strg', 'I'], '*Kursiv*'], [['Strg', '⇧', 'X'], '~~Durchgestrichen~~'], [['Strg', '⇧', 'H'], '==Markiert=='],
@@ -26,6 +27,11 @@ export const shortcutGroups: { title: string; items: [keys: string[], label: str
     [['←↑↓→'], 'Tag · Stunde/Minute'], [['Bild ↑↓'], 'Monat'], [['H'], 'Heute'], [['U'], 'Kalender ⇄ Uhr'],
     [['M'], 'Mehrere Tage'], [['Klick', 'Leer'], 'Bereich: Anfang, Ende'], [['Rechtsklick', '⇧ Leer'], 'Tag heraus / dazu'], [['0–9'], 'Uhrzeit tippen'], [['Tab'], 'Stunden ⇄ Minuten'], [['E'], 'Erinnern'], [['Entf'], 'Uhrzeit entfernen'],
     [['Enter'], 'Planen'], [['Esc'], 'Zurück'],
+  ] },
+  { title: 'Kalender (Seitenleiste)', items: [
+    [['J', 'M', 'W', 'A', 'T'], 'Jahr · Monat · Woche · Mo–Fr · Tag'], [['1–5'], 'Ansicht'], [['← →', 'Wischen'], 'Zurück / weiter'], [['H'], 'Heute'],
+    [['Klick'], 'Tag oder Eintrag im Journal zeigen'], [['Rand ziehen'], 'Breite (Doppelklick: zurücksetzen)'],
+    [['Ziehen im Raster'], 'Termin eintragen (Viertelstunden)'], [['Rechtsklick'], 'Eintrag bearbeiten (Alt Entf: löschen)'], [['↑ ↓', '⇧ ↑ ↓'], 'Termin verschieben · Ende'], [['Alt E', 'Alt A', 'Alt P'], 'Ereignis · Aufgabe · Priorität'],
   ] },
 ];
 

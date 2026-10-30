@@ -1,0 +1,47 @@
+import { useEffect, useRef } from 'react';
+import type { CSSProperties, KeyboardEvent } from 'react';
+import type { ScopeAction, ScopeOption } from '../planning';
+import { formatShortDate } from '../dates';
+import { Icon, IconName } from './Icon';
+
+const actionLabels: Record<ScopeAction, { label: string; icon: IconName }> = {
+  remove: { label: 'Löschen', icon: 'trash' }, done: { label: 'Erledigt', icon: 'check' }, cancelled: { label: 'Abbrechen', icon: 'cancel' },
+};
+export function scopeLabel(option: ScopeOption): string {
+  const count = option.others.length;
+  if (option.scope === 'this') return 'Nur diesen';
+  if (option.scope === 'following') return count === 1 ? 'Auch den folgenden' : `Auch die ${count} folgenden`;
+  return `Alle ${count + 1}`;
+}
+const scopeTip = (option: ScopeOption) => option.others.length ? option.others.map(other => formatShortDate(other.date)).join(', ') : 'Die anderen bleiben, wie sie sind';
+
+/**
+ * When an action on a linked entry (a trace, a moved copy, one of several days) could reach the others too: a small pill
+ * that asks how far – only this one, also the following ones, or all. The least reaching choice has the focus, so Enter
+ * keeps to this entry; ← → move between the choices, Escape (or leaving the pill) cancels the action.
+ * As `satellite` it replaces the orbit's round button it came from: the button stays as the pill's start, and the pill
+ * grows out of it to the right.
+ */
+export function ScopeChoice({ action, options, onChoose, onCancel, variant = 'pill', className = '' }: {
+  action: ScopeAction; options: ScopeOption[]; onChoose: (option: ScopeOption) => void; onCancel: () => void; variant?: 'pill' | 'satellite'; className?: string;
+}) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const { label, icon } = actionLabels[action];
+  useEffect(() => { rootRef.current?.querySelector<HTMLButtonElement>('button')?.focus({ preventScroll: true }); }, []);
+  function onKeyDown(event: KeyboardEvent) {
+    const buttons = [...rootRef.current?.querySelectorAll<HTMLButtonElement>('button') ?? []];
+    const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    if (event.key === 'Escape') onCancel();
+    else if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') buttons[(index + (event.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length]?.focus();
+    else return;
+    event.preventDefault();
+    event.stopPropagation();
+  }
+  return <div ref={rootRef} className={`scope-choice is-${action} is-${variant} ${className}`} role="dialog" aria-label={`${label}: auch für verknüpfte Termine?`} onKeyDown={onKeyDown}
+    onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) onCancel(); }}>
+    {variant === 'satellite' ? <span className="scope-choice-cap"><Icon name={icon} /><span className="visually-hidden">{label}</span></span>
+      : <span className="scope-choice-title"><Icon name={icon} />{label}</span>}
+    {options.map((option, index) => <button key={option.scope} type="button" className={`scope-choice-${option.scope}`} style={{ '--i': index } as CSSProperties} data-tip={scopeTip(option)}
+      onClick={() => onChoose(option)}>{scopeLabel(option)}</button>)}
+  </div>;
+}

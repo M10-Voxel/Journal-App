@@ -20,7 +20,9 @@ assert(entryScript, 'Run npm.cmd run build first.');
 
 const bootstrap = `
   import { mockIPC, mockWindows } from '/__test/mocks.js';
-  mockWindows('main');
+  // The calendar windows are checked by loading the same page as another window (\`?window=calendar\` or \`mini\`).
+  const label = new URLSearchParams(location.search).get('window') ?? 'main';
+  mockWindows(label);
   const today = new Date();
   const date = [today.getFullYear(), String(today.getMonth()+1).padStart(2,'0'), String(today.getDate()).padStart(2,'0')].join('-');
   const fixture = { date, title: 'Zeit für die kleinen Dinge', body: 'Bestehender Freitext bleibt erhalten.', revision: 1, entries: [
@@ -31,10 +33,27 @@ const bootstrap = `
     { id:'10000000-0000-4000-8000-000000000005', kind:'task', text:'Den Schreibtisch umstellen', done:false, cancelled:true, priority:false }
   ]};
   const days = new Map([[date, fixture]]);
-  window.__uiTest = { date, saves: 0, day: (value = date) => structuredClone(days.get(value)) };
+  const shift = amount => { const value = new Date(today.getFullYear(), today.getMonth(), today.getDate() + amount, 12); return [value.getFullYear(), String(value.getMonth()+1).padStart(2,'0'), String(value.getDate()).padStart(2,'0')].join('-'); };
+  const item = (id, kind, text, extra = {}) => ({ id:\`20000000-0000-4000-8000-\${String(id).padStart(12, '0')}\`, kind, text, done:false, cancelled:false, priority:false, time:null, reminder:false, plan:null, ...extra });
+  if (label !== 'main') {
+    fixture.entries[2].time = '15:00';
+    days.set(shift(1), { date:shift(1), title:'', body:'', revision:1, entries:[item(1, 'event', 'Zahnarzt', { time:'09:00' }), item(2, 'event', 'Telefonat mit **Anna**', { time:'09:30' }), item(3, 'task', 'Bericht abgeben', { priority:true }), item(4, 'note', 'Gute Laune'),
+      item(5, 'task', 'Schon verschoben', { plan:{ via:'date', targets:[{ date:shift(9), id:item(6, 'task', '').id }], time:null, reminder:false } })] });
+    days.set(shift(-2), { date:shift(-2), title:'', body:'', revision:1, entries:[item(7, 'task', 'Einkaufen', { done:true }), item(8, 'event', 'Kino', { time:'18:30' })] });
+    days.set(shift(3), { date:shift(3), title:'Großer Tag', body:'', revision:1, entries:Array.from({ length:7 }, (_, index) => item(10 + index, 'task', \`Aufgabe \${index + 1}\`)) });
+    days.set(shift(5), { date:shift(5), title:'Urlaub', body:'', revision:1, entries:[item(20, 'event', 'Flug nach Lissabon')] });
+  }
+  const invoked = [];
+  window.__uiTest = { date, saves: 0, invoked, shift, day: (value = date) => structuredClone(days.get(value)),
+    // Stands in for the journal window saving a day: the stored day changes and the calendars hear about it.
+    store: value => { days.set(value.date, value); return window.__TAURI_INTERNALS__.invoke('plugin:event|emit', { event:'journal:changed', payload:[value.date] }); },
+    emit: (event, payload) => window.__TAURI_INTERNALS__.invoke('plugin:event|emit', { event, payload }) };
   window.confirm = () => true;
-  // Mirrors storage.rs: traces create their target entries once, entries know their trace's day,
-  // and removing a trace or a moved entry removes everything linked to it.
+  // The journal saves by itself shortly after changes; the checks count saves, so they save explicitly (Ctrl+S)
+  // and shorten this only where saving by itself is checked.
+  window.__journalAutosaveDelay = 3600000;
+  // Mirrors storage.rs: traces create their target entries once, entries know their trace's day, removing an entry
+  // removes only it, and linked groups (load_linked) can be changed together on other days (change_linked).
   const origin = id => { for (const [day, value] of days) if (value.entries.some(entry => entry.plan?.targets.some(target => target.id === id))) return day; };
   const loadDay = date => {
     const value = structuredClone(days.get(date) ?? { date, title:'', body:'', revision:0, entries:[] });
@@ -44,6 +63,35 @@ const bootstrap = `
   const take = id => { for (const [day, value] of days) { const index = value.entries.findIndex(entry => entry.id === id); if (index >= 0) return [day, value.entries.splice(index, 1)[0]]; } };
   mockIPC((command, payload) => {
     if (command === 'load_day') return loadDay(payload.date);
+    if (command === 'load_range') return [...days.values()].filter(day => day.date >= payload.from && day.date <= payload.to)
+      .map(day => ({ date:day.date, title:day.title, entries:structuredClone(day.entries.filter(entry => !entry.plan)) })).filter(day => day.title || day.entries.length).sort((a, b) => a.date.localeCompare(b.date));
+    if (command === 'open_window' || command === 'show_day' || command.startsWith('plugin:window|')) { invoked.push([command, payload]); return null; }
+    if (command === 'load_linked') {
+      const where = id => { for (const [day, value] of days) { const found = value.entries.find(entry => entry.id === id); if (found) return [day, found]; } };
+      const group = [payload.id], queue = [payload.id];
+      while (queue.length) {
+        const id = queue.shift(), [, current] = where(id) ?? [];
+        const next = [...(current?.plan?.targets ?? []).map(target => target.id), ...[...days.values()].flatMap(day => day.entries.filter(entry => entry.plan?.targets.some(target => target.id === id)).map(entry => entry.id))];
+        for (const other of next) if (!group.includes(other)) { group.push(other); queue.push(other); }
+      }
+      return group.map(id => where(id)).filter(Boolean).map(([date, entry]) => ({ id:entry.id, date, kind:entry.kind, done:entry.done, cancelled:entry.cancelled, trace:Boolean(entry.plan) })).sort((a, b) => a.date.localeCompare(b.date));
+    }
+    if (command === 'change_linked') {
+      const changed = new Set();
+      for (const { id, action } of payload.changes) for (const [day, value] of days) {
+        const index = value.entries.findIndex(entry => entry.id === id);
+        if (index < 0) continue;
+        const entry = value.entries[index];
+        if (action === 'remove') value.entries.splice(index, 1);
+        else if (entry.kind === 'task' && !entry.plan) Object.assign(entry, { done:action === 'done', cancelled:action === 'cancelled' });
+        else continue;
+        changed.add(day);
+      }
+      for (const day of changed) days.get(day).revision += 1;
+      window.__uiTest.linkedChanges = (window.__uiTest.linkedChanges ?? 0) + 1;
+      void window.__TAURI_INTERNALS__.invoke('plugin:event|emit', { event:'journal:changed', payload:[...changed] });
+      return [...changed].sort();
+    }
     if (command === 'save_day') {
       const value = structuredClone(payload.day); value.revision += 1;
       for (const entry of value.entries) delete entry.origin;
@@ -55,25 +103,33 @@ const bootstrap = `
         if (created.has(target.id)) continue;
         const other = structuredClone(days.get(target.date) ?? { date:target.date, title:'', body:'', revision:0, entries:[] });
         other.revision += 1;
-        other.entries.push({ id:target.id, kind:entry.kind, text:entry.text, done:false, cancelled:false, priority:entry.priority, time:entry.plan.time, reminder:entry.plan.reminder, plan:null });
+        other.entries.push({ id:target.id, kind:entry.kind, text:entry.text, done:false, cancelled:false, priority:entry.priority, time:entry.plan.time, end:entry.plan.end ?? null, reminder:entry.plan.reminder, plan:null });
         days.set(target.date, other); touched.add(target.date);
       }
       days.set(value.date, value);
-      const queue = previous.filter(entry => !kept.has(entry.id)).map(entry => [entry.id, entry.plan]);
-      const seen = new Set();
-      while (queue.length) {
-        const [id, plan] = queue.shift();
-        if (seen.has(id)) continue;
-        seen.add(id);
-        for (const target of plan?.targets ?? []) { const hit = take(target.id); if (hit) { linked.add(hit[0]); queue.push([target.id, hit[1].plan]); } }
-        for (const [day, other] of days) for (const entry of [...other.entries]) if (entry.plan?.targets.some(target => target.id === id)) {
-          entry.plan.targets = entry.plan.targets.filter(target => target.id !== id);
-          linked.add(day);
-          if (!entry.plan.targets.length) { take(entry.id); queue.push([entry.id, null]); }
+      // Edited text, kind or priority reach the linked entries in both directions (sync_linked).
+      const find = id => { for (const [day, other] of days) { const found = other.entries.find(entry => entry.id === id); if (found) return [day, found]; } };
+      for (const entry of value.entries) {
+        const before = previous.find(item => item.id === entry.id);
+        if (!before || (before.kind === entry.kind && before.text === entry.text && before.priority === entry.priority)) continue;
+        const seenLinks = new Set([entry.id]), links = [entry.id];
+        while (links.length) {
+          const id = links.shift(), [, current] = find(id) ?? [];
+          const next = [...(current?.plan?.targets ?? []).map(target => target.id), ...[...days.values()].flatMap(day => day.entries.filter(other => other.plan?.targets.some(target => target.id === id)).map(other => other.id))];
+          for (const other of next) {
+            if (seenLinks.has(other)) continue;
+            seenLinks.add(other); links.push(other);
+            const [day, found] = find(other) ?? [];
+            if (!found || (found.kind === entry.kind && found.text === entry.text && found.priority === entry.priority)) continue;
+            Object.assign(found, { kind:entry.kind, text:entry.text, priority:entry.priority }, entry.kind === 'task' ? {} : { done:false, cancelled:false });
+            if (day !== value.date) { days.get(day).revision += 1; touched.add(day); }
+          }
         }
       }
       for (const day of linked) { days.get(day).revision += 1; touched.add(day); }
       window.__uiTest.saves += 1;
+      // Like save_day in main.rs: every calendar hears which days changed.
+      void window.__TAURI_INTERNALS__.invoke('plugin:event|emit', { event:'journal:changed', payload:[value.date, ...touched] });
       return { ...loadDay(value.date), touched:[...touched].sort() };
     }
   }, { shouldMockEvents: true });
@@ -130,6 +186,10 @@ async function key(keyName, code = keyName, modifiers = 0) {
   await command('Input.dispatchKeyEvent', { type:'keyDown', key:keyName, code, modifiers, ...virtualKey, ...(keyName === 'Enter' ? { text:'\r', unmodifiedText:'\r' } : {}) });
   await command('Input.dispatchKeyEvent', { type:'keyUp', key:keyName, code, modifiers, ...virtualKey });
 }
+async function hoverAt(expression) {
+  const point = await evaluate(`(() => { const r=(${expression}).getBoundingClientRect(); return { x:r.left+r.width/2, y:r.top+r.height/2 }; })()`);
+  await command('Input.dispatchMouseEvent', { type:'mouseMoved', x:point.x, y:point.y });
+}
 async function closeDock() {
   await key('Escape');
   await until("!document.querySelector('.entry-dock-shell.is-open')");
@@ -154,6 +214,445 @@ async function dragRow(sourceId, targetId, placement = 'before', escape = false)
   }
   await command('Input.dispatchMouseEvent', { type:'mouseReleased', x:points.tx, y:points.ty, button:'left', buttons:0, clickCount:1 });
   await until("!document.querySelector('.entry-dragging')");
+}
+
+// Calendar window and compact month window: the same page loaded as those windows, with a few days of synthetic entries.
+const longDate = date => `new Intl.DateTimeFormat('de-DE', { weekday:'long', day:'numeric', month:'long', year:'numeric' }).format(new Date('${date}T12:00'))`;
+async function checkCalendars() {
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  await command('Emulation.setDeviceMetricsOverride', { width:1180, height:780, deviceScaleFactor:1, mobile:false });
+  // The journal saves by itself shortly after a change, and at once before showing another day.
+  const headingNow = "document.querySelector('.document-header h1').textContent";
+  await key('h', 'KeyH', 1);
+  await until(`${headingNow} === ${longDate(await evaluate('window.__uiTest.date'))}`);
+  await key('s', 'KeyS', 2);
+  await until("document.querySelector('.save-status').textContent === 'Gespeichert'");
+  await evaluate('window.__journalAutosaveDelay = 300');
+  const autoSaves = await evaluate('window.__uiTest.saves');
+  await evaluate("(() => { const title=document.querySelector('#title'); title.focus(); title.setSelectionRange(title.value.length, title.value.length); })()");
+  await command('Input.insertText', { text:' – von selbst' });
+  assert.equal(await evaluate("document.querySelector('.save-status').textContent"), 'Wird gleich gespeichert …');
+  await until(`window.__uiTest.saves === ${autoSaves + 1} && document.querySelector('.save-status').textContent === 'Gespeichert'`);
+  assert.match(await evaluate('window.__uiTest.day().title'), /von selbst$/);
+  await evaluate('window.__journalAutosaveDelay = 3600000');
+  await command('Input.insertText', { text:'!' });
+  await key('ArrowRight', 'ArrowRight', 1);
+  await until(`${headingNow} === ${longDate(await evaluate('window.__uiTest.shift(1)'))} && window.__uiTest.saves === ${autoSaves + 2}`);
+  assert.match(await evaluate('window.__uiTest.day().title'), /von selbst!$/, 'Leaving the day saved it first, without asking.');
+  await key('h', 'KeyH', 1);
+  await until(`${headingNow} === ${longDate(await evaluate('window.__uiTest.date'))}`);
+  // Finishing one of several days offers the following ones too.
+  await evaluate("[...document.querySelectorAll('.kind-picker button')].find(button => button.textContent === 'Aufgabe').click()");
+  await until("Boolean(document.activeElement?.closest('.entry'))");
+  await command('Input.insertText', { text:'Serie' });
+  await key('T', 'KeyT', 9);
+  await until("Boolean(document.querySelector('.planner.is-multi')) && document.activeElement?.classList.contains('planner-day')");
+  await key('ArrowRight', 'ArrowRight'); await key(' ', 'Space');
+  await key('ArrowRight', 'ArrowRight'); await key('ArrowRight', 'ArrowRight'); await key(' ', 'Space');
+  await until("document.querySelector('.planner-confirm').textContent === '3 Tage'");
+  await key('Enter', 'Enter');
+  const series = "[...document.querySelectorAll('.entry')].find(row => row.textContent.includes('Serie'))";
+  await until(`${series}?.dataset.trace === 'days'`);
+  await key('s', 'KeyS', 2);
+  await until(`(window.__uiTest.day(window.__uiTest.shift(3))?.entries ?? []).some(entry => entry.text === 'Serie')`);
+  await key('ArrowRight', 'ArrowRight', 1);
+  await until(`${headingNow} === ${longDate(await evaluate('window.__uiTest.shift(1)'))} && Boolean(${series})`);
+  await evaluate(`${series}.querySelector('.entry-text').focus()`);
+  await key('d', 'KeyD', 1);
+  await until(`Boolean(${series}.querySelector('.scope-choice.is-done'))`);
+  assert.deepEqual(await evaluate(`[...${series}.querySelectorAll('.scope-choice button')].map(button => button.textContent)`), ['Nur diesen', 'Auch die 2 folgenden']);
+  await key('ArrowRight', 'ArrowRight');
+  await key('Enter', 'Enter');
+  await until(`${series}.dataset.status === 'done' && [2, 3].every(n => window.__uiTest.day(window.__uiTest.shift(n)).entries.find(entry => entry.text === 'Serie').done)`);
+  // Escape cancels the action altogether.
+  await evaluate(`${series}.querySelector('.entry-text').focus()`);
+  await key('x', 'KeyX', 1);
+  await until(`Boolean(${series}.querySelector('.scope-choice.is-cancelled'))`);
+  await key('Escape');
+  await until(`!${series}.querySelector('.scope-choice') && ${series}.dataset.status === 'done'`);
+  await key('s', 'KeyS', 2);
+  await key('h', 'KeyH', 1);
+  await until(`${headingNow} === ${longDate(await evaluate('window.__uiTest.date'))}`);
+
+  // The journal shows days sent from a calendar window.
+  const target = await evaluate('window.__uiTest.shift(4)');
+  await evaluate(`window.__uiTest.emit('journal:navigate', { date:'${target}', entry:null })`);
+  await until(`document.querySelector('.document-header h1').textContent === ${longDate(target)}`);
+  const heading = "document.querySelector('.document-header h1').textContent";
+  const wheel = (selector, deltaX, deltaY, modifiers = 0) => evaluate(`(() => { const r=document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect(); return { x:r.left+r.width/2, y:r.top+Math.min(r.height/2, 40) }; })()`)
+    .then(point => command('Input.dispatchMouseEvent', { type:'mouseWheel', x:point.x, y:point.y, deltaX, deltaY, modifiers }));
+  // Days turn with a sideways swipe (one day per gesture, however long it runs on) and with Shift + wheel (a day per notch).
+  for (let step = 0; step < 10; step++) await wheel('.document-header', 30, 0);
+  await until(`${heading} === ${longDate(await evaluate('window.__uiTest.shift(5)'))}`);
+  assert.match(await evaluate("document.querySelector('.document-header').className"), /slide-next/, 'The next day slides in from the right.');
+  await pause(300);
+  assert.equal(await evaluate(heading), await evaluate(longDate(await evaluate('window.__uiTest.shift(5)'))), 'One swipe is one day.');
+  await wheel('.document-header', 0, -100, 8);
+  await pause(60);
+  await wheel('.document-header', 0, -100, 8);
+  await until(`${heading} === ${longDate(await evaluate('window.__uiTest.shift(3)'))}`);
+  assert.match(await evaluate("document.querySelector('.document-header').className"), /slide-prev/);
+  // The sidebar is the calendar. It follows the journal's day; a day or an entry clicked there opens in the journal.
+  const side = selector => `document.querySelector('.sidebar .cal')${selector ? `.querySelector(${JSON.stringify(selector)})` : ''}`;
+  await key('h', 'KeyH', 1);
+  const sideToday = await evaluate('window.__uiTest.date');
+  await until(`${heading} === ${longDate(sideToday)}`);
+  await until(`${side()}?.dataset.view === 'month' && ${side('.cal-month-day.is-today')}?.classList.contains('is-journal')`);
+  const sideCell = date => `[...document.querySelectorAll('.sidebar .cal-month-day')].find(cell => cell.querySelector('.cal-month-number').getAttribute('aria-label').startsWith(${longDate(date)}))`;
+  const other = await evaluate('window.__uiTest.shift(2)');
+  await evaluate(`${sideCell(other)}.click()`);
+  await until(`${heading} === ${longDate(other)} && ${sideCell(other)}.classList.contains('is-journal')`);
+  await key('ArrowRight', 'ArrowRight', 1);
+  await until(`${sideCell(await evaluate('window.__uiTest.shift(3)'))}?.classList.contains('is-journal')`);
+  // Saving shows up in the sidebar at once; clicking the entry there opens its day with the cursor in it.
+  await evaluate("document.querySelector('.kind-picker button').click()");
+  await until("Boolean(document.activeElement?.closest('.entry'))");
+  await command('Input.insertText', { text:'Aus dem Kalender' });
+  await key('s', 'KeyS', 2);
+  await until(`[...document.querySelectorAll('.sidebar .cal-item-text')].some(item => item.textContent === 'Aus dem Kalender')`);
+  await key('h', 'KeyH', 1);
+  await until(`${heading} === ${longDate(sideToday)}`);
+  await evaluate("[...document.querySelectorAll('.sidebar .cal-item')].find(item => item.textContent.includes('Aus dem Kalender')).click()");
+  await until(`${heading} === ${longDate(await evaluate('window.__uiTest.shift(3)'))} && document.activeElement?.closest('.entry')?.textContent.includes('Aus dem Kalender')`);
+  // Views switch inside the sidebar with their keys; a swipe there turns the calendar, not the journal.
+  await evaluate(`${side()}.focus()`);
+  await key('w', 'KeyW');
+  await until(`${side()}.dataset.view === 'week'`);
+  const dayShown = await evaluate(heading);
+  const weekTitle = await evaluate(`${side('.cal-title')}.textContent`);
+  for (let step = 0; step < 10; step++) await wheel('.sidebar .cal-body', 30, 0);
+  await until(`${side('.cal-title')}.textContent !== ${JSON.stringify(weekTitle)}`);
+  assert.equal(await evaluate(heading), dayShown, 'Swiping the calendar leaves the journal on its day.');
+  // Marking a range in the time grid creates an entry there: dragging snaps to quarter hours, the composer opens next to it.
+  await key('h', 'KeyH', 1);
+  await until(`${heading} === ${longDate(sideToday)}`);
+  await evaluate(`${side()}.focus()`);
+  await key('t', 'KeyT');
+  await until(`${side()}.dataset.view === 'day' && Boolean(${side('.cal-time-column')})`);
+  await pause(350);
+  const at = minutes => evaluate(`(() => { const r=document.querySelector('.sidebar .cal-time-column').getBoundingClientRect(); return { x:r.left+r.width/2, y:r.top+${minutes}/60*48 }; })()`);
+  const markRange = async (from, ...through) => {
+    const start = await at(from);
+    await command('Input.dispatchMouseEvent', { type:'mouseMoved', x:start.x, y:start.y });
+    await command('Input.dispatchMouseEvent', { type:'mousePressed', x:start.x, y:start.y, button:'left', buttons:1, clickCount:1 });
+    let point = start;
+    for (const minutes of through) { point = await at(minutes); await command('Input.dispatchMouseEvent', { type:'mouseMoved', x:point.x, y:point.y, button:'left', buttons:1 }); }
+    return point;
+  };
+  const release = point => command('Input.dispatchMouseEvent', { type:'mouseReleased', x:point.x, y:point.y, button:'left', buttons:0, clickCount:1 });
+  const selection = "document.querySelector('.sidebar .cal-selection-time')?.textContent";
+  let point = await markRange(9 * 60 + 5, 9 * 60 + 40, 10 * 60 + 20);
+  assert.equal(await evaluate(selection), '09:00 – 10:30', 'The range snaps to quarter hours while dragging.');
+  assert.equal(await evaluate("document.querySelector('.cal-composer')"), null, 'The composer waits for the release.');
+  await release(point);
+  await until("document.querySelector('.cal-composer.is-placed') && document.activeElement === document.querySelector('.cal-composer-text')");
+  assert.equal(await evaluate("(() => { const c=document.querySelector('.cal-composer').getBoundingClientRect(), s=document.querySelector('.sidebar .cal-selection').getBoundingClientRect(); return c.left >= 0 && c.right <= innerWidth && c.bottom <= innerHeight && (c.left >= s.right || c.right <= s.left || c.top >= s.bottom); })()"), true, 'Next to the range, inside the window.');
+  assert.equal(await evaluate("document.querySelector('.cal-composer-length').textContent"), '1 h 30');
+  await command('Input.insertText', { text:'Zahnarzt-Test' });
+  await key('ArrowDown', 'ArrowDown');
+  await until(`${selection} === '09:15 – 10:45'`);
+  await key('ArrowUp', 'ArrowUp', 8);
+  await until(`${selection} === '09:15 – 10:30'`);
+  await key('p', 'KeyP', 1);
+  await until("document.querySelector('.cal-composer-priority').getAttribute('aria-pressed') === 'true'");
+  await pause(450);
+  await screenshot('calendar-composer.png');
+  const savesBeforeCreate = await evaluate('window.__uiTest.saves');
+  await key('Enter', 'Enter');
+  await until(`!document.querySelector('.cal-composer') && window.__uiTest.saves === ${savesBeforeCreate + 1}`);
+  const created = "[...document.querySelectorAll('.entry')].find(row => row.textContent.includes('Zahnarzt-Test'))";
+  assert.equal(await evaluate(`${created}?.querySelector('.entry-when')?.textContent`), '09:15–10:30', 'On the day shown, the entry joins the journal and is saved.');
+  assert.equal(await evaluate(`${created}.dataset.priority`), 'high');
+  await until("[...document.querySelectorAll('.sidebar .cal-item.is-block')].some(block => block.textContent.includes('Zahnarzt-Test'))");
+  assert.equal(await evaluate("Math.round([...document.querySelectorAll('.sidebar .cal-item.is-block')].find(block => block.textContent.includes('Zahnarzt-Test')).getBoundingClientRect().height)"), 57, 'The block lasts as long as the range (75 min).');
+  // A click marks an hour; the edges resize it; Escape discards.
+  point = await markRange(14 * 60 + 10);
+  await release(point);
+  await until(`${selection} === '14:00 – 15:00' && Boolean(document.querySelector('.cal-composer.is-placed'))`);
+  const edge = await evaluate("(() => { const r=document.querySelector('.sidebar .cal-selection-edge.is-end').getBoundingClientRect(); return { x:r.left+r.width/2, y:r.top+r.height/2 }; })()");
+  await command('Input.dispatchMouseEvent', { type:'mouseMoved', x:edge.x, y:edge.y });
+  await command('Input.dispatchMouseEvent', { type:'mousePressed', x:edge.x, y:edge.y, button:'left', buttons:1, clickCount:1 });
+  await command('Input.dispatchMouseEvent', { type:'mouseMoved', x:edge.x, y:edge.y + 36, button:'left', buttons:1 });
+  await command('Input.dispatchMouseEvent', { type:'mouseReleased', x:edge.x, y:edge.y + 36, button:'left', buttons:0, clickCount:1 });
+  await until(`${selection} === '14:00 – 15:45'`);
+  await until("Boolean(document.querySelector('.cal-composer.is-placed'))");
+  await evaluate("document.querySelector('.cal-composer-text').focus()");
+  await key('Enter', 'Enter');
+  await until("document.querySelector('.cal-composer-text').classList.contains('is-shaking')");
+  assert.equal(await evaluate('window.__uiTest.saves'), savesBeforeCreate + 1, 'Nothing is created without text.');
+  await key('Escape');
+  await until(`!document.querySelector('.cal-composer') && !document.querySelector('.sidebar .cal-selection')`);
+  // Dragging into the bottom edge scrolls the hours along.
+  const scrolled = await evaluate("document.querySelector('.sidebar .cal-time').scrollTop");
+  const bottom = await evaluate("(() => { const r=document.querySelector('.sidebar .cal-time').getBoundingClientRect(); return r.bottom - 6; })()");
+  const startDrag = await markRange(16 * 60);
+  await command('Input.dispatchMouseEvent', { type:'mouseMoved', x:startDrag.x, y:bottom, button:'left', buttons:1 });
+  await until(`document.querySelector('.sidebar .cal-time').scrollTop > ${scrolled + 100}`);
+  await release({ x:startDrag.x, y:bottom });
+  assert(await evaluate("Number(document.querySelector('.sidebar .cal-selection-time').textContent.slice(8, 10))") >= 18, 'The range follows the scrolling.');
+  await key('Escape');
+  await until("!document.querySelector('.cal-composer')");
+  // On another day the entry goes straight into the store; the journal stays on its day.
+  const journalDay = await evaluate(heading);
+  await evaluate(`${side()}.focus()`);
+  await key('ArrowRight', 'ArrowRight');
+  const nextDay = await evaluate('window.__uiTest.shift(1)');
+  await until(`${side('.cal-day-side h2')}?.textContent === ${longDate(nextDay)} || ${side('.cal-time-day')}?.title.startsWith(${longDate(nextDay)})`);
+  await evaluate(`${side('.cal-time')}.scrollTop = 0`);
+  point = await markRange(60 + 5, 60 + 35);
+  await release(point);
+  await until("document.activeElement === document.querySelector('.cal-composer-text')");
+  await evaluate("document.querySelector('.cal-composer [aria-label^=\"Aufgabe\"]').click()");
+  await evaluate("document.querySelector('.cal-composer-text').focus()");
+  await command('Input.insertText', { text:'Früh los' });
+  await key('Enter', 'Enter');
+  await until(`(window.__uiTest.day('${nextDay}')?.entries ?? []).some(entry => entry.text === 'Früh los')`);
+  assert.deepEqual(await evaluate(`(({ kind, time, end, priority }) => ({ kind, time, end, priority }))(window.__uiTest.day('${nextDay}').entries.find(entry => entry.text === 'Früh los'))`), { kind:'task', time:'01:00', end:'01:45', priority:false });
+  assert.equal(await evaluate(heading), journalDay, 'The journal stays where it was.');
+  await until("[...document.querySelectorAll('.sidebar .cal-item.is-block')].some(block => block.textContent.includes('Früh los'))");
+  await key('m', 'KeyM');
+  await until(`${side()}.dataset.view === 'month'`);
+  // Right click edits an entry in the calendar: in the time grid as a range (moved here) with the card in edit mode.
+  await evaluate(`${side()}.focus()`);
+  await key('h', 'KeyH');
+  await key('t', 'KeyT');
+  await until(`${side()}.dataset.view === 'day' && ${side('.cal-time-day')}?.title.startsWith(${longDate(sideToday)})`);
+  const rightClick = async expression => {
+    const target = await evaluate(`(() => { const element=${expression}; element.scrollIntoView({ block:'nearest' }); const r=element.getBoundingClientRect(); return { x:r.left+Math.min(r.width/2, 30), y:r.top+Math.min(r.height/2, 8) }; })()`);
+    await command('Input.dispatchMouseEvent', { type:'mouseMoved', x:target.x, y:target.y });
+    await command('Input.dispatchMouseEvent', { type:'mousePressed', x:target.x, y:target.y, button:'right', buttons:2, clickCount:1 });
+    await command('Input.dispatchMouseEvent', { type:'mouseReleased', x:target.x, y:target.y, button:'right', buttons:0, clickCount:1 });
+  };
+  const sideBlock = text => `[...document.querySelectorAll('.sidebar .cal-item')].find(item => item.textContent.includes(${JSON.stringify(text)}))`;
+  await rightClick(sideBlock('Zahnarzt-Test'));
+  await until("document.querySelector('.cal-composer.is-editing.is-placed') && document.activeElement === document.querySelector('.cal-composer-text')");
+  assert.equal(await evaluate("document.querySelector('.cal-composer-text').value"), 'Zahnarzt-Test');
+  assert.equal(await evaluate(selection), '09:15 – 10:30', 'The entry shows as its range.');
+  assert.equal(await evaluate(`${sideBlock('Zahnarzt-Test')}.classList.contains('is-editing')`), true);
+  assert.deepEqual(await evaluate("[...document.querySelectorAll('.cal-composer-kinds [role=radio]')].map(kind => kind.getAttribute('aria-label') + ':' + kind.getAttribute('aria-checked'))"), ['Ereignis:true', 'Aufgabe:false'], 'A timed entry cannot become a note.');
+  await key('a', 'KeyA', 1);
+  await key('ArrowDown', 'ArrowDown');
+  await until(`${selection} === '09:30 – 10:45'`);
+  await command('Input.dispatchKeyEvent', { type:'keyDown', key:'a', code:'KeyA', modifiers:2 }); await command('Input.dispatchKeyEvent', { type:'keyUp', key:'a', code:'KeyA', modifiers:2 });
+  await command('Input.insertText', { text:'Zahnarzt verschoben' });
+  await pause(400);
+  await screenshot('calendar-edit.png');
+  await key('Enter', 'Enter');
+  await until("!document.querySelector('.cal-composer') && [...document.querySelectorAll('.entry')].some(row => row.textContent.includes('Zahnarzt verschoben'))");
+  const moved = "[...document.querySelectorAll('.entry')].find(row => row.textContent.includes('Zahnarzt verschoben'))";
+  assert.deepEqual(await evaluate(`[${moved}.dataset.entryKind, ${moved}.querySelector('.entry-when').textContent]`), ['task', '09:30–10:45'], 'Kind, time and text change in the journal.');
+  // In the month (another day), the card edits in place and can remove the entry.
+  await key('m', 'KeyM');
+  await until(`${side()}.dataset.view === 'month'`);
+  await rightClick(sideBlock('Früh los'));
+  await until("document.querySelector('.cal-composer.is-editing.is-placed') && !document.querySelector('.cal-composer-time')");
+  await evaluate("document.querySelector('.cal-composer-text').focus()");
+  await command('Input.insertText', { text:'!' });
+  await key('Enter', 'Enter');
+  await until(`window.__uiTest.day('${nextDay}').entries.some(entry => entry.text === 'Früh los!')`);
+  assert.equal(await evaluate(heading), journalDay, 'Editing another day leaves the journal where it was.');
+  await until(`Boolean(${sideBlock('Früh los!')})`);
+  await rightClick(sideBlock('Früh los!'));
+  await until("Boolean(document.querySelector('.cal-composer.is-editing .cal-composer-remove'))");
+  await evaluate("document.querySelector('.cal-composer-remove').click()");
+  await until(`!window.__uiTest.day('${nextDay}').entries.some(entry => entry.text.startsWith('Früh los'))`);
+
+  // Kinds change in the journal too: Alt ⇧ E / A / N, or the kind cluster next to the orbit's planning (with a preview).
+  await evaluate("[...document.querySelectorAll('.kind-picker button')].find(button => button.textContent === 'Aufgabe').click()");
+  await until("Boolean(document.activeElement?.closest('.entry'))");
+  await command('Input.insertText', { text:'Typwechsel' });
+  const kindRow = "[...document.querySelectorAll('.entry')].find(row => row.textContent.includes('Typwechsel'))";
+  await key('E', 'KeyE', 9);
+  await until(`${kindRow}.dataset.entryKind === 'event'`);
+  assert.equal(await evaluate(`document.activeElement === ${kindRow}.querySelector('.entry-text')`), true, 'The cursor stays in the text.');
+  await evaluate(`${kindRow}.querySelector('.entry-symbol').click()`);
+  await until("Boolean(document.querySelector('.entry-dock-shell.is-open .dock-kind'))");
+  assert.deepEqual(await evaluate("[...document.querySelectorAll('.entry-dock-shell.is-open .dock-kind button')].map(button => button.getAttribute('aria-label') + ':' + button.getAttribute('aria-pressed'))"), ['Als Ereignis:true', 'Als Aufgabe:false', 'Als Notiz:false']);
+  // Hovering another kind previews it on the symbol (once the cluster has sprung into place).
+  await pause(500);
+  await command('Input.dispatchMouseEvent', { type:'mouseMoved', ...await evaluate("(() => { const r=document.querySelector('.entry-dock-shell.is-open .dock-kind-task').getBoundingClientRect(); return { x:r.left+r.width/2-1, y:r.top+r.height/2 }; })()") });
+  await hover('.entry-dock-shell.is-open .dock-kind-task');
+  await until(`${kindRow}.querySelector('.entry-symbol svg.icon-ghost')?.dataset.icon === 'task'`);
+  await pause(450);
+  await screenshot('orbit-kind.png');
+  await evaluate("document.querySelector('.entry-dock-shell.is-open .dock-kind-note').click()");
+  await until(`${kindRow}.dataset.entryKind === 'note'`);
+  await key('Escape');
+  // A moved entry stays editable: saving its trace passes text and kind on to the copy.
+  await evaluate(`(() => { const text=${kindRow}.querySelector('.entry-text'); text.focus(); text.setSelectionRange(text.value.length, text.value.length); })()`);
+  await key('A', 'KeyA', 9);
+  await until(`${kindRow}.dataset.entryKind === 'task'`);
+  await key('m', 'KeyM', 1);
+  await until(`${kindRow}.dataset.trace === 'tomorrow'`);
+  await key('s', 'KeyS', 2);
+  const copyOf = `window.__uiTest.day(window.__uiTest.date).entries.find(entry => entry.text === 'Typwechsel')?.plan?.targets[0].id`;
+  await until(`Boolean(${copyOf})`);
+  const copyId = await evaluate(copyOf);
+  await evaluate(`(() => { const text=${kindRow}.querySelector('.entry-text'); text.focus(); text.setSelectionRange(text.value.length, text.value.length); })()`);
+  await command('Input.insertText', { text:' (neu)' });
+  await key('E', 'KeyE', 9);
+  await key('s', 'KeyS', 2);
+  await until(`(() => { const copy=window.__uiTest.day(window.__uiTest.shift(1))?.entries.find(entry => entry.id === '${copyId}'); return copy?.text === 'Typwechsel (neu)' && copy.kind === 'event'; })()`);
+
+  // Dragging the edge sets the sidebar's width (remembered), within limits that leave the journal room; a double click resets it.
+  const widthOf = () => evaluate("Math.round(document.querySelector('.sidebar').getBoundingClientRect().width)");
+  const before = await widthOf();
+  const dragEdge = async dx => {
+    const edge = await evaluate("(() => { const r=document.querySelector('.sidebar-resizer').getBoundingClientRect(); return { x:r.left+r.width/2, y:r.top+200 }; })()");
+    await command('Input.dispatchMouseEvent', { type:'mouseMoved', x:edge.x, y:edge.y });
+    await command('Input.dispatchMouseEvent', { type:'mousePressed', x:edge.x, y:edge.y, button:'left', buttons:1, clickCount:1 });
+    const to = Math.max(0, edge.x + dx);
+    await command('Input.dispatchMouseEvent', { type:'mouseMoved', x:edge.x + (to - edge.x) / 2, y:edge.y, button:'left', buttons:1 });
+    await until("document.querySelector('.app').classList.contains('is-resizing')");
+    await command('Input.dispatchMouseEvent', { type:'mouseMoved', x:to, y:edge.y, button:'left', buttons:1 });
+    await command('Input.dispatchMouseEvent', { type:'mouseReleased', x:to, y:edge.y, button:'left', buttons:0, clickCount:1 });
+  };
+  await dragEdge(150);
+  await until(`Math.round(document.querySelector('.sidebar').getBoundingClientRect().width) === ${before + 150}`);
+  assert.equal(await evaluate("localStorage.getItem('journal.sidebar')"), String(before + 150), 'The width is remembered.');
+  await pause(450);
+  await screenshot('journal-sidebar-wide.png');
+  await dragEdge(5000);
+  await until("Math.round(innerWidth - document.querySelector('.main').getBoundingClientRect().width) === Math.round(innerWidth - 420)");
+  await dragEdge(-5000);
+  assert.equal(await widthOf(), 280, 'The sidebar does not get narrower than 280 px.');
+  await pause(450);
+  await screenshot('journal-sidebar-narrow.png');
+  // Nothing in the toolbar sticks out of the sidebar or overlaps anything else.
+  assert.equal(await evaluate(`(() => { const parts=[...document.querySelectorAll('.sidebar .cal-title, .sidebar .cal-views, .sidebar .cal-filter, .sidebar .cal-nav')].map(part => part.getBoundingClientRect()), edge=document.querySelector('.sidebar').getBoundingClientRect().right;
+    return parts.every((a, i) => a.right <= edge + 1 && parts.every((b, j) => i === j || a.right <= b.left + 1 || b.right <= a.left + 1 || a.bottom <= b.top + 1 || b.bottom <= a.top + 1)); })()`), true, 'The calendar toolbar fits the narrowest sidebar.');
+  await evaluate("document.querySelector('.sidebar-resizer').focus()");
+  await key('ArrowRight', 'ArrowRight');
+  assert.equal(await widthOf(), 304);
+  await evaluate("document.querySelector('.sidebar-resizer').dispatchEvent(new MouseEvent('dblclick', { bubbles:true }))");
+  await until(`Math.round(document.querySelector('.sidebar').getBoundingClientRect().width) === ${before}`);
+  await pause(450);
+  await screenshot('journal-sidebar.png');
+
+  await command('Emulation.setEmulatedMedia', { features:[] });
+  await command('Emulation.setDeviceMetricsOverride', { width:1120, height:760, deviceScaleFactor:1, mobile:false });
+  await command('Page.navigate', { url:`${origin}/?window=calendar` });
+  await until("Boolean(document.querySelector('.cal'))");
+  await evaluate("localStorage.removeItem('journal.calendar'); location.reload()");
+  await until("document.querySelector('.cal')?.dataset.view === 'month' && document.querySelectorAll('.cal-item').length > 0");
+  const [today, tomorrow, crowded, later] = await evaluate('[window.__uiTest.date, window.__uiTest.shift(1), window.__uiTest.shift(3), window.__uiTest.shift(2)]');
+  const cell = date => `[...document.querySelectorAll('.cal-month-day')].find(cell => cell.querySelector('.cal-month-number').getAttribute('aria-label').startsWith(${longDate(date)}))`;
+  const texts = selector => evaluate(`[...document.querySelectorAll(${JSON.stringify(selector)})].map(item => item.querySelector('.cal-item-text').textContent)`);
+  assert.equal(await evaluate(`${cell(today)}.classList.contains('is-today')`), true);
+  assert.deepEqual(await evaluate(`[...${cell(tomorrow)}.querySelectorAll('.cal-item-text')].map(item => item.textContent)`), ['Bericht abgeben', 'Zahnarzt', 'Telefonat mit Anna'], 'Without time first, priority first; Markdown is plain; traces and (by default) notes are left out.');
+  assert.match(await evaluate(`${cell(crowded)}.querySelector('.cal-more').textContent`), /^\+\d+ weitere$/, 'A full day ends with "+n weitere".');
+  assert.equal(await evaluate(`${cell(crowded)}.querySelector('.cal-month-title').textContent`), 'Großer Tag');
+  assert.equal(await evaluate(`${cell(crowded)}.scrollHeight <= ${cell(crowded)}.clientHeight + 1`), true, 'Entries never overflow a day.');
+  await pause(350);
+  await screenshot('calendar-month.png');
+  // Swiping (or Shift + wheel) steps the view: here a month.
+  const monthTitle = "document.querySelector('.cal-title strong').textContent";
+  const shown = await evaluate(monthTitle);
+  for (let step = 0; step < 10; step++) await wheel('.cal-body', 30, 0);
+  await until(`${monthTitle} !== ${JSON.stringify(shown)} && Boolean(document.querySelector('.cal-page.slide-next'))`);
+  const next = await evaluate(monthTitle);
+  await pause(300);
+  assert.equal(await evaluate(monthTitle), next, 'One swipe is one month.');
+  await wheel('.cal-body', 0, -100, 8);
+  await until(`${monthTitle} === ${JSON.stringify(shown)}`);
+  // The time shows only while hovering, in the item's bottom right corner.
+  const timeOf = item => `getComputedStyle([...${cell(tomorrow)}.querySelectorAll('.cal-item')][${item}].querySelector('.cal-item-time')).opacity`;
+  assert.equal(await evaluate(timeOf(1)), '0', 'No time without hovering.');
+  assert.equal(await evaluate(`${cell(tomorrow)}.querySelector('.cal-item-text').textContent.includes(':')`), false);
+  await hoverAt(`[...${cell(tomorrow)}.querySelectorAll('.cal-item')][1]`);
+  await until(`${timeOf(1)} === '1'`);
+  assert.equal(await evaluate(`(() => { const item=[...${cell(tomorrow)}.querySelectorAll('.cal-item')][1], time=item.querySelector('.cal-item-time').getBoundingClientRect(), box=item.getBoundingClientRect(); return Math.abs(time.right - box.right) < 4 && Math.abs(time.bottom - box.bottom) < 4 && !item.querySelector('.cal-item-time').classList.contains('is-scrolling'); })()`), true, 'It sits in the bottom right corner and fits.');
+  await evaluate(`[...${cell(tomorrow)}.querySelectorAll('.cal-item')][1].click()`);
+  assert.deepEqual(await evaluate('window.__uiTest.invoked.at(-1)'), ['show_day', { date:tomorrow, entry:'20000000-0000-4000-8000-000000000001' }], 'An entry opens in the journal.');
+
+  // The journal saving a day shows up at once.
+  await evaluate(`window.__uiTest.store({ ...window.__uiTest.day('${today}'), entries:[...window.__uiTest.day('${today}').entries, { id:'30000000-0000-4000-8000-000000000001', kind:'event', text:'Spontan dazu', done:false, cancelled:false, priority:false, time:'20:00', reminder:false, plan:null }] })`);
+  await until(`[...${cell(today)}.querySelectorAll('.cal-item-text')].some(item => item.textContent === 'Spontan dazu') || ${cell(today)}.querySelector('.cal-more')?.textContent !== undefined`);
+
+  // Views by key: J M W A T and 1–5; the choice is remembered.
+  await key('w', 'KeyW');
+  await until("document.querySelector('.cal').dataset.view === 'week' && document.querySelectorAll('.cal-time-column').length === 7");
+  assert.equal(await evaluate("document.querySelector('.cal-views [aria-selected=true]').getAttribute('aria-label')"), 'Woche');
+  assert.equal(await evaluate("document.querySelectorAll('.cal-time-column.is-today .cal-now').length"), 1, 'Today shows the current time.');
+  assert(await evaluate("document.querySelector('.cal-time').scrollTop") > 200, 'The hours start scrolled to the morning.');
+  await pause(350);
+  await screenshot('calendar-week.png');
+  await key('a', 'KeyA');
+  await until("document.querySelector('.cal').dataset.view === 'workweek' && document.querySelectorAll('.cal-time-column').length === 5");
+  await pause(350);
+  await screenshot('calendar-workweek.png');
+  await key('1', 'Digit1');
+  await until("document.querySelector('.cal').dataset.view === 'year' && document.querySelectorAll('.cal-year-month').length === 12");
+  assert.equal(await evaluate("document.querySelectorAll('.cal-year-day.is-today').length"), 1);
+  await pause(350);
+  await screenshot('calendar-year.png');
+  // The smallest window: the views move below the title, nothing is cut off.
+  await command('Emulation.setDeviceMetricsOverride', { width:640, height:460, deviceScaleFactor:1, mobile:false });
+  await key('2', 'Digit2');
+  await pause(350);
+  assert.equal(await evaluate("[...document.querySelectorAll('.cal-toolbar > *')].every(part => part.getBoundingClientRect().right <= innerWidth) && document.querySelector('.cal').scrollWidth <= innerWidth"), true, 'The toolbar fits the narrowest window.');
+  await screenshot('calendar-narrow.png');
+  // Where the time does not fit (overlapping entries in a narrow week), it runs through the corner from right to left.
+  await key('w', 'KeyW');
+  await until("document.querySelector('.cal').dataset.view === 'week'");
+  if (!await evaluate("document.querySelectorAll('.cal-item.is-block.is-event').length >= 2")) await key('ArrowRight', 'ArrowRight');
+  await until("document.querySelectorAll('.cal-item.is-block.is-event').length >= 2");
+  await hoverAt("[...document.querySelectorAll('.cal-item.is-block.is-event')].find(item => item.textContent.includes('Telefonat'))");
+  await until("[...document.querySelectorAll('.cal-item.is-block.is-event')].find(item => item.textContent.includes('Telefonat')).querySelector('.cal-item-time.is-scrolling')?.firstElementChild.getAnimations().length === 1");
+  await pause(500);
+  await screenshot('calendar-ticker.png');
+  await key('m', 'KeyM');
+  await command('Emulation.setDeviceMetricsOverride', { width:1120, height:760, deviceScaleFactor:1, mobile:false });
+  await key('j', 'KeyJ');
+  // In the year a dot marks tasks, a blue ring events, a dot in a ring both.
+  const yearDay = date => `[...document.querySelectorAll('.cal-year-day')].find(day => day.title.startsWith(new Intl.DateTimeFormat('de-DE', { weekday:'short', day:'2-digit', month:'2-digit' }).format(new Date('${date}T12:00'))))`;
+  const mark = date => evaluate(`${yearDay(date)}.querySelector('.cal-year-mark')?.className ?? 'none'`);
+  await until(`Boolean(${yearDay(crowded)}.querySelector('.cal-year-mark'))`);
+  assert.equal(await mark(tomorrow), 'cal-year-mark is-task is-event');
+  assert.equal(await mark(crowded), 'cal-year-mark is-task');
+  assert.equal(await mark(await evaluate('window.__uiTest.shift(5)')), 'cal-year-mark is-event');
+  assert.equal(await mark(await evaluate('window.__uiTest.shift(6)')), 'none');
+  // A day clicked in any view opens its note in the journal (the calendar goes there too); T shows that day's hours,
+  // where overlapping entries share the width.
+  await evaluate(`${yearDay(tomorrow)}.click()`);
+  assert.deepEqual(await evaluate('window.__uiTest.invoked.at(-1)'), ['show_day', { date:tomorrow, entry:null }]);
+  assert.equal(await evaluate("document.querySelector('.cal').dataset.view"), 'year');
+  await key('t', 'KeyT');
+  await until("document.querySelector('.cal').dataset.view === 'day' && document.querySelectorAll('.cal-time-column').length === 1");
+  const blocks = await evaluate("[...document.querySelectorAll('.cal-item.is-block')].map(block => { const r=block.getBoundingClientRect(); return { left:Math.round(r.left), width:Math.round(r.width) }; })");
+  assert.equal(blocks.length, 2); assert(blocks[0].left !== blocks[1].left && Math.abs(blocks[0].width - blocks[1].width) < 2, 'Overlapping entries stand side by side.');
+  assert.deepEqual(await texts('.cal-time-allday .cal-item'), ['Bericht abgeben']);
+  await evaluate("document.querySelector('.cal-filter-note').click()");
+  await until("[...document.querySelectorAll('.cal-time-allday .cal-item-text')].some(item => item.textContent === 'Gute Laune')");
+  assert.equal(await evaluate("document.querySelector('.cal-day-notes').textContent.includes('Gute Laune')"), true);
+  await pause(350);
+  await screenshot('calendar-day.png');
+  await evaluate("document.querySelector('.cal-open').click()");
+  assert.deepEqual(await evaluate('window.__uiTest.invoked.at(-1)'), ['show_day', { date:tomorrow, entry:null }]);
+  await key('ArrowRight', 'ArrowRight');
+  await until(`document.querySelector('.cal-day-side h2').textContent === ${longDate(later)}`);
+  await evaluate('location.reload()');
+  await until("document.querySelector('.cal')?.dataset.view === 'day'");
+  assert.equal(await evaluate("document.querySelector('.cal-filter-note').getAttribute('aria-pressed')"), 'true', 'View and filters are remembered.');
+
+  // The compact month: its own small window to click days in.
+  await command('Emulation.setDeviceMetricsOverride', { width:292, height:330, deviceScaleFactor:1, mobile:false });
+  await command('Page.navigate', { url:`${origin}/?window=mini` });
+  await until("document.querySelectorAll('.cal-compact-day').length === 42");
+  await evaluate(`window.__uiTest.emit('journal:date', '${tomorrow}')`);
+  await until("document.querySelectorAll('.cal-compact-day[aria-selected=true]').length === 1");
+  assert.equal(await evaluate("document.querySelector('.cal-compact-day.is-today').getAttribute('aria-current')"), 'date');
+  assert.equal(await evaluate("document.querySelector('.mini').scrollHeight <= innerHeight"), true, 'The compact month fits its window.');
+  await pause(350);
+  await screenshot('calendar-mini.png');
+  await evaluate("document.querySelector('.cal-compact-day.is-today').click()");
+  assert.deepEqual(await evaluate('window.__uiTest.invoked.at(-1)'), ['show_day', { date:today, entry:null }]);
+  await evaluate("document.querySelector('.mini-pin').click()");
+  await until("document.querySelector('.mini-pin').getAttribute('aria-pressed') === 'true'");
+  assert.equal(await evaluate("window.__uiTest.invoked.at(-1)[0]"), 'plugin:window|set_always_on_top');
+  const month = await evaluate("document.querySelector('.mini .cal-title').textContent");
+  await key('PageDown', 'PageDown');
+  await until(`document.querySelector('.mini .cal-title').textContent !== ${JSON.stringify(month)}`);
 }
 
 try {
@@ -194,7 +693,7 @@ try {
   await evaluate('document.fonts.ready.then(() => true)');
   assert.deepEqual(await evaluate("['#title', '.entry-text', '.cm-line'].map(selector => getComputedStyle(document.querySelector(selector)).fontFamily.split(',')[0].replace(/[\"']/g, ''))"), ['Lilex', 'Lilex', 'Lilex'], 'Writing fields use Lilex.');
   assert.equal(await evaluate("Array.from(document.fonts).some(font => font.family.replace(/[\"']/g, '') === 'Lilex' && font.status === 'loaded')"), true, 'Lilex is loaded from the bundle.');
-  assert.deepEqual(await evaluate("Array.from(document.querySelectorAll('.entry')).map(row => { const a=row.querySelector('.entry-symbol').getBoundingClientRect(), b=row.querySelector('.cm-line').getBoundingClientRect(); return Math.abs(a.top+a.height/2-b.top-b.height/2) < 1; })"), Array(5).fill(true), 'Symbols sit on the first text line (requires the editor styles under the CSP).');
+  assert.deepEqual(await evaluate("Array.from(document.querySelectorAll('.entry')).map(row => { const a=row.querySelector('.entry-symbol').getBoundingClientRect(), line=row.querySelector('.cm-line'), b=line.getBoundingClientRect(), first=parseFloat(getComputedStyle(line).lineHeight); return Math.abs(a.top+a.height/2-b.top-first/2) < 1; })"), Array(5).fill(true), 'Symbols sit on the first text line (requires the editor styles under the CSP).');
   assert.deepEqual(await evaluate("(() => { const s=getComputedStyle(document.querySelector('.cm-content')); return [s.paddingTop, s.whiteSpace, getComputedStyle(document.querySelector('.cm-line')).lineHeight, getComputedStyle(document.querySelector('.cm-editor')).fontSize]; })()"), ['6px', 'break-spaces', '24px', '13px']);
   await screenshot('journal.png');
 
@@ -538,7 +1037,7 @@ try {
   await until("Boolean(document.querySelector('.entry-dock-shell.is-open .dock-plan-date'))");
   await evaluate("document.querySelector('.entry-dock-shell.is-open .dock-plan-date').click()");
   await until("Boolean(document.querySelector('.entry-dock-shell.is-open .planner'))");
-  await tap(await evaluate("(() => { const r=document.querySelector('h1').getBoundingClientRect(); return { x:r.left+20, y:r.top+10 }; })()"));
+  await tap(await evaluate("(() => { const r=document.querySelector('.document-header h1').getBoundingClientRect(); return { x:r.left+20, y:r.top+10 }; })()"));
   await until("!document.querySelector('.entry-dock-shell.is-open')");
   await evaluate(`${row(firstTask)}.querySelector('.entry-symbol').click()`);
   await until("Boolean(document.querySelector('.entry-dock-shell.is-open .dock-plan-date'))");
@@ -559,7 +1058,7 @@ try {
   assert.equal(await symbolIcon(firstTask), 'scheduled', 'A task planned for a date shows <.');
   assert.equal(await evaluate(`${row(firstTask)}.querySelector('.entry-trace-target').textContent`), `${await shortDate(inTwoDays)}15:30`);
   assert.equal(await evaluate(`${row(firstTask)}.querySelector('.entry-trace-target .icon') !== null`), true, 'The reminder is shown as a bell.');
-  assert.equal(await evaluate(`${row(firstTask)}.querySelector('.entry-text').readOnly`), true, 'A trace is not editable.');
+  assert.equal(await evaluate(`${row(firstTask)}.querySelector('.entry-text').readOnly`), false, 'A trace stays editable (its copies follow when saved).');
   await pause(400);
   await screenshot('planned.png');
 
@@ -610,16 +1109,24 @@ try {
   assert.equal(await evaluate("Boolean(document.querySelector('.entry-dock-shell.is-open .dock-unplan'))"), false, 'Saved plans cannot be taken back.');
   await closeDock();
   await evaluate(`${row(firstTask)}.querySelector('.entry-trace-target').click()`);
-  await until(`document.querySelector('h1').textContent.includes('${Number(tomorrow.slice(8))}.') && Boolean(${row(stored.find(entry => entry.id === firstTask).plan.targets[0].id)})`);
+  await until(`document.querySelector('.document-header h1').textContent.includes('${Number(tomorrow.slice(8))}.') && Boolean(${row(stored.find(entry => entry.id === firstTask).plan.targets[0].id)})`);
   const copyId = stored.find(entry => entry.id === firstTask).plan.targets[0].id;
   assert.equal(await evaluate(`${row(copyId)}.querySelector('.entry-text').value`), 'Eine Runde durch den Park gehen', 'The planned task appears on its new day.');
   assert.equal(await evaluate(`${row(copyId)}.dataset.trace`), undefined);
   assert.equal(await evaluate(`${row(copyId)}.dataset.priority`), 'high', 'Priority travels with the entry.');
-  // Removing the moved entry also removes its trace; removing a trace also removes the moved entry.
+  // Removing a moved entry asks whether its trace goes too; removing a trace whether the moved entry does.
   await evaluate(`${row(copyId)}.querySelector('.entry-symbol').click()`);
   await until("Boolean(document.querySelector('.entry-dock-shell.is-open .dock-remove'))");
-  assert.match(await evaluate("document.querySelector('.entry-dock-shell.is-open .dock-remove').dataset.tip"), /Spur am/, 'The hint says the trace goes too.');
+  assert.match(await evaluate("document.querySelector('.entry-dock-shell.is-open .dock-remove').dataset.tip"), /Spur am/, 'The hint mentions the trace.');
   await evaluate("document.querySelector('.entry-dock-shell.is-open .dock-remove').click()");
+  await until(`Boolean(${row(copyId)}.querySelector('.scope-choice'))`);
+  assert.deepEqual(await evaluate(`[...${row(copyId)}.querySelectorAll('.scope-choice button')].map(button => button.textContent)`), ['Nur diesen', 'Alle 2'], 'Nothing follows the copy; all includes the trace before it.');
+  assert.equal(await evaluate(`(() => { const choice=${row(copyId)}.querySelector('.dock-remove-choice .scope-choice.is-satellite'), cap=choice?.querySelector('.scope-choice-cap').getBoundingClientRect();
+    return Boolean(choice) && !${row(copyId)}.querySelector('.dock-remove') && cap.width === 30 && choice.getBoundingClientRect().width > 150 && Boolean(document.querySelector('.entry-dock-shell.is-open')); })()`), true, 'In the orbit the question grows out of the trash satellite, which stays as its start.');
+  assert.equal(await evaluate(`document.activeElement === ${row(copyId)}.querySelector('.scope-choice-this')`), true, 'Enter keeps to this entry.');
+  await pause(400);
+  await screenshot('scope-choice.png');
+  await evaluate(`${row(copyId)}.querySelector('.scope-choice-all').click()`);
   await until(`!${row(copyId)}`);
   const savesBeforeRemove = await evaluate('window.__uiTest.saves');
   await key('s', 'KeyS', 2);
@@ -629,8 +1136,12 @@ try {
   assert.equal(await evaluate(`window.__uiTest.day().entries.some(entry => entry.id === '${firstTask}')`), false, 'The trace is gone from its day.');
   await evaluate(`${row(eventId)}.querySelector('.entry-symbol').click()`);
   await until("Boolean(document.querySelector('.entry-dock-shell.is-open .dock-remove'))");
-  assert.equal(await evaluate("document.querySelector('.entry-dock-shell.is-open .dock-remove').dataset.tip"), `Entfernen · auch am ${await shortDate(nextWeek)}`);
+  assert.equal(await evaluate("document.querySelector('.entry-dock-shell.is-open .dock-remove').dataset.tip"), `Entfernen · auf Wunsch auch am ${await shortDate(nextWeek)}`);
   await evaluate("document.querySelector('.entry-dock-shell.is-open .dock-remove').click()");
+  await until(`Boolean(${row(eventId)}.querySelector('.scope-choice'))`);
+  assert.deepEqual(await evaluate(`[...${row(eventId)}.querySelectorAll('.scope-choice button')].map(button => button.textContent)`), ['Nur diesen', 'Auch den folgenden']);
+  await key('ArrowRight', 'ArrowRight');
+  await key('Enter', 'Enter');
   await until(`!${row(eventId)}`);
   await key('s', 'KeyS', 2);
   await until(`window.__uiTest.saves === ${savesBeforeRemove + 2} && document.querySelector('.save-status').textContent === 'Gespeichert'`);
@@ -676,7 +1187,7 @@ try {
   await screenshot('markdown-preview.png');
   assert(await evaluate(`(() => { const entry=document.querySelector('[data-entry-id="${cancelledTask}"]'); const line=entry.querySelector('.strike-overlay line'); const text=entry.querySelector('.cm-line'); const range=document.createRange(); range.selectNodeContents(text); return Math.abs(Number(line.getAttribute('x2')) - (range.getBoundingClientRect().right - entry.querySelector('.entry-edit').getBoundingClientRect().left)) < 2; })()`), 'The strike-through ends with the text, not the line box.');
   // Clicking into a hidden part reveals it and puts the caret where the click was.
-  const clickAt = await evaluate(`(() => { const node=Array.from(${row(md)}.querySelectorAll('.md-italic')).at(-1); const r=node.getBoundingClientRect(); return { x:r.left+r.width/2, y:r.top+r.height/2 }; })()`);
+  const clickAt = await evaluate(`(() => { const node=Array.from(${row(md)}.querySelectorAll('.md-italic')).at(-1); node.scrollIntoView({ block:'center' }); const r=node.getBoundingClientRect(); return { x:r.left+r.width/2, y:r.top+r.height/2 }; })()`);
   await command('Input.dispatchMouseEvent', { type:'mouseMoved', x:clickAt.x, y:clickAt.y });
   await command('Input.dispatchMouseEvent', { type:'mousePressed', x:clickAt.x, y:clickAt.y, button:'left', buttons:1, clickCount:1 });
   await command('Input.dispatchMouseEvent', { type:'mouseReleased', x:clickAt.x, y:clickAt.y, button:'left', buttons:0, clickCount:1 });
@@ -801,110 +1312,39 @@ try {
 
   await key('s', 'KeyS', 2);
   await until("document.querySelector('.save-status').textContent === 'Gespeichert'");
-  const heading = await evaluate("document.querySelector('h1').textContent");
+  const heading = await evaluate("document.querySelector('.document-header h1').textContent");
   await key('ArrowRight', 'ArrowRight', 1);
-  await until(`document.querySelector('h1').textContent !== ${JSON.stringify(heading)}`);
+  await until(`document.querySelector('.document-header h1').textContent !== ${JSON.stringify(heading)}`);
   await key('h', 'KeyH', 1);
-  await until(`document.querySelector('h1').textContent === ${JSON.stringify(heading)} && document.querySelectorAll('.entry').length > 0`);
+  await until(`document.querySelector('.document-header h1').textContent === ${JSON.stringify(heading)} && document.querySelectorAll('.entry').length > 0`);
   await key('ArrowLeft', 'ArrowLeft', 1);
-  await until(`document.querySelector('h1').textContent !== ${JSON.stringify(heading)}`);
+  await until(`document.querySelector('.document-header h1').textContent !== ${JSON.stringify(heading)}`);
   await key('ArrowRight', 'ArrowRight', 1);
-  await until(`document.querySelector('h1').textContent === ${JSON.stringify(heading)} && document.querySelectorAll('.entry').length > 0`);
+  await until(`document.querySelector('.document-header h1').textContent === ${JSON.stringify(heading)} && document.querySelectorAll('.entry').length > 0`);
 
-  // Setting: switch the entry actions between the orbit and the old bar; the choice is remembered.
+  // Setting: the entry actions as an orbit (default), as words in the text or as gestures; the choice is remembered.
   assert.equal(await evaluate("document.querySelector('.app').classList.contains('actions-orbit')"), true, 'The orbit is the default.');
   await key(',', 'Comma', 2);
   await until("Boolean(document.querySelector('.settings')) && document.activeElement.dataset.layout === 'orbit'");
+  assert.deepEqual(await evaluate("[...document.querySelectorAll('.settings-option')].map(option => option.dataset.layout)"), ['orbit', 'inline', 'swipe'], 'The bar and the palette are gone.');
   await pause(350);
   await screenshot('settings.png');
-  await evaluate("document.querySelector('.settings-option[data-layout=bar]').click()");
-  await until("document.querySelector('.app').classList.contains('actions-bar')");
+  await evaluate("document.querySelector('.settings-option[data-layout=inline]').click()");
+  await until("document.querySelector('.app').classList.contains('actions-inline')");
   await key('Escape');
   await until("!document.querySelector('.settings')");
-  const barTask = await evaluate("document.querySelector('.entry[data-entry-kind=task]:not([data-trace])').dataset.entryId");
-  await evaluate(`${row(barTask)}.querySelector('.entry-symbol').click()`);
-  await until("Boolean(document.querySelector('.entry-dock-shell.is-open'))");
-  await pause(450);
-  const bar = await evaluate(`(() => {
-    const entry=${row(barTask)}, dock=entry.querySelector('.entry-dock').getBoundingClientRect();
-    const buttons=Array.from(entry.querySelectorAll('.entry-dock button:not(:disabled)')).map(button => button.getBoundingClientRect());
-    return { satellites:entry.querySelectorAll('.dock-satellite, .dock-orbit').length, dividers:entry.querySelectorAll('.dock-divider').length, oneRow:buttons.every(r => Math.abs(r.top+r.height/2 - (dock.top+dock.height/2)) < 2), below:dock.top >= entry.getBoundingClientRect().top + 30, left:Math.abs(dock.left - entry.getBoundingClientRect().left) < 8, width:dock.width };
-  })()`);
-  assert.equal(bar.satellites, 0);
-  assert(bar.dividers >= 4 && bar.oneRow && bar.below && bar.left && bar.width < 360, `The bar is one compact row under the entry (${JSON.stringify(bar)}).`);
-  await screenshot('bar.png');
-  await evaluate("document.querySelector('.entry-dock-shell.is-open .dock-plan-date').click()");
-  await until("Boolean(document.querySelector('.entry-dock-shell.is-open .planner'))");
-  assert(await evaluate(`Math.abs(${row(barTask)}.querySelector('.planner').getBoundingClientRect().left - ${row(barTask)}.getBoundingClientRect().left) < 8`), 'In the bar layout the calendar opens in place, left under the row.');
-  await key('Escape'); await key('Escape');
-  await until("!document.querySelector('.entry-dock-shell.is-open')");
   await key('s', 'KeyS', 2);
   await until("document.querySelector('.save-status').textContent === 'Gespeichert'");
   await command('Page.reload');
   await until("document.querySelectorAll('.entry').length > 0");
-  assert.equal(await evaluate("document.querySelector('.app').classList.contains('actions-bar')"), true, 'The layout is remembered.');
+  assert.equal(await evaluate("document.querySelector('.app').classList.contains('actions-inline')"), true, 'The layout is remembered.');
   await evaluate("document.querySelector('.settings-button').click()");
-  await until("document.activeElement?.dataset.layout === 'bar'");
+  await until("document.activeElement?.dataset.layout === 'inline'");
   await key('ArrowLeft');
   await until("document.querySelector('.app').classList.contains('actions-orbit') && document.activeElement.dataset.layout === 'orbit'");
   await key('Escape');
 
-  // Third layout: the searchable command palette.
-  await key(',', 'Comma', 2);
-  await until("Boolean(document.querySelector('.settings'))");
-  assert.equal(await evaluate("document.querySelectorAll('.settings-option').length"), 5);
-  await evaluate("document.querySelector('.settings-option[data-layout=palette]').click()");
-  await until("document.querySelector('.app').classList.contains('actions-palette')");
-  await pause(300);
-  await screenshot('settings.png');
-  await key('Escape');
-  await evaluate("document.querySelector('#title').focus()");
-  await key('a', 'KeyA', 1);
-  await until("document.activeElement.classList.contains('entry-text')");
-  const paletteTask = await focusedId();
-  await command('Input.insertText', { text:'Palette testen' });
-  const typeQuery = async text => { await command('Input.insertText', { text }); };
-  const selected = () => evaluate("document.querySelector('.palette-item[aria-selected=true] .palette-label')?.textContent ?? null");
-  await key('Enter', 'Enter', 1);
-  await until("document.activeElement?.closest('.palette-search') !== null && document.activeElement.tagName === 'INPUT'");
-  assert.equal(await evaluate("document.querySelector('.palette-item.is-current .palette-label').textContent"), 'Wieder öffnen', 'The current state is marked, not offered.');
-  await typeQuery('erl');
-  await until(`document.querySelectorAll('.palette-item').length === 1 && ${row(paletteTask)}.dataset.preview === 'done'`);
-  assert.equal(await selected(), 'Erledigt', 'Typing filters and highlights; the highlight previews on the entry.');
-  await pause(300);
-  await screenshot('palette.png');
-  await key('Enter');
-  await until(`${row(paletteTask)}.dataset.status === 'done' && !document.querySelector('.palette')`);
-  assert.equal(await evaluate(`document.activeElement === ${row(paletteTask)}.querySelector('.entry-text')`), true, 'Running an action closes the palette and returns to the text.');
-  await key('Enter', 'Enter', 1);
-  await until("Boolean(document.querySelector('.palette'))");
-  await typeQuery('wichtig');
-  await until("document.querySelector('.palette-item[aria-selected=true] .palette-label')?.textContent === 'Hohe Priorität'");
-  await key('Escape');
-  await until("!document.querySelector('.palette')");
-  await key('Enter', 'Enter', 1);
-  await until("Boolean(document.querySelector('.palette'))");
-  await typeQuery('xyz');
-  await until("Boolean(document.querySelector('.palette-empty'))");
-  await key('Escape');
-  await key('Enter', 'Enter', 1);
-  await until("Boolean(document.querySelector('.palette'))");
-  await key('ArrowDown');
-  assert.notEqual(await selected(), 'Erledigt');
-  await typeQuery('termin');
-  await until("document.querySelector('.palette-item[aria-selected=true] .palette-label')?.textContent === 'Planen …'");
-  await key('Enter');
-  await until(`Boolean(${row(paletteTask)}.querySelector('.planner-grid'))`);
-  await key('Escape');
-  await until("!document.querySelector('.entry-dock-shell.is-open')");
-  await key('Enter', 'Enter', 1);
-  await until("Boolean(document.querySelector('.palette'))");
-  await typeQuery('mor');
-  await key('Enter');
-  await until(`${row(paletteTask)}.dataset.trace === 'tomorrow'`);
-  await key('Delete', 'Delete', 1);
-  await until(`!${row(paletteTask)}`);
-  // Fourth layout: embedded in the text flow, no surface.
+  // Embedded in the text flow, no surface.
   await key(',', 'Comma', 2);
   await until("Boolean(document.querySelector('.settings'))");
   await evaluate("document.querySelector('.settings-option[data-layout=inline]').click()");
@@ -1097,6 +1537,10 @@ try {
   for (const date of days) assert.equal(await evaluate(`window.__uiTest.day('${date}').entries.filter(entry => entry.text === 'Mehrere Tage planen').length`), 1, `A copy on ${date}.`);
   await evaluate(`${row(held)}.querySelector('.entry-text').focus()`);
   await key('Delete', 'Delete', 1);
+  await until(`Boolean(${row(held)}.querySelector('.scope-choice'))`);
+  assert.deepEqual(await evaluate(`[...${row(held)}.querySelectorAll('.scope-choice button')].map(button => button.textContent)`), ['Nur diesen', 'Auch die 4 folgenden']);
+  await key('ArrowRight', 'ArrowRight');
+  await key('Enter', 'Enter');
   await until(`!${row(held)}`);
   await key('s', 'KeyS', 2);
   await until(`window.__uiTest.saves === ${savesBeforeDays + 2}`);
@@ -1104,8 +1548,10 @@ try {
   assert.equal(await evaluate(`(window.__uiTest.day('${excluded}')?.entries ?? []).length`), 0, 'The day taken out of the range got nothing.');
   const wheeled = await swipeTask('Mit dem Trackpad');
   const wheelAt = await symbolPoint(wheeled);
+  const dayBeforeWheel = await evaluate("document.querySelector('.document-header h1').textContent");
   for (let step = 0; step < 4; step++) await command('Input.dispatchMouseEvent', { type:'mouseWheel', x:wheelAt.x + 120, y:wheelAt.y, deltaX:-22, deltaY:0 });
   await until(`${row(wheeled)}.dataset.trace === 'tomorrow'`, 'Two-finger swipe right moves to tomorrow.');
+  assert.equal(await evaluate("document.querySelector('.document-header h1').textContent"), dayBeforeWheel, 'Swiping an entry does not turn the day.');
   await evaluate(`${row(wheeled)}.querySelector('.entry-text').focus()`);
   await key('Enter', 'Enter', 1);
   await until("Boolean(document.querySelector('.entry-dock-shell.is-open .swipe-legend'))");
@@ -1122,8 +1568,9 @@ try {
   await command('Emulation.setEmulatedMedia', { features:[{name:'prefers-reduced-motion',value:'reduce'}] });
   await evaluate("document.querySelector('.entry-symbol').click()");
   assert.equal(await evaluate("getComputedStyle(document.querySelector('.entry-dock-shell.is-open')).transitionDuration"), '0s');
+  await checkCalendars();
   assert.deepEqual(errors, [], 'No browser runtime errors.');
-  console.log('UI checks passed: settings (orbit/bar/palette/inline/swipe layout, remembered), swipe gestures (the icon stays at the symbol, a bar in each action’s own colour grows, full height sideways; right: tomorrow/plan/several days, left: remove, down: done/cancel, up: priority, tap, hold is a tap, keys, trackpad), planning several days (range by two clicks, right-click flips, copies per day, linked removal), embedded inline actions (in the flow, no surface, preview, calendar), command palette (filter, synonyms, preview, Enter, empty, plan, tomorrow), IBM Plex Sans UI and bold Lilex title, live-preview Markdown (markers only at the cursor, hidden when not editing, click into hidden parts), format shortcuts with undo, colours, right-click format menu; shortcuts (F1, Alt+A/Enter/Backspace outliner, Alt+D/X/P/U/T/M/Enter/Entf, Ctrl+arrows, Alt+arrows/H), clock as large as the calendar with back button, Tab and typed digits; clock dial (tap on both rings, wheel, keys, quick times), calendar stays open on inner clicks, time after text, linked removal both ways; planning (calendar keyboard, time, reminder, traces >/</outlined <, undo, tomorrow, same-day time, copies on target days), asterisk/outlined event/thick note priority symbols, automatic priority order, drag and keyboard boundaries, toolbar focus, saved priority; action pill, previews, removal, grouping, caret, saving, cached navigation, wrapping and reduced motion.');
+  console.log('UI checks passed: calendar window (month, week, work week, year, day; keys, swiping, filters, remembered, live updates, open in journal), compact month window, calendar in the resizable sidebar (creating entries by marking quarter hours, composer, editing by right click), changing kinds (keys, orbit cluster, preview), saving by itself (after a pause, before leaving the day), actions reaching linked entries (following / all, Escape cancels), editable traces passing edits to their copies, swiping days, settings (orbit/inline/swipe layout, remembered), swipe gestures (the icon stays at the symbol, a bar in each action’s own colour grows, full height sideways; right: tomorrow/plan/several days, left: remove, down: done/cancel, up: priority, tap, hold is a tap, keys, trackpad), planning several days (range by two clicks, right-click flips, copies per day, linked removal), embedded inline actions (in the flow, no surface, preview, calendar), IBM Plex Sans UI and bold Lilex title, live-preview Markdown (markers only at the cursor, hidden when not editing, click into hidden parts), format shortcuts with undo, colours, right-click format menu; shortcuts (F1, Alt+A/Enter/Backspace outliner, Alt+D/X/P/U/T/M/Enter/Entf, Ctrl+arrows, Alt+arrows/H), clock as large as the calendar with back button, Tab and typed digits; clock dial (tap on both rings, wheel, keys, quick times), calendar stays open on inner clicks, time after text, linked removal both ways; planning (calendar keyboard, time, reminder, traces >/</outlined <, undo, tomorrow, same-day time, copies on target days), asterisk/outlined event/thick note priority symbols, automatic priority order, drag and keyboard boundaries, toolbar focus, saved priority; action pill, previews, removal, grouping, caret, saving, cached navigation, wrapping and reduced motion.');
   console.log(`Screenshots: ${join(artifacts, 'journal.png')} and menu.png`);
 } finally {
   if (socket?.readyState === WebSocket.OPEN) {

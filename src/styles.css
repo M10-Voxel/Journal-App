@@ -45,25 +45,14 @@ button:active:not(:disabled) > .icon { transform: scale(.92); }
 
 .app { display: flex; height: 100dvh; min-height: 0; overflow: hidden; }
 .sidebar, .topbar, .statusbar, .section-heading, .entry-actions, .entry-grip, .entry-dock, .eyebrow, h1, .empty { user-select: none; -webkit-user-select: none; }
-.sidebar { width: 208px; flex-shrink: 0; display: flex; flex-direction: column; padding: 0 12px; background: var(--surface); border-right: 1px solid var(--border); }
-.brand { display: flex; align-items: center; gap: 9px; min-height: 67px; padding: 0 12px; }
-.brand-mark { color: var(--accent); }
-.brand-mark .icon { width: 20px; height: 20px; }
-.brand strong { font-size: 14px; letter-spacing: .02em; font-weight: 600; }
-.side-section-label { padding: 17px 12px 10px; color: var(--placeholder); font-family: var(--mono); font-size: 10px; letter-spacing: .07em; }
-.side-active { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 4px; background: var(--selected); font-size: 13px; }
-.side-active .icon { color: var(--accent); }
-.week-label { margin-top: 25px; }
-.week-list { display: flex; flex-direction: column; gap: 2px; }
-.week-day { display: flex; align-items: center; gap: 14px; padding: 8px 12px; min-height: 32px; text-align: left; border: 0; border-radius: 4px; background: transparent; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
-.week-day:hover { background: var(--hover); color: var(--text); }
-.week-day.selected { background: var(--hover); color: var(--text); }
-.week-day-name { width: 19px; color: var(--placeholder); }
-.week-day.selected .week-day-name { color: var(--accent); }
-.today-dot { margin-left: auto; width: 4px; height: 4px; border-radius: 50%; background: var(--accent); }
-.side-bottom { display: flex; align-items: center; gap: 10px; margin-top: auto; padding: 20px 12px; color: var(--muted); font-size: 11px; }
-.side-bottom > .icon { color: var(--placeholder); }
-.side-bottom small { display: block; margin-top: 3px; color: var(--placeholder); font-size: 10px; }
+/* The sidebar holds the calendar; its width (inline style) is set by dragging the edge, see useSidebarWidth. */
+.sidebar { position: relative; flex-shrink: 0; display: flex; flex-direction: column; min-width: 0; background: var(--surface); border-right: 1px solid var(--border); }
+.sidebar-resizer { position: absolute; top: 0; bottom: 0; right: -5px; z-index: 30; width: 9px; cursor: col-resize; touch-action: none; }
+.sidebar-resizer::after { content: ''; position: absolute; top: 0; bottom: 0; left: 3px; width: 3px; border-radius: 2px; background: var(--accent); opacity: 0; transition: opacity var(--fast) ease; }
+.sidebar-resizer:hover::after { opacity: .5; transition-delay: 150ms; }
+.sidebar-resizer:focus-visible { outline: none; }
+.sidebar-resizer:focus-visible::after, .app.is-resizing .sidebar-resizer::after { opacity: 1; transition-delay: 0s; }
+.app.is-resizing, .app.is-resizing * { cursor: col-resize !important; user-select: none; }
 
 .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .topbar { display: flex; align-items: stretch; justify-content: space-between; min-height: 45px; gap: 12px; padding-right: 14px; border-bottom: 1px solid var(--border); background: var(--surface); }
@@ -149,40 +138,6 @@ h2 { margin: 0; font-size: 12px; font-weight: 600; }
 .entry-open { z-index: 3; }
 .entry-leaving { pointer-events: none; animation: entry-out 200ms cubic-bezier(.5, 0, .75, 0) forwards; }
 
-/* Entry actions, layout "bar" (setting): one compact pill under the row. */
-/* Floating action pill */
-.actions-bar .entry-dock-shell { position: absolute; left: -4px; top: calc(100% - 1px); z-index: 3; visibility: hidden; pointer-events: none; transition: visibility 0s 180ms; }
-.actions-bar .entry-dock-shell.is-open { visibility: visible; pointer-events: auto; transition-delay: 0s; }
-.actions-bar .entry-dock-shell:focus { outline: none; }
-.actions-bar .entry-dock { position: relative; display: flex; align-items: center; gap: 2px; padding: 3px; border-radius: 10px; background: var(--surface); box-shadow: 0 0 0 1px var(--edge), 0 12px 32px -10px #000000e6, 0 3px 8px #00000080;
-  transform-origin: 19px -6px; opacity: 0; transform: translateY(-6px) scale(.86); transition: transform 340ms var(--spring), opacity 140ms ease; }
-.actions-bar .is-open > .entry-dock { opacity: 1; transform: none; }
-.actions-bar .entry-dock::before { content: ''; position: absolute; top: -4px; left: 15px; width: 8px; height: 8px; border-radius: 2px 0 0 0; background: var(--surface); box-shadow: -1px -1px 0 var(--edge); transform: rotate(45deg); }
-.actions-bar .entry-dock button { position: relative; display: grid; place-items: center; width: 30px; height: 28px; padding: 0; border: 0; border-radius: 7px; background: transparent; color: var(--muted);
-  transition: color var(--fast) ease, background-color var(--fast) ease, transform 220ms var(--spring); }
-.actions-bar .is-open > .entry-dock button { animation: item-in 360ms var(--spring) backwards; animation-delay: calc(var(--i, 0) * 24ms + 50ms); }
-.actions-bar .entry-dock button > .icon { width: 15px; height: 15px; transition: transform 260ms var(--spring); }
-.actions-bar .entry-dock button:hover:not(:disabled) { background: var(--hover); color: var(--text); }
-.actions-bar .entry-dock button:active:not(:disabled) { transform: scale(.86); }
-.actions-bar .entry-dock button:focus-visible { outline-offset: -1px; }
-.actions-bar .dock-divider { flex: none; width: 1px; height: 16px; margin: 0 3px; border-radius: 1px; background: var(--hover); }
-.actions-bar .dock-order { display: flex; gap: 2px; }
-.actions-bar .dock-order button:first-child:hover:not(:disabled) > .icon { transform: translateY(-2px); }
-.actions-bar .dock-order button:last-child:hover:not(:disabled) > .icon { transform: translateY(2px); }
-.actions-bar .entry-dock .dock-remove:hover { background: #ff55551f; color: var(--error); }
-.actions-bar .entry-dock .dock-priority[aria-pressed='true'], .actions-bar .entry-dock .dock-priority:hover { color: var(--priority); }
-.actions-bar .dock-remove:hover > .icon { animation: wiggle 420ms ease; }
-.actions-bar .status-track { position: relative; display: flex; border-radius: 7px; background: var(--border); }
-.actions-bar .status-track::before { content: ''; position: absolute; top: 0; left: 0; width: 30px; height: 28px; border-radius: 7px; background: var(--selected); box-shadow: inset 0 0 0 1px #569eff4d; transition: transform 380ms var(--spring); }
-.actions-bar .status-track[data-status='done']::before { transform: translateX(30px); }
-.actions-bar .status-track[data-status='cancelled']::before { transform: translateX(60px); }
-.actions-bar .entry-dock .status-track button:hover:not(:disabled) { background: #ffffff0d; }
-.actions-bar .status-track button[aria-pressed='true'], .actions-bar .entry-dock .status-track button[aria-pressed='true']:hover { background: transparent; color: var(--accent); }
-.actions-bar .status-track button[aria-pressed='true'] > .icon { animation: icon-pop 420ms var(--spring); }
-.actions-bar .status-track button:not([aria-pressed='true']):hover > .icon { transform: scale(1.15); }
-.actions-bar .dock-planning { display: flex; gap: 2px; border-radius: 7px; outline: 1px dashed var(--focus); outline-offset: -1px; }
-.actions-bar .entry-dock .dock-planning button:disabled { opacity: 1; color: var(--disabled); }
-
 /* Entry actions as satellites (see EntryActionDock): an orbit around the symbol, planning at the end of the row.
    The symbol's centre is at 15px / 18px of the entry; satellites start there and spring out to their place on the orbit. */
 .actions-orbit .entry-dock-shell { position: absolute; inset: 0; z-index: 3; visibility: hidden; pointer-events: none; transition: visibility 0s 220ms; }
@@ -212,17 +167,23 @@ h2 { margin: 0; font-size: 12px; font-weight: 600; }
 .actions-orbit .entry-dock .dock-priority[aria-pressed='true'], .actions-orbit .entry-dock .dock-priority:hover { color: var(--priority); }
 .actions-orbit .status-track .dock-satellite[aria-pressed='true'] { color: var(--accent); box-shadow: 0 0 0 1.5px var(--accent), 0 6px 16px -6px #000000e6; }
 .actions-orbit .status-track .dock-satellite[aria-pressed='true'] > .icon { animation: icon-pop 420ms var(--spring); }
-/* Planning sits apart, under the end of the row. */
-.actions-orbit .dock-planning { position: absolute; right: 0; top: calc(100% - 2px); display: flex; gap: 2px; padding: 3px; border-radius: 999px; pointer-events: auto;
+/* Planning and the kind sit apart, side by side under the end of the row; the kind's current choice wears the blue ring. */
+.actions-orbit .dock-clusters { position: absolute; right: 0; top: calc(100% - 2px); display: flex; gap: 10px; pointer-events: none; }
+.actions-orbit :is(.dock-planning, .dock-kind) { position: relative; display: flex; gap: 2px; padding: 3px; border-radius: 999px; pointer-events: auto;
   background: var(--surface); box-shadow: 0 0 0 1px var(--edge), 0 8px 20px -8px #000000e6;
   opacity: 0; transform: translateX(10px) scale(.9); transform-origin: right center; transition: transform 220ms var(--ease), opacity 140ms ease; }
-.actions-orbit .is-open .dock-planning { opacity: 1; transform: none; transition: transform 420ms var(--spring) 120ms, opacity 160ms ease 120ms; }
-.actions-orbit .dock-planning button { position: relative; display: grid; place-items: center; width: 28px; height: 26px; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--muted); transition: color var(--fast) ease, background-color var(--fast) ease, transform 220ms var(--spring); }
-.actions-orbit .dock-planning button > .icon { width: 14px; height: 14px; }
-.actions-orbit .dock-planning button:hover:not(:disabled) { background: var(--hover); color: var(--text); }
-.actions-orbit .dock-planning button:active:not(:disabled) { transform: scale(.86); }
+.actions-orbit .is-open :is(.dock-planning, .dock-kind) { opacity: 1; transform: none; transition: transform 420ms var(--spring) 120ms, opacity 160ms ease 120ms; }
+.actions-orbit .is-open .dock-kind { transition-delay: 60ms; }
+.actions-orbit :is(.dock-planning, .dock-kind) button { position: relative; display: grid; place-items: center; width: 28px; height: 26px; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--muted); transition: color var(--fast) ease, background-color var(--fast) ease, box-shadow var(--fast) ease, transform 220ms var(--spring); }
+.actions-orbit :is(.dock-planning, .dock-kind) button > .icon { width: 14px; height: 14px; }
+.actions-orbit :is(.dock-planning, .dock-kind) button:hover:not(:disabled) { background: var(--hover); color: var(--text); }
+.actions-orbit :is(.dock-planning, .dock-kind) button:active:not(:disabled) { transform: scale(.86); }
 .actions-orbit .entry-dock .dock-planning button:disabled { opacity: 1; color: var(--disabled); }
+.actions-orbit .entry-dock .dock-kind button:disabled { opacity: .35; }
 .actions-orbit .dock-planning::before { content: ''; position: absolute; inset: -3px; border-radius: inherit; border: 1px dashed var(--focus); opacity: .6; pointer-events: none; }
+.actions-orbit .dock-kind button { width: 26px; }
+.actions-orbit .dock-kind button[aria-pressed='true'] { color: var(--accent); box-shadow: inset 0 0 0 1.5px var(--accent); cursor: default; }
+.actions-orbit .dock-kind button[aria-pressed='true'] > .icon { animation: icon-pop 420ms var(--spring); }
 
 /* Wordless by default; a short hint appears only when lingering on an action. It points away from the symbol: up/down on the left (the sidebar would clip it), sideways on the right. */
 .actions-orbit .entry-dock .dock-up[data-tip]::after { top: auto; bottom: calc(100% + 8px); }
@@ -394,34 +355,6 @@ h2 { margin: 0; font-size: 12px; font-weight: 600; }
 .shortcuts h3 { margin: 0 0 8px; font: 10px var(--mono); letter-spacing: .07em; text-transform: uppercase; color: var(--placeholder); }
 .shortcut { display: flex; align-items: center; gap: 10px; min-height: 26px; font-size: 12px; color: var(--muted); }
 .shortcut-keys { display: flex; gap: 3px; min-width: 86px; }
-/* Entry actions, layout "palette" (setting): a searchable command list under the row, keyboard-first. */
-.actions-palette .entry-dock-shell { position: absolute; left: 36px; top: calc(100% - 2px); z-index: 3; visibility: hidden; pointer-events: none; transition: visibility 0s 160ms; }
-.actions-palette .entry-dock-shell.is-open { visibility: visible; pointer-events: auto; transition-delay: 0s; }
-.actions-palette .entry-dock-shell:focus { outline: none; }
-.palette { width: 290px; padding: 6px; border-radius: 12px; background: var(--surface); box-shadow: 0 0 0 1px var(--edge), 0 18px 44px -14px #000000f2, 0 3px 8px #00000080;
-  transform-origin: 0 -6px; animation: palette-in 280ms var(--spring); }
-.palette-search { display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 10px; margin-bottom: 4px; border-radius: 8px; background: var(--border); color: var(--placeholder); box-shadow: inset 0 0 0 1px var(--edge); }
-.palette-search:focus-within { box-shadow: inset 0 0 0 1px #569eff80; color: var(--accent); }
-.palette-search .icon { width: 14px; height: 14px; }
-.palette-search input { flex: 1; min-width: 0; padding: 0; border: 0; background: transparent; color: var(--text); font: 13px var(--write); font-variant-ligatures: none; caret-color: var(--accent); }
-.palette-search input::placeholder { color: var(--disabled); }
-.palette-search input:focus, .palette-search input:focus-visible { outline: none; }
-.palette-list { max-height: 286px; overflow: auto; scrollbar-width: thin; }
-.palette-item { position: relative; display: flex; align-items: center; gap: 10px; height: 30px; padding: 0 8px 0 10px; border-radius: 7px; color: var(--muted); font-size: 12px; cursor: pointer;
-  animation: palette-item-in 260ms var(--spring) backwards; animation-delay: calc(var(--i, 0) * 14ms); transition: background-color var(--fast) ease, color var(--fast) ease; }
-.palette-item > .icon { width: 14px; height: 14px; color: var(--placeholder); transition: color var(--fast) ease, transform 220ms var(--spring); }
-.palette-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.palette-item kbd { padding: 1px 5px; border-radius: 4px; background: var(--border); color: var(--placeholder); font: 10px var(--mono); }
-.palette-item[aria-selected='true'] { background: #569eff1f; color: var(--text); }
-.palette-item[aria-selected='true']::before { content: ''; position: absolute; left: 0; top: 7px; bottom: 7px; width: 2px; border-radius: 1px; background: var(--accent); animation: fade-in var(--fast) ease; }
-.palette-item[aria-selected='true'] > .icon { color: var(--accent); transform: scale(1.1); }
-.palette-item[aria-disabled='true'] { cursor: default; opacity: .45; }
-.palette-item.is-current { opacity: .7; }
-.palette-item.is-current > .icon { color: var(--accent); }
-.palette-badge { color: var(--accent); font: 10px var(--mono); }
-.palette-empty { padding: 10px; color: var(--placeholder); font-size: 12px; text-align: center; }
-.actions-palette .entry-dock-shell > .planner { animation: planner-in 320ms var(--spring); }
-
 /* Entry actions, layout "inline" (setting): no surface, no shadow. The row opens a line in the document flow under the text,
    threaded to the symbol, with the actions written as dim words in the writing font. */
 .actions-inline .entry-dock-shell { position: relative; display: grid; grid-template-rows: 0fr; visibility: hidden; opacity: 0;
@@ -546,7 +479,6 @@ h2 { margin: 0; font-size: 12px; font-weight: 600; }
 @keyframes digit-in { from { opacity: 0; transform: translateY(-40%); } }
 @keyframes dial-in { from { opacity: 0; transform: scale(.82) rotate(-12deg); } }
 @keyframes palette-in { from { opacity: 0; transform: translateY(-6px) scale(.94); } }
-@keyframes palette-item-in { from { opacity: 0; transform: translateX(-6px); } }
 @keyframes word-in { from { opacity: 0; transform: translateY(-3px); } }
 @keyframes swipe-swap { from { opacity: 0; } }
 @keyframes pending-pulse { 50% { box-shadow: inset 0 0 0 1.5px #569eff99; } }
@@ -569,3 +501,35 @@ h2 { margin: 0; font-size: 12px; font-weight: 600; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* Asking how far an action on a linked entry reaches (ScopeChoice): a pill under the row, the least reaching choice first. */
+.scope-choice { position: absolute; left: 26px; top: calc(100% - 2px); z-index: 6; display: flex; align-items: center; gap: 2px; padding: 3px; border-radius: 999px; background: var(--surface);
+  box-shadow: 0 0 0 1px var(--edge), 0 10px 24px -10px #000000e6, 0 2px 6px #00000080; transform-origin: 20px -6px; animation: scope-in 340ms var(--spring); user-select: none; }
+@keyframes scope-in { from { opacity: 0; transform: translateY(-6px) scale(.88); } }
+.scope-choice-title { display: flex; align-items: center; gap: 6px; padding: 0 8px 0 7px; color: var(--muted); font-size: 11.5px; }
+.scope-choice-title .icon { width: 13px; height: 13px; }
+.scope-choice.is-remove .scope-choice-title { color: var(--error); }
+.scope-choice.is-done .scope-choice-title { color: var(--success); }
+.scope-choice.is-cancelled .scope-choice-title { color: #c77aa0; }
+.scope-choice button { position: relative; height: 26px; padding: 0 11px; border: 0; border-radius: 999px; background: transparent; color: var(--text); font-size: 12px; white-space: nowrap;
+  animation: item-in 360ms var(--spring) backwards; animation-delay: calc(var(--i, 0) * 30ms + 60ms); transition: background-color var(--fast) ease, transform 220ms var(--spring); }
+.scope-choice button:hover, .scope-choice button:focus-visible { background: var(--hover); outline: none; }
+.scope-choice button:focus-visible { box-shadow: inset 0 0 0 1px var(--accent); }
+.scope-choice button:active { transform: scale(.92); }
+.scope-choice [data-tip]::after { content: attr(data-tip); position: absolute; top: calc(100% + 8px); left: 50%; z-index: 1; padding: 3px 8px; border-radius: 6px; background: var(--focus); color: var(--text); box-shadow: 0 4px 12px #00000080;
+  font: 11px/1.45 var(--sans); white-space: nowrap; pointer-events: none; opacity: 0; transform: translate(-50%, -3px) scale(.95); transition: opacity 120ms ease, transform 200ms var(--spring); }
+.scope-choice [data-tip]:hover::after, .scope-choice [data-tip]:focus-visible::after { opacity: 1; transform: translate(-50%, 0); transition-delay: 400ms; }
+.cal-composer .scope-choice.in-composer { position: static; align-self: stretch; box-shadow: inset 0 0 0 1px var(--hover); animation: scope-in 300ms var(--spring); }
+.cal-composer .scope-choice button { color: var(--text); font-size: 11.5px; padding: 0 9px; }
+/* In the open orbit the question grows out of the trash satellite: the round button stays as the pill's start (now red),
+   the pill unrolls from it to the right. */
+.actions-orbit .dock-remove-choice { position: absolute; left: 0; top: 3px; z-index: 4; transform: translate(var(--x), var(--y)); pointer-events: auto; }
+.scope-choice.is-satellite { position: static; height: 30px; padding: 0 3px 0 0; border-radius: 15px; animation: scope-extend 420ms var(--spring); }
+@keyframes scope-extend { from { clip-path: inset(0 calc(100% - 30px) 0 0 round 15px); } to { clip-path: inset(0 0 0 0 round 15px); } }
+.scope-choice-cap { display: grid; place-items: center; flex: none; width: 30px; height: 30px; margin-right: 2px; border-radius: 50%; background: #ff55551f; color: var(--error); }
+.scope-choice-cap .icon { width: 14px; height: 14px; animation: wiggle 420ms ease; }
+.scope-choice.is-satellite button { height: 24px; }
+@media (prefers-reduced-motion: reduce) { .scope-choice, .scope-choice * { animation: none !important; } }
+/* While asking, the rest of the orbit steps back. */
+.actions-orbit .entry-dock.is-asking > :not(.dock-remove-choice, .status-track), .actions-orbit .entry-dock.is-asking > .status-track > * { opacity: .2 !important; pointer-events: none; transition: opacity 200ms ease; }
+.actions-orbit .entry-dock.is-asking > .dock-clusters { opacity: 0 !important; }
