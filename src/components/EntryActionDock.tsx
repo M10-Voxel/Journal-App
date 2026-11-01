@@ -9,6 +9,7 @@ import type { SwipeActions } from './useSwipe';
 import { formatShortDate, localDate } from '../dates';
 import { Schedule, canBeNote, canPlan, keepDuration, repeatChange, tomorrowChange } from '../planning';
 import type { RepeatRule } from '../repeat';
+import type { Tag } from '../tags';
 
 export type TaskStatus = 'open' | 'done' | 'cancelled';
 export type EntryPreview = TaskStatus | EntryKind | 'remove' | 'up' | 'down' | 'priority' | 'tomorrow' | 'unplan';
@@ -53,7 +54,8 @@ const kindActions = (): { kind: EntryKind; label: string; short: string; hint: s
 //   kind belongs to the entry as a whole rather than to one direction;
 // - asking how far removing a linked entry reaches (ScopeChoice) grows out of the trash satellite itself.
 // Icon-only: hovering or keyboard-focusing an action previews its effect on the entry itself.
-export function EntryActionDock({ layout, swipeActions, removeChoice, onClose, entry, day, label, isOpen, planning, plannerView, traceSaved, canMoveUp, canMoveDown, onStatusChange, onKindChange, onPriorityChange, onMove, onRemove, onPreview, onPlanDatePreview, onPlanningChange, onPlan, onNavigate }: {
+export function EntryActionDock({ layout, swipeActions, removeChoice, onClose, entry, day, label, isOpen, planning, plannerView, traceSaved, canMoveUp, canMoveDown, tag, onTag, onStatusChange, onKindChange, onPriorityChange, onMove, onRemove, onPreview, onPlanDatePreview, onPlanningChange, onPlan, onNavigate }: {
+  tag: Tag | null; onTag: () => void;
   layout: ActionLayout; swipeActions: SwipeActions<EntryPreview>; removeChoice?: ReactNode; onClose: () => void; entry: Entry; day: string; label: string; isOpen: boolean; planning: boolean; plannerView: PlannerView; traceSaved: boolean; canMoveUp: boolean; canMoveDown: boolean;
   onStatusChange: (status: TaskStatus) => void; onKindChange: (kind: EntryKind) => void; onPriorityChange: () => void; onMove: (offset: -1 | 1) => void; onRemove: () => void; onPreview: (preview: EntryPreview | null) => void;
   onPlanDatePreview: (date: string | null, count?: number) => void; onPlanningChange: (planning: boolean, view?: PlannerView) => void; onPlan: (change: PlanUpdate) => void; onNavigate: (date: string) => void;
@@ -101,10 +103,15 @@ export function EntryActionDock({ layout, swipeActions, removeChoice, onClose, e
       aria-pressed={entry.kind === action.kind} disabled={action.kind === 'note' && entry.kind !== 'note' && !canBeNote(entry)}
       {...(entry.kind === action.kind ? {} : previewing(action.kind))} onClick={() => onKindChange(action.kind)}><Icon name={action.kind} /></button>)}
   </div>;
+  // The tag: a dot in its colour (or the tag symbol), opening the tag picker.
+  const tagGroup = () => <div className="dock-tag" role="group" aria-label={t("Tag zuweisen")}>
+    <button type="button" className={`dock-tag-button${tag ? ' has-tag' : ''}`} style={stagger(tag ? { '--tag': tag.color } as CSSProperties : {})} aria-label={tag ? t("Tag {0} ändern", tag.name) : t("Tag zuweisen")} aria-haspopup="dialog"
+      data-tip={tag ? t("{0} · Alt G", tag.name) : t("Tag · Alt G")} onClick={onTag}>{tag ? <span className="tag-dot" /> : <Icon name="tag" />}</button>
+  </div>;
   const isTask = entry.kind === 'task' && !trace;
   // Inline groups: the actions as short, lower-case words as they read in a sentence.
-  const groupOf: Record<string, number> = { jump: 0, unplan: 0, open: 1, done: 1, cancelled: 1, priority: 2, 'kind-event': 2.5, 'kind-task': 2.5, 'kind-note': 2.5, tomorrow: 3, plan: 3, days: 3, repeat: 3, up: 4, down: 4, remove: 5 };
-  const shortWords: Record<string, string> = { jump: t("zum tag"), unplan: t("zurücknehmen"), open: t('offen'), done: t('erledigt'), cancelled: t('abbrechen'), priority: t("priorität"), 'kind-event': t("als ereignis"), 'kind-task': t("als aufgabe"), 'kind-note': t("als notiz"), tomorrow: t('morgen'), plan: t('planen'), days: t("mehrere tage"), repeat: t('wiederholen'), up: '', down: '', remove: t("löschen") };
+  const groupOf: Record<string, number> = { jump: 0, unplan: 0, open: 1, done: 1, cancelled: 1, priority: 2, tag: 2, 'kind-event': 2.5, 'kind-task': 2.5, 'kind-note': 2.5, tomorrow: 3, plan: 3, days: 3, repeat: 3, up: 4, down: 4, remove: 5 };
+  const shortWords: Record<string, string> = { jump: t("zum tag"), unplan: t("zurücknehmen"), open: t('offen'), done: t('erledigt'), cancelled: t('abbrechen'), priority: t("priorität"), tag: tag ? tag.name.toLowerCase() : t("tag"), 'kind-event': t("als ereignis"), 'kind-task': t("als aufgabe"), 'kind-note': t("als notiz"), tomorrow: t('morgen'), plan: t('planen'), days: t("mehrere tage"), repeat: t('wiederholen'), up: '', down: '', remove: t("löschen") };
   const inlineGroups = () => {
     const items = actionItems().map(item => ({ ...item, short: shortWords[item.id] }));
     const order = ['open', 'done', 'cancelled'];
@@ -123,7 +130,8 @@ export function EntryActionDock({ layout, swipeActions, removeChoice, onClose, e
       { id: 'cancelled', label: t("Abbrechen"), icon: 'cancel' as const, preview: 'cancelled' as const, current: status === 'cancelled', run: () => onStatusChange('cancelled') },
       { id: 'open', label: t("Wieder öffnen"), icon: 'task' as const, preview: 'open' as const, current: status === 'open', run: () => onStatusChange('open') },
     ] : [],
-    ...!trace ? [{ id: 'priority', label: entry.priority ? t("Priorität entfernen") : t("Hohe Priorität"), icon: priorityIcon(entry.kind), preview: 'priority' as const, run: onPriorityChange }] : [],
+    ...!trace ? [{ id: 'priority', label: entry.priority ? t("Priorität entfernen") : t("Hohe Priorität"), icon: priorityIcon(entry.kind), preview: 'priority' as const, run: onPriorityChange },
+      { id: 'tag', label: tag ? t("Tag {0} ändern", tag.name) : t("Tag zuweisen"), icon: 'tag' as const, run: onTag }] : [],
     ...kindActions().filter(action => action.kind !== entry.kind && (action.kind !== 'note' || canBeNote(entry))).map(action => ({ id: `kind-${action.kind}`, label: action.label, icon: action.kind, preview: action.kind, run: () => onKindChange(action.kind) })),
     ...canPlan(entry) ? [
       ...entry.kind === 'task' ? [{ id: 'tomorrow', label: t("Auf morgen"), icon: 'plan-tomorrow' as const, preview: 'tomorrow' as const, run: () => onPlan(tomorrowChange(entry, day)) }] : [],
@@ -183,7 +191,7 @@ export function EntryActionDock({ layout, swipeActions, removeChoice, onClose, e
       {down()}
       {trace && <>{!traceSaved && unplan()}{jump()}</>}
       {isTask && states(statusActions())}
-      <div className="dock-clusters">{kindGroup()}{canPlan(entry) && planningGroup()}</div>
+      <div className="dock-clusters">{!trace && tagGroup()}{kindGroup()}{canPlan(entry) && planningGroup()}</div>
     </div>}
   </div>;
 }

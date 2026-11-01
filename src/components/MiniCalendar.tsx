@@ -6,6 +6,9 @@ import { monthGrid, shiftMonth } from '../dates';
 import { formatMonthName } from '../calendar';
 import { CompactMonth, openInJournal, useCalendarData, useJournalDate, useNow } from './calendarShared';
 import { Icon } from './Icon';
+import { TagFilter } from './TagFilter';
+import { useHiddenTags, useTags } from '../tagStore';
+import { filterTagDays } from '../tags';
 
 // The compact month window: a small, separate window to jump to days with one click (like the calendar in
 // the macOS menu bar). It follows the journal's month and can stay on top of other windows.
@@ -17,6 +20,8 @@ export function MiniCalendar() {
   const [pinned, setPinned] = useState(false);
   const grid = monthGrid(month);
   const { days, error } = useCalendarData(grid[0], grid[grid.length - 1]);
+  const tags = useTags();
+  const [hiddenTags, setHiddenTags] = useHiddenTags('calendar');
   useEffect(() => { if (journalDate) setMonth(journalDate.slice(0, 7)); }, [journalDate]);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -44,7 +49,8 @@ export function MiniCalendar() {
         <button type="button" className={`cal-icon-button mini-pin${pinned ? ' is-on' : ''}`} aria-pressed={pinned} aria-label={t("Immer im Vordergrund")} title={t("Immer im Vordergrund")} onClick={togglePin}><Icon name="pin" /></button>
       </div>
     </header>
+    {tags.length > 0 && <div className="mini-tag-toolbar"><TagFilter label={t('Tags im Kalender')} hidden={hiddenTags} onChange={setHiddenTags} /></div>}
     {error && <div className="cal-error" role="alert">{error}</div>}
-    <CompactMonth month={month} days={days} today={today} selected={journalDate} onMonth={setMonth} onPick={date => openInJournal(date)} />
+    <CompactMonth month={month} days={filterTagDays(days, hiddenTags)} today={today} selected={journalDate} onMonth={setMonth} onPick={date => openInJournal(date)} />
   </div>;
 }

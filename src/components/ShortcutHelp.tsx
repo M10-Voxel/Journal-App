@@ -22,12 +22,17 @@ export const shortcutGroups = (): { id: string; title: string; icon: IconName; i
   { id: 'entry', title: t("Aktueller Eintrag"), icon: 'event', items: [
     ['Alt+D', t("Erledigt")], ['Alt+X', t("Abbrechen")], ['Alt+P', t("Priorität")], ['Alt+M', t("Auf morgen")],
     ['Alt+T', t("Planen · bei einer Spur: zum Tag springen")], ['Alt+⇧+T', t("Mehrere Tage planen")], ['Alt+U', t("Uhrzeit")], ['Alt+W', t("Wiederholen")],
+    ['Alt+G', t("Tag zuweisen (0–9 direkt, tippen: suchen oder neu)")],
     ['Alt+⇧+E', t("Als Ereignis")], ['Alt+⇧+A', t("Als Aufgabe")], ['Alt+⇧+N', t("Als Notiz")],
     ['Alt+Enter', t("Aktionen öffnen")], ['Alt+Entf', t("Löschen (verknüpfte: ← / → und Enter wählen)")],
   ] },
   { id: 'swipe', title: t("Wischen"), icon: 'right', items: [
     ['→', t("Auf morgen")], ['⇧+→', t("Planen")], ['Strg+⇧+→', t("Mehrere Tage")], ['↓', t("Erledigt")], ['⇧+↓', t("Abbrechen")],
     ['↑', t("Priorität")], ['⇧+←', t("Löschen")], ['~Antippen', t("Aufgabe weiterschalten")],
+  ] },
+  { id: 'tags', title: t("Tags"), icon: 'tag', items: [
+    ['Alt+G', t("Tag zuweisen")], ['1–9', t("Tag nehmen oder ein-/ausblenden (in der Liste)")], ['0', t("Kein Tag / Einträge ohne Tag")],
+    ['A', t("Filter: alle Tags zeigen")], ['Alt+~Klick / ⇧+Enter', t("Filter: nur diesen Tag zeigen")], ['Enter', t("Tippen und Enter: neuen Tag anlegen")],
   ] },
   { id: 'text', title: t("Text"), icon: 'pencil', items: [
     ['Strg+B', '**Fett**'], ['Strg+I', '*Kursiv*'], ['Strg+⇧+X', '~~Durchgestrichen~~'], ['Strg+⇧+H', '==Markiert=='],
@@ -49,7 +54,7 @@ export const shortcutGroups = (): { id: string; title: string; icon: IconName; i
     ['~Klick', t("Tag oder Eintrag im Journal zeigen")], [t("~Rand ziehen"), t("Breite (Doppelklick: zurücksetzen)")],
     [t("~Ziehen im Raster"), t("Termin eintragen – auch über Mitternacht in den nächsten Tag")], ['~Rechtsklick', t("Eintrag bearbeiten")], ['Alt+Entf', t("Eintrag löschen")],
     ['↑ / ↓', t("Termin verschieben")], ['⇧+↑ / ⇧+↓', t("Ende verschieben")],
-    ['Alt+K', t("Als Kalendereintrag")], ['Alt+E', t("Als Ereignis")], ['Alt+A', t("Als Aufgabe")], ['Alt+P', t("Priorität")],
+    ['Alt+K', t("Als Kalendereintrag")], ['Alt+E', t("Als Ereignis")], ['Alt+A', t("Als Aufgabe")], ['Alt+P', t("Priorität")], ['Alt+G', t("Tag zuweisen")],
   ] },
 ]);
 

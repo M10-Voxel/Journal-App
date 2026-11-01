@@ -20,6 +20,8 @@ export interface Entry {
   id: string; kind: EntryKind; text: string; done: boolean; cancelled: boolean; priority: boolean;
   /** Additional calendar details, separate from the title. */
   description?: string;
+  /** The tag's ID (see tags.ts); passed on to planned copies and occurrences like the text. */
+  tag?: string | null;
   /** Optional `HH:MM` on the entry's own day. */
   time?: string | null;
   /** Optional end `HH:MM` on the same day, after `time` (entries marked as a range in the calendar). */

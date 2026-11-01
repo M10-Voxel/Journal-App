@@ -13,13 +13,17 @@ import { useEntryDrag } from './components/useEntryDrag';
 import { useListMotion } from './components/useListMotion';
 import { ShortcutHelp } from './components/ShortcutHelp';
 import { SettingsDialog } from './components/SettingsDialog';
+import type { SettingsTab } from './components/SettingsDialog';
+import { TagFilter } from './components/TagFilter';
+import { manageTags, useHiddenTags, useTags } from './tagStore';
+import { filterKey, isShown, tagOf, tagRank } from './tags';
 import { useMailImport } from './components/useMailImport';
 import { MailImportToast } from './components/MailImportToast';
 import { Settings, applyTheme, loadSettings, saveSettings } from './settings';
 import { ThemeSync } from './components/ThemeSync';
 import { adjacentText, focusText, titleInput } from './components/focus';
 import type { TextField } from './components/entryEditor';
-import { entryKindOrder, orderEntries, moveEntry, moveEntryByOffset, mergeCalendarImport } from './entries';
+import { entryKindOrder, orderEntries, moveEntry, moveEntryByOffset, mergeCalendarImport, sameGroup } from './entries';
 import { Calendar, CalendarWindow } from './components/CalendarWindow';
 import type { EntryEdit, NewEntry } from './components/CalendarComposer';
 import { useSidebarWidth } from './components/useSidebarWidth';
@@ -44,6 +48,7 @@ import '@fontsource/pixelify-sans/700.css';
 import '@fontsource/vt323/400.css';
 import './pixel.css';
 import './colors.css';
+import './tags.css';
 import { applyColors } from './colors';
 
 applyTheme(loadSettings().theme);
@@ -78,6 +83,11 @@ function App() {
   const [help, setHelp] = useState(false);
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>('appearance');
+  const openSettings = (tab: SettingsTab = 'appearance') => { setSettingsTab(tab); setSettingsOpen(true); };
+  useEffect(() => manageTags.register(() => openSettings('tags')), []);
+  const tags = useTags();
+  const [hiddenTags, setHiddenTags] = useHiddenTags('journal');
   const [slide, setSlide] = useState<'next' | 'prev' | null>(null);
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const sidebar = useSidebarWidth();
@@ -137,6 +147,10 @@ function App() {
     window.addEventListener('keydown', handleKey);
     return () => { disposed = true; unlisten?.(); void quit.then(stop => stop()); window.removeEventListener('keydown', handleKey); };
   }, []);
+
+  // Entries are grouped in the order of their tags; a changed list (or the tags arriving) groups them anew.
+  const tagOrder = tags.map(tag => tag.id).join();
+  useEffect(() => { setDay(current => current ? { ...current, entries: orderEntries(current.entries) } : current); }, [tagOrder]);
 
   // The calendar windows highlight the day shown here and send clicked days (and entries) back.
   const dateRef = useRef(date);
@@ -245,7 +259,7 @@ function App() {
   const pendingSave = useRef(false);
   useEffect(() => { if (pendingSave.current && !busy && ready) { pendingSave.current = false; void save(); } }, [day, busy]);
   const createFromCalendar = useStableCallback(async (target: string, made: NewEntry) => {
-    const entry: Entry = { id: crypto.randomUUID(), kind: made.kind, text: made.text, description: made.description, done: false, cancelled: false, priority: made.priority, time: made.time, end: made.end, reminder: made.reminder, showInJournal: made.showInJournal, plan: null, repeat: made.repeat ?? null };
+    const entry: Entry = { id: crypto.randomUUID(), kind: made.kind, text: made.text, description: made.description, tag: made.tag ?? null, done: false, cancelled: false, priority: made.priority, time: made.time, end: made.end, reminder: made.reminder, showInJournal: made.showInJournal, plan: null, repeat: made.repeat ?? null };
     if (target === date && ready) {
       captureLayout();
       update(current => ({ ...current, entries: orderEntries([...current.entries, entry]) }));
@@ -307,10 +321,13 @@ function App() {
 
   const dismissReminder = (reminder: Reminder) => setReminders(current => current.filter(item => !(item.id === reminder.id && item.due === reminder.due)));
 
-  // New entries go directly below `afterId` when it is of the same kind, otherwise to the end of their group.
+  // New entries go directly below `afterId` when it is of the same kind and tag, otherwise to the end of their group.
+  // They take the tag of that entry; without one, while entries without a tag are hidden, the first tag shown.
   const addEntry = useStableCallback((kind: EntryKind, afterId?: string) => {
     if (!ready) return;
-    const entry: Entry = { id: crypto.randomUUID(), kind, text: '', done: false, cancelled: false, priority: false, time: null, reminder: false, plan: null };
+    const after = day.entries.find(item => item.id === afterId);
+    const tag = after ? tagOf(tags, after.tag)?.id ?? null : isShown(hiddenTags, null) ? null : tags.find(item => !hiddenTags.has(item.id))?.id ?? null;
+    const entry: Entry = { id: crypto.randomUUID(), kind, text: '', done: false, cancelled: false, priority: false, time: null, reminder: false, plan: null, tag };
     focusEntryId.current = entry.id;
     setNewEntryId(entry.id);
     setOpenEntryId(null);
@@ -318,7 +335,7 @@ function App() {
     update(current => {
       const entries = [...current.entries];
       const index = entries.findIndex(item => item.id === afterId);
-      if (index >= 0 && entries[index].kind === kind) entries.splice(index + 1, 0, entry); else entries.push(entry);
+      if (index >= 0 && entries[index].kind === kind && tagRank(entries[index].tag) === tagRank(tag)) entries.splice(index + 1, 0, entry); else entries.push(entry);
       return { ...current, entries: orderEntries(entries) };
     });
   });
@@ -333,7 +350,7 @@ function App() {
     const kinds: Record<string, EntryKind> = { KeyA: 'task', KeyE: 'event', KeyN: 'note' };
     if (ctrl && event.code === 'KeyS') save();
     else if (event.key === 'F1' || (event.key === '?' && !typing && !event.ctrlKey && !event.altKey)) setHelp(open => !open);
-    else if (ctrl && event.key === ',') setSettingsOpen(open => !open);
+    else if (ctrl && event.key === ',') { setSettingsTab('appearance'); setSettingsOpen(open => !open); }
     else if (ctrl && event.code === 'KeyG') setDatePickerOpen(open => !open);
     else if (help || settingsOpen || datePickerOpen) return;
     else if (alt && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) stepDay(event.key === 'ArrowLeft' ? -1 : 1);
@@ -344,8 +361,8 @@ function App() {
     event.preventDefault();
   });
   const changeEntry = useStableCallback((id: string, change: EntryChange) => {
-    // Priority and kind decide the place in the list, so changing them re-sorts it.
-    const resort = 'priority' in change || 'kind' in change;
+    // Priority, kind and tag decide the place in the list, so changing them re-sorts it.
+    const resort = 'priority' in change || 'kind' in change || 'tag' in change;
     if (resort) captureLayout();
     update(current => {
       const entries = current.entries.map(entry => entry.id === id ? { ...entry, ...change } : entry);
@@ -360,10 +377,12 @@ function App() {
   const changeOpen = useCallback((id: string, open: boolean) => {
     setOpenEntryId(current => open ? id : current === id ? null : current);
   }, []);
+  // Entries of hidden tags stay out of the list (a new one stays until it is left).
+  function shownHere(entry: Entry) { return entry.showInJournal !== false && (isShown(hiddenTags, entry.tag) || entry.id === newEntryId); }
   function applyOrder(entries: Entry[], id: string, keepTextFocus = false): boolean {
     if (!day || entries === day.entries) return false;
     const entry = entries.find(item => item.id === id)!;
-    const siblings = entries.filter(item => item.kind === entry.kind && item.showInJournal !== false);
+    const siblings = entries.filter(item => sameGroup(item, entry) && shownHere(item));
     focusMoveEntryId.current = keepTextFocus ? null : id;
     setNewEntryId(null);
     setOpenEntryId(null);
@@ -373,16 +392,20 @@ function App() {
     return true;
   }
   const moveByOffset = useStableCallback((id: string, offset: -1 | 1, keepTextFocus?: boolean) =>
-    day ? applyOrder(moveEntryByOffset(day.entries, id, offset), id, keepTextFocus) : false);
+    day ? applyOrder(moveEntryByOffset(day.entries, id, offset, shownHere), id, keepTextFocus) : false);
   const drag = useEntryDrag(scrollRef, (source, target, placement) => {
     if (day) applyOrder(moveEntry(day.entries, source, target, placement), source);
   });
 
-  const visibleEntries = ready ? day.entries.filter(entry => entry.showInJournal !== false) : [];
+  const visibleEntries = ready ? day.entries.filter(shownHere) : [];
   const entryCount = visibleEntries.length;
+  const hiddenByTag = ready ? day.entries.filter(entry => entry.showInJournal !== false && !shownHere(entry)).length : 0;
   // A trace whose plan is already stored has created its target entries; only unsaved plans can be taken back.
   const savedTraces = new Set(ready ? journal.cached(day.date)?.entries.filter(entry => entry.plan).map(entry => entry.id) : []);
-  return <div className={`app actions-${settings.actionLayout}${sidebar.dragging ? ' is-resizing' : ''}`}>
+  return <div className={`app actions-${settings.actionLayout}${sidebar.dragging ? ' is-resizing' : ''}`} onFocusCapture={event => {
+    const target = event.target as HTMLElement;
+    if (newEntryId && !target.closest('.popover') && target.closest<HTMLElement>('[data-entry-id]')?.dataset.entryId !== newEntryId) setNewEntryId(null);
+  }}>
     {/* The sidebar is the calendar (its view switch in line with the toolbar next to it); dragging its edge sets the width. */}
     <aside className="sidebar" aria-label={t("Kalender und Navigation")} style={{ width: sidebar.width }}>
       <Calendar embedded journalDate={date} onOpen={openFromCalendar} onCreate={createFromCalendar} onEdit={editFromCalendar} onRemove={removeFromCalendar} onExport={exportFromCalendar} onImport={importFromCalendar} />
@@ -400,7 +423,7 @@ function App() {
         <div className="document-tab"><Icon name="journal" /><span>{t("Tagesjournal")}</span>{dirty && <span className="unsaved-dot" aria-label={t("Ungespeicherte Änderungen")} />}</div>
         <div className="titlebar-space" />
         {/* Settings sit with the window's own controls, where Zed and most apps keep them. */}
-        <button type="button" className="titlebar-button settings-button" data-mail-count={mailStatus.count || undefined} aria-label={t("Einstellungen")} aria-keyshortcuts="Control+," title={t("Einstellungen · Strg ,")} onClick={() => setSettingsOpen(true)}><Icon name="settings" /></button>
+        <button type="button" className="titlebar-button settings-button" data-mail-count={mailStatus.count || undefined} aria-label={t("Einstellungen")} aria-keyshortcuts="Control+," title={t("Einstellungen · Strg ,")} onClick={() => openSettings()}><Icon name="settings" /></button>
         <WindowControls onError={setError} />
       </header>
       {/* Like the calendar's toolbar (and Zed's under its tabs): turning the days first, then what is shown. */}
@@ -408,6 +431,7 @@ function App() {
         <NavCluster label={t("Tagesnavigation")} prev={{ label: t("Vorheriger Tag"), tip: t("Vorheriger Tag · Alt ←") }} next={{ label: t("Nächster Tag"), tip: t("Nächster Tag · Alt →") }}
           today={{ tip: t("Heute · Alt H"), disabled: date === today }} atToday={date === today} onPrev={() => stepDay(-1)} onToday={() => navigate(today)} onNext={() => stepDay(1)} />
         <MiniCalendarPicker date={date} open={datePickerOpen} onOpenChange={setDatePickerOpen} onPick={navigate} buttonRef={datePickerButtonRef} />
+        <div className="toolbar-end"><TagFilter label={t("Tags im Journal")} hidden={hiddenTags} onChange={next => { setNewEntryId(null); setHiddenTags(next); }} /></div>
       </div>
 
       <div className="scroll" ref={scrollRef}>
@@ -424,7 +448,8 @@ function App() {
               onKeyDown={event => { if ((event.key === 'Enter' || event.key === 'ArrowDown') && !event.altKey && !event.shiftKey && focusText(adjacentText(null, 1), 'end')) event.preventDefault(); }} onChange={event => { const title = event.target.value; update(current => ({ ...current, title })); }} />
             <section className="journal-section" aria-labelledby="entries-heading">
               <div className="section-heading">
-                <div className="section-title"><h2 id="entries-heading">{t("Einträge")}</h2><span className="entry-count">{entryCount}</span></div>
+                <div className="section-title"><h2 id="entries-heading">{t("Einträge")}</h2><span className="entry-count">{entryCount}</span>
+                  {hiddenByTag > 0 && <button type="button" className="entry-hidden-count" data-tip={t("Alle Tags zeigen")} onClick={() => setHiddenTags(new Set())}><Icon name="tag" />{t("{0} ausgeblendet", hiddenByTag)}</button>}</div>
                 <div className="kind-picker" role="group" aria-label={t("Eintrag hinzufügen")}>
                   {entryKindOrder.map(kind => <button type="button" key={kind} title={t("Neu · Alt {0}", { task: 'A', event: 'E', note: 'N' }[kind])} onClick={() => addEntry(kind)}><Icon name={kind} />{entryLabels()[kind]}</button>)}
                 </div>
@@ -433,10 +458,12 @@ function App() {
                 <span className="visually-hidden" id="entry-reorder-help">{t("Innerhalb desselben Typs und derselben Priorität ziehen oder mit Alt und den Pfeiltasten nach oben und unten verschieben. Das funktioniert auch direkt im Text.")}</span>
                 <span className="visually-hidden" role="status">{moveAnnouncement}</span>
                 {visibleEntries.length === 0 && <div className="empty"><Icon name="journal" /><p>{t("Ein neuer Tag. Platz für deine Gedanken.")}</p><span>{t("Füge oben eine Aufgabe, Notiz oder ein Ereignis hinzu.")}</span></div>}
-                {visibleEntries.map((entry, index) => <JournalEntry key={entry.id} layout={settings.actionLayout} entry={entry} day={day.date} onCreate={addEntry} traceSaved={savedTraces.has(entry.id)} onNavigate={navigate} isNew={entry.id === newEntryId} isOpen={entry.id === openEntryId} focusEntryId={focusEntryId} focusMoveEntryId={focusMoveEntryId}
+                {visibleEntries.map((entry, index) => <JournalEntry key={entry.id} layout={settings.actionLayout} entry={entry} day={day.date} tag={tagOf(tags, entry.tag)}
+                  tagFirst={index === 0 || visibleEntries[index - 1].kind !== entry.kind || filterKey(visibleEntries[index - 1].tag) !== filterKey(entry.tag)}
+                  tagLast={index === visibleEntries.length - 1 || visibleEntries[index + 1].kind !== entry.kind || filterKey(visibleEntries[index + 1].tag) !== filterKey(entry.tag)} onCreate={addEntry} traceSaved={savedTraces.has(entry.id)} onNavigate={navigate} isNew={entry.id === newEntryId} isOpen={entry.id === openEntryId} focusEntryId={focusEntryId} focusMoveEntryId={focusMoveEntryId}
                   isGroupStart={index > 0 && visibleEntries[index - 1].kind !== entry.kind}
-                  canMoveUp={index > 0 && visibleEntries[index - 1].kind === entry.kind && visibleEntries[index - 1].priority === entry.priority}
-                  canMoveDown={index < visibleEntries.length - 1 && visibleEntries[index + 1].kind === entry.kind && visibleEntries[index + 1].priority === entry.priority}
+                  canMoveUp={index > 0 && sameGroup(visibleEntries[index - 1], entry)}
+                  canMoveDown={index < visibleEntries.length - 1 && sameGroup(visibleEntries[index + 1], entry)}
                   dragState={drag.view?.sourceId === entry.id ? 'source' : drag.view?.targetId === entry.id ? `drop-${drag.view.placement}` : null}
                   drag={drag.handlers} onMoveOffset={moveByOffset} onOpenChange={changeOpen} onChange={changeEntry} onRemove={removeEntry} onLinkedChange={changeLinked}
                 />)}
@@ -456,7 +483,7 @@ function App() {
       onSnooze={reminder => { dismissReminder(reminder); journal.snoozeReminder(reminder).catch(reason => setError(t("Erinnerung: {0}", String(reason)))); }}
       onOpen={reminder => { dismissReminder(reminder); showFromCalendar(reminder.date, reminder.id); }} onDismiss={dismissReminder} />
     {help && <ShortcutHelp onClose={() => setHelp(false)} />}
-    {settingsOpen && <SettingsDialog settings={settings} mailStatus={mailStatus} onImport={importFromCalendar} onClose={() => setSettingsOpen(false)} onChange={next => { setOpenEntryId(null); setSettings(next); saveSettings(next); }} />}
+    {settingsOpen && <SettingsDialog key={settingsTab} initialTab={settingsTab} settings={settings} mailStatus={mailStatus} onImport={importFromCalendar} onClose={() => setSettingsOpen(false)} onChange={next => { setOpenEntryId(null); setSettings(next); saveSettings(next); }} />}
   </div>;
 }
 

@@ -5,9 +5,10 @@ import type { ColorToken } from '../colors';
 import type { Settings } from '../settings';
 import { t, useLanguage } from '../i18n';
 import { Icon } from './Icon';
+import { ColorButton } from './ColorPicker';
 
-function ColorField({ token, label, value, customized, onChange, onReset }: {
-  token: ColorToken; label: string; value: string; customized: boolean; onChange: (value: string) => void; onReset: () => void;
+function ColorField({ token, label, value, customized, swatches, onChange, onReset }: {
+  token: ColorToken; label: string; value: string; customized: boolean; swatches: string[]; onChange: (value: string) => void; onReset: () => void;
 }) {
   const id = useId();
   const [draft, setDraft] = useState(value);
@@ -16,8 +17,7 @@ function ColorField({ token, label, value, customized, onChange, onReset }: {
   return <div className={`color-field${customized ? ' is-customized' : ''}`} data-color-field={token}>
     <label htmlFor={id}>{t(label)}{customized && <span className="color-changed" title={t('Angepasst')} aria-label={t('Angepasst')} />}</label>
     <div className="color-field-controls">
-      <input type="color" value={value.slice(0, 7)} aria-label={t('{0}: Farbe wählen', t(label))}
-        onChange={event => onChange(event.target.value + value.slice(7))} />
+      <ColorButton value={value} label={t(label)} alpha={value.length === 9 || ['edge', 'line', 'md-highlight-background'].includes(token)} swatches={swatches} onChange={onChange} />
       <input id={id} className="color-hex" type="text" value={draft} spellCheck={false} autoComplete="off" maxLength={9}
         aria-invalid={invalid || undefined} aria-describedby={invalid ? `${id}-error` : undefined}
         onChange={event => { const next = event.target.value; setDraft(next); if (isHexColor(next)) onChange(next.toLowerCase()); }}
@@ -38,6 +38,8 @@ export function ColorSettings({ settings, onChange }: { settings: Settings; onCh
   const palette = resolvePalette(settings);
   const overrides = settings.customColors[settings.colorTheme] ?? {};
   const customized = Object.keys(overrides).length;
+  // The theme's own colours as suggestions: picking one keeps a custom colour in the family.
+  const swatches = [...new Set((['accent', 'priority', 'success', 'error', 'cancelled', 'md-red', 'md-orange', 'md-yellow', 'md-green', 'md-cyan', 'md-blue', 'md-purple', 'md-pink', 'text', 'muted', 'surface'] as const).map(token => palette[token].slice(0, 7)))];
   const setColor = (token: ColorToken, value: string | null) => {
     const next = { ...overrides };
     const base = colorThemes.find(theme => theme.id === settings.colorTheme)!.colors;
@@ -79,7 +81,7 @@ export function ColorSettings({ settings, onChange }: { settings: Settings; onCh
     <p className="settings-hint">{t('Änderungen werden sofort angezeigt und pro Basis gespeichert. Hexwerte unterstützen auch Deckkraft (AA).')}</p>
     {colorGroups.map((group, index) => <details className="color-group" key={group.id} open={index === 0 || group.id === 'markdown'} data-color-group={group.id}>
       <summary><Icon name="right" /><span>{t(group.label)}</span><small>{group.colors.length}</small></summary>
-      <div className="color-fields">{group.colors.map(([token, label]) => <ColorField key={`${settings.colorTheme}-${token}`} token={token} label={label} value={palette[token]} customized={overrides[token] !== undefined}
+      <div className="color-fields">{group.colors.map(([token, label]) => <ColorField key={`${settings.colorTheme}-${token}`} token={token} label={label} value={palette[token]} customized={overrides[token] !== undefined} swatches={swatches}
         onChange={value => setColor(token, value)} onReset={() => setColor(token, null)} />)}</div>
     </details>)}
     <p className="settings-hint color-markdown-hint">{t('Markdown-Farben gelten auch für vorhandene Texte und das Formatmenü. Der Inhalt deiner Einträge bleibt erhalten.')}</p>

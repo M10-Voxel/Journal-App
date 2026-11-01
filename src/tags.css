@@ -1,0 +1,194 @@
+/* Tags (tags.ts): the floating panels, the filter, the tag at entries and in the calendar, the settings, and the colour
+   picker. Every colour of a tag comes in as --tag. Pixel variants at the end. */
+
+/* Floating panels (Popover.tsx) */
+.popover { position: fixed; z-index: 1000; max-width: calc(100vw - 16px); padding: 6px; border-radius: 10px; background: var(--surface); color: var(--text);
+  box-shadow: 0 0 0 1px var(--edge), 0 14px 36px #000000b3; font: 12px var(--sans); animation: popover-in 150ms var(--spring) both; }
+.popover.is-above { animation-name: popover-in-above; }
+@keyframes popover-in { from { opacity: 0; transform: translateY(-4px) scale(.98); } }
+@keyframes popover-in-above { from { opacity: 0; transform: translateY(4px) scale(.98); } }
+.popover button { border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.popover kbd { display: inline-grid; place-items: center; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 4px; background: var(--border); box-shadow: inset 0 -1px 0 var(--hover), 0 0 0 1px var(--edge); color: var(--muted); font: 9.5px var(--mono); }
+
+.tag-dot { display: inline-block; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--tag, var(--muted)); box-shadow: 0 0 0 1px #00000059; }
+.tag-dot.is-empty { background: transparent; box-shadow: inset 0 0 0 1.2px var(--placeholder); }
+
+/* Choosing a tag */
+.tag-picker { width: 244px; }
+.tag-picker-search { display: flex; align-items: center; gap: 7px; height: 30px; margin-bottom: 4px; padding: 0 8px; border-radius: 6px; background: var(--inset); box-shadow: inset 0 0 0 1px var(--edge); color: var(--muted); }
+.tag-picker-search:focus-within { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 60%, transparent); }
+.tag-picker-search .icon { flex: none; width: 13px; height: 13px; }
+.tag-picker-search input { flex: 1; min-width: 0; padding: 0; border: 0; outline: 0; background: transparent; color: var(--strong); font: 12px var(--sans); }
+.tag-picker-search input::placeholder { color: var(--placeholder); }
+.tag-picker-list, .tag-filter-list { display: flex; flex-direction: column; gap: 1px; max-height: 268px; overflow: auto; }
+.tag-option, .tag-filter-row { display: flex; align-items: center; gap: 8px; min-height: 28px; padding: 0 8px; border-radius: 6px; text-align: left; }
+.tag-option[aria-selected='true'], .tag-filter-row:is(:hover, :focus-visible) { background: var(--hover); color: var(--strong); outline: 0; }
+.tag-option-name, .tag-filter-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tag-option.is-none .tag-option-name { color: var(--muted); }
+.tag-option.is-current .tag-option-name { color: var(--strong); font-weight: 500; }
+.tag-option > .icon { flex: none; width: 12px; height: 12px; color: var(--accent); }
+.tag-option.is-create > .icon:first-child { color: var(--tag); }
+.tag-option.is-create strong { color: var(--strong); font-weight: 500; }
+.tag-option kbd, .tag-filter-row kbd { flex: none; }
+.tag-picker-foot { display: flex; align-items: center; gap: 6px; margin-top: 5px; padding: 6px 2px 0 6px; border-top: 1px solid var(--divider); color: var(--placeholder); font-size: 10px; }
+.tag-picker-foot > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tag-picker-foot button { display: flex; align-items: center; gap: 5px; height: 24px; padding: 0 7px; border-radius: 5px; color: var(--accent); font-size: 11px; white-space: nowrap; }
+.tag-picker-foot button:first-child { padding-left: 4px; }
+.tag-picker-foot button:hover:not(:disabled) { background: var(--hover); }
+.tag-picker-foot button:disabled { color: var(--disabled); cursor: default; }
+.tag-picker-foot button .icon { width: 13px; height: 13px; color: var(--muted); }
+.tag-picker-error { margin: 5px 8px 0; color: var(--error); font-size: 11px; overflow-wrap: anywhere; }
+
+/* Showing and hiding tags: the button in the toolbars and its list */
+.toolbar-end { display: flex; align-items: center; margin-left: auto; }
+.tag-filter-button { display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 9px 0 8px; border: 0; border-radius: 999px; background: transparent; color: var(--muted);
+  box-shadow: inset 0 0 0 1px var(--edge); cursor: pointer; transition: color var(--fast) ease, background-color var(--fast) ease, box-shadow var(--fast) ease, transform 220ms var(--spring); }
+.tag-filter-button:is(:hover, [aria-expanded='true']) { background: var(--hover); color: var(--text); }
+.tag-filter-button:active { transform: scale(.94); }
+.tag-filter-button > .icon { flex: none; width: 13px; height: 13px; }
+.tag-filter-dots { display: flex; }
+.tag-filter-dots:empty { display: none; }
+.tag-filter-dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--tag); box-shadow: 0 0 0 1.5px var(--background); }
+.tag-filter-dots i + i { margin-left: -2px; }
+.tag-filter-button.is-filtering { color: var(--accent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent); }
+.tag-filter-count { font: 10px var(--mono); font-variant-numeric: tabular-nums; }
+.cal-actions .tag-filter-button { height: 26px; margin-right: 4px; }
+.mini-tag-toolbar { display: flex; flex: none; justify-content: flex-end; padding: 0 4px 6px; }
+.tag-filter { width: 228px; }
+.tag-check { display: grid; flex: none; place-items: center; width: 14px; height: 14px; border-radius: 4px; box-shadow: inset 0 0 0 1.5px var(--tag, var(--placeholder)); color: transparent;
+  transition: background-color var(--fast) ease, color var(--fast) ease; }
+.tag-check .icon { width: 10px; height: 10px; stroke-width: 2.2; }
+.tag-filter-row[aria-checked='true'] .tag-check { background: var(--tag, var(--muted)); color: var(--background); box-shadow: none; }
+.tag-filter-row[aria-checked='false'] .tag-filter-name { color: var(--placeholder); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--placeholder) 60%, transparent); }
+.tag-filter-row.is-untagged .tag-filter-name { color: var(--muted); }
+.entry-hidden-count { display: flex; align-items: center; gap: 4px; margin-left: 8px; padding: 2px 7px; border: 0; border-radius: 999px; background: transparent; color: var(--placeholder); font: 10px var(--mono); cursor: pointer; }
+.entry-hidden-count .icon { width: 11px; height: 11px; }
+.entry-hidden-count:hover { background: var(--surface); color: var(--accent); }
+
+/* The journal: a tag's entries follow each other and share a thin line in its colour; the first one names the tag. */
+.entry.has-tag::after { content: ''; position: absolute; left: -4px; top: 0; bottom: 0; width: 2px; background: var(--tag); opacity: .72; pointer-events: none; }
+.entry.has-tag.tag-first::after { top: 9px; border-top-left-radius: 2px; border-top-right-radius: 2px; }
+.entry.has-tag.tag-last::after { bottom: 9px; border-bottom-left-radius: 2px; border-bottom-right-radius: 2px; }
+.entry ~ .entry.entry-tag-start:not(.entry-group-start) { margin-top: 10px; }
+.entry.entry-dragging::after { opacity: .3; }
+.entry-tag { flex: none; display: flex; align-items: center; gap: 6px; max-width: 150px; height: 22px; margin-top: 7px; padding: 0 9px 0 8px; border: 0; border-radius: 999px;
+  background: color-mix(in srgb, var(--tag) 13%, transparent); color: color-mix(in srgb, var(--tag) 62%, var(--strong)); font: 11px var(--sans); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  animation: chip-in 360ms var(--spring) backwards; transition: background-color var(--fast) ease; }
+.entry-tag:hover, .entry-tag[aria-expanded='true'] { background: color-mix(in srgb, var(--tag) 24%, transparent); }
+.entry-tag .tag-dot { width: 7px; height: 7px; box-shadow: none; }
+.entry[data-status='done'] .entry-tag, .entry[data-status='cancelled'] .entry-tag { opacity: .7; }
+/* In the actions: a dot in the tag's colour (orbit) or the tag's name as a word (inline). */
+.actions-orbit .dock-tag { position: relative; display: flex; padding: 3px; border-radius: 999px; pointer-events: auto; background: var(--surface); box-shadow: 0 0 0 1px var(--edge), 0 8px 20px -8px #000000e6;
+  opacity: 0; transform: translateX(10px) scale(.9); transform-origin: right center; transition: transform 220ms var(--ease), opacity 140ms ease; }
+.actions-orbit .is-open .dock-tag { opacity: 1; transform: none; transition: transform 420ms var(--spring) 30ms, opacity 160ms ease 30ms; }
+.actions-orbit .dock-tag button { display: grid; place-items: center; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--muted); transition: background-color var(--fast) ease, transform 220ms var(--spring); }
+.actions-orbit .dock-tag button:hover { background: var(--hover); color: var(--text); }
+.actions-orbit .dock-tag button:active { transform: scale(.86); }
+.actions-orbit .dock-tag button > .icon { width: 14px; height: 14px; }
+.actions-orbit .dock-tag .has-tag { box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--tag) 70%, transparent); }
+.dock-tag-button .tag-dot { width: 9px; height: 9px; }
+.actions-inline .dock-word.dock-tag .icon { color: var(--tag, inherit); }
+
+/* The calendar: tagged entries take the tag's colour – blocks tinted and edged with it, bars too, lines a little. */
+.cal-item.has-tag { box-shadow: inset 2px 0 var(--tag); }
+.cal-item.has-tag:not(.is-event) { background: color-mix(in srgb, var(--tag) 9%, transparent) !important; }
+.cal-item.has-tag:not(.is-event):hover { background: color-mix(in srgb, var(--tag) 18%, transparent) !important; }
+.cal-item.has-tag .icon { color: var(--tag); }
+.cal-item.is-event.has-tag { background: color-mix(in srgb, var(--tag) 17%, transparent) !important; box-shadow: inset 2px 0 var(--tag); color: color-mix(in srgb, var(--tag) 30%, var(--strong)) !important; }
+.cal-item.is-event.has-tag:hover { background: color-mix(in srgb, var(--tag) 27%, transparent) !important; }
+.cal-item.is-block.has-tag { background: color-mix(in srgb, var(--tag) 22%, var(--background)) !important; box-shadow: inset 3px 0 var(--tag), 0 1px 2px #00000080; color: color-mix(in srgb, var(--tag) 22%, var(--strong)) !important; }
+.cal-item.is-block.is-task.has-tag { background: color-mix(in srgb, var(--tag) 12%, var(--task-background)) !important; }
+.cal-item.is-block.has-tag:hover { background: color-mix(in srgb, var(--tag) 32%, var(--background)) !important; }
+.cal-item.has-tag:is(.is-done, .is-cancelled) { --tag-fade: 1; box-shadow: inset 2px 0 color-mix(in srgb, var(--tag) 45%, transparent); }
+.cal-item.has-tag:is(.is-done, .is-cancelled) .icon { color: var(--disabled); }
+.cal-item.is-block.has-tag:is(.is-done, .is-cancelled) { background: color-mix(in srgb, var(--tag) 8%, var(--task-background)) !important; }
+.cal-item.has-tag .cal-item-time { background: color-mix(in srgb, var(--tag) 38%, var(--background)); color: var(--strong); }
+.cal-item.is-night-rest.has-tag { box-shadow: inset 3px 0 color-mix(in srgb, var(--tag) 55%, transparent), 0 1px 2px #00000080; }
+.cal-item.is-editing.has-tag { box-shadow: inset 0 0 0 1.5px var(--accent) !important; }
+/* Status remains readable even when a tag colours a block (including overnight/pixel blocks). */
+:root .cal-item.is-task.has-tag:is(.is-done, .is-cancelled) { color: var(--disabled) !important; box-shadow: inset 2px 0 color-mix(in srgb, var(--tag) 30%, var(--disabled)); }
+:root .cal-item.is-task.has-tag:is(.is-done, .is-cancelled) .cal-item-time { color: var(--disabled); }
+/* The card shows the chosen tag along its top edge. */
+.cal-composer.has-tag::before { content: ''; position: absolute; top: 0; left: 18px; right: 18px; height: 2px; border-radius: 0 0 2px 2px; background: var(--tag); pointer-events: none; }
+.cal-composer-tag .tag-dot { width: 10px; height: 10px; }
+.cal-composer-tag.has-tag[aria-pressed='true'] { color: var(--tag) !important; box-shadow: 0 0 0 1.5px var(--tag), 0 6px 16px -6px #000000e6; }
+
+/* Settings → Tags */
+.tag-list { display: flex; flex-direction: column; gap: 5px; margin: 14px 0 8px; }
+.tag-row { display: flex; align-items: center; gap: 6px; min-width: 0; padding: 5px 6px 5px 10px; border-radius: 9px; background: var(--border); box-shadow: inset 3px 0 var(--tag), inset 0 0 0 1px var(--edge); }
+.tag-row.is-new { margin-top: 2px; background: transparent; box-shadow: inset 0 0 0 1px var(--edge); }
+.tag-row .tag-name { flex: 1; min-width: 60px; height: 28px; padding: 0 8px; border: 0; border-radius: 6px; background: transparent; color: var(--strong); font: 13px var(--sans); }
+.tag-row .tag-name:hover { background: var(--hover); }
+.tag-row .tag-name:focus { background: var(--inset); outline: 1px solid color-mix(in srgb, var(--accent) 70%, transparent); outline-offset: 0; }
+.tag-row .tag-name::placeholder { color: var(--placeholder); }
+.tag-row-sample { display: flex; align-items: center; gap: 6px; flex: none; max-width: 130px; height: 20px; padding: 0 9px 0 8px; overflow: hidden; border-radius: 999px;
+  background: color-mix(in srgb, var(--tag) 13%, transparent); color: color-mix(in srgb, var(--tag) 62%, var(--strong)); font: 11px var(--sans); white-space: nowrap; text-overflow: ellipsis; }
+.tag-row-sample i { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--tag); }
+.tag-row-key { display: inline-grid; place-items: center; flex: none; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 4px; color: var(--placeholder); font: 10px var(--mono); }
+.tag-row-key:not(:empty) { background: var(--background); box-shadow: 0 0 0 1px var(--edge); }
+.tag-row .cal-icon-button { flex: none; display: grid; place-items: center; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--muted); }
+.tag-row .cal-icon-button:hover:not(:disabled) { background: var(--hover); color: var(--text); }
+.tag-row .cal-icon-button:disabled { opacity: .3; }
+.tag-row .cal-icon-button .icon { width: 13px; height: 13px; }
+.tag-row .tag-remove:hover:not(:disabled) { color: var(--error); }
+.tag-remove.is-asking { flex: none; height: 26px; padding: 0 9px; border: 0; border-radius: 6px; background: color-mix(in srgb, var(--error) 18%, transparent); color: var(--error); font: 500 11px var(--sans); cursor: pointer; animation: chip-in 260ms var(--spring); }
+.tag-add { display: flex; align-items: center; gap: 5px; flex: none; height: 28px; padding: 0 11px 0 9px; border: 0; border-radius: 7px; background: var(--accent); color: var(--on-accent); font: 500 12px var(--sans); cursor: pointer; }
+.tag-add .icon { width: 13px; height: 13px; }
+.tag-add:disabled { background: var(--hover); color: var(--disabled); cursor: default; }
+.tag-empty { margin: 2px 0; color: var(--placeholder); font-size: 12px; }
+.tag-error { margin: 8px 0 0; color: var(--error); font-size: 11px; }
+@media (max-width: 560px) { .tag-row-sample, .tag-row-key { display: none; } }
+
+/* The colour picker (ColorPicker.tsx) and its well */
+.color-well { position: relative; flex: none; width: 30px; height: 30px; padding: 3px; border: 0; border-radius: 7px; background: var(--inset); box-shadow: inset 0 0 0 1px var(--edge); cursor: pointer;
+  transition: box-shadow var(--fast) ease, transform 220ms var(--spring); }
+.tag-row .color-well { width: 26px; height: 26px; }
+.color-well > span, .color-picker-compare, .color-picker-bar.is-alpha { background-color: #cfcfcf; background-image: conic-gradient(#8f8f8f 25%, transparent 0 50%, #8f8f8f 0 75%, transparent 0); background-size: 8px 8px; }
+.color-well > span { position: relative; display: block; width: 100%; height: 100%; overflow: hidden; border-radius: 4px; }
+.color-well > span::after { content: ''; position: absolute; inset: 0; background: var(--swatch); box-shadow: inset 0 0 0 1px #ffffff1f; }
+.color-well:is(:hover, [aria-expanded='true']) { box-shadow: inset 0 0 0 1px var(--accent); }
+.color-well:active { transform: scale(.92); }
+.color-picker-popover { width: 244px; padding: 10px; }
+.color-picker { display: flex; flex-direction: column; gap: 10px; }
+.color-picker-field { position: relative; height: 144px; border-radius: 7px; cursor: crosshair; touch-action: none; }
+.color-picker canvas { display: block; width: 100%; height: 100%; border-radius: inherit; }
+.color-picker.is-pixel canvas { image-rendering: pixelated; }
+.color-picker-field:focus-visible, .color-picker-bar:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.color-picker-thumb { position: absolute; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; background: var(--picked-opaque); box-shadow: 0 0 0 2px #fff, 0 0 0 3px #00000099, 0 2px 6px #00000080; pointer-events: none; }
+.color-picker-bars { display: flex; flex-direction: column; gap: 9px; }
+.color-picker-bar { position: relative; height: 12px; border-radius: 6px; cursor: pointer; touch-action: none; }
+.color-picker-bar .color-picker-thumb { top: 50%; background: var(--hue); }
+.color-picker-bar.is-alpha .color-picker-thumb { background: var(--picked); }
+.color-picker-values { display: flex; align-items: center; gap: 6px; }
+.color-picker-compare { display: flex; flex: none; width: 36px; height: 26px; padding: 0 !important; overflow: hidden; border-radius: 6px; box-shadow: inset 0 0 0 1px var(--edge); }
+.color-picker-compare i { flex: 1; background: var(--before); }
+.color-picker-compare b { flex: 1; background: var(--picked); }
+.color-picker-hex { flex: 1; min-width: 0; height: 26px; padding: 0 8px; border: 0; border-radius: 6px; background: var(--inset); box-shadow: inset 0 0 0 1px var(--edge); color: var(--strong); font: 12px var(--mono); }
+.color-picker-hex:focus { outline: 1px solid color-mix(in srgb, var(--accent) 70%, transparent); outline-offset: 0; }
+.color-picker-hex[aria-invalid='true'] { box-shadow: inset 0 0 0 1px var(--error); }
+.color-picker-alpha { flex: none; color: var(--muted); font: 11px var(--mono); }
+.color-picker-dropper { display: grid; flex: none; place-items: center; width: 26px; height: 26px; border-radius: 6px; color: var(--muted) !important; }
+.color-picker-dropper:hover { background: var(--hover) !important; color: var(--text) !important; }
+.color-picker-dropper .icon { width: 14px; height: 14px; }
+.color-picker-swatches { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 6px; padding-top: 9px; border-top: 1px solid var(--divider); }
+.color-picker-swatches button { aspect-ratio: 1; padding: 0 !important; border-radius: 50%; background: var(--swatch) !important; box-shadow: inset 0 0 0 1px #ffffff26; transition: transform 200ms var(--spring); }
+.color-picker-swatches button:hover { transform: scale(1.15); }
+.color-picker-swatches button[aria-pressed='true'] { box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px var(--strong); }
+.color-field .color-well { width: 30px; height: 30px; }
+
+/* Pixel: hard edges and offset shadows like the other panels, square thumbs and dots, the terminal face a size up. */
+:root[data-theme='pixel'] .popover { outline: 1px solid var(--edge); outline-offset: 1px; box-shadow: 3px 3px 0 var(--border), 5px 5px 0 #0008; animation-timing-function: steps(3); }
+:root[data-theme='pixel'] .color-picker-thumb { width: 12px; height: 12px; margin: -6px 0 0 -6px; box-shadow: 0 0 0 2px #fff, 0 0 0 4px #000; }
+:root[data-theme='pixel'] .color-picker-bar { height: 14px; }
+:root[data-theme='pixel'] .color-picker-bar .color-picker-thumb { width: 8px; height: 18px; margin: -9px 0 0 -4px; }
+:root[data-theme='pixel'] :is(.color-well > span, .color-picker-compare, .color-picker-bar.is-alpha) { background-size: 8px 8px; image-rendering: pixelated; }
+:root[data-theme='pixel'] .color-picker-swatches button[aria-pressed='true'] { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--strong); }
+:root[data-theme='pixel'] :is(.color-picker-hex, .color-picker-alpha, .tag-filter-count, .entry-hidden-count, .popover kbd, .tag-row-key) { font-size: 15px; }
+:root[data-theme='pixel'] .tag-filter-dots i + i { margin-left: 1px; }
+:root[data-theme='pixel'] .tag-filter-dots i { box-shadow: none; }
+:root[data-theme='pixel'] .entry.has-tag::after { width: 2px; opacity: 1; background: repeating-linear-gradient(var(--tag) 0 4px, transparent 4px 6px); }
+:root[data-theme='pixel'] .cal-item.has-tag { box-shadow: inset 3px 0 var(--tag); }
+:root[data-theme='pixel'] .cal-item.is-block.has-tag { box-shadow: inset 3px 0 var(--tag), 2px 2px 0 #0008; }
+:root[data-theme='pixel'] .tag-row { box-shadow: inset 4px 0 var(--tag), inset 0 0 0 1px var(--edge); }
+:root[data-theme='pixel'] .cal-composer.has-tag::before { left: 10px; right: 10px; height: 3px; }
+:root[data-theme='pixel'] .entry-tag, :root[data-theme='pixel'] .tag-row-sample { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tag) 45%, transparent); }

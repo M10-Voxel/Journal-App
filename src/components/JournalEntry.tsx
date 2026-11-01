@@ -19,15 +19,20 @@ import { swipeStages, useSwipe } from './useSwipe';
 import type { SwipeAction, SwipeActions, SwipeDirection } from './useSwipe';
 import type { TextField } from './entryEditor';
 import type { EntryDragHandlers } from './useEntryDrag';
+import { TagPicker } from './TagPicker';
+import { filterKey } from '../tags';
+import type { Tag } from '../tags';
 
 export const entryLabels = () => ({ task: t("Aufgabe"), event: t("Ereignis"), note: t("Notiz") });
-export type EntryChange = Partial<Pick<Entry, 'kind' | 'text' | 'done' | 'cancelled' | 'priority' | 'time' | 'end' | 'reminder' | 'plan' | 'repeat'>>;
+export type EntryChange = Partial<Pick<Entry, 'kind' | 'text' | 'done' | 'cancelled' | 'priority' | 'time' | 'end' | 'reminder' | 'plan' | 'repeat' | 'tag'>>;
 export type DragState = 'source' | 'drop-before' | 'drop-after' | null;
 interface TextSelection { start: number; end: number; direction: 'forward' | 'backward' | 'none' }
 
 // Memoized: all callbacks receive the entry ID and are stable, so typing in one row re-renders only that row.
-export const JournalEntry = memo(function JournalEntry({ layout, entry, day, traceSaved, isNew, isOpen, isGroupStart, canMoveUp, canMoveDown, dragState, drag, onMoveOffset, onOpenChange, onChange, onRemove, onLinkedChange, onCreate, onNavigate, focusEntryId, focusMoveEntryId }: {
-  layout: ActionLayout; entry: Entry; day: string; traceSaved: boolean; onNavigate: (date: string) => void; onCreate: (kind: Entry['kind'], afterId: string) => void; isNew: boolean; isOpen: boolean; onOpenChange: (id: string, open: boolean) => void;
+export const JournalEntry = memo(function JournalEntry({ layout, entry, day, tag, tagFirst, tagLast, traceSaved, isNew, isOpen, isGroupStart, canMoveUp, canMoveDown, dragState, drag, onMoveOffset, onOpenChange, onChange, onRemove, onLinkedChange, onCreate, onNavigate, focusEntryId, focusMoveEntryId }: {
+  layout: ActionLayout; entry: Entry; day: string; traceSaved: boolean;
+  /** The entry's tag; entries of one tag follow each other, the first of them names it (`tagFirst`). */
+  tag: Tag | null; tagFirst: boolean; tagLast: boolean; onNavigate: (date: string) => void; onCreate: (kind: Entry['kind'], afterId: string) => void; isNew: boolean; isOpen: boolean; onOpenChange: (id: string, open: boolean) => void;
   onChange: (id: string, change: EntryChange) => void; onRemove: (id: string) => void; focusEntryId: { current: string | null };
   /** The same action for linked entries elsewhere (chosen in ScopeChoice). */
   onLinkedChange: (others: ScopeOption['others'], action: LinkedAction) => void;
@@ -52,6 +57,8 @@ export const JournalEntry = memo(function JournalEntry({ layout, entry, day, tra
   const [planDate, setPlanDate] = useState<string | null>(null);
   const [plannerView, setPlannerView] = useState<PlannerView>('date');
   const [planCount, setPlanCount] = useState(1);
+  const [tagging, setTagging] = useState(false);
+  const tagRef = useRef<HTMLButtonElement>(null);
   const [scopeAsk, setScopeAsk] = useState<{ action: ScopeAction; options: ScopeOption[]; apply: () => void; fromOrbit: boolean } | null>(null);
   const trace = entry.plan ?? null;
   const rule = entry.repeat?.rule ?? null;
@@ -72,6 +79,8 @@ export const JournalEntry = memo(function JournalEntry({ layout, entry, day, tra
   const statusLabel = trace ? t(", geplant auf {0}", trace.targets.map(target => formatShortDate(target.date)).join(', ')) : status === 'done' ? t(", erledigt") : status === 'cancelled' ? t(", abgebrochen") : status === 'open' ? t(", offen") : '';
 
   useLayoutEffect(() => {
+    // Keep the saved caret until the tag popup closes; restoring it now steals its search focus.
+    if (tagging) return;
     if (restorePriorityFocus.current) {
       const button = rootRef.current?.querySelector<HTMLButtonElement>('.dock-priority');
       button?.focus({ preventScroll: true });
@@ -103,7 +112,7 @@ export const JournalEntry = memo(function JournalEntry({ layout, entry, day, tra
     if (!isOpen) return;
     const outside = (event: globalThis.PointerEvent) => {
       const target = event.target as Element | null;
-      if (target && !rootRef.current?.contains(target) && !target.closest('.format-menu, .shortcut-backdrop')) onOpenChange(entry.id, false);
+      if (target && !rootRef.current?.contains(target) && !target.closest('.format-menu, .shortcut-backdrop, .popover')) onOpenChange(entry.id, false);
     };
     const escape = (event: globalThis.KeyboardEvent) => {
       if (event.key !== 'Escape' || event.defaultPrevented) return;
@@ -176,6 +185,17 @@ export const JournalEntry = memo(function JournalEntry({ layout, entry, day, tra
     else restoreSymbolFocus.current = true;
     onChange(entry.id, { kind: next, ...next === 'task' ? {} : { done: false, cancelled: false } });
   }
+  // Choosing a tag (Alt G, the tag at the row, or the actions) re-sorts the list into the tag's group, like priority.
+  function chooseTag(text: TextField | null = null) {
+    if (text) restoreSelection.current = { start: text.selectionStart, end: text.selectionEnd, direction: text.selectionDirection };
+    onOpenChange(entry.id, false);
+    setTagging(true);
+  }
+  function pickTag(id: string | null) {
+    if (id === (entry.tag ?? null)) return;
+    if (!restoreSelection.current) restoreSymbolFocus.current = true;
+    onChange(entry.id, { tag: id });
+  }
   // Priority re-sorts the list, which moves this row's DOM node; focus is restored after the move.
   function togglePriority(text: TextField | null) {
     if (text) restoreSelection.current = { start: text.selectionStart, end: text.selectionEnd, direction: text.selectionDirection };
@@ -201,6 +221,7 @@ export const JournalEntry = memo(function JournalEntry({ layout, entry, day, tra
         case 'KeyT': if (trace) { onNavigate(trace.targets[0].date); return true; } if (!canPlan(entry)) return false; openPlanner('date', Boolean(text)); return true;
         case 'KeyU': if (!canPlan(entry)) return false; openPlanner('time', Boolean(text)); return true;
         case 'KeyW': if (!canPlan(entry)) return false; openPlanner('repeat', Boolean(text)); return true;
+        case 'KeyG': if (trace) return false; chooseTag(text); return true;
         case 'Enter': if (isOpen) closeActions(); else { returnToText.current = Boolean(text); onOpenChange(entry.id, true); } return true;
         case 'Delete': { if (linked) { remove(); return true; } const neighbor = adjacentText(rootRef.current, 1) ?? adjacentText(rootRef.current, -1); remove(); if (!focusText(neighbor)) titleInput()?.focus(); return true; }
       }
@@ -267,7 +288,10 @@ export const JournalEntry = memo(function JournalEntry({ layout, entry, day, tra
   }
 
   const dragClass = dragState === 'source' ? ' entry-dragging' : dragState ? ` ${dragState}` : '';
-  return <div ref={rootRef} className={`entry${isNew ? ' entry-new' : ''}${isGroupStart ? ' entry-group-start' : ''}${isOpen ? ' entry-open' : ''}${leaving ? ' entry-leaving' : ''}${dragClass}`} data-entry-id={entry.id} data-entry-kind={entry.kind} data-status={status} data-priority={entry.priority ? 'high' : undefined} data-preview={preview ?? undefined} data-trace={trace ? trace.via : undefined} data-swipe={layout === 'swipe' && swipe.phase !== 'idle' ? swipe.phase : undefined}
+  // A tag's entries share a thin line in its colour at their left; a new group (within a kind) keeps a little distance.
+  const tagClass = `${tag ? ` has-tag${tagFirst ? ' tag-first' : ''}${tagLast ? ' tag-last' : ''}` : ''}${tagFirst && !isGroupStart ? ' entry-tag-start' : ''}`;
+  return <div ref={rootRef} className={`entry${isNew ? ' entry-new' : ''}${isGroupStart ? ' entry-group-start' : ''}${tagClass}${isOpen ? ' entry-open' : ''}${leaving ? ' entry-leaving' : ''}${dragClass}`} data-entry-id={entry.id}
+    style={tag ? { '--tag': tag.color } as CSSProperties : undefined} data-group={filterKey(entry.tag)} data-tag={tag?.name} data-entry-kind={entry.kind} data-status={status} data-priority={entry.priority ? 'high' : undefined} data-preview={preview ?? undefined} data-trace={trace ? trace.via : undefined} data-swipe={layout === 'swipe' && swipe.phase !== 'idle' ? swipe.phase : undefined}
     // Swiping the entry keeps the gesture from turning the day; Shift + wheel always turns the day.
     onWheel={event => { if (layout === 'swipe' && !isOpen && !event.shiftKey && swipe.wheel(event.deltaX, event.deltaY)) event.stopPropagation(); }}
     onAnimationEnd={event => { if (leaving && event.target === event.currentTarget && event.animationName === 'entry-out') onRemove(entry.id); }}
@@ -331,6 +355,8 @@ export const JournalEntry = memo(function JournalEntry({ layout, entry, day, tra
         </button>
       </div>
       <EntryText entry={entry} label={entry.priority ? t("{0} mit hoher Priorität", label) : label} strike={strike} focusEntryId={focusEntryId} onChange={text => onChange(entry.id, { text })} />
+      {tag && tagFirst && <button ref={tagRef} type="button" className="entry-tag" aria-label={t("Tag {0} ändern", tag.name)} data-tip={t("Tag · Alt G")} aria-haspopup="dialog" aria-expanded={tagging}
+        onClick={() => chooseTag()}><span className="tag-dot" />{tag.name}</button>}
       {!trace && (entry.time || entry.reminder || rule) && <button type="button" className="entry-when" title={rule ? describe(rule) : undefined}
         aria-label={t("Termin{0}{1}{2} ändern", entry.time ? ` ${formatSpan(entry.time, entry.end)}` : '', entry.reminder ? t(", mit Erinnerung") : '', rule ? `, ${describe(rule)}` : '')} onClick={() => openPlanner()}>
         {entry.time && <span>{formatSpan(entry.time, entry.end)}</span>}{entry.reminder && <Icon name="bell" />}{rule && <Icon name="repeat" className="entry-repeat" />}
@@ -340,6 +366,8 @@ export const JournalEntry = memo(function JournalEntry({ layout, entry, day, tra
       </button>}
     </div>
     {scopeAsk && !fromSatellite && scopeChoice()}
-    <EntryActionDock layout={layout} swipeActions={swipeActions} removeChoice={fromSatellite ? scopeChoice('satellite') : undefined} onClose={closeActions} entry={entry} day={day} label={label} isOpen={isOpen} planning={planning} plannerView={plannerView} traceSaved={traceSaved} onPlanningChange={changePlanning} onPlanDatePreview={(date, count = 1) => { setPlanDate(date); setPlanCount(count); }} onPlan={plan} onNavigate={onNavigate} canMoveUp={canMoveUp} canMoveDown={canMoveDown} onPreview={next => { if (!restorePriorityFocus.current) setPreview(next); }} onRemove={remove} onPriorityChange={() => togglePriority(null)} onMove={offset => { setPreview(null); onMoveOffset(entry.id, offset); }} onStatusChange={changeStatus} onKindChange={kind => changeKind(kind)} />
+    {tagging && <TagPicker anchor={tagRef.current ?? triggerRef.current} value={tag?.id ?? null} onPick={pickTag}
+      onClose={() => { setTagging(false); const selection = restoreSelection.current; if (selection) { restoreSelection.current = null; const text = rootRef.current?.querySelector<TextField>('.entry-text'); text?.focus({ preventScroll: true }); text?.setSelectionRange(selection.start, selection.end, selection.direction); } }} />}
+    <EntryActionDock layout={layout} swipeActions={swipeActions} removeChoice={fromSatellite ? scopeChoice('satellite') : undefined} onClose={closeActions} entry={entry} day={day} label={label} isOpen={isOpen} planning={planning} plannerView={plannerView} traceSaved={traceSaved} onPlanningChange={changePlanning} onPlanDatePreview={(date, count = 1) => { setPlanDate(date); setPlanCount(count); }} onPlan={plan} onNavigate={onNavigate} canMoveUp={canMoveUp} canMoveDown={canMoveDown} onPreview={next => { if (!restorePriorityFocus.current) setPreview(next); }} onRemove={remove} onPriorityChange={() => togglePriority(null)} onMove={offset => { setPreview(null); onMoveOffset(entry.id, offset); }} onStatusChange={changeStatus} onKindChange={kind => changeKind(kind)} tag={tag} onTag={() => chooseTag()} />
   </div>;
 });

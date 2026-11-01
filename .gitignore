@@ -3,3 +3,12 @@ dist/
 src-tauri/target/
 src-tauri/gen/
 *.sqlite*
+
+# Generated knowledge graph, caches and agent work memory (kept locally).
+graphify-out/
+
+# Machine-specific agent permissions.
+.claude/settings.local.json
+
+# Temporary verification scripts.
+scripts/*.tmp.mjs

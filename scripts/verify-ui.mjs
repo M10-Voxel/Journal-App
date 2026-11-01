@@ -90,6 +90,8 @@ const bootstrap = `
     return [...(current?.plan?.targets ?? []).map(target => target.id), ...[...days.values()].flatMap(day => day.entries.filter(entry => entry.plan?.targets.some(target => target.id === id) || (current?.seriesId && entry.seriesId === current.seriesId)).map(entry => entry.id))];
   };
   const take = id => { for (const [day, value] of days) { const index = value.entries.findIndex(entry => entry.id === id); if (index >= 0) return [day, value.entries.splice(index, 1)[0]]; } };
+  const tagList = [];
+  window.__uiTest.tags = () => structuredClone(tagList);
   const mail = { accounts:[], pending:[], candidates:[], notices:[], delivered:new Set(), analyzed:[], model:{installed:false,enabled:false,installing:false,downloaded:0,total:0,error:''} };
   window.__uiTest.mail = mail;
   const mailChanged = () => { void window.__TAURI_INTERNALS__.invoke('plugin:event|emit', { event:'mail:changed', payload:null }); };
@@ -151,6 +153,25 @@ const bootstrap = `
       for (const date of touched) days.get(date).revision++;
       void window.__TAURI_INTERNALS__.invoke('plugin:event|emit', { event:'journal:changed', payload:[...touched] });
       return [...touched];
+    }
+    if (command === 'load_tags') return structuredClone(tagList);
+    if (command === 'save_tags') {
+      const save = () => {
+      const names = payload.tags.map(tag => tag.name.trim().toLowerCase());
+      if (names.some((name, index) => !name || names.indexOf(name) !== index || payload.tags[index].name !== payload.tags[index].name.trim())) throw new Error('Ungültiger Tag');
+      const kept = new Set(payload.tags.map(tag => tag.id)), touched = [];
+      for (const day of days.values()) for (const entry of day.entries) if (entry.tag && !kept.has(entry.tag)) { entry.tag = null; touched.push(day.date); }
+      tagList.splice(0, tagList.length, ...payload.tags.map(tag => ({ ...tag, color:tag.color.toLowerCase() })));
+      void window.__uiTest.emit('journal:tags', structuredClone(tagList));
+      if (touched.length) void window.__uiTest.emit('journal:changed', touched);
+      return structuredClone(tagList);
+      };
+      if (!window.__uiTest.tagSaveDelay) return save();
+      window.__uiTest.tagSaveActive = true;
+      return new Promise((resolve, reject) => setTimeout(() => {
+        try { resolve(save()); } catch (error) { reject(error); }
+        finally { window.__uiTest.tagSaveActive = false; }
+      }, window.__uiTest.tagSaveDelay));
     }
     if (command === 'load_day') return loadDay(payload.date);
     if (command === 'load_range') return [...days.values()].filter(day => day.date >= payload.from && day.date <= payload.to)
@@ -544,8 +565,13 @@ async function checkColors() {
   assert.equal(await token('on-accent'),'#ffffff','Dark accent colours receive light button text.');
   await evaluate("document.querySelector('[data-color-field=accent] .color-reset').click()");
   assert.equal(await token('accent'),'#aeff00');
-  await fill('accent','#cde857','color');
+  await evaluate("document.querySelector('[data-color-field=accent] .color-well').click()");
+  await until("Boolean(document.querySelector('.color-picker-popover .color-picker-hex'))");
+  await evaluate("(() => {const input=document.querySelector('.color-picker-popover .color-picker-hex'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'#cde857'); input.dispatchEvent(new Event('input',{bubbles:true}));})()");
   assert.equal(await token('accent'),'#cde857','The colour picker and hex input edit the same token.');
+  assert.equal(await evaluate("document.querySelector('[data-color-field=accent] .color-hex').value"),'#cde857');
+  await key('Escape');
+  await until("!document.querySelector('.color-picker-popover') && Boolean(document.querySelector('.settings'))");
   await fill('edge','128','range');
   assert.equal(await token('edge'),'#aeff0080');
   await evaluate("document.querySelector('[data-color-theme-choice=original]').click()");
@@ -640,6 +666,210 @@ async function checkColors() {
   console.log('Colour checks passed: base palettes, live Markdown/editor/menu colours, picker/hex/opacity, validation, independent overrides, resets, unsaved content, persistence, compact layout, both UI styles, English labels and all window types.');
 }
 
+async function checkTags() {
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  await evaluate("localStorage.setItem('journal.settings', JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'), theme:'classic', language:'de'})); localStorage.removeItem('journal.hiddenTags')");
+  await command('Emulation.setDeviceMetricsOverride', { width:1180, height:780, deviceScaleFactor:1, mobile:false });
+  await command('Page.navigate', { url:origin });
+  await until("document.querySelectorAll('.entry').length===5");
+  assert(!await evaluate("Boolean(document.querySelector('.tag-filter-button'))"), 'Without tags there is nothing to filter.');
+  const row = id => `document.querySelector('[data-entry-id="10000000-0000-4000-8000-00000000000${id}"]')`;
+  const setValue = (selector, value) => evaluate(`(() => {const input=document.querySelector(${JSON.stringify(selector)}); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,${JSON.stringify(value)}); input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+
+  // Settings → Tags: two tags, each with its own colour; names are unique.
+  await key(',', 'Comma', 2);
+  await until("Boolean(document.querySelector('#settings-tags-tab'))");
+  await evaluate("document.querySelector('#settings-tags-tab').click()");
+  await until("Boolean(document.querySelector('.tag-row.is-new .tag-name'))");
+  const addTag = async name => {
+    await evaluate("document.querySelector('.tag-row.is-new .tag-name').focus()");
+    await command('Input.insertText', { text:name });
+    await key('Enter', 'Enter');
+  };
+  await addTag('Arbeit');
+  await until("document.querySelectorAll('.tag-list .tag-row').length===1");
+  await addTag('Uni');
+  await until("document.querySelectorAll('.tag-list .tag-row').length===2");
+  assert.deepEqual(await evaluate("window.__uiTest.tags().map(tag=>tag.name)"), ['Arbeit','Uni']);
+  const [work, uni] = await evaluate("window.__uiTest.tags()");
+  assert.notEqual(work.color, uni.color, 'New tags get different colours.');
+  await addTag('arbeit');
+  await until("Boolean(document.querySelector('.tag-error'))");
+  assert.equal(await evaluate("document.querySelectorAll('.tag-list .tag-row').length"), 2, 'A name in use is refused.');
+  await setValue('.tag-row.is-new .tag-name', '');
+
+  // The own colour picker: a field, a hue bar, hex, suggestions; Escape closes only the picker.
+  await evaluate("document.querySelector('[data-tag-row=Uni] .color-well').click()");
+  await until("Boolean(document.querySelector('.color-picker-popover .color-picker-field canvas'))");
+  assert.deepEqual(await evaluate("(() => {const c=document.querySelector('.color-picker-field canvas'); return [c.width, c.height, getComputedStyle(c).imageRendering];})()"), [96, 64, 'auto']);
+  await until("document.activeElement?.classList.contains('color-picker-field')");
+  const before = await evaluate("document.querySelector('.color-picker-hex').value");
+  await key('ArrowLeft', 'ArrowLeft', 8);
+  await until(`document.querySelector('.color-picker-hex').value!==${JSON.stringify(before)}`);
+  await setValue('.color-picker-hex', '#ff7a90');
+  await until("document.querySelector('[data-tag-row=Uni]').style.getPropertyValue('--tag')==='#ff7a90'");
+  await until("window.__uiTest.tags()[1].color==='#ff7a90'");
+  assert.equal(await evaluate("document.querySelector('.color-picker-swatches button[aria-pressed=true]')?.getAttribute('aria-label') ?? null"), '#ff7a90');
+  await evaluate("document.querySelector('.color-picker-swatches button').click()");
+  await until("window.__uiTest.tags()[1].color==='#569eff'");
+  await setValue('.color-picker-hex', '#ff7a90');
+  await until("window.__uiTest.tags()[1].color==='#ff7a90'");
+  await pause(200); await screenshot('tags-settings.png');
+  await key('Escape');
+  await until("!document.querySelector('.color-picker-popover') && Boolean(document.querySelector('.settings'))");
+  await key('Escape');
+  await until("!document.querySelector('.settings')");
+
+  // Alt G: the tag picker at the entry. A number picks at once, typing finds, Enter on a new name creates it.
+  // Leaving the pane commits a colour before the debounce expires.
+  const openTags = async () => {
+    await evaluate("document.querySelector('.settings-button').click()");
+    await until("Boolean(document.querySelector('#settings-tags-tab'))");
+    await evaluate("document.querySelector('#settings-tags-tab').click()");
+    await until("Boolean(document.querySelector('[data-tag-row=Uni]'))");
+  };
+  await openTags();
+  await evaluate("document.querySelector('[data-tag-row=Uni] .color-well').click()");
+  await until("Boolean(document.querySelector('.color-picker-hex'))");
+  await setValue('.color-picker-hex', '#a1b2c3');
+  await evaluate("document.querySelector('.settings-close').click()");
+  await until("!document.querySelector('.settings') && window.__uiTest.tags()[1].color==='#a1b2c3'");
+  // A slow earlier write cannot clear a later colour or overwrite a rename.
+  await openTags();
+  await evaluate("window.__uiTest.tagSaveDelay=250;document.querySelector('[data-tag-row=Uni] .color-well').click()");
+  await until("Boolean(document.querySelector('.color-picker-hex'))");
+  await setValue('.color-picker-hex', '#8fb9ef');
+  await until("window.__uiTest.tagSaveActive===true");
+  await setValue('.color-picker-hex', '#ff7a90');
+  await key('Escape');
+  await until("!document.querySelector('.color-picker-popover')");
+  await setValue('[data-tag-row=Uni] .tag-name', 'Studium');
+  await evaluate("document.querySelector('[data-tag-row=Uni] .tag-name').focus();document.querySelector('[data-tag-row=Uni] .tag-name').blur()");
+  await until("window.__uiTest.tags()[1].name==='Studium' && window.__uiTest.tags()[1].color==='#ff7a90'");
+  await evaluate("window.__uiTest.tagSaveDelay=0");
+  await setValue('[data-tag-row=Studium] .tag-name', 'Uni');
+  await evaluate("document.querySelector('[data-tag-row=Studium] .tag-name').focus();document.querySelector('[data-tag-row=Studium] .tag-name').blur()");
+  await until("window.__uiTest.tags()[1].name==='Uni'");
+  await evaluate("document.querySelector('.settings-close').click()");
+  await until("!document.querySelector('.settings')");
+  const pickTag = async (id, keys) => {
+    await evaluate(`${row(id)}.querySelector('.entry-text').focus()`);
+    await key('g', 'KeyG', 1);
+    await until("Boolean(document.querySelector('.tag-picker input'))");
+    await until("document.activeElement===document.querySelector('.tag-picker input')");
+    await keys();
+  };
+  await pickTag(1, () => key('1', 'Digit1'));
+  await until(`${row(1)}.dataset.tag==='Arbeit'`);
+  await until(`document.activeElement?.closest('[data-entry-id]')===${row(1)} && document.activeElement.classList.contains('entry-text')`);
+  await pickTag(5, async () => { await command('Input.insertText', { text:'un' }); await until("document.querySelector('.tag-option[aria-selected=true]')?.textContent.includes('Uni')"); await key('Enter', 'Enter'); });
+  await until(`${row(5)}.dataset.tag==='Uni'`);
+  await pickTag(4, async () => { await command('Input.insertText', { text:'Sport' }); await until("Boolean(document.querySelector('.tag-option.is-create[aria-selected=true]'))"); await key('Enter', 'Enter'); });
+  await until(`${row(4)}.dataset.tag==='Sport' && window.__uiTest.tags().length===3`);
+  // Grouped: within the tasks Arbeit, Uni, Sport follow the tags' order; each group's first entry names its tag.
+  const knownTags = await evaluate("window.__uiTest.tags()");
+  await evaluate(`window.__TAURI_INTERNALS__.invoke('save_tags',{tags:[...window.__uiTest.tags(),...Array.from({length:24},(_,i)=>({id:crypto.randomUUID(),name:'Auswahl '+String(i+1).padStart(2,'0'),color:'#569eff'}))]})`);
+  await pickTag(1, async () => { await key('ArrowUp'); await key('ArrowUp'); });
+  await until("document.querySelector('.tag-option[aria-selected=true]')?.textContent.includes('Auswahl 24')");
+  assert(await evaluate("(() => {const list=document.querySelector('.tag-picker-list'),item=list.querySelector('[aria-selected=true]'),a=list.getBoundingClientRect(),b=item.getBoundingClientRect();return list.scrollTop>0 && b.top>=a.top-1 && b.bottom<=a.bottom+1;})()"),'Keyboard navigation scrolls long tag lists into view.');
+  await key('Escape');
+  await evaluate(`window.__TAURI_INTERNALS__.invoke('save_tags',{tags:${JSON.stringify(knownTags)}})`);
+  assert.deepEqual(await evaluate("[...document.querySelectorAll('.entry[data-entry-kind=task]')].map(entry=>entry.dataset.tag)"), ['Arbeit','Uni','Sport']);
+  assert.equal(await evaluate(`${row(1)}.querySelector('.entry-tag').textContent`), 'Arbeit');
+  assert(await evaluate(`${row(1)}.classList.contains('has-tag') && getComputedStyle(${row(1)}, '::after').backgroundColor==='rgb(86, 158, 255)'`), 'The tag line takes its colour.');
+  // Enter below a tagged entry: the new one takes the tag and stays in the group.
+  await evaluate(`(() => {const text=${row(1)}.querySelector('.entry-text'); text.focus(); text.setSelectionRange(text.value.length,text.value.length);})()`);
+  await key('Enter', 'Enter');
+  await until("document.activeElement?.closest('.entry')?.dataset.tag==='Arbeit' && document.activeElement.value===''");
+  await command('Input.insertText', { text:'Bericht schreiben' });
+  assert.deepEqual(await evaluate("[...document.querySelectorAll('.entry[data-entry-kind=task]')].map(entry=>entry.dataset.tag)"), ['Arbeit','Arbeit','Uni','Sport']);
+  assert.equal(await evaluate("document.querySelectorAll('.entry[data-tag=Arbeit] .entry-tag').length"), 1, 'Only the first of a group names the tag.');
+  // In the orbit the tag is one more cluster at the row's end; it opens the same picker.
+  await evaluate(`${row(3)}.querySelector('.entry-symbol').click()`);
+  await until(`Boolean(${row(3)}.querySelector('.entry-dock-shell.is-open .dock-tag-button'))`);
+  await evaluate(`${row(3)}.querySelector('.dock-tag-button').click()`);
+  await until("Boolean(document.querySelector('.tag-picker'))");
+  await key('2', 'Digit2');
+  await until(`${row(3)}.dataset.tag==='Uni'`);
+  await key('s', 'KeyS', 2);
+  await until("!document.querySelector('.save-status.is-dirty')");
+  await pause(250); await screenshot('tags-journal.png');
+
+  // The journal's filter: 1 hides Arbeit, A shows all, Alt+click keeps one. The choice stays.
+  await until("Boolean(document.querySelector('.main > .toolbar .tag-filter-button'))");
+  await evaluate("document.querySelector('.main > .toolbar .tag-filter-button').click()");
+  await until("document.activeElement?.classList.contains('tag-filter-row')");
+  await key('1', 'Digit1');
+  await until("!document.querySelector('.entry[data-tag=Arbeit]') && document.querySelector('.entry-hidden-count')?.textContent==='2 ausgeblendet'");
+  assert(await evaluate("document.querySelector('.main > .toolbar .tag-filter-button').classList.contains('is-filtering')"));
+  await pause(150); await screenshot('tags-filter.png');
+  await key('a', 'KeyA');
+  await until("document.querySelectorAll('.entry[data-tag=Arbeit]').length===2 && !document.querySelector('.entry-hidden-count')");
+  await evaluate("[...document.querySelectorAll('.tag-filter-row')].find(row=>row.textContent.includes('Uni')).dispatchEvent(new MouseEvent('click',{bubbles:true,altKey:true}))");
+  await until("[...document.querySelectorAll('.entry')].every(entry=>entry.dataset.tag==='Uni')");
+  assert.deepEqual(await evaluate("JSON.parse(localStorage.getItem('journal.hiddenTags')).journal.length"), 3, 'Arbeit, Sport and the untagged are hidden, and remembered.');
+  await key('a', 'KeyA');
+  await key('Escape');
+  await until("!document.querySelector('.tag-filter') && document.querySelectorAll('.entry').length===6");
+
+  // The calendar: tagged entries in their colour, its own filter, the tag in the card (Alt G).
+  await evaluate("window.__uiTest.store({...window.__uiTest.day(),entries:window.__uiTest.day().entries.map(entry=>entry.done ? {...entry,time:'09:00',end:'10:00'} : entry)})");
+  await evaluate("document.querySelector('.sidebar .cal').focus()");
+  await key('t','KeyT');
+  await until("Boolean(document.querySelector('.cal-item.is-block.is-task.has-tag.is-done'))");
+  assert(await evaluate("(() => {const item=document.querySelector('.cal-item.is-block.is-task.has-tag.is-done');return getComputedStyle(item).color===getComputedStyle(item.querySelector('.icon')).color;})()"),'Completed tagged blocks keep their grey status colour.');
+  await until("Boolean(document.querySelector('.cal-item[data-tag=Arbeit]'))");
+  assert(await evaluate("getComputedStyle(document.querySelector('.cal-item[data-tag=Arbeit]')).boxShadow.includes('rgb(86, 158, 255)')"), 'Calendar entries are edged in their tag colour.');
+  await evaluate("document.querySelector('.cal-actions .tag-filter-button').click()");
+  await until("document.activeElement?.classList.contains('tag-filter-row')");
+  await key('1', 'Digit1');
+  await until("!document.querySelector('.cal-item[data-tag=Arbeit]') && document.querySelectorAll('.entry[data-tag=Arbeit]').length===2");
+  assert.match(await evaluate("document.querySelector('.cal-day-stats').textContent"),/1\/2/, 'The day summary also excludes hidden tags.');
+  await key('a', 'KeyA');
+  await key('Escape');
+  await until("Boolean(document.querySelector('.cal-item[data-tag=Arbeit]'))");
+  await evaluate("document.querySelector('.cal-item[data-tag=Uni]').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true}))");
+  await until("document.querySelector('.cal-composer')?.classList.contains('has-tag')");
+  await until("document.activeElement?.classList.contains('cal-composer-text')");
+  await key('g', 'KeyG', 1);
+  await until("Boolean(document.querySelector('.tag-picker'))");
+  await key('3', 'Digit3');
+  await until("document.querySelector('.cal-composer-tag')?.getAttribute('aria-label')==='Tag: Sport' && document.activeElement?.classList.contains('cal-composer-text')");
+  await pause(150); await screenshot('tags-composer.png');
+  await key('Enter', 'Enter');
+  await until("!document.querySelector('.cal-composer') && document.querySelectorAll('.entry[data-tag=Sport]').length===2");
+
+  // Removing a tag keeps its entries, without a tag.
+  await key(',', 'Comma', 2);
+  await until("Boolean(document.querySelector('#settings-tags-tab'))");
+  await evaluate("document.querySelector('#settings-tags-tab').click()");
+  await until("Boolean(document.querySelector('[data-tag-row=Sport] .tag-remove'))");
+  await evaluate("document.querySelector('[data-tag-row=Sport] .tag-remove').click()");
+  await until("document.querySelector('[data-tag-row=Sport] .tag-remove')?.textContent==='Löschen?'");
+  await evaluate("document.querySelector('[data-tag-row=Sport] .tag-remove').click()");
+  await until("!document.querySelector('[data-tag-row=Sport]') && !document.querySelector('.entry[data-tag=Sport]') && document.querySelectorAll('.entry').length===6");
+
+  // Pixel: the same, drawn in coarse pixels.
+  await evaluate("document.querySelector('#settings-appearance-tab').click()");
+  await until("Boolean(document.querySelector('[data-theme-choice=pixel]'))");
+  await evaluate("document.querySelector('[data-theme-choice=pixel]').click()");
+  await until("document.documentElement.dataset.theme==='pixel'");
+  await evaluate("document.querySelector('#settings-tags-tab').click()");
+  await until("Boolean(document.querySelector('[data-tag-row=Arbeit] .color-well'))");
+  await evaluate("document.querySelector('[data-tag-row=Arbeit] .color-well').click()");
+  await until("Boolean(document.querySelector('.color-picker.is-pixel'))");
+  assert.deepEqual(await evaluate("(() => {const c=document.querySelector('.color-picker-field canvas'); return [c.width, c.height, getComputedStyle(c).imageRendering, getComputedStyle(document.querySelector('.color-picker-thumb')).borderRadius];})()"), [18, 12, 'pixelated', '0px']);
+  await pause(200); await screenshot('tags-pixel-settings.png');
+  await key('Escape');
+  await key('Escape');
+  await until("!document.querySelector('.settings')");
+  await evaluate("document.querySelector('.main > .toolbar .tag-filter-button').click()");
+  await until("Boolean(document.querySelector('.tag-filter'))");
+  await pause(200); await screenshot('tags-pixel-journal.png');
+  await key('Escape');
+  await evaluate("localStorage.setItem('journal.settings', JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'), theme:'classic'})); localStorage.removeItem('journal.hiddenTags')");
+  console.log('Tag checks passed: settings (create, unique names, colours, order), own colour picker (field, keys, hex, suggestions, pixel cells), Alt G picker (number, search, create), grouping, Enter keeps the tag, orbit cluster, journal and calendar filters (toggle, all, only one, remembered), calendar colours, tag in the card, removing a tag, pixel theme.');
+}
 async function checkPixelTheme() {
   const origin = `http://127.0.0.1:${server.address().port}`;
   await command('Page.navigate', { url:origin });
@@ -1349,6 +1579,8 @@ try {
   await evaluate('document.fonts.ready.then(() => true)');
   if (process.env.JOURNAL_UI_SCOPE === 'colors') {
     await checkColors();
+  } else if (process.env.JOURNAL_UI_SCOPE === 'tags') {
+    await checkTags();
   } else if (process.env.JOURNAL_UI_SCOPE === 'language') {
     await checkLanguage();
   } else if (process.env.JOURNAL_UI_SCOPE === 'pixel') {
@@ -2533,6 +2765,7 @@ try {
   await checkPixelTheme();
   await checkLanguage();
   await checkColors();
+  await checkTags();
   }
   assert.deepEqual(errors, [], 'No browser runtime errors.');
   console.log('UI checks passed: calendar window (month, week, work week, year, day; keys, swiping, filters, remembered, live updates, open in journal), compact month window, calendar in the resizable sidebar (creating entries by marking quarter hours, composer, editing by right click), changing kinds (keys, orbit cluster, preview), saving by itself (after a pause, before leaving the day), actions reaching linked entries (following / all, Escape cancels), editable traces passing edits to their copies, swiping days, settings (orbit/inline/swipe layout, remembered), swipe gestures (the icon stays at the symbol, a bar in each action’s own colour grows, full height sideways; right: tomorrow/plan/several days, left: remove, down: done/cancel, up: priority, tap, hold is a tap, keys, trackpad), planning several days (range by two clicks, right-click flips, copies per day, linked removal), embedded inline actions (in the flow, no surface, preview, calendar), IBM Plex Sans UI and bold Lilex title, live-preview Markdown (markers only at the cursor, hidden when not editing, click into hidden parts), format shortcuts with undo, colours, right-click format menu; shortcuts (F1, Alt+A/Enter/Backspace outliner, Alt+D/X/P/U/T/M/Enter/Entf, Ctrl+arrows, Alt+arrows/H), clock as large as the calendar with back button, Tab and typed digits; clock dial (tap on both rings, wheel, keys, quick times), calendar stays open on inner clicks, time after text, linked removal both ways; planning (calendar keyboard, time, reminder, traces >/</outlined <, undo, tomorrow, same-day time, copies on target days), asterisk/outlined event/thick note priority symbols, automatic priority order, drag and keyboard boundaries, toolbar focus, saved priority; action pill, previews, removal, grouping, caret, saving, cached navigation, wrapping and reduced motion.');

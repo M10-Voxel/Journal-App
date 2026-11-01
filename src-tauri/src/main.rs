@@ -6,7 +6,7 @@ mod ui_language;
 
 use std::sync::{atomic::{AtomicBool, Ordering}, Mutex};
 use tauri::{menu::{Menu, MenuItem}, tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
-use storage::{CalendarDay, CalendarImport, Day, LinkedChange, LinkedEntry, Reminder, SeriesExtension, SeriesInfo, Store};
+use storage::{CalendarDay, CalendarImport, Day, LinkedChange, LinkedEntry, Reminder, SeriesExtension, SeriesInfo, Store, Tag};
 
 /// Every window shares one WebView2 environment, so all are created with the same arguments (those of the main window in
 /// tauri.conf.json): Tauri's defaults, and sound without a click first (the reminders' chime).
@@ -128,6 +128,24 @@ async fn extend_series(app: tauri::AppHandle, extensions: Vec<SeriesExtension>, 
     Ok(touched)
 }
 
+#[tauri::command]
+async fn load_tags(store: tauri::State<'_, Mutex<Store>>) -> Result<Vec<Tag>, String> {
+    store.lock().map_err(|_| "Speicher ist gesperrt".to_string())?.tags().map_err(|e| e.to_string())
+}
+
+/// Every window hears the new list (`journal:tags`); days whose entries lost a removed tag are shown anew.
+#[tauri::command]
+async fn save_tags(app: tauri::AppHandle, tags: Vec<Tag>, store: tauri::State<'_, Mutex<Store>>) -> Result<Vec<Tag>, String> {
+    let (saved, touched) = {
+        let mut store = store.lock().map_err(|_| "Speicher ist gesperrt".to_string())?;
+        let touched = store.save_tags(&tags).map_err(|e| e.to_string())?;
+        (store.tags().map_err(|e| e.to_string())?, touched)
+    };
+    let _ = app.emit("journal:tags", &saved);
+    if !touched.is_empty() { let _ = app.emit("journal:changed", &touched); }
+    Ok(saved)
+}
+
 /// Opens (or brings back) the calendar window or the compact month window. Each exists at most once.
 #[tauri::command]
 async fn open_window(app: tauri::AppHandle, kind: String) -> Result<(), String> {
@@ -189,6 +207,6 @@ fn main() {
         .on_window_event(|window, event| {
             if window.label() == "main" && matches!(event, tauri::WindowEvent::Destroyed) { window.app_handle().exit(0); }
         })
-        .invoke_handler(tauri::generate_handler![ui_language::set_ui_language, load_day, load_range, save_day, load_linked, change_linked, load_series, extend_series, snooze_reminder, quit_app, popup_reminders, fit_popup, reminder_action, background_hint, open_window, show_day, export_calendar, import_calendar, read_calendar_file, write_calendar_file, mail::mail_accounts, mail::mail_save, mail::mail_cancel, mail::mail_sync, mail::mail_remove, mail::mail_pending, mail::mail_stage, mail::mail_candidates, mail::mail_resolve, mail::mail_enabled, mail::mail_notices, mail::mail_help, mail::ml::mail_ml_status, mail::ml::mail_ml_enabled, mail::ml::mail_ml_install, mail::ml::mail_ml_analyze])
+        .invoke_handler(tauri::generate_handler![ui_language::set_ui_language, load_day, load_range, save_day, load_linked, change_linked, load_series, extend_series, load_tags, save_tags, snooze_reminder, quit_app, popup_reminders, fit_popup, reminder_action, background_hint, open_window, show_day, export_calendar, import_calendar, read_calendar_file, write_calendar_file, mail::mail_accounts, mail::mail_save, mail::mail_cancel, mail::mail_sync, mail::mail_remove, mail::mail_pending, mail::mail_stage, mail::mail_candidates, mail::mail_resolve, mail::mail_enabled, mail::mail_notices, mail::mail_help, mail::ml::mail_ml_status, mail::ml::mail_ml_enabled, mail::ml::mail_ml_install, mail::ml::mail_ml_analyze])
         .run(tauri::generate_context!()).expect("Journal konnte nicht gestartet werden");
 }

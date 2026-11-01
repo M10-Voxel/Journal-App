@@ -11,6 +11,8 @@ import { formatSpan } from '../planning';
 import { describe } from '../repeat';
 import { Icon, IconName, priorityIcon } from './Icon';
 import { entryLabels } from './JournalEntry';
+import { tagOf } from '../tags';
+import { useTags } from '../tagStore';
 import '../calendar.css';
 
 // Shared by the calendar (in the journal's sidebar or its own window) and the compact month window. They only read the
@@ -63,7 +65,7 @@ export function entrySymbol(entry: Entry): IconName {
   if (entry.done) return 'done';
   return entry.priority ? priorityIcon(entry.kind) : entry.kind;
 }
-export const entryTitle = (entry: Entry) => `${entryLabels()[entry.kind]}${entry.time ? entry.end ? t(" von {0} bis {1}", entry.time, entry.end) : t(" um {0}", entry.time) : ''}${entry.done ? t(", erledigt") : entry.cancelled ? t(", abgebrochen") : ''}${entry.repeat?.rule ? `, ${describe(entry.repeat.rule)}` : ''}: ${plainText(entry.text) || t("ohne Text")}`;
+export const entryTitle = (entry: Entry, tag?: string) => `${tag ? `${tag} · ` : ''}${entryLabels()[entry.kind]}${entry.time ? entry.end ? t(" von {0} bis {1}", entry.time, entry.end) : t(" um {0}", entry.time) : ''}${entry.done ? t(", erledigt") : entry.cancelled ? t(", abgebrochen") : ''}${entry.repeat?.rule ? `, ${describe(entry.repeat.rule)}` : ''}: ${plainText(entry.text) || t("ohne Text")}`;
 
 /** How fast the time scrolls when it does not fit (px per second). */
 const tickerSpeed = 36;
@@ -93,9 +95,12 @@ export function CalendarItem({ entry, date, variant = 'line', short = false, sty
   useLanguage();
   const open = useContext(OpenInJournal);
   const { edit, editingId } = useContext(EditInCalendar);
+  // A tagged entry takes its tag's colour: the block (or bar) is tinted with it and edged in it.
+  const tag = tagOf(useTags(), entry.tag);
   const state = entry.done ? ' is-done' : entry.cancelled ? ' is-cancelled' : '';
-  return <button type="button" className={`cal-item is-${entry.kind} is-${variant}${short ? ' is-short' : ''}${state}${entry.priority ? ' is-priority' : ''}${editingId === entry.id ? ' is-editing' : ''}${night ? ` is-night-${night}` : ''}`} style={style}
-    title={t("{0}{1} · Im Journal zeigen{2}", entryTitle(entry), entry.description ? `\n${entry.description}` : '', edit ? t(" · Rechtsklick: bearbeiten") : '')} aria-label={t("{0}. Im Journal zeigen", entryTitle(entry))}
+  return <button type="button" className={`cal-item is-${entry.kind} is-${variant}${short ? ' is-short' : ''}${state}${entry.priority ? ' is-priority' : ''}${tag ? ' has-tag' : ''}${editingId === entry.id ? ' is-editing' : ''}${night ? ` is-night-${night}` : ''}`}
+    style={tag ? { ...style, '--tag': tag.color } as CSSProperties : style} data-tag={tag?.name}
+    title={t("{0}{1} · Im Journal zeigen{2}", entryTitle(entry, tag?.name), entry.description ? `\n${entry.description}` : '', edit ? t(" · Rechtsklick: bearbeiten") : '')} aria-label={t("{0}. Im Journal zeigen", entryTitle(entry, tag?.name))}
     onContextMenu={event => { if (!edit) return; event.preventDefault(); event.stopPropagation(); edit(entry, date, event.currentTarget); }}
     onKeyDown={event => { if (edit && (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10'))) { event.preventDefault(); edit(entry, date, event.currentTarget); } }}
     onPointerEnter={event => measureTime(event.currentTarget)} onFocus={event => measureTime(event.currentTarget)}

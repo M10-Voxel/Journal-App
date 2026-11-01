@@ -14,13 +14,16 @@ import { CompactMonth } from './calendarShared';
 import type { ScopeOption } from '../planning';
 import { ScopeChoice } from './ScopeChoice';
 import { Icon, priorityIcon } from './Icon';
+import { TagPicker } from './TagPicker';
+import { tagOf } from '../tags';
+import { useTags } from '../tagStore';
 
 /** A range marked in the time grid, in minutes of its day. */
 export interface Draft { date: string; start: number; end: number }
 /** What the composer creates: an event or a task (a time block) over the marked range. */
-export interface NewEntry { kind: 'event' | 'task'; text: string; description: string; time: string; end: string; priority: boolean; reminder: boolean; showInJournal: boolean; repeat?: Repeat }
+export interface NewEntry { kind: 'event' | 'task'; text: string; description: string; tag: string | null; time: string; end: string; priority: boolean; reminder: boolean; showInJournal: boolean; repeat?: Repeat }
 /** What editing an entry in the calendar changes. */
-export type EntryEdit = Partial<Pick<Entry, 'kind' | 'text' | 'description' | 'priority' | 'reminder' | 'time' | 'end' | 'done' | 'cancelled' | 'showInJournal' | 'repeat'>>;
+export type EntryEdit = Partial<Pick<Entry, 'kind' | 'text' | 'description' | 'tag' | 'priority' | 'reminder' | 'time' | 'end' | 'done' | 'cancelled' | 'showInJournal' | 'repeat'>>;
 
 const widths = { create: 400, edit: 436 };
 type ComposerKind = EntryKind | 'calendar';
@@ -35,8 +38,8 @@ const kindKey: Record<ComposerKind, string> = { event: 'E', task: 'A', note: 'N'
  * range with ↑ ↓ in the text, its end with ⇧ ↑ ↓. Enter creates or saves, Escape (or a click elsewhere) discards.
  * Editing also offers the note (where it may be one: no time, reminder or planning) and removing.
  */
-export function CalendarComposer({ date, draft, entry, anchor, onChange, onCancel, onCreate, onSave, onRemove }: {
-  date: string; draft: Draft | null; entry?: Entry; anchor: () => DOMRect | null; onChange?: (draft: Draft) => void; onCancel: (byKey: boolean) => void;
+export function CalendarComposer({ date, draft, entry, tag: initialTag = null, anchor, onChange, onCancel, onCreate, onSave, onRemove }: {
+  date: string; draft: Draft | null; entry?: Entry; tag?: string | null; anchor: () => DOMRect | null; onChange?: (draft: Draft) => void; onCancel: (byKey: boolean) => void;
   onCreate?: (entry: NewEntry) => Promise<void>; onSave?: (change: EntryEdit) => Promise<void>; onRemove?: (others: ScopeOption['others']) => Promise<void>;
 }) {
   useLanguage();
@@ -47,6 +50,12 @@ export function CalendarComposer({ date, draft, entry, anchor, onChange, onCance
   const [text, setText] = useState(entry?.text ?? '');
   const [description, setDescription] = useState(entry?.description ?? '');
   const [priority, setPriority] = useState(entry?.priority ?? false);
+  // The tag (Alt G): a new range takes the one the calendar suggests (see newTag), an entry keeps its own.
+  const tags = useTags();
+  const [tagId, setTagId] = useState<string | null>(entry ? entry.tag ?? null : initialTag);
+  const tag = tagOf(tags, tagId);
+  const [tagging, setTagging] = useState(false);
+  const tagButton = useRef<HTMLButtonElement>(null);
   const [reminder, setReminder] = useState(entry?.reminder ?? false);
   const [showInJournal, setShowInJournal] = useState(entry ? entry.showInJournal !== false : false);
   const selectedKind: ComposerKind = showInJournal ? kind : 'calendar';
@@ -98,7 +107,7 @@ export function CalendarComposer({ date, draft, entry, anchor, onChange, onCance
   useEffect(() => {
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Element;
-      if (!target.closest('.cal-composer, .cal-time-column')) latest.current.onCancel(false);
+      if (!target.closest('.cal-composer, .cal-time-column, .popover')) latest.current.onCancel(false);
     };
     // Escape also discards while the focus is still elsewhere (right after marking).
     const onKey = (event: globalThis.KeyboardEvent) => { if (event.key === 'Escape' && !cardRef.current?.contains(event.target as Node)) { event.preventDefault(); latest.current.onCancel(true); } };
@@ -131,13 +140,13 @@ export function CalendarComposer({ date, draft, entry, anchor, onChange, onCance
       // The same change the planner makes: a new or changed rule starts a series here (see repeatChange).
       const repeatOf = (base: Entry) => kind === 'note' ? undefined : repeatChange(base, date, [date], { time: null, reminder }, shownRule, localDate()).repeat ?? undefined;
       if (!entry) {
-        const made = { kind: kind === 'note' ? 'event' as const : kind, text: text.trim(), description: description.trim(), time: timeOfMinutes(draft!.start), end: timeOfMinutes(draft!.end), priority, reminder, showInJournal };
+        const made = { kind: kind === 'note' ? 'event' as const : kind, text: text.trim(), description: description.trim(), tag: tag?.id ?? null, time: timeOfMinutes(draft!.start), end: timeOfMinutes(draft!.end), priority, reminder, showInJournal };
         await onCreate?.({ ...made, repeat: repeatOf({ id: '', done: false, cancelled: false, plan: null, ...made }) });
       } else {
         // An entry without an end keeps having none, unless its length changed.
         const times = draft ? { time: timeOfMinutes(draft.start), end: entry.end || length !== slotMinutes ? timeOfMinutes(draft.end) : null } : {};
         const repeat = repeatOf(entry);
-        await onSave?.({ kind, text: text.trim(), description: description.trim(), priority, showInJournal, reminder: kind === 'note' ? false : reminder, ...times, ...kind === 'task' ? {} : { done: false, cancelled: false }, ...repeat ? { repeat } : {} });
+        await onSave?.({ kind, text: text.trim(), description: description.trim(), tag: tag?.id ?? null, priority, showInJournal, reminder: kind === 'note' ? false : reminder, ...times, ...kind === 'task' ? {} : { done: false, cancelled: false }, ...repeat ? { repeat } : {} });
       }
     }
     catch (reason) { setError(String(reason)); setBusy(false); }
@@ -167,6 +176,7 @@ export function CalendarComposer({ date, draft, entry, anchor, onChange, onCance
     else if (key === 'Enter' && !event.altKey && (!(event.target instanceof HTMLTextAreaElement) || event.ctrlKey || event.metaKey)) void submit();
     else if (event.altKey && !event.ctrlKey && event.code in kindKeys) chooseKind(kindKeys[event.code]);
     else if (event.altKey && !event.ctrlKey && event.code === 'KeyP') setPriority(value => !value);
+    else if (event.altKey && !event.ctrlKey && event.code === 'KeyG') setTagging(true);
     else if (event.altKey && !event.ctrlKey && key === 'Delete' && editing) void remove();
     else if ((key === 'ArrowUp' || key === 'ArrowDown') && draft && event.target === inputRef.current && !event.altKey && !event.ctrlKey) {
       const step = key === 'ArrowUp' ? -snapMinutes : snapMinutes;
@@ -188,12 +198,12 @@ export function CalendarComposer({ date, draft, entry, anchor, onChange, onCance
     </button>;
   };
   let order = 0;
-  const satellite = (): CSSProperties => ({ '--i': order++ } as CSSProperties);
+  const satellite = (style?: CSSProperties): CSSProperties => ({ ...style, '--i': order++ } as CSSProperties);
   const label = selectedKind === 'calendar' ? t("Kalendereintrag") : kindLabels()[kind];
   const title = editing ? t("{0} bearbeiten", label) : selectedKind === 'calendar' ? t("Neuer Kalendereintrag") : kind === 'event' ? t("Neues Ereignis") : t("Neue Aufgabe");
 
-  return createPortal(<div ref={cardRef} className={`cal-composer is-${place?.side ?? 'right'}${place ? ' is-placed' : ''}${editing ? ' is-editing' : ''}`} role="dialog" aria-label={t("{0} am {1}", title, formatShortDate(date))}
-    style={{ left: place?.left ?? -9999, top: place?.top ?? 0, width } as CSSProperties} onKeyDown={onKeyDown}>
+  return createPortal(<div ref={cardRef} className={`cal-composer is-${place?.side ?? 'right'}${place ? ' is-placed' : ''}${editing ? ' is-editing' : ''}${tag ? ' has-tag' : ''}`} role="dialog" aria-label={t("{0} am {1}", title, formatShortDate(date))}
+    style={{ left: place?.left ?? -9999, top: place?.top ?? 0, width, '--tag': tag?.color } as CSSProperties} onKeyDown={onKeyDown}>
     <div className="cal-composer-head">
       <div className="cal-composer-kinds" role="radiogroup" aria-label={t("Art")}>
         {kinds.map(value => <button key={value} type="button" role="radio" className="cal-satellite" style={satellite()} aria-checked={selectedKind === value}
@@ -209,6 +219,8 @@ export function CalendarComposer({ date, draft, entry, anchor, onChange, onCance
         {draft ? <>{timeChip('start')}<span className="cal-composer-dash">–</span>{timeChip('end')}<span className="cal-composer-length" key={length}>{formatDuration(length)}</span></>
           : <span className="cal-composer-untimed">{entry?.time ? formatSpan(entry.time, entry.end) : t("ohne Uhrzeit")}</span>}
       </div>
+      <button ref={tagButton} type="button" className={`cal-satellite cal-composer-tag${tag ? ' has-tag' : ''}`} style={satellite(tag ? { '--tag': tag.color } as CSSProperties : undefined)} aria-pressed={Boolean(tag)} aria-haspopup="dialog" aria-expanded={tagging}
+        aria-label={tag ? t("Tag: {0}", tag.name) : t("Tag zuweisen")} data-tip={tag ? t("{0} · Alt G", tag.name) : t("Tag · Alt G")} onClick={() => setTagging(value => !value)}>{tag ? <span className="tag-dot" /> : <Icon name="tag" />}</button>
       <button type="button" className="cal-satellite cal-composer-priority" style={satellite()} aria-pressed={priority} aria-label={t("Hohe Priorität")} data-tip={t("Priorität · Alt P")} onClick={() => setPriority(value => !value)}><Icon name={priorityIcon(kind)} /></button>
       {kind !== 'note' && <button type="button" className="cal-satellite cal-composer-repeat" style={satellite()} aria-pressed={Boolean(rule)} aria-expanded={repeatView !== null}
         aria-label={shownRule ? t("Wiederholen: {0}", describe(shownRule)) : t("Wiederholen")} data-tip={shownRule ? `${describe(shownRule)} · Alt W` : t("Wiederholen · Alt W")} onClick={toggleRepeat}><Icon name="repeat" /></button>}
@@ -231,6 +243,7 @@ export function CalendarComposer({ date, draft, entry, anchor, onChange, onCance
             onPick={until => { setRule({ ...shownRule, end: { until: until < shownRule.start ? shownRule.start : until } }); setRepeatView('rule'); }} />
         </div>}
     </div>}
+    {tagging && <TagPicker anchor={tagButton.current} value={tag?.id ?? null} onPick={setTagId} onClose={() => { setTagging(false); requestAnimationFrame(() => inputRef.current?.focus({ preventScroll: true })); }} />}
     {removing && <ScopeChoice className="in-composer" action="remove" options={removing} onChoose={option => void remove(option)} onCancel={() => { setRemoving(null); inputRef.current?.focus(); }} />}
     {error && <div className="cal-composer-error" role="alert">{error}</div>}
   </div>, document.body);

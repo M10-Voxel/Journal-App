@@ -5,7 +5,7 @@ import type { Entry } from '../journal';
 type Placement = 'before' | 'after';
 interface DragView { sourceId: string; targetId: string | null; placement: Placement }
 interface DragSession extends DragView {
-  kind: Entry['kind']; priority: boolean; pointerId: number; handle: HTMLButtonElement;
+  kind: Entry['kind']; priority: boolean; tag: string; pointerId: number; handle: HTMLButtonElement;
   startX: number; startY: number; x: number; y: number; active: boolean;
 }
 export interface EntryDragHandlers {
@@ -28,7 +28,7 @@ export function useEntryDrag(scrollRef: RefObject<HTMLDivElement | null>, onMove
       const drag = session.current;
       if (!drag?.active) return;
       const row = document.elementFromPoint(drag.x, drag.y)?.closest<HTMLElement>('[data-entry-id]');
-      const targetId = row?.dataset.entryKind === drag.kind && (row.dataset.priority === 'high') === drag.priority && row.dataset.entryId !== drag.sourceId ? row.dataset.entryId ?? null : null;
+      const targetId = row?.dataset.entryKind === drag.kind && (row.dataset.priority === 'high') === drag.priority && (row.dataset.group ?? '') === drag.tag && row.dataset.entryId !== drag.sourceId ? row.dataset.entryId ?? null : null;
       const bounds = row?.getBoundingClientRect();
       const placement: Placement = bounds && drag.y > bounds.top + bounds.height / 2 ? 'after' : 'before';
       if (drag.targetId !== targetId || drag.placement !== placement) {
@@ -67,7 +67,7 @@ export function useEntryDrag(scrollRef: RefObject<HTMLDivElement | null>, onMove
         event.preventDefault();
         event.currentTarget.focus({ preventScroll: true });
         event.currentTarget.setPointerCapture(event.pointerId);
-        session.current = { sourceId: entry.id, kind: entry.kind, priority: entry.priority, pointerId: event.pointerId, handle: event.currentTarget,
+        session.current = { sourceId: entry.id, kind: entry.kind, priority: entry.priority, tag: event.currentTarget.closest<HTMLElement>('[data-entry-id]')?.dataset.group ?? '', pointerId: event.pointerId, handle: event.currentTarget,
           startX: event.clientX, startY: event.clientY, x: event.clientX, y: event.clientY, active: false, targetId: null, placement: 'before' };
       },
       move(event) {

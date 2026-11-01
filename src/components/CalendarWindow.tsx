@@ -1,5 +1,5 @@
 import { t, useLanguage } from '../i18n';
-import { memo, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { memo, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, KeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { CalendarDay, Entry, EntryKind, formatDate, formatWeekday, localDate } from '../journal';
 import { monthGrid, shiftDate } from '../dates';
@@ -14,6 +14,9 @@ import { Icon } from './Icon';
 import { CalendarTransfer } from './CalendarTransfer';
 import type { CalendarImport } from '../journal';
 import { useWheelSwipe } from './useWheelSwipe';
+import { TagFilter } from './TagFilter';
+import { useHiddenTags, useTags } from '../tagStore';
+import { filterTagDays, isShown } from '../tags';
 
 // The calendar: in the journal's sidebar, or in a window of its own (currently not offered). Year and month like
 // Apple's and Samsung's calendars, week, work week and day as a time grid with a band for entries without time
@@ -63,7 +66,12 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
   // One day more before: an appointment from the evening before may reach into the first shown day.
   const { days, error } = useCalendarData(shiftDate(range.from, -1), range.to);
   const title = viewTitle(view, date);
-  const entriesOn = (value: string) => orderForCalendar((days.get(value)?.entries ?? []).filter(entry => kinds[entry.kind]));
+  const tags = useTags();
+  const [hiddenTags, setHiddenTags] = useHiddenTags('calendar');
+  const visibleDays = useMemo(() => filterTagDays(days, hiddenTags), [days, hiddenTags, tags]);
+  const entriesOn = (value: string) => orderForCalendar((visibleDays.get(value)?.entries ?? []).filter(entry => kinds[entry.kind]));
+  // A range drawn while entries without a tag are hidden takes the first tag shown, so it does not vanish at once.
+  const newTag = isShown(hiddenTags, null) ? null : tags.find(tag => !hiddenTags.has(tag.id))?.id ?? null;
 
   useEffect(() => { try { localStorage.setItem(storageKey, JSON.stringify(prefs)); } catch { /* keep it for this session */ } }, [prefs]);
   useEffect(() => { if (autoFocus) rootRef.current?.focus(); }, []);
@@ -117,6 +125,7 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
           atToday={viewDates(view, date).includes(today)} onPrev={() => step(-1)} onToday={() => go(today)} onNext={() => step(1)} /></div>
         <h1 className="cal-title" title={`${title.main} ${title.sub}`} key={`${view}-${title.main}-${title.sub}`}><strong><span className="cal-title-long">{title.main}</span><span className="cal-title-short" aria-hidden="true">{shortTitle(title.main)}</span></strong>{title.sub && <> <span className="cal-title-sub">{title.sub}</span></>}</h1>
         <div className="cal-actions">
+          <TagFilter label={t("Tags im Kalender")} hidden={hiddenTags} onChange={setHiddenTags} />
           {/* Like the orbit's satellites: round, the shown kinds lit. */}
           <div className="cal-filter" role="group" aria-label={t("Angezeigte Einträge")}>
             {(['event', 'task', 'note'] as EntryKind[]).map(kind => <button key={kind} type="button" className={`cal-filter-${kind}`} aria-pressed={kinds[kind]} title={`${kindPlurals()[kind]} ${kinds[kind] ? 'ausblenden' : 'zeigen'}`}
@@ -127,12 +136,12 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
       {error && <div className="cal-error" role="alert">{error}</div>}
       <div className="cal-body" key={view} onWheel={swipe}>
         <div className={`cal-page${slide ? ` slide-${slide}` : ''}`} key={pageKey}>
-          {view === 'year' && <YearView date={date} today={today} journalDate={journalDate} days={days} entriesOn={entriesOn} onDay={openDay} onMonth={value => show('month', value)} />}
-          {view === 'month' && <MonthView date={date} today={today} journalDate={journalDate} days={days} entriesOn={entriesOn} onDay={openDay} onMore={value => show('day', value)} onWeek={value => show('week', value)} />}
+          {view === 'year' && <YearView date={date} today={today} journalDate={journalDate} days={visibleDays} entriesOn={entriesOn} onDay={openDay} onMonth={value => show('month', value)} />}
+          {view === 'month' && <MonthView date={date} today={today} journalDate={journalDate} days={visibleDays} entriesOn={entriesOn} onDay={openDay} onMore={value => show('day', value)} onWeek={value => show('week', value)} />}
           {(view === 'week' || view === 'workweek' || view === 'day') && <div className="cal-split">
-            <TimeGrid dates={viewDates(view, date)} today={today} now={now} journalDate={journalDate} entriesOn={entriesOn} onDay={openDay} onCreate={onCreate}
+            <TimeGrid dates={viewDates(view, date)} today={today} now={now} journalDate={journalDate} entriesOn={entriesOn} onDay={openDay} onCreate={onCreate} newTag={newTag}
               editing={inGrid} onEditEnd={byKey => { setEditing(null); if (byKey) refocus(); }} onSave={save} onRemove={remove} />
-            {view === 'day' && <DaySide date={date} today={today} journalDate={journalDate} days={days} onPick={openDay} />}
+            {view === 'day' && <DaySide date={date} today={today} journalDate={journalDate} days={visibleDays} hiddenTags={hiddenTags} onPick={openDay} />}
           </div>}
         </div>
       </div>
@@ -223,8 +232,8 @@ type Gesture = { mode: 'new' | 'start' | 'end' | 'move'; column: HTMLElement; da
  * Apple's red one. With `onCreate`, dragging in a column marks a range in quarter hours (a click marks an hour; near the
  * edges the grid scrolls along) and the composer opens next to it; the marked range can still be moved and resized.
  */
-function TimeGrid({ dates, today, now, journalDate, entriesOn, onDay, onCreate, editing, onEditEnd, onSave, onRemove }: {
-  dates: string[]; today: string; now: Date; journalDate: string | null; entriesOn: (date: string) => Entry[]; onDay: (date: string) => void;
+function TimeGrid({ dates, today, now, journalDate, entriesOn, onDay, onCreate, newTag, editing, onEditEnd, onSave, onRemove }: {
+  newTag?: string | null; dates: string[]; today: string; now: Date; journalDate: string | null; entriesOn: (date: string) => Entry[]; onDay: (date: string) => void;
   onCreate?: (date: string, entry: NewEntry) => Promise<void>;
   editing: Editing | null; onEditEnd: (byKey: boolean) => void; onSave: (change: EntryEdit) => Promise<void>; onRemove: (others: { id: string; date: string }[]) => Promise<void>;
 }) {
@@ -442,13 +451,13 @@ function TimeGrid({ dates, today, now, journalDate, entriesOn, onDay, onCreate, 
     {draft && !marking && onCreate && (editing && draft.date === editing.date
       ? <CalendarComposer key={editing.entry.id} date={draft.date} draft={draft} entry={editing.entry} anchor={() => selectionRef.current?.getBoundingClientRect() ?? null} onChange={setDraft}
         onCancel={byKey => { setDraft(null); onEditEnd(byKey); }} onSave={async change => { await onSave(change); setDraft(null); }} onRemove={async others => { await onRemove(others); setDraft(null); }} />
-      : <CalendarComposer key={`new-${draft.date}`} date={draft.date} draft={draft} anchor={() => selectionRef.current?.getBoundingClientRect() ?? null} onChange={setDraft}
+      : <CalendarComposer key={`new-${draft.date}`} date={draft.date} draft={draft} tag={newTag} anchor={() => selectionRef.current?.getBoundingClientRect() ?? null} onChange={setDraft}
         onCancel={byKey => { setDraft(null); if (byKey) refocus(); }} onCreate={async entry => { await onCreate(draft.date, entry); setDraft(null); refocus(); }} />)}
   </div>;
 }
 
 /** Next to the day's hours: the month to pick another day, and the day as the journal has it (title, counts, notes). */
-function DaySide({ date, today, journalDate, days, onPick }: { date: string; today: string; journalDate: string | null; days: Map<string, CalendarDay>; onPick: (date: string) => void }) {
+function DaySide({ date, today, journalDate, days, hiddenTags, onPick }: { date: string; today: string; journalDate: string | null; days: Map<string, CalendarDay>; hiddenTags: ReadonlySet<string>; onPick: (date: string) => void }) {
   useLanguage();
   const open = useContext(OpenInJournal);
   const { edit } = useContext(EditInCalendar);
@@ -456,7 +465,7 @@ function DaySide({ date, today, journalDate, days, onPick }: { date: string; tod
   useEffect(() => setMonth(date.slice(0, 7)), [date]);
   // Paging the small month on its own needs that month's days for the dots.
   const grid = monthGrid(month);
-  const shown = useCalendarData(grid[0], grid[grid.length - 1]).days;
+  const shown = filterTagDays(useCalendarData(grid[0], grid[grid.length - 1]).days, hiddenTags);
   const day = days.get(date);
   const entries = day?.entries ?? [];
   const tasks = entries.filter(entry => entry.kind === 'task');

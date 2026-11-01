@@ -6,8 +6,10 @@ import type { CalendarImport } from '../journal';
 import { MailSettings } from './MailSettings';
 import { Icon } from './Icon';
 import { ColorSettings } from './ColorSettings';
+import { TagSettings } from './TagSettings';
 
-const tabs = ['appearance', 'colors', 'mail'] as const;
+const tabs = ['appearance', 'colors', 'tags', 'mail'] as const;
+export type SettingsTab = typeof tabs[number];
 
 const layouts = (): { value: ActionLayout; title: string; text: string }[] => ([
   { value: 'orbit', title: 'Orbit', text: t("Aktionen kreisen um den Punkt, Planen sitzt am Zeilenende.") },
@@ -40,13 +42,13 @@ function Preview({ layout }: { layout: ActionLayout }) {
   </svg>;
 }
 
-export function SettingsDialog({ settings, onChange, onClose, onImport, mailStatus }: { settings: Settings; onChange: (settings: Settings) => void; onClose: () => void; onImport: (entries: CalendarImport[]) => Promise<void>; mailStatus: { count: number; error: string } }) {
+export function SettingsDialog({ settings, onChange, onClose, onImport, mailStatus, initialTab = 'appearance' }: { initialTab?: SettingsTab; settings: Settings; onChange: (settings: Settings) => void; onClose: () => void; onImport: (entries: CalendarImport[]) => Promise<void>; mailStatus: { count: number; error: string } }) {
   useLanguage();
   const dialogRef = useRef<HTMLDivElement>(null);
-  const [tab, setTab] = useState('appearance');
+  const [tab, setTab] = useState<string>(initialTab);
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
-    dialogRef.current?.querySelector<HTMLElement>('.settings-option[aria-checked="true"]')?.focus();
+    dialogRef.current?.querySelector<HTMLElement>(initialTab === 'tags' ? '#settings-tags .tag-name' : '.settings-option[aria-checked="true"]')?.focus();
     return () => previous?.focus({ preventScroll: true });
   }, []);
   return <div className="shortcut-backdrop" onPointerDown={event => { if (event.target === event.currentTarget) onClose(); }}>
@@ -67,6 +69,7 @@ export function SettingsDialog({ settings, onChange, onClose, onImport, mailStat
       }}>
         <button id="settings-appearance-tab" type="button" role="tab" tabIndex={tab === 'appearance' ? 0 : -1} aria-selected={tab === 'appearance'} aria-controls="settings-appearance" onClick={event => { event.currentTarget.focus(); setTab('appearance'); }}><Icon name="layout" />{t("Darstellung")}</button>
         <button id="settings-colors-tab" type="button" role="tab" tabIndex={tab === 'colors' ? 0 : -1} aria-selected={tab === 'colors'} aria-controls="settings-colors" onClick={event => { event.currentTarget.focus(); setTab('colors'); }}><Icon name="pencil" />{t('Farben')}</button>
+        <button id="settings-tags-tab" type="button" role="tab" tabIndex={tab === 'tags' ? 0 : -1} aria-selected={tab === 'tags'} aria-controls="settings-tags" onClick={event => { event.currentTarget.focus(); setTab('tags'); }}><Icon name="tag" />{t('Tags')}</button>
         <button id="settings-mail-tab" type="button" role="tab" tabIndex={tab === 'mail' ? 0 : -1} aria-selected={tab === 'mail'} aria-controls="settings-mail" onClick={event => { event.currentTarget.focus(); setTab('mail'); }}><Icon name="mail" />{t("E-Mail-Konten")}{mailStatus.count > 0 && <span className="mail-badge">{mailStatus.count}</span>}</button>
       </div>
       {tab === 'appearance' ? <div className="settings-panel" role="tabpanel" id="settings-appearance" aria-labelledby="settings-appearance-tab">
@@ -112,7 +115,8 @@ export function SettingsDialog({ settings, onChange, onClose, onImport, mailStat
           <span>{layout.text}</span>
         </button>)}
       </div>
-      </div> : tab === 'colors' ? <div className="settings-panel" role="tabpanel" id="settings-colors" aria-labelledby="settings-colors-tab"><ColorSettings settings={settings} onChange={onChange} /></div> : <div className="settings-panel" role="tabpanel" id="settings-mail" aria-labelledby="settings-mail-tab"><MailSettings onImport={onImport} importError={mailStatus.error} /></div>}
+      </div> : tab === 'colors' ? <div className="settings-panel" role="tabpanel" id="settings-colors" aria-labelledby="settings-colors-tab"><ColorSettings settings={settings} onChange={onChange} /></div>
+        : tab === 'tags' ? <div className="settings-panel" role="tabpanel" id="settings-tags" aria-labelledby="settings-tags-tab"><TagSettings /></div> : <div className="settings-panel" role="tabpanel" id="settings-mail" aria-labelledby="settings-mail-tab"><MailSettings onImport={onImport} importError={mailStatus.error} /></div>}
       </div>
     </div>
   </div>;
