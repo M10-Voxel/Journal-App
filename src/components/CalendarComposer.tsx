@@ -1,3 +1,4 @@
+import { t, useLanguage } from '../i18n';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { CSSProperties, KeyboardEvent, WheelEvent } from 'react';
 import { createPortal } from 'react-dom';
@@ -23,7 +24,7 @@ export type EntryEdit = Partial<Pick<Entry, 'kind' | 'text' | 'description' | 'p
 
 const widths = { create: 400, edit: 436 };
 type ComposerKind = EntryKind | 'calendar';
-const kindLabels: Record<ComposerKind, string> = { event: 'Ereignis', task: 'Aufgabe', note: 'Notiz', calendar: 'Nur im Kalender' };
+const kindLabels = (): Record<ComposerKind, string> => ({ event: t("Ereignis"), task: t("Aufgabe"), note: t("Notiz"), calendar: t("Nur im Kalender") });
 const kindKeys: Record<string, ComposerKind> = { KeyE: 'event', KeyA: 'task', KeyN: 'note', KeyK: 'calendar' };
 const kindKey: Record<ComposerKind, string> = { event: 'E', task: 'A', note: 'N', calendar: 'K' };
 
@@ -38,6 +39,7 @@ export function CalendarComposer({ date, draft, entry, anchor, onChange, onCance
   date: string; draft: Draft | null; entry?: Entry; anchor: () => DOMRect | null; onChange?: (draft: Draft) => void; onCancel: (byKey: boolean) => void;
   onCreate?: (entry: NewEntry) => Promise<void>; onSave?: (change: EntryEdit) => Promise<void>; onRemove?: (others: ScopeOption['others']) => Promise<void>;
 }) {
+  useLanguage();
   const editing = Boolean(entry);
   const width = widths[editing ? 'edit' : 'create'];
   // A range marked in the calendar becomes a calendar entry unless chosen otherwise (it is the first choice, too).
@@ -178,8 +180,8 @@ export function CalendarComposer({ date, draft, entry, anchor, onChange, onCance
   const timeChip = (edge: 'start' | 'end') => {
     const value = edge === 'start' ? draft!.start : draft!.end;
     const step = (amount: number) => setEdge(edge, value + amount);
-    return <button type="button" className="cal-composer-time" aria-label={`${edge === 'start' ? 'Beginn' : 'Ende'} ${formatEnd(timeOfMinutes(value)).replace('⁺¹', ' am nächsten Tag')}, mit Pfeiltasten oder Mausrad ändern`}
-      data-tip={`${edge === 'start' ? 'Beginn' : 'Ende'} · ↑ ↓ oder Mausrad`}
+    return <button type="button" className="cal-composer-time" aria-label={t("{0} {1}, mit Pfeiltasten oder Mausrad ändern", edge === 'start' ? t("Beginn") : t("Ende"), formatEnd(timeOfMinutes(value)).replace('⁺¹', t(" am nächsten Tag")))}
+      data-tip={t("{0} · ↑ ↓ oder Mausrad", edge === 'start' ? t("Beginn") : t("Ende"))}
       onWheel={(event: WheelEvent) => step(event.deltaY > 0 ? snapMinutes : -snapMinutes)}
       onKeyDown={event => { if (event.key === 'ArrowUp' || event.key === 'ArrowDown') { event.preventDefault(); event.stopPropagation(); step(event.key === 'ArrowUp' ? -snapMinutes : snapMinutes); } }}>
       <span key={value}>{formatEnd(timeOfMinutes(value))}</span>
@@ -187,43 +189,43 @@ export function CalendarComposer({ date, draft, entry, anchor, onChange, onCance
   };
   let order = 0;
   const satellite = (): CSSProperties => ({ '--i': order++ } as CSSProperties);
-  const label = selectedKind === 'calendar' ? 'Kalendereintrag' : kindLabels[kind];
-  const title = editing ? `${label} bearbeiten` : selectedKind === 'calendar' ? 'Neuer Kalendereintrag' : kind === 'event' ? 'Neues Ereignis' : 'Neue Aufgabe';
+  const label = selectedKind === 'calendar' ? t("Kalendereintrag") : kindLabels()[kind];
+  const title = editing ? t("{0} bearbeiten", label) : selectedKind === 'calendar' ? t("Neuer Kalendereintrag") : kind === 'event' ? t("Neues Ereignis") : t("Neue Aufgabe");
 
-  return createPortal(<div ref={cardRef} className={`cal-composer is-${place?.side ?? 'right'}${place ? ' is-placed' : ''}${editing ? ' is-editing' : ''}`} role="dialog" aria-label={`${title} am ${formatShortDate(date)}`}
+  return createPortal(<div ref={cardRef} className={`cal-composer is-${place?.side ?? 'right'}${place ? ' is-placed' : ''}${editing ? ' is-editing' : ''}`} role="dialog" aria-label={t("{0} am {1}", title, formatShortDate(date))}
     style={{ left: place?.left ?? -9999, top: place?.top ?? 0, width } as CSSProperties} onKeyDown={onKeyDown}>
     <div className="cal-composer-head">
-      <div className="cal-composer-kinds" role="radiogroup" aria-label="Art">
+      <div className="cal-composer-kinds" role="radiogroup" aria-label={t("Art")}>
         {kinds.map(value => <button key={value} type="button" role="radio" className="cal-satellite" style={satellite()} aria-checked={selectedKind === value}
-          aria-label={value === 'task' && !editing ? 'Aufgabe (Zeitblock)' : kindLabels[value]} data-tip={`${kindLabels[value]} · Alt ${kindKey[value]}`} onClick={() => chooseKind(value)}><Icon name={value} /></button>)}
+          aria-label={value === 'task' && !editing ? t("Aufgabe (Zeitblock)") : kindLabels()[value]} data-tip={`${kindLabels()[value]} · Alt ${kindKey[value]}`} onClick={() => chooseKind(value)}><Icon name={value} /></button>)}
       </div>
-      <input ref={inputRef} className={`cal-composer-text${shaking ? ' is-shaking' : ''}`} onAnimationEnd={() => setShaking(false)} value={text} placeholder={selectedKind === 'calendar' ? 'Neuer Kalendereintrag …' : kind === 'event' ? 'Neues Ereignis …' : kind === 'task' ? 'Neue Aufgabe …' : 'Notiz …'} aria-label="Text" disabled={busy}
+      <input ref={inputRef} className={`cal-composer-text${shaking ? ' is-shaking' : ''}`} onAnimationEnd={() => setShaking(false)} value={text} placeholder={selectedKind === 'calendar' ? t("Neuer Kalendereintrag …") : kind === 'event' ? t("Neues Ereignis …") : kind === 'task' ? t("Neue Aufgabe …") : t("Notiz …")} aria-label={t("Text")} disabled={busy}
         onChange={event => setText(event.target.value)} />
     </div>
-    <textarea className="cal-composer-description" aria-label="Beschreibung" placeholder="Beschreibung hinzufügen …" value={description} onChange={event => setDescription(event.target.value)} disabled={busy} rows={2} maxLength={100000} />
+    <textarea className="cal-composer-description" aria-label={t("Beschreibung")} placeholder={t("Beschreibung hinzufügen …")} value={description} onChange={event => setDescription(event.target.value)} disabled={busy} rows={2} maxLength={100000} />
     <div className="cal-composer-foot">
       <div className={`cal-composer-when${draft ? '' : ' is-untimed'}`}>
         <span className="cal-composer-day">{formatShortDate(date)}</span>
         {draft ? <>{timeChip('start')}<span className="cal-composer-dash">–</span>{timeChip('end')}<span className="cal-composer-length" key={length}>{formatDuration(length)}</span></>
-          : <span className="cal-composer-untimed">{entry?.time ? formatSpan(entry.time, entry.end) : 'ohne Uhrzeit'}</span>}
+          : <span className="cal-composer-untimed">{entry?.time ? formatSpan(entry.time, entry.end) : t("ohne Uhrzeit")}</span>}
       </div>
-      <button type="button" className="cal-satellite cal-composer-priority" style={satellite()} aria-pressed={priority} aria-label="Hohe Priorität" data-tip="Priorität · Alt P" onClick={() => setPriority(value => !value)}><Icon name={priorityIcon(kind)} /></button>
+      <button type="button" className="cal-satellite cal-composer-priority" style={satellite()} aria-pressed={priority} aria-label={t("Hohe Priorität")} data-tip={t("Priorität · Alt P")} onClick={() => setPriority(value => !value)}><Icon name={priorityIcon(kind)} /></button>
       {kind !== 'note' && <button type="button" className="cal-satellite cal-composer-repeat" style={satellite()} aria-pressed={Boolean(rule)} aria-expanded={repeatView !== null}
-        aria-label={shownRule ? `Wiederholen: ${describe(shownRule)}` : 'Wiederholen'} data-tip={shownRule ? `${describe(shownRule)} · Alt W` : 'Wiederholen · Alt W'} onClick={toggleRepeat}><Icon name="repeat" /></button>}
-      {kind !== 'note' && <button type="button" className="cal-satellite cal-composer-reminder" style={satellite()} aria-pressed={reminder} aria-label="Erinnern" data-tip="Erinnern zur Uhrzeit" onClick={() => setReminder(value => !value)}><Icon name="bell" /></button>}
-      {editing && <button type="button" className="cal-satellite cal-composer-remove" style={satellite()} aria-label={`${label} löschen`} data-tip="Löschen · Alt Entf" disabled={busy} onClick={() => void remove()}><Icon name="trash" /></button>}
-      <button type="button" className="cal-satellite cal-composer-create" style={satellite()} aria-label={editing ? 'Speichern' : `${label} anlegen`} data-tip={editing ? 'Speichern · Enter' : 'Anlegen · Enter'} disabled={busy} onClick={() => void submit()}><Icon name="check" /></button>
+        aria-label={shownRule ? t("Wiederholen: {0}", describe(shownRule)) : t("Wiederholen")} data-tip={shownRule ? `${describe(shownRule)} · Alt W` : t("Wiederholen · Alt W")} onClick={toggleRepeat}><Icon name="repeat" /></button>}
+      {kind !== 'note' && <button type="button" className="cal-satellite cal-composer-reminder" style={satellite()} aria-pressed={reminder} aria-label={t("Erinnern")} data-tip={t("Erinnern zur Uhrzeit")} onClick={() => setReminder(value => !value)}><Icon name="bell" /></button>}
+      {editing && <button type="button" className="cal-satellite cal-composer-remove" style={satellite()} aria-label={t("{0} löschen", label)} data-tip={t("Löschen · Alt Entf")} disabled={busy} onClick={() => void remove()}><Icon name="trash" /></button>}
+      <button type="button" className="cal-satellite cal-composer-create" style={satellite()} aria-label={editing ? t("Speichern") : t("{0} anlegen", label)} data-tip={editing ? t("Speichern · Enter") : t("Anlegen · Enter")} disabled={busy} onClick={() => void submit()}><Icon name="check" /></button>
     </div>
     {repeatView && shownRule && <div className="cal-composer-repeat-panel">
       {repeatView === 'rule'
         ? <RepeatPanel rule={shownRule} today={localDate()} onChange={setRule} onBack={() => { setRepeatView(null); inputRef.current?.focus(); }}
           onOff={() => { setRule(null); setRepeatView(null); inputRef.current?.focus(); }} onPickEnd={() => { setEndMonth((shownRule.end?.until ?? date).slice(0, 7)); setRepeatView('end'); }} />
-        : <div className="cal-composer-end" role="group" aria-label="Ende wählen">
+        : <div className="cal-composer-end" role="group" aria-label={t("Ende wählen")}>
           <div className="cal-composer-end-head">
-            <button type="button" className="clock-back" aria-label="Zurück" data-tip="Zurück · Esc" onClick={() => setRepeatView('rule')}><Icon name="left" /></button>
-            <span className="repeat-summary"><em>Ende · </em>{formatMonth(endMonth)}</span>
-            <button type="button" className="cal-icon-button" aria-label="Vorheriger Monat" onClick={() => setEndMonth(shiftMonth(endMonth, -1))}><Icon name="up" /></button>
-            <button type="button" className="cal-icon-button" aria-label="Nächster Monat" onClick={() => setEndMonth(shiftMonth(endMonth, 1))}><Icon name="down" /></button>
+            <button type="button" className="clock-back" aria-label={t("Zurück")} data-tip={t("Zurück · Esc")} onClick={() => setRepeatView('rule')}><Icon name="left" /></button>
+            <span className="repeat-summary"><em>{t("Ende · ")}</em>{formatMonth(endMonth)}</span>
+            <button type="button" className="cal-icon-button" aria-label={t("Vorheriger Monat")} onClick={() => setEndMonth(shiftMonth(endMonth, -1))}><Icon name="up" /></button>
+            <button type="button" className="cal-icon-button" aria-label={t("Nächster Monat")} onClick={() => setEndMonth(shiftMonth(endMonth, 1))}><Icon name="down" /></button>
           </div>
           <CompactMonth month={endMonth} days={new Map()} today={localDate()} selected={shownRule.end?.until ?? null} onMonth={setEndMonth}
             onPick={until => { setRule({ ...shownRule, end: { until: until < shownRule.start ? shownRule.start : until } }); setRepeatView('rule'); }} />

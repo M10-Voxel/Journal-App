@@ -1,3 +1,4 @@
+import { t, useLanguage } from '../i18n';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
@@ -9,9 +10,9 @@ import { Icon } from './Icon';
 
 /** "14:15–15:00", "Sa., 31.10. · 09:00", "verpasst · 07:30". */
 export function reminderWhen(reminder: Reminder, today: string): string {
-  const parts = [reminder.snoozed ? 'Erneut' : reminder.late ? 'Verpasst' : 'Erinnerung'];
+  const parts = [reminder.snoozed ? t("Erneut") : reminder.late ? t("Verpasst") : t("Erinnerung")];
   if (reminder.date !== today) parts.push(formatShortDate(reminder.date));
-  parts.push(reminder.time ? formatSpan(reminder.time, reminder.end) : 'ganztägig');
+  parts.push(reminder.time ? formatSpan(reminder.time, reminder.end) : t("ganztägig"));
   return parts.join(' · ');
 }
 
@@ -23,6 +24,7 @@ export function ReminderToasts({ reminders, today, snoozeMinutes, onStatus, onSn
   reminders: Reminder[]; today: string; snoozeMinutes: number;
   onStatus: (reminder: Reminder, status: 'done' | 'cancelled') => void; onSnooze: (reminder: Reminder) => void; onOpen: (reminder: Reminder) => void; onDismiss: (reminder: Reminder) => void; onQuit?: () => void;
 }) {
+  useLanguage();
   // A snoozed card says until when for a moment before it goes, so "later" visibly took effect.
   const [snoozing, setSnoozing] = useState<Record<string, string>>({});
   const snooze = (reminder: Reminder) => {
@@ -33,23 +35,23 @@ export function ReminderToasts({ reminders, today, snoozeMinutes, onStatus, onSn
     setTimeout(() => { onSnooze(reminder); setSnoozing(({ [key]: _, ...rest }) => rest); }, 1300);
   };
   if (!reminders.length) return null;
-  return <div className="reminders" role="region" aria-label="Erinnerungen">
+  return <div className="reminders" role="region" aria-label={t("Erinnerungen")}>
     {reminders.map(reminder => {
       // Notes from the app itself: that it keeps running in the background (after closing the window the first time), or
       // that more reminders were missed than fit here.
       if (reminder.kind === 'info') return <div key={reminder.id} className="reminder is-info" role="status">
         <span className="reminder-icon" aria-hidden="true"><Icon name={reminder.id === 'missed' ? 'bell' : 'journal'} /></span>
         <div className="reminder-body">
-          <span className="reminder-when">{reminder.id === 'missed' ? 'Verpasst' : 'Im Hintergrund'}</span>
-          <span className="reminder-text is-info">{reminder.text}</span>
+          <span className="reminder-when">{reminder.id === 'missed' ? t("Verpasst") : t("Im Hintergrund")}</span>
+          <span className="reminder-text is-info">{reminder.id === 'background' ? t('Journal läuft im Hintergrund weiter und erinnert dich. Öffnen und Beenden über das Symbol im Infobereich.') : reminder.id === 'missed' ? t('Weitere verpasste Erinnerungen: {0}. Im Journal an ihren Tagen.', /\d+/.exec(reminder.text)?.[0] ?? '') : reminder.text}</span>
           <div className="reminder-actions">
-            <button type="button" className="reminder-done" onClick={() => onDismiss(reminder)}><Icon name="check" /><span>Verstanden</span></button>
-            {reminder.id === 'missed' && <button type="button" className="reminder-open" onClick={() => onOpen(reminder)}><Icon name="jump" /><span>Öffnen</span></button>}
-            {reminder.id === 'background' && onQuit && <button type="button" className="reminder-quit" onClick={onQuit}><Icon name="done" /><span>Beenden</span></button>}
+            <button type="button" className="reminder-done" onClick={() => onDismiss(reminder)}><Icon name="check" /><span>{t("Verstanden")}</span></button>
+            {reminder.id === 'missed' && <button type="button" className="reminder-open" onClick={() => onOpen(reminder)}><Icon name="jump" /><span>{t("Öffnen")}</span></button>}
+            {reminder.id === 'background' && onQuit && <button type="button" className="reminder-quit" onClick={onQuit}><Icon name="done" /><span>{t("Beenden")}</span></button>}
           </div>
         </div>
       </div>;
-      const text = plainText(reminder.text.split('\n')[0] ?? '').trim() || 'Ohne Text';
+      const text = plainText(reminder.text.split('\n')[0] ?? '').trim() || t("Ohne Text");
       const later = snoozing[`${reminder.id}-${reminder.due}`];
       return <div key={`${reminder.id}-${reminder.due}`} className={`reminder is-${reminder.kind}${reminder.late ? ' is-late' : ''}${later ? ' is-snoozed' : ''}`} role="alertdialog" aria-label={`${reminderWhen(reminder, today)}: ${text}`}
         onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); onDismiss(reminder); } }}>
@@ -57,16 +59,16 @@ export function ReminderToasts({ reminders, today, snoozeMinutes, onStatus, onSn
         <div className="reminder-body">
           <span className="reminder-when">{reminderWhen(reminder, today)}</span>
           <span className="reminder-text" title={text}>{text}</span>
-          {later ? <div className="reminder-later" role="status"><Icon name="clock" /><span>Wieder um {later}</span></div> : <div className="reminder-actions">
+          {later ? <div className="reminder-later" role="status"><Icon name="clock" /><span>{t("Wieder um ")}{later}</span></div> : <div className="reminder-actions">
             {reminder.kind === 'task' && <>
-              <button type="button" className="reminder-done" onClick={() => onStatus(reminder, 'done')}><Icon name="check" /><span>Erledigt</span></button>
-              <button type="button" className="reminder-cancel" aria-label="Abbrechen" title="Abbrechen" onClick={() => onStatus(reminder, 'cancelled')}><Icon name="cancel" /></button>
+              <button type="button" className="reminder-done" onClick={() => onStatus(reminder, 'done')}><Icon name="check" /><span>{t("Erledigt")}</span></button>
+              <button type="button" className="reminder-cancel" aria-label={t("Abbrechen")} title={t("Abbrechen")} onClick={() => onStatus(reminder, 'cancelled')}><Icon name="cancel" /></button>
             </>}
-            <button type="button" className="reminder-snooze" onClick={() => snooze(reminder)}><Icon name="clock" /><span>{snoozeMinutes} Min.</span></button>
-            <button type="button" className="reminder-open" onClick={() => onOpen(reminder)}><Icon name="jump" /><span>Öffnen</span></button>
+            <button type="button" className="reminder-snooze" onClick={() => snooze(reminder)}><Icon name="clock" /><span>{snoozeMinutes}{t(" Min.")}</span></button>
+            <button type="button" className="reminder-open" onClick={() => onOpen(reminder)}><Icon name="jump" /><span>{t("Öffnen")}</span></button>
           </div>}
         </div>
-        <button type="button" className="reminder-close" aria-label="Erinnerung schließen" onClick={() => onDismiss(reminder)}><Icon name="done" /></button>
+        <button type="button" className="reminder-close" aria-label={t("Erinnerung schließen")} onClick={() => onDismiss(reminder)}><Icon name="done" /></button>
       </div>;
     })}
   </div>;
@@ -95,6 +97,7 @@ export function chime() {
  * The store sends the whole list on every change; the window is sized to it, and new reminders chime.
  */
 export function ReminderPopup() {
+  useLanguage();
   const [items, setItems] = useState<Reminder[]>([]);
   const rootRef = useRef<HTMLDivElement>(null);
   const known = useRef(new Set<string>());

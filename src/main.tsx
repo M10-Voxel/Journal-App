@@ -1,3 +1,4 @@
+import { t, useLanguage, setLanguage } from './i18n.ts';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -42,8 +43,12 @@ import '@fontsource/pixelify-sans/600.css';
 import '@fontsource/pixelify-sans/700.css';
 import '@fontsource/vt323/400.css';
 import './pixel.css';
+import './colors.css';
+import { applyColors } from './colors';
 
 applyTheme(loadSettings().theme);
+applyColors(loadSettings());
+setLanguage(loadSettings().language);
 
 // Bold and italic would otherwise load on first use, briefly rendering a fallback of a different width under the caret.
 for (const face of ['400 13px Lilex', 'italic 400 13px Lilex', '700 13px Lilex', 'italic 700 13px Lilex']) void document.fonts.load(face);
@@ -60,6 +65,7 @@ function useStableCallback<A extends unknown[], R>(callback: (...args: A) => R):
 }
 
 function App() {
+  useLanguage();
   const [date, setDate] = useState(localDate);
   const [day, setDay] = useState<Day | null>(null);
   const [dirty, setDirty] = useState(false);
@@ -123,10 +129,10 @@ function App() {
     };
     getCurrentWindow().onCloseRequested(event => {
       event.preventDefault();
-      whenSaved(toBackground, 'Fenster trotzdem schließen?');
+      whenSaved(toBackground, t("Fenster trotzdem schließen?"));
     }).then(stop => { if (disposed) stop(); else unlisten = stop; })
-      .catch(reason => setError(`Schließschutz konnte nicht eingerichtet werden: ${String(reason)}`));
-    const quit = listen('journal:quit', () => whenSaved(() => invoke('quit_app'), 'Journal trotzdem beenden?'));
+      .catch(reason => setError(t("Schließschutz konnte nicht eingerichtet werden: {0}", String(reason))));
+    const quit = listen('journal:quit', () => whenSaved(() => invoke('quit_app'), t("Journal trotzdem beenden?")));
     const handleKey = (event: KeyboardEvent) => onGlobalKey(event);
     window.addEventListener('keydown', handleKey);
     return () => { disposed = true; unlisten?.(); void quit.then(stop => stop()); window.removeEventListener('keydown', handleKey); };
@@ -215,7 +221,7 @@ function App() {
       setSavedCount(count => count + 1);
       return unchanged;
     }
-    catch (reason) { setError(`Speichern fehlgeschlagen: ${String(reason)}`); pendingNavigation.current = null; return false; }
+    catch (reason) { setError(t("Speichern fehlgeschlagen: {0}", String(reason))); pendingNavigation.current = null; return false; }
     finally { busyRef.current = false; setBusy(false); }
   });
   const pendingNavigation = useRef<string | null>(null);
@@ -251,11 +257,11 @@ function App() {
   });
 
   const exportFromCalendar = useStableCallback(async () => {
-    if (!await save()) throw new Error('Bitte laufende Änderungen zuerst speichern und erneut versuchen.');
+    if (!await save()) throw new Error(t("Bitte laufende Änderungen zuerst speichern und erneut versuchen."));
     return journal.exportCalendar();
   });
   const importFromCalendar = useStableCallback(async (entries: CalendarImport[]) => {
-    if (!await save()) throw new Error('Bitte laufende Änderungen zuerst speichern und erneut versuchen.');
+    if (!await save()) throw new Error(t("Bitte laufende Änderungen zuerst speichern und erneut versuchen."));
     const target = date;
     const before = journal.cached(target);
     busyRef.current = true; setBusy(true);
@@ -296,7 +302,7 @@ function App() {
     }
     const elsewhere = others.filter(other => !here.includes(other));
     try { if (elsewhere.length) await journal.changeLinked(elsewhere.map(other => ({ id: other.id, action }))); }
-    catch (reason) { setError(`Ändern fehlgeschlagen: ${String(reason)}`); }
+    catch (reason) { setError(t("Ändern fehlgeschlagen: {0}", String(reason))); }
   });
 
   const dismissReminder = (reminder: Reminder) => setReminders(current => current.filter(item => !(item.id === reminder.id && item.due === reminder.due)));
@@ -361,7 +367,7 @@ function App() {
     focusMoveEntryId.current = keepTextFocus ? null : id;
     setNewEntryId(null);
     setOpenEntryId(null);
-    setMoveAnnouncement(`${entryLabels[entry.kind]} verschoben. Position ${siblings.indexOf(entry) + 1} von ${siblings.length}.`);
+    setMoveAnnouncement(t("{0} verschoben. Position {1} von {2}.", entryLabels()[entry.kind], siblings.indexOf(entry) + 1, siblings.length));
     captureLayout();
     update(current => ({ ...current, entries }));
     return true;
@@ -378,7 +384,7 @@ function App() {
   const savedTraces = new Set(ready ? journal.cached(day.date)?.entries.filter(entry => entry.plan).map(entry => entry.id) : []);
   return <div className={`app actions-${settings.actionLayout}${sidebar.dragging ? ' is-resizing' : ''}`}>
     {/* The sidebar is the calendar (its view switch in line with the toolbar next to it); dragging its edge sets the width. */}
-    <aside className="sidebar" aria-label="Kalender und Navigation" style={{ width: sidebar.width }}>
+    <aside className="sidebar" aria-label={t("Kalender und Navigation")} style={{ width: sidebar.width }}>
       <Calendar embedded journalDate={date} onOpen={openFromCalendar} onCreate={createFromCalendar} onEdit={editFromCalendar} onRemove={removeFromCalendar} onExport={exportFromCalendar} onImport={importFromCalendar} />
       <div className="sidebar-resizer" {...sidebar.handle} />
     </aside>
@@ -389,44 +395,44 @@ function App() {
         if (event.button !== 0 || (event.target as Element).closest('button, input, [role="dialog"]')) return;
         event.preventDefault();
         const window = getCurrentWindow();
-        void (event.detail === 2 ? window.toggleMaximize() : window.startDragging()).catch(reason => setError(`Fensteraktion fehlgeschlagen: ${String(reason)}`));
+        void (event.detail === 2 ? window.toggleMaximize() : window.startDragging()).catch(reason => setError(t("Fensteraktion fehlgeschlagen: {0}", String(reason))));
       }}>
-        <div className="document-tab"><Icon name="journal" /><span>Tagesjournal</span>{dirty && <span className="unsaved-dot" aria-label="Ungespeicherte Änderungen" />}</div>
+        <div className="document-tab"><Icon name="journal" /><span>{t("Tagesjournal")}</span>{dirty && <span className="unsaved-dot" aria-label={t("Ungespeicherte Änderungen")} />}</div>
         <div className="titlebar-space" />
         {/* Settings sit with the window's own controls, where Zed and most apps keep them. */}
-        <button type="button" className="titlebar-button settings-button" data-mail-count={mailStatus.count || undefined} aria-label="Einstellungen" aria-keyshortcuts="Control+," title="Einstellungen · Strg ," onClick={() => setSettingsOpen(true)}><Icon name="settings" /></button>
+        <button type="button" className="titlebar-button settings-button" data-mail-count={mailStatus.count || undefined} aria-label={t("Einstellungen")} aria-keyshortcuts="Control+," title={t("Einstellungen · Strg ,")} onClick={() => setSettingsOpen(true)}><Icon name="settings" /></button>
         <WindowControls onError={setError} />
       </header>
       {/* Like the calendar's toolbar (and Zed's under its tabs): turning the days first, then what is shown. */}
       <div className="toolbar">
-        <NavCluster label="Tagesnavigation" prev={{ label: 'Vorheriger Tag', tip: 'Vorheriger Tag · Alt ←' }} next={{ label: 'Nächster Tag', tip: 'Nächster Tag · Alt →' }}
-          today={{ tip: 'Heute · Alt H', disabled: date === today }} atToday={date === today} onPrev={() => stepDay(-1)} onToday={() => navigate(today)} onNext={() => stepDay(1)} />
+        <NavCluster label={t("Tagesnavigation")} prev={{ label: t("Vorheriger Tag"), tip: t("Vorheriger Tag · Alt ←") }} next={{ label: t("Nächster Tag"), tip: t("Nächster Tag · Alt →") }}
+          today={{ tip: t("Heute · Alt H"), disabled: date === today }} atToday={date === today} onPrev={() => stepDay(-1)} onToday={() => navigate(today)} onNext={() => stepDay(1)} />
         <MiniCalendarPicker date={date} open={datePickerOpen} onOpenChange={setDatePickerOpen} onPick={navigate} buttonRef={datePickerButtonRef} />
       </div>
 
       <div className="scroll" ref={scrollRef}>
         <div className="content">
           <div className={`document-header${slide ? ` slide-${slide}` : ''}`} key={`header-${date}`}>
-            <div className="eyebrow">Tagesnotiz{date === today && <span className="today-label">Heute</span>}</div>
+            <div className="eyebrow">{t("Tagesnotiz")}{date === today && <span className="today-label">{t("Heute")}</span>}</div>
             <h1>{formatDate(date)}</h1>
           </div>
           {error && <div className="error" role="alert">{error}</div>}
-          {!ready && !error && <p className="loading" role="status">Tagesnotiz wird geöffnet …</p>}
+          {!ready && !error && <p className="loading" role="status">{t("Tagesnotiz wird geöffnet …")}</p>}
           {ready && <div className={`editor${slide ? ` slide-${slide}` : ''}`} key={day.date}>
-            <label className="visually-hidden" htmlFor="title">Titel des Tages</label>
-            <input id="title" className="title-input" placeholder="Gib deinem Tag einen Namen …" value={day.title}
+            <label className="visually-hidden" htmlFor="title">{t("Titel des Tages")}</label>
+            <input id="title" className="title-input" placeholder={t("Gib deinem Tag einen Namen …")} value={day.title}
               onKeyDown={event => { if ((event.key === 'Enter' || event.key === 'ArrowDown') && !event.altKey && !event.shiftKey && focusText(adjacentText(null, 1), 'end')) event.preventDefault(); }} onChange={event => { const title = event.target.value; update(current => ({ ...current, title })); }} />
             <section className="journal-section" aria-labelledby="entries-heading">
               <div className="section-heading">
-                <div className="section-title"><h2 id="entries-heading">Einträge</h2><span className="entry-count">{entryCount}</span></div>
-                <div className="kind-picker" role="group" aria-label="Eintrag hinzufügen">
-                  {entryKindOrder.map(kind => <button type="button" key={kind} title={`Neu · Alt ${{ task: 'A', event: 'E', note: 'N' }[kind]}`} onClick={() => addEntry(kind)}><Icon name={kind} />{entryLabels[kind]}</button>)}
+                <div className="section-title"><h2 id="entries-heading">{t("Einträge")}</h2><span className="entry-count">{entryCount}</span></div>
+                <div className="kind-picker" role="group" aria-label={t("Eintrag hinzufügen")}>
+                  {entryKindOrder.map(kind => <button type="button" key={kind} title={t("Neu · Alt {0}", { task: 'A', event: 'E', note: 'N' }[kind])} onClick={() => addEntry(kind)}><Icon name={kind} />{entryLabels()[kind]}</button>)}
                 </div>
               </div>
               <div className="entries" ref={entriesRef}>
-                <span className="visually-hidden" id="entry-reorder-help">Innerhalb desselben Typs und derselben Priorität ziehen oder mit Alt und den Pfeiltasten nach oben und unten verschieben. Das funktioniert auch direkt im Text.</span>
+                <span className="visually-hidden" id="entry-reorder-help">{t("Innerhalb desselben Typs und derselben Priorität ziehen oder mit Alt und den Pfeiltasten nach oben und unten verschieben. Das funktioniert auch direkt im Text.")}</span>
                 <span className="visually-hidden" role="status">{moveAnnouncement}</span>
-                {visibleEntries.length === 0 && <div className="empty"><Icon name="journal" /><p>Ein neuer Tag. Platz für deine Gedanken.</p><span>Füge oben eine Aufgabe, Notiz oder ein Ereignis hinzu.</span></div>}
+                {visibleEntries.length === 0 && <div className="empty"><Icon name="journal" /><p>{t("Ein neuer Tag. Platz für deine Gedanken.")}</p><span>{t("Füge oben eine Aufgabe, Notiz oder ein Ereignis hinzu.")}</span></div>}
                 {visibleEntries.map((entry, index) => <JournalEntry key={entry.id} layout={settings.actionLayout} entry={entry} day={day.date} onCreate={addEntry} traceSaved={savedTraces.has(entry.id)} onNavigate={navigate} isNew={entry.id === newEntryId} isOpen={entry.id === openEntryId} focusEntryId={focusEntryId} focusMoveEntryId={focusMoveEntryId}
                   isGroupStart={index > 0 && visibleEntries[index - 1].kind !== entry.kind}
                   canMoveUp={index > 0 && visibleEntries[index - 1].kind === entry.kind && visibleEntries[index - 1].priority === entry.priority}
@@ -441,13 +447,13 @@ function App() {
       </div>
 
       <footer className="statusbar">
-        <div className={`save-status${dirty ? ' is-dirty' : ''}`} role="status"><span key={savedCount} className={`status-dot${savedCount && !dirty ? ' just-saved' : ''}`} />{busy ? 'Wird gespeichert …' : dirty ? (error ? 'Nicht gespeichert' : 'Wird gleich gespeichert …') : ready ? 'Gespeichert' : 'Wird geöffnet …'}</div>
-        <div className="statusbar-actions"><button type="button" className="help-button" aria-label="Tastenkürzel" aria-keyshortcuts="F1" onClick={() => setHelp(true)}><span>?</span><kbd>F1</kbd></button><span className="toolbar-separator" /><span className="status-count">{entryCount} {entryCount === 1 ? 'Eintrag' : 'Einträge'}</span><span className="toolbar-separator" /><button type="button" className="save" disabled={!ready || !dirty || busy} onClick={() => { void save(); }}><Icon name="save" /><span>Speichern</span><kbd>Strg S</kbd></button></div>
+        <div className={`save-status${dirty ? ' is-dirty' : ''}`} role="status"><span key={savedCount} className={`status-dot${savedCount && !dirty ? ' just-saved' : ''}`} />{busy ? t("Wird gespeichert …") : dirty ? (error ? t("Nicht gespeichert") : t("Wird gleich gespeichert …")) : ready ? t("Gespeichert") : t("Wird geöffnet …")}</div>
+        <div className="statusbar-actions"><button type="button" className="help-button" aria-label={t("Tastenkürzel")} aria-keyshortcuts="F1" onClick={() => setHelp(true)}><span>?</span><kbd>F1</kbd></button><span className="toolbar-separator" /><span className="status-count">{entryCount} {entryCount === 1 ? t("Eintrag") : t("Einträge")}</span><span className="toolbar-separator" /><button type="button" className="save" disabled={!ready || !dirty || busy} onClick={() => { void save(); }}><Icon name="save" /><span>{t("Speichern")}</span><kbd>{t("Strg S")}</kbd></button></div>
       </footer>
     </main>
     <ReminderToasts reminders={reminders} today={today} snoozeMinutes={10}
       onStatus={(reminder, status) => { dismissReminder(reminder); void changeLinked([reminder], status); }}
-      onSnooze={reminder => { dismissReminder(reminder); journal.snoozeReminder(reminder).catch(reason => setError(`Erinnerung: ${String(reason)}`)); }}
+      onSnooze={reminder => { dismissReminder(reminder); journal.snoozeReminder(reminder).catch(reason => setError(t("Erinnerung: {0}", String(reason)))); }}
       onOpen={reminder => { dismissReminder(reminder); showFromCalendar(reminder.date, reminder.id); }} onDismiss={dismissReminder} />
     {help && <ShortcutHelp onClose={() => setHelp(false)} />}
     {settingsOpen && <SettingsDialog settings={settings} mailStatus={mailStatus} onImport={importFromCalendar} onClose={() => setSettingsOpen(false)} onChange={next => { setOpenEntryId(null); setSettings(next); saveSettings(next); }} />}

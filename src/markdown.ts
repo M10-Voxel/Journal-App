@@ -1,11 +1,11 @@
 // Inline Markdown for entry texts: **bold**, *italic* (also _italic_), ***both***, ~~strike~~, ==highlight==,
-// [text]{color} with the Clean theme colours, and \-escapes. No code, links or formulas.
+// [text]{color} with theme-aware semantic colours, and \-escapes. No code, links or formulas.
 // Every character of the source is kept in the tree: formatted nodes carry their `open`/`close` markers, escapes are
 // `mark` nodes. The editor uses this to hide markers unless the cursor is in or at the formatted part.
 
 export const textColors = [
-  { name: 'rot', value: '#DF6262' }, { name: 'orange', value: '#E6A85C' }, { name: 'gelb', value: '#E2D7B7' }, { name: 'grün', value: '#76D982' },
-  { name: 'cyan', value: '#C2DCE9' }, { name: 'blau', value: '#569EFF' }, { name: 'lila', value: '#C69BFF' }, { name: 'pink', value: '#AD4075' },
+  { name: 'rot', value: 'var(--md-red, #df6262)' }, { name: 'orange', value: 'var(--md-orange, #e6a85c)' }, { name: 'gelb', value: 'var(--md-yellow, #e2d7b7)' }, { name: 'grün', value: 'var(--md-green, #76d982)' },
+  { name: 'cyan', value: 'var(--md-cyan, #c2dce9)' }, { name: 'blau', value: 'var(--md-blue, #569eff)' }, { name: 'lila', value: 'var(--md-purple, #c69bff)' }, { name: 'pink', value: 'var(--md-pink, #ad4075)' },
 ] as const;
 export type TextColor = typeof textColors[number]['name'];
 export type Style = 'bold' | 'italic' | 'strike' | 'highlight';

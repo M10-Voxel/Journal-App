@@ -1,3 +1,4 @@
+import { t, useLanguage } from '../i18n';
 import { useEffect, useRef, useState } from 'react';
 import type { RefObject } from 'react';
 import { localDate, monthGrid, shiftMonth } from '../dates';
@@ -9,9 +10,10 @@ import { Icon } from './Icon';
 export function MiniCalendarPicker({ date, open, onOpenChange, onPick, buttonRef }: {
   date: string; open: boolean; onOpenChange: (open: boolean) => void; onPick: (date: string) => void; buttonRef: RefObject<HTMLButtonElement | null>;
 }) {
+  useLanguage();
   const rootRef = useRef<HTMLDivElement>(null);
   return <div className="mini-calendar-picker" ref={rootRef}>
-    <button ref={buttonRef} type="button" className="date-picker-button" aria-label="Datum auswählen" title="Mini-Kalender · Strg G" aria-expanded={open} aria-controls="journal-mini-calendar" onClick={() => onOpenChange(!open)}>
+    <button ref={buttonRef} type="button" className="date-picker-button" aria-label={t("Datum auswählen")} title={t("Mini-Kalender · Strg G")} aria-expanded={open} aria-controls="journal-mini-calendar" onClick={() => onOpenChange(!open)}>
       <span className="date-picker-weekday">{formatWeekdayLong(date)}</span><span>{date.split('-').reverse().join('.')}</span><Icon name="calendar" />
     </button>
     {open && <PickerPanel date={date} rootRef={rootRef} onPick={value => { onPick(value); onOpenChange(false); buttonRef.current?.focus(); }} onClose={restore => { onOpenChange(false); if (restore) buttonRef.current?.focus(); }} />}
@@ -21,6 +23,7 @@ export function MiniCalendarPicker({ date, open, onOpenChange, onPick, buttonRef
 function PickerPanel({ date, rootRef, onPick, onClose }: {
   date: string; rootRef: RefObject<HTMLDivElement | null>; onPick: (date: string) => void; onClose: (restore: boolean) => void;
 }) {
+  useLanguage();
   const [month, setMonth] = useState(date.slice(0, 7));
   const today = localDate(useNow());
   const grid = monthGrid(month);
@@ -35,7 +38,7 @@ function PickerPanel({ date, rootRef, onPick, onClose }: {
     window.addEventListener('keydown', escape);
     return () => { cancelAnimationFrame(frame); window.removeEventListener('pointerdown', outside); window.removeEventListener('keydown', escape); };
   }, []);
-  return <div ref={panelRef} className="mini-picker-panel" role="dialog" aria-label="Mini-Kalender" id="journal-mini-calendar"
+  return <div ref={panelRef} className="mini-picker-panel" role="dialog" aria-label={t("Mini-Kalender")} id="journal-mini-calendar"
     onKeyDown={event => {
       if (event.key === 'Escape' || (event.ctrlKey && event.code === 'KeyG')) { event.preventDefault(); onClose(true); }
       if (event.key === 'Tab') {
@@ -47,11 +50,11 @@ function PickerPanel({ date, rootRef, onPick, onClose }: {
       event.stopPropagation();
     }}>
     <div className="mini-picker-head"><strong>{formatMonthName(`${month}-01`)} <span>{month.slice(0, 4)}</span></strong>
-      <button type="button" className="cal-icon-button" aria-label="Vorheriger Monat" onClick={() => setMonth(shiftMonth(month, -1))}><Icon name="left" /></button>
-      <button type="button" className="cal-icon-button" aria-label="Nächster Monat" onClick={() => setMonth(shiftMonth(month, 1))}><Icon name="right" /></button>
+      <button type="button" className="cal-icon-button" aria-label={t("Vorheriger Monat")} onClick={() => setMonth(shiftMonth(month, -1))}><Icon name="left" /></button>
+      <button type="button" className="cal-icon-button" aria-label={t("Nächster Monat")} onClick={() => setMonth(shiftMonth(month, 1))}><Icon name="right" /></button>
     </div>
     {error && <div className="mini-picker-error" role="alert">{error}</div>}
     <CompactMonth month={month} days={days} today={today} selected={date} onMonth={setMonth} onPick={onPick} />
-    <div className="mini-picker-foot"><button type="button" onClick={() => onPick(today)}>Heute</button><span>← → Tage · Bild ↑ ↓ Monat</span></div>
+    <div className="mini-picker-foot"><button type="button" onClick={() => onPick(today)}>{t("Heute")}</button><span>{t("← → Tage · Bild ↑ ↓ Monat")}</span></div>
   </div>;
 }

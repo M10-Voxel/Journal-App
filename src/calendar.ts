@@ -1,13 +1,14 @@
+import { t, dateFormat } from './i18n.ts';
 import type { Entry } from './journal';
 import { monthGrid, shiftDate, shiftMonth, weekDates } from './dates.ts';
 
 // The calendar window's views, after Apple's and Samsung's calendars (year, month, week, day) and TaskNotes' work week.
 export type CalendarView = 'year' | 'month' | 'week' | 'workweek' | 'day';
 /** `short` is shown when the calendar is narrow (a slim sidebar). */
-export const calendarViews: { view: CalendarView; label: string; short: string; key: string }[] = [
-  { view: 'year', label: 'Jahr', short: 'Jahr', key: 'J' }, { view: 'month', label: 'Monat', short: 'Monat', key: 'M' }, { view: 'week', label: 'Woche', short: 'Woche', key: 'W' },
-  { view: 'workweek', label: 'Arbeitswoche', short: 'Mo–Fr', key: 'A' }, { view: 'day', label: 'Tag', short: 'Tag', key: 'T' },
-];
+export const calendarViews = (): { view: CalendarView; label: string; short: string; key: string }[] => ([
+  { view: 'year', label: t("Jahr"), short: t("Jahr"), key: 'J' }, { view: 'month', label: t("Monat"), short: t("Monat"), key: 'M' }, { view: 'week', label: t("Woche"), short: t("Woche"), key: 'W' },
+  { view: 'workweek', label: t("Arbeitswoche"), short: t("Mo–Fr"), key: 'A' }, { view: 'day', label: t("Tag"), short: t("Tag"), key: 'T' },
+]);
 
 const noon = (date: string) => { const [year, month, day] = date.split('-').map(Number); return new Date(year, month - 1, day, 12); };
 const daysInMonth = (month: string) => { const [year, value] = month.split('-').map(Number); return new Date(year, value, 0).getDate(); };
@@ -46,29 +47,31 @@ export function isoWeek(date: string): number {
   return Math.round((thursday.getTime() - firstThursday.getTime()) / 604800000) + 1;
 }
 
-const monthName = new Intl.DateTimeFormat('de-DE', { month: 'long' });
-const shortMonth = new Intl.DateTimeFormat('de-DE', { month: 'short' });
-const weekdayLong = new Intl.DateTimeFormat('de-DE', { weekday: 'long' });
-export const formatMonthName = (date: string) => monthName.format(noon(date));
-export const formatWeekdayLong = (date: string) => weekdayLong.format(noon(date));
+const monthName = () => dateFormat({ month: 'long' });
+const shortMonth = () => dateFormat({ month: 'short' });
+const weekdayLong = () => dateFormat({ weekday: 'long' });
+export const formatMonthName = (date: string) => monthName().format(noon(date));
+export const formatWeekdayLong = (date: string) => weekdayLong().format(noon(date));
 /** One-line calendar heading: what is shown, and – in the week views the week, in the day view the day – in grey after it. */
 export function viewTitle(view: CalendarView, date: string): { main: string; sub: string } {
   const year = date.slice(0, 4);
   if (view === 'year') return { main: year, sub: '' };
   if (view === 'month') return { main: `${formatMonthName(date)} ${year}`, sub: '' };
   if (view === 'day') return { main: `${formatMonthName(date)} ${year}`, sub: `${formatWeekdayLong(date)}, ${Number(date.slice(8))}.` };
-  const sub = `KW ${isoWeek(date)}`;
+  const sub = t("KW {0}", isoWeek(date));
   const dates = viewDates(view, date);
   const [first, last] = [dates[0], dates[dates.length - 1]];
   const main = first.slice(0, 4) !== last.slice(0, 4)
-    ? `${shortMonth.format(noon(first))} ${first.slice(0, 4)} – ${shortMonth.format(noon(last))} ${last.slice(0, 4)}`
-    : `${first.slice(0, 7) === last.slice(0, 7) ? formatMonthName(first) : `${shortMonth.format(noon(first))} – ${shortMonth.format(noon(last))}`} ${year}`;
+    ? `${shortMonth().format(noon(first))} ${first.slice(0, 4)} – ${shortMonth().format(noon(last))} ${last.slice(0, 4)}`
+    : `${first.slice(0, 7) === last.slice(0, 7) ? formatMonthName(first) : `${shortMonth().format(noon(first))} – ${shortMonth().format(noon(last))}`} ${year}`;
   return { main, sub };
 }
 
 /** The heading's short form for a narrow calendar: "Nov 2026", "Okt – Nov 2026". */
-const monthNames = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
-export const shortTitle = (main: string) => main.replace(new RegExp(`(${monthNames.join('|')})`, 'g'), month => shortMonth.format(noon(`2000-${String(monthNames.indexOf(month) + 1).padStart(2, '0')}-15`)));
+export const shortTitle = (main: string) => {
+  const names=Array.from({length:12},(_,index)=>monthName().format(new Date(2000,index,15,12)));
+  return main.replace(new RegExp(`(${names.join('|')})`, 'g'), month => shortMonth().format(noon(`2000-${String(names.indexOf(month) + 1).padStart(2, '0')}-15`)));
+};
 
 export const minutesOf = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
 /** Entries with a start but no end take an hour in the time grid. */

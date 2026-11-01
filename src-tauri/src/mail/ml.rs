@@ -142,7 +142,7 @@ pub async fn mail_ml_install(app: tauri::AppHandle, from_folder: bool) -> Result
     let state = app.state::<MlState>();
     if state.installing.swap(true, Ordering::SeqCst) { return Err("Die Modelleinrichtung läuft bereits".into()); }
     tauri::async_runtime::spawn_blocking(move || {
-        let local = if from_folder { rfd::FileDialog::new().set_title("Verifizierten Mailmodell-Ordner auswählen").pick_folder() } else { None };
+        let local = if from_folder { rfd::FileDialog::new().set_title(crate::ui_language::text("Verifizierten Mailmodell-Ordner auswählen", "Select verified mail model folder")).pick_folder() } else { None };
         let result = if from_folder && local.is_none() { Ok(()) } else { install(&app, local.as_deref()) };
         let state = app.state::<MlState>(); state.installing.store(false,Ordering::SeqCst);
         if let Ok(mut progress) = state.progress.lock() { progress.installing=false; progress.error=result.as_ref().err().cloned().unwrap_or_default(); }

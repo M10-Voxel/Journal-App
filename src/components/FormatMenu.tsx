@@ -1,20 +1,22 @@
+import { t, useLanguage } from '../i18n';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import { Style, TextColor, textColors } from '../markdown';
 
-const styles: { style: Style; label: string; tip: string }[] = [
-  { style: 'bold', label: 'Fett', tip: 'Fett · Strg B' },
-  { style: 'italic', label: 'Kursiv', tip: 'Kursiv · Strg I' },
-  { style: 'strike', label: 'Durchgestrichen', tip: 'Durchgestrichen · Strg ⇧ X' },
-  { style: 'highlight', label: 'Markieren', tip: 'Markieren · Strg ⇧ H' },
-];
+const styles = (): { style: Style; label: string; tip: string }[] => ([
+  { style: 'bold', label: t("Fett"), tip: t("Fett · Strg B") },
+  { style: 'italic', label: t("Kursiv"), tip: t("Kursiv · Strg I") },
+  { style: 'strike', label: t("Durchgestrichen"), tip: t("Durchgestrichen · Strg ⇧ X") },
+  { style: 'highlight', label: t("Markieren"), tip: t("Markieren · Strg ⇧ H") },
+]);
 
 // Right-click menu for selected text. It never takes focus (mousedown is prevented), so the editor keeps its selection.
 export function FormatMenu({ x, y, active, color, onStyle, onColor, onClose }: {
   x: number; y: number; active: Record<Style, boolean>; color: TextColor | null;
   onStyle: (style: Style) => void; onColor: (color: TextColor | null) => void; onClose: () => void;
 }) {
+  useLanguage();
   const menuRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState({ left: x, top: y });
   // Formatting may scroll the list a little to keep the cursor in view; that is no reason to close, only real scrolling is.
@@ -44,16 +46,16 @@ export function FormatMenu({ x, y, active, color, onStyle, onColor, onClose }: {
     };
   }, [onClose]);
 
-  return createPortal(<div ref={menuRef} className="format-menu" role="toolbar" aria-label="Text formatieren" style={position} onMouseDown={event => event.preventDefault()}>
+  return createPortal(<div ref={menuRef} className="format-menu" role="toolbar" aria-label={t("Text formatieren")} style={position} onMouseDown={event => event.preventDefault()}>
     <div className="format-row">
-      {styles.map(({ style, label, tip }) => <button key={style} type="button" className={`format-style format-${style}`} aria-label={label} aria-pressed={active[style]} data-tip={tip} onClick={acting(() => onStyle(style))}>
+      {styles().map(({ style, label, tip }) => <button key={style} type="button" className={`format-style format-${style}`} aria-label={label} aria-pressed={active[style]} data-tip={tip} onClick={acting(() => onStyle(style))}>
         {{ bold: 'B', italic: 'I', strike: 'S', highlight: 'H' }[style]}
       </button>)}
     </div>
     <div className="format-row format-colors">
-      {textColors.map(({ name, value }, index) => <button key={name} type="button" className="format-color" aria-label={`Farbe ${name}`} aria-pressed={color === name} data-tip={`${name[0].toUpperCase()}${name.slice(1)} · Alt ${index + 1}`}
+      {textColors.map(({ name, value }, index) => <button key={name} type="button" className="format-color" aria-label={t("Farbe {0}", t(name))} aria-pressed={color === name} data-tip={`${t(name)[0].toUpperCase()}${t(name).slice(1)} · Alt ${index + 1}`}
         style={{ '--swatch': value } as CSSProperties} onClick={acting(() => onColor(name))} />)}
-      <button type="button" className="format-color format-no-color" aria-label="Farbe entfernen" data-tip="Ohne Farbe · Alt 0" disabled={!color} onClick={acting(() => onColor(null))} />
+      <button type="button" className="format-color format-no-color" aria-label={t("Farbe entfernen")} data-tip={t("Ohne Farbe · Alt 0")} disabled={!color} onClick={acting(() => onColor(null))} />
     </div>
   </div>, document.body);
 }

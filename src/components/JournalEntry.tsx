@@ -1,3 +1,4 @@
+import { t, useLanguage } from '../i18n';
 import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { CSSProperties, KeyboardEvent } from 'react';
 import { Entry, EntryKind, journal } from '../journal';
@@ -19,7 +20,7 @@ import type { SwipeAction, SwipeActions, SwipeDirection } from './useSwipe';
 import type { TextField } from './entryEditor';
 import type { EntryDragHandlers } from './useEntryDrag';
 
-export const entryLabels = { task: 'Aufgabe', event: 'Ereignis', note: 'Notiz' };
+export const entryLabels = () => ({ task: t("Aufgabe"), event: t("Ereignis"), note: t("Notiz") });
 export type EntryChange = Partial<Pick<Entry, 'kind' | 'text' | 'done' | 'cancelled' | 'priority' | 'time' | 'end' | 'reminder' | 'plan' | 'repeat'>>;
 export type DragState = 'source' | 'drop-before' | 'drop-after' | null;
 interface TextSelection { start: number; end: number; direction: 'forward' | 'backward' | 'none' }
@@ -33,6 +34,7 @@ export const JournalEntry = memo(function JournalEntry({ layout, entry, day, tra
   isGroupStart: boolean; canMoveUp: boolean; canMoveDown: boolean; dragState: DragState; drag: EntryDragHandlers;
   onMoveOffset: (id: string, offset: -1 | 1, keepTextFocus?: boolean) => boolean; focusMoveEntryId: { current: string | null };
 }) {
+  useLanguage();
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const gripRef = useRef<HTMLButtonElement>(null);
@@ -42,7 +44,7 @@ export const JournalEntry = memo(function JournalEntry({ layout, entry, day, tra
   const restoreSymbolFocus = useRef(false);
   // Set when the toolbar or planner was opened by a shortcut while typing, so closing it returns to the text.
   const returnToText = useRef(false);
-  const label = entryLabels[entry.kind];
+  const label = entryLabels()[entry.kind];
   const [preview, setPreview] = useState<EntryPreview | null>(null);
   const [pop, setPop] = useState<{ key: number; status: TaskStatus | 'planned' } | null>(null);
   const [leaving, setLeaving] = useState(false);
@@ -67,7 +69,7 @@ export const JournalEntry = memo(function JournalEntry({ layout, entry, day, tra
     : planning && planDate && planDate !== day ? traceIcon({ kind: shownKind, plan: { via: planCount > 1 ? 'days' : 'date', targets: [], time: null, reminder: false } })
     : trace ? traceIcon({ kind: shownKind, plan: trace }) : null;
   const planGhost = preview === 'tomorrow' || preview === 'unplan' || (planning && planDate !== null && planDate !== day);
-  const statusLabel = trace ? `, geplant auf ${trace.targets.map(target => formatShortDate(target.date)).join(', ')}` : status === 'done' ? ', erledigt' : status === 'cancelled' ? ', abgebrochen' : status === 'open' ? ', offen' : '';
+  const statusLabel = trace ? t(", geplant auf {0}", trace.targets.map(target => formatShortDate(target.date)).join(', ')) : status === 'done' ? t(", erledigt") : status === 'cancelled' ? t(", abgebrochen") : status === 'open' ? t(", offen") : '';
 
   useLayoutEffect(() => {
     if (restorePriorityFocus.current) {
@@ -237,21 +239,21 @@ export const JournalEntry = memo(function JournalEntry({ layout, entry, day, tra
   // down: done, further down cancelled (a finished task reopens); up: priority. A tap cycles a task's state.
   const swipeActions: SwipeActions<EntryPreview> = (() => {
     // A linked entry stays in place while asking whether the others go too.
-    const removeAction: SwipeAction<EntryPreview> = { id: 'remove', label: 'löschen', icon: 'trash', color: '#DF6262', preview: 'remove', leaves: !linked, run: () => linked ? remove() : onRemove(entry.id) };
-    const priorityAction: SwipeAction<EntryPreview> = { id: 'priority', label: entry.priority ? 'priorität weg' : 'priorität', icon: priorityIcon(entry.kind), color: 'var(--priority)', preview: 'priority', run: () => togglePriority(null) };
+    const removeAction: SwipeAction<EntryPreview> = { id: 'remove', label: t("löschen"), icon: 'trash', color: 'var(--error)', preview: 'remove', leaves: !linked, run: () => linked ? remove() : onRemove(entry.id) };
+    const priorityAction: SwipeAction<EntryPreview> = { id: 'priority', label: entry.priority ? t("priorität weg") : t("priorität"), icon: priorityIcon(entry.kind), color: 'var(--priority)', preview: 'priority', run: () => togglePriority(null) };
     if (trace) return {
-      right: [{ id: 'jump', label: 'zum tag', icon: 'jump', color: '#8FB3E8', run: () => onNavigate(trace.targets[0].date) },
-        ...traceSaved ? [] : [{ id: 'unplan', label: 'zurücknehmen', icon: 'undo', color: '#BC95C9', preview: 'unplan', run: () => onChange(entry.id, { plan: null }) } as SwipeAction<EntryPreview>]],
+      right: [{ id: 'jump', label: t("zum tag"), icon: 'jump', color: 'var(--accent)', run: () => onNavigate(trace.targets[0].date) },
+        ...traceSaved ? [] : [{ id: 'unplan', label: t("zurücknehmen"), icon: 'undo', color: 'var(--md-purple)', preview: 'unplan', run: () => onChange(entry.id, { plan: null }) } as SwipeAction<EntryPreview>]],
       left: [removeAction], up: [], down: [],
     };
     const right: SwipeAction<EntryPreview>[] = canPlan(entry) ? [
-      { id: 'tomorrow', label: 'morgen', icon: 'plan-tomorrow', color: '#C2DCE9', preview: 'tomorrow', run: () => plan(tomorrowChange(entry, day)) },
-      { id: 'plan', label: 'planen', icon: 'calendar', color: '#569EFF', run: () => openPlanner('date') },
-      { id: 'days', label: 'mehrere tage', icon: 'plan-days', color: '#C69BFF', run: () => openPlanner('days') },
+      { id: 'tomorrow', label: 'morgen', icon: 'plan-tomorrow', color: 'var(--md-cyan)', preview: 'tomorrow', run: () => plan(tomorrowChange(entry, day)) },
+      { id: 'plan', label: 'planen', icon: 'calendar', color: 'var(--accent)', run: () => openPlanner('date') },
+      { id: 'days', label: t("mehrere tage"), icon: 'plan-days', color: 'var(--md-purple)', run: () => openPlanner('days') },
     ] : [];
-    const reopen: SwipeAction<EntryPreview> = { id: 'open', label: 'wieder offen', icon: 'task', color: '#E2D7B7', preview: 'open', run: () => changeStatus('open') };
-    const done: SwipeAction<EntryPreview> = { id: 'done', label: 'erledigt', icon: 'check', color: '#76D982', preview: 'done', run: () => changeStatus('done') };
-    const cancelled: SwipeAction<EntryPreview> = { id: 'cancelled', label: 'abbrechen', icon: 'cancel', color: '#AD4075', preview: 'cancelled', run: () => changeStatus('cancelled') };
+    const reopen: SwipeAction<EntryPreview> = { id: 'open', label: t("wieder offen"), icon: 'task', color: 'var(--md-yellow)', preview: 'open', run: () => changeStatus('open') };
+    const done: SwipeAction<EntryPreview> = { id: 'done', label: 'erledigt', icon: 'check', color: 'var(--success)', preview: 'done', run: () => changeStatus('done') };
+    const cancelled: SwipeAction<EntryPreview> = { id: 'cancelled', label: 'abbrechen', icon: 'cancel', color: 'var(--cancelled)', preview: 'cancelled', run: () => changeStatus('cancelled') };
     const down = status === 'open' ? [done, cancelled] : status === 'done' ? [reopen, cancelled] : status === 'cancelled' ? [reopen, done] : [];
     return { right, left: [removeAction], up: [priorityAction], down };
   })();
@@ -291,7 +293,7 @@ export const JournalEntry = memo(function JournalEntry({ layout, entry, day, tra
         if (isOpen) { event.preventDefault(); closeActions(); }
       }
     }}>
-    <button ref={gripRef} type="button" className="entry-grip" aria-label={`${label} verschieben: ${entry.text || 'ohne Text'}`} aria-describedby="entry-reorder-help" title="Zum Verschieben ziehen · Alt + ↑ / ↓" disabled={!canMoveUp && !canMoveDown}
+    <button ref={gripRef} type="button" className="entry-grip" aria-label={t("{0} verschieben: {1}", label, entry.text || t("ohne Text"))} aria-describedby="entry-reorder-help" title={t("Zum Verschieben ziehen · Alt + ↑ / ↓")} disabled={!canMoveUp && !canMoveDown}
       onPointerDown={event => { onOpenChange(entry.id, false); drag.start(event, entry); }} onPointerMove={drag.move} onPointerUp={drag.end} onPointerCancel={drag.cancel} onLostPointerCapture={drag.cancel}><Icon name="grip" /></button>
     {layout === 'swipe' && swipe.phase !== 'idle' && (() => {
       // The symbol stays where it rests and becomes the action's icon (sideways with its word above it); a bar in the action's
@@ -313,7 +315,7 @@ export const JournalEntry = memo(function JournalEntry({ layout, entry, day, tra
     })()}
     <div className="entry-main">
       <div className="entry-actions">
-        <button ref={triggerRef} type="button" className="entry-symbol" aria-label={`Aktionen für ${label}${statusLabel}${entry.priority ? ', hohe Priorität' : ''}: ${entry.text || 'ohne Text'}`} aria-expanded={isOpen} aria-keyshortcuts={layout === 'swipe' ? 'ArrowRight Shift+ArrowRight Control+Shift+ArrowRight ArrowDown Shift+ArrowDown ArrowUp Shift+ArrowLeft' : undefined}
+        <button ref={triggerRef} type="button" className="entry-symbol" aria-label={t("Aktionen für {0}{1}{2}: {3}", label, statusLabel, entry.priority ? t(", hohe Priorität") : '', entry.text || t("ohne Text"))} aria-expanded={isOpen} aria-keyshortcuts={layout === 'swipe' ? 'ArrowRight Shift+ArrowRight Control+Shift+ArrowRight ArrowDown Shift+ArrowDown ArrowUp Shift+ArrowLeft' : undefined}
           {...(layout === 'swipe' ? swipe.handle : {})}
           onClick={event => { if (layout !== 'swipe') onOpenChange(entry.id, !isOpen); else if (event.detail === 0 && status) changeStatus(nextStatus[status]); }}
           onKeyDown={event => {
@@ -328,13 +330,13 @@ export const JournalEntry = memo(function JournalEntry({ layout, entry, day, tra
           {pop?.status === 'done' && <span key={`burst-${pop.key}`} className="symbol-burst" aria-hidden="true" />}
         </button>
       </div>
-      <EntryText entry={entry} label={entry.priority ? `${label} mit hoher Priorität` : label} strike={strike} focusEntryId={focusEntryId} onChange={text => onChange(entry.id, { text })} />
+      <EntryText entry={entry} label={entry.priority ? t("{0} mit hoher Priorität", label) : label} strike={strike} focusEntryId={focusEntryId} onChange={text => onChange(entry.id, { text })} />
       {!trace && (entry.time || entry.reminder || rule) && <button type="button" className="entry-when" title={rule ? describe(rule) : undefined}
-        aria-label={`Termin${entry.time ? ` ${formatSpan(entry.time, entry.end)}` : ''}${entry.reminder ? ', mit Erinnerung' : ''}${rule ? `, ${describe(rule)}` : ''} ändern`} onClick={() => openPlanner()}>
+        aria-label={t("Termin{0}{1}{2} ändern", entry.time ? ` ${formatSpan(entry.time, entry.end)}` : '', entry.reminder ? t(", mit Erinnerung") : '', rule ? `, ${describe(rule)}` : '')} onClick={() => openPlanner()}>
         {entry.time && <span>{formatSpan(entry.time, entry.end)}</span>}{entry.reminder && <Icon name="bell" />}{rule && <Icon name="repeat" className="entry-repeat" />}
       </button>}
-      {trace && <button type="button" className="entry-trace-target" aria-label={`Zum ${formatShortDate(trace.targets[0].date)} springen${trace.repeat?.rule ? `, ${describe(trace.repeat.rule)}` : ''}`} title={trace.repeat?.rule ? describe(trace.repeat.rule) : undefined} onClick={() => onNavigate(trace.targets[0].date)}>
-        <span>{trace.targets.length > 1 ? `${trace.targets.length} Tage` : formatShortDate(trace.targets[0].date)}</span>{trace.time && <span className="entry-trace-time">{formatSpan(trace.time, trace.end)}</span>}{trace.reminder && <Icon name="bell" />}{trace.repeat?.rule && <Icon name="repeat" className="entry-repeat" />}
+      {trace && <button type="button" className="entry-trace-target" aria-label={t("Zum {0} springen{1}", formatShortDate(trace.targets[0].date), trace.repeat?.rule ? `, ${describe(trace.repeat.rule)}` : '')} title={trace.repeat?.rule ? describe(trace.repeat.rule) : undefined} onClick={() => onNavigate(trace.targets[0].date)}>
+        <span>{trace.targets.length > 1 ? t("{0} Tage", trace.targets.length) : formatShortDate(trace.targets[0].date)}</span>{trace.time && <span className="entry-trace-time">{formatSpan(trace.time, trace.end)}</span>}{trace.reminder && <Icon name="bell" />}{trace.repeat?.rule && <Icon name="repeat" className="entry-repeat" />}
       </button>}
     </div>
     {scopeAsk && !fromSatellite && scopeChoice()}

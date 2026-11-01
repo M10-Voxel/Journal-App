@@ -1,3 +1,4 @@
+import { t, useLanguage } from '../i18n';
 import { useEffect, useState } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { localDate } from '../journal';
@@ -9,6 +10,7 @@ import { Icon } from './Icon';
 // The compact month window: a small, separate window to jump to days with one click (like the calendar in
 // the macOS menu bar). It follows the journal's month and can stay on top of other windows.
 export function MiniCalendar() {
+  useLanguage();
   const today = localDate(useNow());
   const journalDate = useJournalDate();
   const [month, setMonth] = useState(today.slice(0, 7));
@@ -36,10 +38,10 @@ export function MiniCalendar() {
     <header className="mini-head">
       <h1 className="cal-title" key={month}><strong>{formatMonthName(`${month}-01`)}</strong> <span>{month.slice(0, 4)}</span></h1>
       <div className="mini-actions">
-        <button type="button" className="cal-icon-button" aria-label="Vorheriger Monat" title="Vorheriger Monat · Bild ↑" onClick={() => setMonth(shiftMonth(month, -1))}><Icon name="left" /></button>
-        <button type="button" className="cal-today" title="Heute · H" disabled={month === today.slice(0, 7)} onClick={() => setMonth(today.slice(0, 7))}>Heute</button>
-        <button type="button" className="cal-icon-button" aria-label="Nächster Monat" title="Nächster Monat · Bild ↓" onClick={() => setMonth(shiftMonth(month, 1))}><Icon name="right" /></button>
-        <button type="button" className={`cal-icon-button mini-pin${pinned ? ' is-on' : ''}`} aria-pressed={pinned} aria-label="Immer im Vordergrund" title="Immer im Vordergrund" onClick={togglePin}><Icon name="pin" /></button>
+        <button type="button" className="cal-icon-button" aria-label={t("Vorheriger Monat")} title={t("Vorheriger Monat · Bild ↑")} onClick={() => setMonth(shiftMonth(month, -1))}><Icon name="left" /></button>
+        <button type="button" className="cal-today" title={t("Heute · H")} disabled={month === today.slice(0, 7)} onClick={() => setMonth(today.slice(0, 7))}>{t("Heute")}</button>
+        <button type="button" className="cal-icon-button" aria-label={t("Nächster Monat")} title={t("Nächster Monat · Bild ↓")} onClick={() => setMonth(shiftMonth(month, 1))}><Icon name="right" /></button>
+        <button type="button" className={`cal-icon-button mini-pin${pinned ? ' is-on' : ''}`} aria-pressed={pinned} aria-label={t("Immer im Vordergrund")} title={t("Immer im Vordergrund")} onClick={togglePin}><Icon name="pin" /></button>
       </div>
     </header>
     {error && <div className="cal-error" role="alert">{error}</div>}

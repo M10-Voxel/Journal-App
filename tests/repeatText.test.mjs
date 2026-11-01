@@ -60,10 +60,10 @@ test('birthdays by date, holidays by weekday position or Easter', () => {
 test('the word being typed is completed', () => {
   assert.equal(completion('jeden Mit'), 'twoch');
   assert.equal(completion('alle 3 Wo'), 'chen');
-  assert.equal(completion('every 2 we'), 'eks');
-  assert.equal(completion('on wed'), 'nesday');
+  assert.equal(completion('every 2 we', 'en'), 'eks');
+  assert.equal(completion('on wed', 'en'), 'nesday');
   assert.equal(completion('jeden Mittwoch im Mä'), 'rz');
-  assert.equal(completion('good fr'), 'iday');
+  assert.equal(completion('good fr', 'en'), 'iday');
   assert.equal(completion('Karf'), 'reitag');
   assert.equal(completion('jeden Mittwoch'), 's', 'A longer known word still completes.');
   assert.equal(completion('alle 3 '), '');
@@ -129,7 +129,7 @@ test('suggestions like an editor: beginnings first, then letters in order, with 
   assert.equal(suggestions('jeden Mit')[0].description, 'Wochentag');
   assert.deepEqual(suggestions('jeden Mit')[0].matches, [0, 1, 2]);
   assert.equal(words('alle 3 Wo')[0], 'Wochen', 'In the plural after a number above one.');
-  assert.equal(words('every 2 we')[0], 'weeks');
+  assert.equal(suggestions('every 2 we', 6, 'en')[0].word, 'weeks');
   assert.ok(words('jeden mtw').includes('Mittwoch'), 'Letters in order also match.');
   assert.deepEqual(suggestions('jeden mtw').find(item => item.word === 'Mittwoch').matches, [0, 2, 4]);
   assert.equal(suggestions('Karf')[0].description, 'Feiertag · Ostern −2');

@@ -141,15 +141,15 @@ pub fn plain(text: &str) -> String {
 
 /// "Aufgabe · 14:15–15:00 · Sa., 31.10. · verpasst".
 pub fn describe(reminder: &Reminder, today: &str) -> String {
-    let mut parts = vec![if reminder.kind == "task" { "Aufgabe".to_string() } else { "Ereignis".to_string() }];
+    let mut parts = vec![if reminder.kind == "task" { crate::ui_language::text("Aufgabe","Task").to_string() } else { crate::ui_language::text("Ereignis","Event").to_string() }];
     if let Some(time) = &reminder.time { parts.push(match &reminder.end { Some(end) => format!("{time}–{end}"), None => time.clone() }); }
     if reminder.date != today {
         if let Ok(date) = chrono::NaiveDate::parse_from_str(&reminder.date, "%Y-%m-%d") {
-            const DAYS: [&str; 7] = ["Mo.", "Di.", "Mi.", "Do.", "Fr.", "Sa.", "So."];
-            parts.push(format!("{} {}", DAYS[chrono::Datelike::weekday(&date).num_days_from_monday() as usize], date.format("%d.%m.")));
+            let days = if crate::ui_language::text("de","en")=="en" { ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] } else { ["Mo.", "Di.", "Mi.", "Do.", "Fr.", "Sa.", "So."] };
+            parts.push(format!("{} {}", days[chrono::Datelike::weekday(&date).num_days_from_monday() as usize], date.format("%d.%m.")));
         }
     }
-    if reminder.snoozed { parts.push("erneut".into()); } else if reminder.late { parts.push("verpasst".into()); }
+    if reminder.snoozed { parts.push(crate::ui_language::text("erneut","again").into()); } else if reminder.late { parts.push(crate::ui_language::text("verpasst","missed").into()); }
     parts.join(" · ")
 }
 
@@ -192,14 +192,17 @@ mod toast {
         let toasts = app.try_state::<Toasts>().ok_or_else(|| windows::core::Error::from_hresult(windows::core::HRESULT(0x8000_4005_u32 as i32)))?;
         let today = chrono::Local::now().date_naive().to_string();
         let icon = toasts.icons.join(if reminder.kind == "task" { "reminder-task.png" } else { "reminder-event.png" });
-        let done = if reminder.kind == "task" { r#"<action content="Erledigt" arguments="done" activationType="foreground"/>"# } else { "" };
+        let done = if reminder.kind == "task" { format!(r#"<action content="{}" arguments="done" activationType="foreground"/>"#,crate::ui_language::text("Erledigt","Completed")) } else { String::new() };
+        let attribution=crate::ui_language::text("Erinnerung","Reminder");
+        let later=crate::ui_language::text("Min. später","min later");
+        let open=crate::ui_language::text("Öffnen","Open");
         // "reminder" keeps it on screen until answered, with the reminder sound.
         let xml = format!(r#"<toast scenario="reminder" launch="open" activationType="foreground">
             <visual><binding template="ToastGeneric">
-              <text hint-maxLines="2">{title}</text><text>{line}</text><text placement="attribution">Erinnerung</text>
+              <text hint-maxLines="2">{title}</text><text>{line}</text><text placement="attribution">{attribution}</text>
               <image placement="appLogoOverride" src="file:///{icon}"/>
             </binding></visual>
-            <actions>{done}<action content="{SNOOZE_MINUTES} Min. später" arguments="snooze" activationType="foreground"/><action content="Öffnen" arguments="open" activationType="foreground"/></actions>
+            <actions>{done}<action content="{SNOOZE_MINUTES} {later}" arguments="snooze" activationType="foreground"/><action content="{open}" arguments="open" activationType="foreground"/></actions>
             <audio src="ms-winsoundevent:Notification.Reminder"/>
           </toast>"#, title = escape(&plain(&reminder.text)), line = escape(&describe(reminder, &today)), icon = escape(&icon.to_string_lossy().replace('\\', "/")));
         let document = XmlDocument::new()?;

@@ -1,3 +1,4 @@
+import { t, useLanguage, getLanguage } from '../i18n';
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import type { CSSProperties, KeyboardEvent } from 'react';
 import { invoke } from '@tauri-apps/api/core';
@@ -62,7 +63,7 @@ export function entrySymbol(entry: Entry): IconName {
   if (entry.done) return 'done';
   return entry.priority ? priorityIcon(entry.kind) : entry.kind;
 }
-export const entryTitle = (entry: Entry) => `${entryLabels[entry.kind]}${entry.time ? entry.end ? ` von ${entry.time} bis ${entry.end}` : ` um ${entry.time}` : ''}${entry.done ? ', erledigt' : entry.cancelled ? ', abgebrochen' : ''}${entry.repeat?.rule ? `, ${describe(entry.repeat.rule)}` : ''}: ${plainText(entry.text) || 'ohne Text'}`;
+export const entryTitle = (entry: Entry) => `${entryLabels()[entry.kind]}${entry.time ? entry.end ? t(" von {0} bis {1}", entry.time, entry.end) : t(" um {0}", entry.time) : ''}${entry.done ? t(", erledigt") : entry.cancelled ? t(", abgebrochen") : ''}${entry.repeat?.rule ? `, ${describe(entry.repeat.rule)}` : ''}: ${plainText(entry.text) || t("ohne Text")}`;
 
 /** How fast the time scrolls when it does not fit (px per second). */
 const tickerSpeed = 36;
@@ -89,32 +90,34 @@ function measureTime(item: HTMLElement) {
 /** One entry: its journal symbol and the text. Events are filled bars, tasks and notes lines (like Samsung's calendar). */
 /** `night`: a block past midnight – `start` on its own day (cut at 24:00), `rest` its continuation on the next. */
 export function CalendarItem({ entry, date, variant = 'line', short = false, style, night }: { entry: Entry; date: string; variant?: 'line' | 'block'; short?: boolean; style?: CSSProperties; night?: 'start' | 'rest' }) {
+  useLanguage();
   const open = useContext(OpenInJournal);
   const { edit, editingId } = useContext(EditInCalendar);
   const state = entry.done ? ' is-done' : entry.cancelled ? ' is-cancelled' : '';
   return <button type="button" className={`cal-item is-${entry.kind} is-${variant}${short ? ' is-short' : ''}${state}${entry.priority ? ' is-priority' : ''}${editingId === entry.id ? ' is-editing' : ''}${night ? ` is-night-${night}` : ''}`} style={style}
-    title={`${entryTitle(entry)}${entry.description ? `\n${entry.description}` : ''} · Im Journal zeigen${edit ? ' · Rechtsklick: bearbeiten' : ''}`} aria-label={`${entryTitle(entry)}. Im Journal zeigen`}
+    title={t("{0}{1} · Im Journal zeigen{2}", entryTitle(entry), entry.description ? `\n${entry.description}` : '', edit ? t(" · Rechtsklick: bearbeiten") : '')} aria-label={t("{0}. Im Journal zeigen", entryTitle(entry))}
     onContextMenu={event => { if (!edit) return; event.preventDefault(); event.stopPropagation(); edit(entry, date, event.currentTarget); }}
     onKeyDown={event => { if (edit && (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10'))) { event.preventDefault(); edit(entry, date, event.currentTarget); } }}
     onPointerEnter={event => measureTime(event.currentTarget)} onFocus={event => measureTime(event.currentTarget)}
     onClick={event => { event.stopPropagation(); open(date, entry.id); }} onDoubleClick={event => event.stopPropagation()}>
     <Icon name={entrySymbol(entry)} />
-    <span className="cal-item-text">{plainText(entry.text) || 'ohne Text'}</span>
+    <span className="cal-item-text">{plainText(entry.text) || t("ohne Text")}</span>
     {entry.time && <time className="cal-item-time" aria-hidden="true"><span>{formatSpan(entry.time, entry.end)}</span></time>}
   </button>;
 }
 
-const weekdayInitials = ['M', 'D', 'M', 'D', 'F', 'S', 'S'];
+const weekdayInitials = () => getLanguage() === 'en' ? ['M','T','W','T','F','S','S'] : ['M','D','M','D','F','S','S'];
 /** Up to three dots below a day number: events, open tasks, and everything else. */
 function DayDots({ day }: { day: CalendarDay | undefined }) {
+  useLanguage();
   if (!day?.entries.length) return null;
   const has = { event: day.entries.some(entry => entry.kind === 'event'), task: day.entries.some(entry => entry.kind === 'task' && !entry.done && !entry.cancelled), other: day.entries.some(entry => entry.kind === 'note' || entry.done || entry.cancelled) };
   return <span className="cal-dots" aria-hidden="true">{has.event && <i className="is-event" />}{has.task && <i className="is-task" />}{has.other && <i />}</span>;
 }
 export function dayLabel(date: string, day: CalendarDay | undefined): string {
   const count = day?.entries.length ?? 0;
-  const lines = day?.entries.slice(0, 6).map(entry => `${entry.time ? `${entry.time} ` : ''}${plainText(entry.text) || 'ohne Text'}`) ?? [];
-  return [`${formatShortDate(date)}${day?.title ? ` · ${day.title}` : ''} · ${count ? `${count} ${count === 1 ? 'Eintrag' : 'Einträge'}` : 'keine Einträge'}`, ...lines, ...count > 6 ? ['…'] : []].join('\n');
+  const lines = day?.entries.slice(0, 6).map(entry => `${entry.time ? `${entry.time} ` : ''}${plainText(entry.text) || t("ohne Text")}`) ?? [];
+  return [`${formatShortDate(date)}${day?.title ? ` · ${day.title}` : ''} · ${count ? `${count} ${count === 1 ? t("Eintrag") : t("Einträge")}` : t("keine Einträge")}`, ...lines, ...count > 6 ? ['…'] : []].join('\n');
 }
 
 /**
@@ -124,6 +127,7 @@ export function dayLabel(date: string, day: CalendarDay | undefined): string {
 export function CompactMonth({ month, days, today, selected, onPick, onMonth }: {
   month: string; days: Map<string, CalendarDay>; today: string; selected: string | null; onPick: (date: string) => void; onMonth: (month: string) => void;
 }) {
+  useLanguage();
   const [focus, setFocus] = useState<string | null>(null);
   const gridRef = useRef<HTMLDivElement>(null);
   const moved = useRef(false);
@@ -147,8 +151,8 @@ export function CompactMonth({ month, days, today, selected, onPick, onMonth }: 
     event.stopPropagation();
   }
   return <div className="cal-compact">
-    <div className="cal-compact-weekdays" aria-hidden="true">{weekdayInitials.map((initial, index) => <span key={index} className={index === 5 ? 'is-saturday' : index === 6 ? 'is-sunday' : undefined}>{initial}</span>)}</div>
-    <div ref={gridRef} className="cal-compact-grid" role="grid" aria-label="Tage des Monats" onKeyDown={onKeyDown} key={month}>
+    <div className="cal-compact-weekdays" aria-hidden="true">{weekdayInitials().map((initial, index) => <span key={index} className={index === 5 ? 'is-saturday' : index === 6 ? 'is-sunday' : undefined}>{initial}</span>)}</div>
+    <div ref={gridRef} className="cal-compact-grid" role="grid" aria-label={t("Tage des Monats")} onKeyDown={onKeyDown} key={month}>
       {monthGrid(month).map((date, index) => {
         const outside = !date.startsWith(month);
         const classes = `cal-compact-day${outside ? ' is-outside' : ''}${date === today ? ' is-today' : ''}${index % 7 === 5 ? ' is-saturday' : index % 7 === 6 ? ' is-sunday' : ''}`;

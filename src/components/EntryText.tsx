@@ -1,3 +1,4 @@
+import { t, useLanguage } from '../i18n';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { Entry } from '../journal';
@@ -12,6 +13,7 @@ const shiftStyleKeys: Record<string, Style> = { KeyX: 'strike', KeyH: 'highlight
 
 // `strike` is 'ghost' while a cancel action is only being previewed.
 export function EntryText({ entry, label, strike, readOnly = false, onChange, focusEntryId }: { entry: Entry; label: string; strike: 'solid' | 'ghost' | null; readOnly?: boolean; onChange: (text: string) => void; focusEntryId: { current: string | null } }) {
+  useLanguage();
   const containerRef = useRef<HTMLDivElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
   const editor = useRef<EntryEditor | null>(null);
@@ -20,7 +22,7 @@ export function EntryText({ entry, label, strike, readOnly = false, onChange, fo
   const measureRef = useRef<() => void>(() => {});
   const [lines, setLines] = useState<StrikeLine[]>([]);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
-  const ariaLabel = readOnly ? `${label} (geplant, Spur)` : `${label} bearbeiten`;
+  const ariaLabel = readOnly ? t("{0} (geplant, Spur)", label) : t("{0} bearbeiten", label);
 
   useLayoutEffect(() => {
     const instance = createEntryEditor({

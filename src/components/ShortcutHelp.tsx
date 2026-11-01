@@ -1,3 +1,4 @@
+import { t, useLanguage } from '../i18n';
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { Icon } from './Icon';
 import type { IconName } from './Icon';
@@ -8,66 +9,68 @@ import type { IconName } from './Icon';
 // cursor; Ctrl formats text like in any editor.
 //
 // Keys are written as `Alt+⇧+T` (pressed together) and `← / →` (either); `~Klick` marks a mouse or touch gesture.
-export const shortcutGroups: { id: string; title: string; icon: IconName; items: [keys: string, label: string][] }[] = [
-  { id: 'days', title: 'Tage', icon: 'journal', items: [
-    ['Alt+←', 'Vorheriger Tag'], ['Alt+→', 'Nächster Tag'], ['Alt+H', 'Heute'], ['Strg+G', 'Gehe zu Datum (Mini-Kalender)'],
-    ['~Wischen / ⇧+~Mausrad', 'Tag zurück / weiter'], ['Strg+S', 'Sofort speichern (sonst von selbst)'], ['Strg+,', 'Einstellungen'], ['F1 / ?', 'Diese Übersicht'],
+export const shortcutGroups = (): { id: string; title: string; icon: IconName; items: [keys: string, label: string][] }[] => ([
+  { id: 'days', title: t("Tage"), icon: 'journal', items: [
+    ['Alt+←', t("Vorheriger Tag")], ['Alt+→', t("Nächster Tag")], ['Alt+H', t("Heute")], ['Strg+G', t("Gehe zu Datum (Mini-Kalender)")],
+    [t("~Wischen / ⇧+~Mausrad"), t("Tag zurück / weiter")], ['Strg+S', t("Sofort speichern (sonst von selbst)")], ['Strg+,', t("Einstellungen")], ['F1 / ?', t("Diese Übersicht")],
   ] },
-  { id: 'entries', title: 'Einträge', icon: 'task', items: [
-    ['Alt+A', 'Neue Aufgabe'], ['Alt+E', 'Neues Ereignis'], ['Alt+N', 'Neue Notiz'],
-    ['Enter', 'Neuer Eintrag darunter'], ['⇧+Enter', 'Zeilenumbruch'], ['⌫', 'Leeren Eintrag löschen'],
-    ['Strg+↑ / Strg+↓', 'Zum Eintrag darüber / darunter'], ['Alt+↑ / Alt+↓', 'Eintrag verschieben'],
+  { id: 'entries', title: t("Einträge"), icon: 'task', items: [
+    ['Alt+A', t("Neue Aufgabe")], ['Alt+E', t("Neues Ereignis")], ['Alt+N', t("Neue Notiz")],
+    ['Enter', t("Neuer Eintrag darunter")], ['⇧+Enter', 'Zeilenumbruch'], ['⌫', t("Leeren Eintrag löschen")],
+    ['Strg+↑ / Strg+↓', t("Zum Eintrag darüber / darunter")], ['Alt+↑ / Alt+↓', t("Eintrag verschieben")],
   ] },
-  { id: 'entry', title: 'Aktueller Eintrag', icon: 'event', items: [
-    ['Alt+D', 'Erledigt'], ['Alt+X', 'Abbrechen'], ['Alt+P', 'Priorität'], ['Alt+M', 'Auf morgen'],
-    ['Alt+T', 'Planen · bei einer Spur: zum Tag springen'], ['Alt+⇧+T', 'Mehrere Tage planen'], ['Alt+U', 'Uhrzeit'], ['Alt+W', 'Wiederholen'],
-    ['Alt+⇧+E', 'Als Ereignis'], ['Alt+⇧+A', 'Als Aufgabe'], ['Alt+⇧+N', 'Als Notiz'],
-    ['Alt+Enter', 'Aktionen öffnen'], ['Alt+Entf', 'Löschen (verknüpfte: ← / → und Enter wählen)'],
+  { id: 'entry', title: t("Aktueller Eintrag"), icon: 'event', items: [
+    ['Alt+D', t("Erledigt")], ['Alt+X', t("Abbrechen")], ['Alt+P', t("Priorität")], ['Alt+M', t("Auf morgen")],
+    ['Alt+T', t("Planen · bei einer Spur: zum Tag springen")], ['Alt+⇧+T', t("Mehrere Tage planen")], ['Alt+U', t("Uhrzeit")], ['Alt+W', t("Wiederholen")],
+    ['Alt+⇧+E', t("Als Ereignis")], ['Alt+⇧+A', t("Als Aufgabe")], ['Alt+⇧+N', t("Als Notiz")],
+    ['Alt+Enter', t("Aktionen öffnen")], ['Alt+Entf', t("Löschen (verknüpfte: ← / → und Enter wählen)")],
   ] },
-  { id: 'swipe', title: 'Wischen', icon: 'right', items: [
-    ['→', 'Auf morgen'], ['⇧+→', 'Planen'], ['Strg+⇧+→', 'Mehrere Tage'], ['↓', 'Erledigt'], ['⇧+↓', 'Abbrechen'],
-    ['↑', 'Priorität'], ['⇧+←', 'Löschen'], ['~Antippen', 'Aufgabe weiterschalten'],
+  { id: 'swipe', title: t("Wischen"), icon: 'right', items: [
+    ['→', t("Auf morgen")], ['⇧+→', t("Planen")], ['Strg+⇧+→', t("Mehrere Tage")], ['↓', t("Erledigt")], ['⇧+↓', t("Abbrechen")],
+    ['↑', t("Priorität")], ['⇧+←', t("Löschen")], ['~Antippen', t("Aufgabe weiterschalten")],
   ] },
-  { id: 'text', title: 'Text', icon: 'pencil', items: [
+  { id: 'text', title: t("Text"), icon: 'pencil', items: [
     ['Strg+B', '**Fett**'], ['Strg+I', '*Kursiv*'], ['Strg+⇧+X', '~~Durchgestrichen~~'], ['Strg+⇧+H', '==Markiert=='],
-    ['Alt+1–8', 'Farbe: [Text]{rot} …'], ['Alt+0', 'Farbe entfernen'], ['~Rechtsklick', 'Format-Menü (mit Auswahl)'], ['Strg+Z', 'Rückgängig'],
+    ['Alt+1–8', 'Farbe: [Text]{rot} …'], ['Alt+0', t("Farbe entfernen")], ['~Rechtsklick', t("Format-Menü (mit Auswahl)")], ['Strg+Z', t("Rückgängig")],
   ] },
-  { id: 'planner', title: 'Planen & Uhr', icon: 'calendar', items: [
-    ['← / → / ↑ / ↓', 'Tag wählen'], ['Bild↑ / Bild↓', 'Monat'], ['H', 'Heute'], ['U', 'Kalender ⇄ Uhr'], ['W', 'Wiederholen'], ['E', 'Erinnern'],
-    ['Enter', 'Planen'], ['Esc', 'Zurück'],
-    ['0–9', 'Uhr: Uhrzeit tippen'], ['Tab', 'Uhr: Stunden ⇄ Minuten'], ['↑ / ↓', 'Uhr: Stunde/Minute ändern'], ['Entf', 'Uhrzeit entfernen'],
-    ['~Klick / Leertaste', 'Mehrere Tage: Bereich von – bis'], ['~Rechtsklick / ⇧+Leertaste', 'Mehrere Tage: Tag heraus / dazu'],
+  { id: 'planner', title: t("Planen & Uhr"), icon: 'calendar', items: [
+    ['← / → / ↑ / ↓', t("Tag wählen")], ['Bild↑ / Bild↓', t("Monat")], ['H', t("Heute")], ['U', t("Kalender ⇄ Uhr")], ['W', t("Wiederholen")], ['E', t("Erinnern")],
+    ['Enter', t("Planen")], ['Esc', t("Zurück")],
+    ['0–9', t("Uhr: Uhrzeit tippen")], ['Tab', t("Uhr: Stunden ⇄ Minuten")], ['↑ / ↓', t("Uhr: Stunde/Minute ändern")], [t("Entf"), t("Uhrzeit entfernen")],
+    [t("~Klick / Leertaste"), t("Mehrere Tage: Bereich von – bis")], [t("~Rechtsklick / ⇧+Leertaste"), t("Mehrere Tage: Tag heraus / dazu")],
   ] },
-  { id: 'repeat', title: 'Wiederholen', icon: 'repeat', items: [
-    ['← / →', 'Tag · Woche · Monat · Jahr'], ['↑ / ↓', 'Alle n'], ['1–7', 'Wochentage Mo – So'], ['P', 'Pause (z. B. 3 an, 1 aus)'],
-    ['/', 'In Worten schreiben (Deutsch oder Englisch)'], ['↑ / ↓', 'Beim Schreiben: Vorschlag wählen'], ['Tab / Enter', 'Beim Schreiben: Vorschlag übernehmen'],
-    ['Entf', 'Nicht wiederholen'], ['Enter', 'Übernehmen'], ['Esc', 'Zurück'],
+  { id: 'repeat', title: t("Wiederholen"), icon: 'repeat', items: [
+    ['← / →', t("Tag · Woche · Monat · Jahr")], ['↑ / ↓', t("Alle n")], ['1–7', t("Wochentage Mo – So")], ['P', t("Pause (z. B. 3 an, 1 aus)")],
+    ['/', t("In Worten schreiben (Deutsch oder Englisch)")], ['↑ / ↓', t("Beim Schreiben: Vorschlag wählen")], ['Tab / Enter', t("Beim Schreiben: Vorschlag übernehmen")],
+    [t("Entf"), t("Nicht wiederholen")], ['Enter', t("Übernehmen")], ['Esc', t("Zurück")],
   ] },
-  { id: 'calendar', title: 'Kalender', icon: 'month', items: [
-    ['J / M / W / A / T', 'Jahr · Monat · Woche · Mo–Fr · Tag'], ['1–5', 'Ansicht'], ['← / → / ~Wischen', 'Zurück / weiter'], ['H', 'Heute'],
-    ['~Klick', 'Tag oder Eintrag im Journal zeigen'], ['~Rand ziehen', 'Breite (Doppelklick: zurücksetzen)'],
-    ['~Ziehen im Raster', 'Termin eintragen – auch über Mitternacht in den nächsten Tag'], ['~Rechtsklick', 'Eintrag bearbeiten'], ['Alt+Entf', 'Eintrag löschen'],
-    ['↑ / ↓', 'Termin verschieben'], ['⇧+↑ / ⇧+↓', 'Ende verschieben'],
-    ['Alt+K', 'Als Kalendereintrag'], ['Alt+E', 'Als Ereignis'], ['Alt+A', 'Als Aufgabe'], ['Alt+P', 'Priorität'],
+  { id: 'calendar', title: t("Kalender"), icon: 'month', items: [
+    ['J / M / W / A / T', t("Jahr · Monat · Woche · Mo–Fr · Tag")], ['1–5', 'Ansicht'], [t("← / → / ~Wischen"), t("Zurück / weiter")], ['H', t("Heute")],
+    ['~Klick', t("Tag oder Eintrag im Journal zeigen")], [t("~Rand ziehen"), t("Breite (Doppelklick: zurücksetzen)")],
+    [t("~Ziehen im Raster"), t("Termin eintragen – auch über Mitternacht in den nächsten Tag")], ['~Rechtsklick', t("Eintrag bearbeiten")], ['Alt+Entf', t("Eintrag löschen")],
+    ['↑ / ↓', t("Termin verschieben")], ['⇧+↑ / ⇧+↓', t("Ende verschieben")],
+    ['Alt+K', t("Als Kalendereintrag")], ['Alt+E', t("Als Ereignis")], ['Alt+A', t("Als Aufgabe")], ['Alt+P', t("Priorität")],
   ] },
-];
+]);
 
 /** `Alt+⇧+T / Strg+G`: chips for keys pressed together, "oder" between alternatives, gestures in their own look. */
 function Keys({ keys }: { keys: string }) {
+  useLanguage();
   return <span className="shortcut-keys">{keys.split(' / ').map((combo, index) => <Fragment key={combo}>
-    {index > 0 && <span className="shortcut-or">oder</span>}
+    {index > 0 && <span className="shortcut-or">{t("oder")}</span>}
     <span className="shortcut-combo">{combo.split('+').map(key => key.startsWith('~')
       ? <span key={key} className="shortcut-gesture">{key.slice(1)}</span>
-      : <kbd key={key}>{key}</kbd>)}</span>
+      : <kbd key={key}>{t(key)}</kbd>)}</span>
   </Fragment>)}</span>;
 }
 
 // Like the settings (and Zed's keymap): pages on the left, each shortcut as a row – what it does, then its keys.
 // Typing searches all pages; ↑/↓ change the page.
 export function ShortcutHelp({ onClose }: { onClose: () => void }) {
+  useLanguage();
   const dialogRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
-  const [page, setPage] = useState(shortcutGroups[0].id);
+  const [page, setPage] = useState(shortcutGroups()[0].id);
   const [query, setQuery] = useState('');
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
@@ -75,38 +78,38 @@ export function ShortcutHelp({ onClose }: { onClose: () => void }) {
     return () => previous?.focus({ preventScroll: true });
   }, []);
   const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  const matching = (keys: string, label: string) => words.every(word => `${label} ${keys}`.toLowerCase().replace(/~/g, '').includes(word));
-  const shown = words.length ? shortcutGroups.map(group => ({ ...group, items: group.items.filter(([keys, label]) => matching(keys, label)) })).filter(group => group.items.length)
-    : shortcutGroups.filter(group => group.id === page);
+  const matching = (keys: string, label: string) => words.every(word => `${label} ${t(keys)}`.toLowerCase().replace(/~/g, '').includes(word));
+  const shown = words.length ? shortcutGroups().map(group => ({ ...group, items: group.items.filter(([keys, label]) => matching(keys, label)) })).filter(group => group.items.length)
+    : shortcutGroups().filter(group => group.id === page);
   function turn(step: number) {
-    const index = shortcutGroups.findIndex(group => group.id === page);
-    setPage(shortcutGroups[(index + step + shortcutGroups.length) % shortcutGroups.length].id);
+    const index = shortcutGroups().findIndex(group => group.id === page);
+    setPage(shortcutGroups()[(index + step + shortcutGroups().length) % shortcutGroups().length].id);
     setQuery('');
   }
   return <div className="shortcut-backdrop" onPointerDown={event => { if (event.target === event.currentTarget) onClose(); }}>
-    <div ref={dialogRef} className="shortcuts dialog-panes" role="dialog" aria-modal="true" aria-label="Tastenkürzel" tabIndex={-1}
+    <div ref={dialogRef} className="shortcuts dialog-panes" role="dialog" aria-modal="true" aria-label={t("Tastenkürzel")} tabIndex={-1}
       onKeyDown={event => {
         if (event.key === 'Escape' && query) { event.preventDefault(); event.stopPropagation(); setQuery(''); }
         else if (event.key === 'Escape' || event.key === 'F1') { event.preventDefault(); event.stopPropagation(); onClose(); }
         else if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && !query) { event.preventDefault(); turn(event.key === 'ArrowDown' ? 1 : -1); }
       }}>
       <div className="settings-head">
-        <Icon name="settings" /><strong>Tastenkürzel</strong>
-        <label className="shortcut-search"><Icon name="search" /><input ref={searchRef} value={query} placeholder="Suchen … (z. B. Uhr, Alt T)" aria-label="Tastenkürzel suchen"
+        <Icon name="settings" /><strong>{t("Tastenkürzel")}</strong>
+        <label className="shortcut-search"><Icon name="search" /><input ref={searchRef} value={query} placeholder={t("Suchen … (z. B. Uhr, Alt T)")} aria-label={t("Tastenkürzel suchen")}
           onChange={event => setQuery(event.target.value)} /></label>
         <span className="settings-keys"><kbd>F1</kbd></span>
-        <button type="button" className="settings-close" aria-label="Tastenkürzel schließen" title="Schließen · Esc" onClick={onClose}><Icon name="done" /></button>
+        <button type="button" className="settings-close" aria-label={t("Tastenkürzel schließen")} title={t("Schließen · Esc")} onClick={onClose}><Icon name="done" /></button>
       </div>
       <div className="settings-body">
-        <div className="settings-tabs" role="tablist" aria-label="Bereich" aria-orientation="vertical">
-          {shortcutGroups.map(group => <button key={group.id} type="button" role="tab" aria-selected={!words.length && group.id === page} tabIndex={group.id === page ? 0 : -1}
+        <div className="settings-tabs" role="tablist" aria-label={t("Bereich")} aria-orientation="vertical">
+          {shortcutGroups().map(group => <button key={group.id} type="button" role="tab" aria-selected={!words.length && group.id === page} tabIndex={group.id === page ? 0 : -1}
             onClick={() => { setPage(group.id); setQuery(''); searchRef.current?.focus(); }}><Icon name={group.icon} />{group.title}</button>)}
         </div>
-        <div className="settings-panel shortcut-pages" role="tabpanel" aria-label={words.length ? 'Suchergebnisse' : shortcutGroups.find(group => group.id === page)!.title}>
+        <div className="settings-panel shortcut-pages" role="tabpanel" aria-label={words.length ? t("Suchergebnisse") : shortcutGroups().find(group => group.id === page)!.title}>
           {shown.length ? shown.map(group => <section key={group.id}>
             {words.length > 0 && <h3>{group.title}</h3>}
             {group.items.map(([keys, label]) => <div className="shortcut" key={`${keys}-${label}`}><span className="shortcut-label">{label}</span><Keys keys={keys} /></div>)}
-          </section>) : <p className="settings-hint">Kein Kürzel passt zu „{query}“.</p>}
+          </section>) : <p className="settings-hint">{t("Kein Kürzel passt zu „")}{query}“.</p>}
         </div>
       </div>
     </div>

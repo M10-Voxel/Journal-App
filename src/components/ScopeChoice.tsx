@@ -1,19 +1,20 @@
+import { t, useLanguage } from '../i18n';
 import { useEffect, useRef } from 'react';
 import type { CSSProperties, KeyboardEvent } from 'react';
 import type { ScopeAction, ScopeOption } from '../planning';
 import { formatShortDate } from '../dates';
 import { Icon, IconName } from './Icon';
 
-const actionLabels: Record<ScopeAction, { label: string; icon: IconName }> = {
-  remove: { label: 'Löschen', icon: 'trash' }, done: { label: 'Erledigt', icon: 'check' }, cancelled: { label: 'Abbrechen', icon: 'cancel' },
-};
+const actionLabels = (): Record<ScopeAction, { label: string; icon: IconName }> => ({
+  remove: { label: t("Löschen"), icon: 'trash' }, done: { label: t("Erledigt"), icon: 'check' }, cancelled: { label: t("Abbrechen"), icon: 'cancel' },
+});
 export function scopeLabel(option: ScopeOption): string {
   const count = option.others.length;
-  if (option.scope === 'this') return 'Nur diesen';
-  if (option.scope === 'following') return count === 1 ? 'Auch den folgenden' : `Auch die ${count} folgenden`;
-  return `Alle ${count + 1}`;
+  if (option.scope === 'this') return t("Nur diesen");
+  if (option.scope === 'following') return count === 1 ? t("Auch den folgenden") : t("Auch die {0} folgenden", count);
+  return t("Alle {0}", count + 1);
 }
-const scopeTip = (option: ScopeOption) => option.others.length ? option.others.map(other => formatShortDate(other.date)).join(', ') : 'Die anderen bleiben, wie sie sind';
+const scopeTip = (option: ScopeOption) => option.others.length ? option.others.map(other => formatShortDate(other.date)).join(', ') : t("Die anderen bleiben, wie sie sind");
 
 /**
  * When an action on a linked entry (a trace, a moved copy, one of several days) could reach the others too: a small pill
@@ -25,8 +26,9 @@ const scopeTip = (option: ScopeOption) => option.others.length ? option.others.m
 export function ScopeChoice({ action, options, onChoose, onCancel, variant = 'pill', className = '' }: {
   action: ScopeAction; options: ScopeOption[]; onChoose: (option: ScopeOption) => void; onCancel: () => void; variant?: 'pill' | 'satellite'; className?: string;
 }) {
+  useLanguage();
   const rootRef = useRef<HTMLDivElement>(null);
-  const { label, icon } = actionLabels[action];
+  const { label, icon } = actionLabels()[action];
   useEffect(() => { rootRef.current?.querySelector<HTMLButtonElement>('button')?.focus({ preventScroll: true }); }, []);
   function onKeyDown(event: KeyboardEvent) {
     const buttons = [...rootRef.current?.querySelectorAll<HTMLButtonElement>('button') ?? []];
@@ -37,7 +39,7 @@ export function ScopeChoice({ action, options, onChoose, onCancel, variant = 'pi
     event.preventDefault();
     event.stopPropagation();
   }
-  return <div ref={rootRef} className={`scope-choice is-${action} is-${variant} ${className}`} role="dialog" aria-label={`${label}: auch für verknüpfte Termine?`} onKeyDown={onKeyDown}
+  return <div ref={rootRef} className={`scope-choice is-${action} is-${variant} ${className}`} role="dialog" aria-label={t("{0}: auch für verknüpfte Termine?", label)} onKeyDown={onKeyDown}
     onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) onCancel(); }}>
     {variant === 'satellite' ? <span className="scope-choice-cap"><Icon name={icon} /><span className="visually-hidden">{label}</span></span>
       : <span className="scope-choice-title"><Icon name={icon} />{label}</span>}

@@ -431,6 +431,215 @@ async function dragRow(sourceId, targetId, placement = 'before', escape = false)
 
 // Calendar window and compact month window: the same page loaded as those windows, with a few days of synthetic entries.
 const longDate = date => `new Intl.DateTimeFormat('de-DE', { weekday:'long', day:'numeric', month:'long', year:'numeric' }).format(new Date('${date}T12:00'))`;
+async function checkLanguage() {
+  const origin=`http://127.0.0.1:${server.address().port}`;
+  await command('Page.navigate',{url:origin});
+  await until("document.querySelectorAll('.entry').length===5");
+  await evaluate('window.__journalAutosaveDelay=3600000');
+  await evaluate("document.querySelector('.entry-text').focus()");
+  await command('Input.insertText',{text:'Aufgabe bleibt Deutsch – '});
+  const draft=await evaluate("document.querySelector('.entry-text').value");
+  await key(',', 'Comma', 2);
+  await until("Boolean(document.querySelector('[data-language=en]'))");
+  await evaluate("document.querySelector('[data-language=en]').click()");
+  await until("document.documentElement.lang==='en' && document.querySelector('#settings-appearance-tab').textContent==='Appearance'");
+  assert.equal(await evaluate("document.querySelector('.entry-text').value"),draft,'Switching languages preserves unsaved user content.');
+  assert.equal(await evaluate("JSON.parse(localStorage.getItem('journal.settings')).language"),'en');
+  assert.equal(await evaluate("document.querySelector('#settings-language').textContent"),'Display language');
+  await pause(300); await screenshot('language-english-settings.png');
+  await key('Escape');
+  assert.match(await evaluate("document.querySelector('.document-header h1').textContent"),/Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday/);
+  assert.equal(await evaluate("document.querySelector('.cal-views button[aria-label=Week]')?.textContent.includes('Week')"),true);
+  // Open the existing entry's planner and repeat field without changing its text.
+  await evaluate("document.querySelector('.entry-text').focus()");
+  await key('w','KeyW',1);
+  await until("Boolean(document.querySelector('.repeat-write'))");
+  assert.match(await evaluate("document.querySelector('.repeat-write').value"),/Weekly|Daily/);
+  assert.equal(await evaluate("document.querySelector('.repeat-units button').textContent"),'day');
+  const typeWord=async text=>{
+    await evaluate("document.querySelector('.repeat-write').focus()");
+    await evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
+    await evaluate("document.querySelector('.repeat-write').select()");
+    await command('Input.insertText',{text});
+    await until("document.querySelectorAll('.repeat-suggest-item').length>0");
+    return evaluate("[...document.querySelectorAll('.repeat-suggest-word')].map(node=>node.textContent)");
+  };
+  const en=await typeWord('Mon'); assert(en.includes('Monday')); assert(!en.includes('Montag')); assert(!en.includes('Monat'));
+  await pause(300); await screenshot('language-english-suggestions.png');
+  const fallback=await typeWord('Mit'); assert(fallback.includes('Mittwoch'),'German suggestions remain available when English has no matching word.');
+  // A switch from another window changes labels without replacing the text being typed.
+  await evaluate("window.__uiTest.emit('journal:language','de')");
+  await until("document.documentElement.lang==='de'");
+  assert.equal(await evaluate("document.querySelector('.repeat-write').value"),'Mit');
+  const de=await typeWord('Mon'); assert(de.includes('Montag')); assert(!de.includes('Monday'));
+  await key('Escape'); await key('Escape'); await key('Escape');
+  await key(',', 'Comma', 2); await until("Boolean(document.querySelector('[data-language=de]'))");
+  await evaluate("document.querySelector('[data-language=en]').click()");
+  await until("document.documentElement.lang==='en'");
+  await key('Escape'); await command('Page.reload');
+  await until("document.documentElement.lang==='en' && document.querySelectorAll('.entry').length===5");
+  await key('F1'); await until("Boolean(document.querySelector('.shortcut-pages'))");
+  assert.equal(await evaluate("document.querySelector('.shortcuts').getAttribute('aria-label')"),'Keyboard shortcuts');
+  await pause(300); await screenshot('language-english-shortcuts.png');
+  await key('Escape');
+  await command('Page.navigate',{url:`${origin}/?window=calendar`});
+  await until("document.documentElement.lang==='en' && Boolean(document.querySelector('.cal'))");
+  assert.equal(await evaluate("document.querySelector('.cal-viewbar [aria-label=Month]')!==null"),true);
+  await command('Page.navigate',{url:origin}); await until("Boolean(document.querySelector('.settings-button'))");
+  await key(',', 'Comma', 2); await until("Boolean(document.querySelector('[data-language=de]'))");
+  await evaluate("document.querySelector('[data-language=de]').click()");
+  await until("document.documentElement.lang==='de'"); await key('Escape');
+  console.log('Language checks passed: DE/EN labels/dates, unsaved content, planning suggestions with strict preferred-language fallback, persistence and cross-window updates.');
+}
+async function checkColors() {
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  await command('Page.navigate', {url:origin});
+  await until("document.querySelectorAll('.entry').length===5");
+  const draft = '**Klar** [Rot]{rot} [Grün]{grün} ==Markiert==';
+  await evaluate("document.querySelector('.entry-text').focus(); document.querySelector('.entry-text').setSelectionRange(0,document.querySelector('.entry-text').value.length)");
+  await command('Input.insertText',{text:draft});
+  const token = name => evaluate(`getComputedStyle(document.documentElement).getPropertyValue(${JSON.stringify('--'+name)}).trim()`);
+  const fill = (name, value, type='text') => evaluate(`(() => {const input=document.querySelector('[data-color-field="${name}"] input[type="${type}"]'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,${JSON.stringify(value)}); input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+  const openSettings = async () => {await evaluate("document.querySelector('.settings-button').click()"); await until("Boolean(document.querySelector('#settings-colors-tab'))"); await evaluate("document.querySelector('#settings-colors-tab').click()");};
+  await openSettings();
+  await until("Boolean(document.querySelector('[data-color-theme-choice=green]'))");
+  await pause(350); await screenshot('colors-original-settings.png');
+  await evaluate("document.querySelector('[data-color-theme-choice=original]').focus()");
+  await key('ArrowRight');
+  await until("document.documentElement.dataset.colorTheme==='green'");
+  assert.equal(await token('accent'),'#aeff00');
+  assert(await evaluate("(() => {const symbols=[...document.querySelectorAll('.entry[data-status=open] .entry-symbol')];return symbols.length>0 && symbols.every(symbol=>getComputedStyle(symbol).color==='rgb(174, 255, 0)');})()"),'Open task symbols use the main lime colour.');
+  assert.equal(await evaluate("document.querySelector('.entry-text').value"),draft,'A palette change preserves unsaved Markdown.');
+  assert.equal(await evaluate("getComputedStyle(document.querySelector('.md-color')).color"),'rgb(236, 163, 144)','Existing Markdown inherits the selected theme.');
+  await pause(250); await screenshot('colors-green-settings.png');
+  assert.equal(await evaluate("document.querySelectorAll('[data-color-theme-choice]').length"),3);
+  await key('End');
+  await until("document.documentElement.dataset.colorTheme==='summer'");
+  assert.equal(await token('accent'),'#50d5ff');
+  assert.equal(await evaluate("getComputedStyle(document.querySelector('.md-color')).color"),'rgb(255, 159, 147)','The summer theme recolours existing Markdown without editing it.');
+  assert.equal(await token('md-blue'),'#78cfff');
+  assert.equal(await token('md-highlight-background'),'#f1ce8533');
+  assert.equal(await evaluate("document.querySelector('.entry-text').value"),draft);
+  await pause(200); await screenshot('colors-summer-settings.png');
+  await evaluate("document.querySelector('.settings-close').click()");
+  await until("!document.querySelector('.settings')");
+  await pause(200); await screenshot('colors-summer-journal.png');
+  await openSettings();
+  await evaluate("document.querySelector('[data-color-theme-choice=summer]').focus()");
+  await key('ArrowRight');
+  await until("document.documentElement.dataset.colorTheme==='original'");
+  await key('ArrowLeft');
+  await until("document.documentElement.dataset.colorTheme==='summer'");
+  await key('ArrowLeft');
+  await until("document.documentElement.dataset.colorTheme==='green'");
+  await fill('md-red','#ffbbaa');
+  await until("getComputedStyle(document.querySelector('.md-color')).color==='rgb(255, 187, 170)'");
+  await fill('md-red','#oops');
+  assert.equal(await token('md-red'),'#ffbbaa','Invalid hex never reaches CSS or persisted preferences.');
+  assert.equal(await evaluate("document.querySelector('[data-color-field=md-red] .color-hex').getAttribute('aria-invalid')"),'true');
+  await evaluate("document.querySelector('[data-color-field=md-red] .color-hex').focus();document.querySelector('[data-color-field=md-red] .color-hex').blur()");
+  assert.equal(await evaluate("document.querySelector('[data-color-field=md-red] .color-hex').value"),'#ffbbaa');
+  await evaluate("document.querySelector('[data-color-group=accents]').open=true");
+  await fill('accent','#151515');
+  assert.equal(await token('on-accent'),'#ffffff','Dark accent colours receive light button text.');
+  await evaluate("document.querySelector('[data-color-field=accent] .color-reset').click()");
+  assert.equal(await token('accent'),'#aeff00');
+  await fill('accent','#cde857','color');
+  assert.equal(await token('accent'),'#cde857','The colour picker and hex input edit the same token.');
+  await fill('edge','128','range');
+  assert.equal(await token('edge'),'#aeff0080');
+  await evaluate("document.querySelector('[data-color-theme-choice=original]').click()");
+  await until("document.documentElement.dataset.colorTheme==='original'");
+  assert.equal(await token('md-red'),'#df6262');
+  await evaluate("document.querySelector('[data-color-group=accents]').open=true");
+  await fill('accent','#8db4ff');
+  await evaluate("document.querySelector('[data-color-theme-choice=green]').click()");
+  assert.equal(await token('accent'),'#cde857','Switching bases restores that base’s overrides.');
+  assert.equal(await token('md-red'),'#ffbbaa');
+  await evaluate("document.querySelector('.color-reset-all').click()");
+  assert.equal(await token('accent'),'#aeff00');
+  assert.equal(await token('md-red'),'#eca390');
+  await fill('md-red','#ffbbaa');
+  await command('Emulation.setDeviceMetricsOverride',{width:760,height:520,deviceScaleFactor:1,mobile:false});
+  await pause(150);
+  assert(await evaluate("(() => {const p=document.querySelector('.settings'),r=p.getBoundingClientRect(); return r.left>=0 && r.top>=0 && r.right<=innerWidth && r.bottom<=innerHeight && p.scrollWidth<=p.clientWidth+1 && [...p.querySelectorAll('.color-hex')].every(e=>e.getBoundingClientRect().width>=65);})()"),'Colour controls fit compact windows, including the header and close button.');
+  assert(await evaluate("(() => {const head=document.querySelector('.settings-head'),r=head.getBoundingClientRect(); return head.contains(document.elementFromPoint(r.left+r.width/2,r.top+r.height/2));})()"),'App toolbars cannot cover the modal header in small windows.');
+  await screenshot('colors-settings-compact.png');
+  await command('Emulation.setDeviceMetricsOverride',{width:1180,height:780,deviceScaleFactor:1,mobile:false});
+  await evaluate("document.querySelector('.settings-close').focus()");
+  await key('Escape');
+  await until("!document.querySelector('.settings')");
+  assert.equal(await evaluate("document.querySelector('.entry-text').value"),draft);
+  await pause(200); await screenshot('colors-green-journal.png');
+  await evaluate("(() => {const input=document.querySelector('.entry-text'); input.focus(); const start=input.value.indexOf('Rot');input.setSelectionRange(start,start+3); input.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,clientX:800,clientY:300}));})()");
+  await until("Boolean(document.querySelector('.format-menu'))");
+  assert.equal(await evaluate("getComputedStyle(document.querySelector('.format-color')).backgroundColor"),'rgb(255, 187, 170)','The format menu uses exactly the same overridden Markdown colour.');
+  await key('Escape');
+  await key('s','KeyS',2);
+  const saved=await evaluate("JSON.parse(localStorage.getItem('journal.settings'))");
+  assert.equal(saved.customColors.green['md-red'],'#ffbbaa');
+  await openSettings();
+  await evaluate("document.querySelector('#settings-appearance-tab').click()");
+  await until("Boolean(document.querySelector('[data-theme-choice=pixel]'))");
+  await evaluate("document.querySelector('[data-theme-choice=pixel]').click()");
+  assert.equal(await token('accent'),'#aeff00','Pixel and Classic share the chosen palette.');
+  await evaluate("document.querySelector('[data-language=en]').click()");
+  await evaluate("document.querySelector('#settings-colors-tab').click()");
+  await until("document.querySelector('#settings-colors-tab').textContent==='Colours'");
+  assert.equal(await evaluate("document.querySelector('#settings-colors-title').textContent"),'Base colour theme');
+  await pause(200); await screenshot('colors-green-pixel-settings.png');
+  await key('Escape');
+  await pause(150); await screenshot('colors-green-pixel-journal.png');
+  for (const window of ['calendar','mini','reminder']) {
+    await command('Page.navigate',{url:`${origin}/?window=${window}`});
+    await until("document.documentElement.dataset.colorTheme==='green' && document.documentElement.dataset.theme==='pixel'");
+    assert.equal(await token('md-red'),'#ffbbaa');
+    // A window already open must also update from the device event without losing its content.
+    await evaluate("window.__uiTest.emit('journal:colors',{colorTheme:'original',customColors:{}})");
+    await until("document.documentElement.dataset.colorTheme==='original'");
+    assert.equal(await token('md-red'),'#df6262');
+    if (window === 'calendar') {
+      await until("Boolean(document.querySelector('.cal'))");
+      await evaluate("window.__uiTest.emit('journal:colors',JSON.parse(localStorage.getItem('journal.settings')))");
+      await pause(250); await screenshot('colors-green-calendar.png');
+    }
+  }
+  await command('Page.navigate',{url:origin});
+  await until("document.documentElement.dataset.colorTheme==='green' && Boolean(document.querySelector('.settings-button'))");
+  assert.equal(await token('md-red'),'#ffbbaa','Custom colours survive a reload.');
+  await openSettings();
+  await evaluate("document.querySelector('[data-color-theme-choice=summer]').click()");
+  await fill('md-blue','#82ddff');
+  await command('Page.reload');
+  await until("document.documentElement.dataset.colorTheme==='summer' && Boolean(document.querySelector('.settings-button'))");
+  assert.equal(await token('md-blue'),'#82ddff','The third theme and its own overrides survive a reload.');
+  assert.equal(await token('md-red'),'#ff9f93','Green overrides do not leak into the summer palette.');
+  await pause(200); await screenshot('colors-summer-pixel-journal.png');
+  for (const window of ['calendar','mini','reminder']) {
+    await command('Page.navigate',{url:`${origin}/?window=${window}`});
+    await until("document.documentElement.dataset.colorTheme==='summer' && document.documentElement.dataset.theme==='pixel'");
+    assert.equal(await token('md-blue'),'#82ddff');
+  }
+  await command('Page.navigate',{url:origin});
+  await until("Boolean(document.querySelector('.settings-button'))");
+  await openSettings();
+  assert.equal(await evaluate("document.querySelector('[data-color-theme-choice=summer] strong').textContent"),'Sky & Sunshine');
+  await pause(250); await screenshot('colors-summer-pixel-settings.png');
+  await evaluate("document.querySelector('.color-reset-all').click()");
+  assert.equal(await token('md-blue'),'#78cfff');
+  await evaluate("document.querySelector('[data-color-theme-choice=green]').click()");
+  await evaluate("document.querySelector('.color-reset-all').click()");
+  await evaluate("document.querySelector('[data-color-theme-choice=original]').click()");
+  await evaluate("document.querySelector('.color-reset-all').click()");
+  await evaluate("document.querySelector('#settings-appearance-tab').click()");
+  await until("Boolean(document.querySelector('[data-theme-choice=classic]'))");
+  await evaluate("document.querySelector('[data-theme-choice=classic]').click()");
+  await evaluate("document.querySelector('[data-language=de]').click()");
+  await until("document.documentElement.dataset.colorTheme==='original' && document.documentElement.dataset.theme==='classic' && document.documentElement.lang==='de'");
+  await key('Escape');
+  console.log('Colour checks passed: base palettes, live Markdown/editor/menu colours, picker/hex/opacity, validation, independent overrides, resets, unsaved content, persistence, compact layout, both UI styles, English labels and all window types.');
+}
+
 async function checkPixelTheme() {
   const origin = `http://127.0.0.1:${server.address().port}`;
   await command('Page.navigate', { url:origin });
@@ -1138,7 +1347,11 @@ try {
   await until("document.querySelectorAll('.entry').length === 5");
   await pause(250);
   await evaluate('document.fonts.ready.then(() => true)');
-  if (process.env.JOURNAL_UI_SCOPE === 'pixel') {
+  if (process.env.JOURNAL_UI_SCOPE === 'colors') {
+    await checkColors();
+  } else if (process.env.JOURNAL_UI_SCOPE === 'language') {
+    await checkLanguage();
+  } else if (process.env.JOURNAL_UI_SCOPE === 'pixel') {
     await checkPixelTheme();
   } else if (process.env.JOURNAL_UI_SCOPE === 'calendar-start') {
     await checkCalendarStart();
@@ -1946,7 +2159,7 @@ try {
   const downShort = await swipeVertical(swiped, 42, async () => ({ ...await lane(swiped), shot:await pause(200).then(() => screenshot('swipe-down.png')), strip: await evaluate(`(() => { const trail=${row(swiped)}.querySelector('.swipe-trail'), symbol=${row(swiped)}.querySelector('.entry-symbol').getBoundingClientRect(), r=trail.getBoundingClientRect(); return { vertical:trail.classList.contains('is-vertical'), width:Math.round(r.width), symbolWidth:Math.round(symbol.width), words:${row(swiped)}.querySelectorAll('.swipe-handle .swipe-label').length, below:r.bottom > ${row(swiped)}.getBoundingClientRect().bottom, iconStays:Math.abs(${row(swiped)}.querySelector('.swipe-handle').getBoundingClientRect().top - symbol.top) < 1 }; })()`) }));
   await pause(300);
   assert.deepEqual(downShort.strip, { vertical:true, width:30, symbolWidth:30, words:0, below:true, iconStays:true }, 'Down: the icon stays at the symbol, a bar as wide as the symbol grows downwards.');
-  assert.equal(downShort.color, '#76D982', 'Done has its own colour (green).');
+  assert.equal(downShort.color, await evaluate("getComputedStyle(document.documentElement).getPropertyValue('--success').trim()"), 'Done uses the theme’s success colour.');
   assert.deepEqual([downShort.trailRing, downShort.trailBorder], ['none', 'none'], 'Only colour, no ring.');
   assert.equal(downShort.rowShift, 0, 'The text does not move.');
   await until(`${row(swiped)}.dataset.status === 'done'`);
@@ -1954,7 +2167,7 @@ try {
   await until(`${row(swiped)}.dataset.status === 'open'`);
   const downLong = await swipeVertical(swiped, 90, () => lane(swiped));
   assert.equal(downLong.preview, 'cancelled', 'Further down cancels.');
-  assert.equal(downLong.color, '#AD4075', 'Cancel has its own colour (pink).');
+  assert.equal(downLong.color, await evaluate("getComputedStyle(document.documentElement).getPropertyValue('--cancelled').trim()"), 'Cancel uses the theme’s cancelled colour.');
   await until(`${row(swiped)}.dataset.status === 'cancelled'`);
   await swipeVertical(swiped, 42);
   await until(`${row(swiped)}.dataset.status === 'open'`);
@@ -2012,7 +2225,7 @@ try {
   await key('Escape');
   await until("!document.querySelector('.entry-dock-shell.is-open')");
   const short = await swipeDrag(swiped, 112, async () => { await pause(260); const seen = await lane(swiped); seen.labelAbove = await evaluate(`${row(swiped)}.querySelector('.swipe-label').getBoundingClientRect().bottom <= ${row(swiped)}.querySelector('.cm-line').getBoundingClientRect().top + 2`); seen.scrollbar = await evaluate("document.querySelector('.scroll').offsetHeight !== document.querySelector('.scroll').clientHeight"); await screenshot('swipe.png'); return seen; });
-  assert.equal(short.text, 'morgen'); assert.equal(short.armed, true); assert.equal(short.color, '#C2DCE9', 'Tomorrow is cyan, leading into blue and purple.'); assert.equal(short.preview, 'tomorrow');
+  assert.equal(short.text, 'morgen'); assert.equal(short.armed, true); assert.equal(short.color, await evaluate("getComputedStyle(document.documentElement).getPropertyValue('--md-cyan').trim()"), 'Tomorrow uses the theme’s cyan.'); assert.equal(short.preview, 'tomorrow');
   assert(short.label > 0.9, 'With room the word is faded in.');
   assert.equal(short.labelAbove, true, 'The word floats above the line instead of covering the text.');
   await until(`!${row(swiped)}.querySelector('.swipe-handle') && getComputedStyle(${row(swiped)}.querySelector('.entry-symbol')).opacity === '1'`);
@@ -2025,7 +2238,7 @@ try {
   await until(`${row(swiped)}.dataset.trace === 'tomorrow'`);
   // Left: remove.
   const remove = await swipeDrag(swiped, -80, () => lane(swiped));
-  assert.equal(remove.text, 'löschen'); assert.equal(remove.color, '#DF6262');
+  assert.equal(remove.text, 'löschen'); assert.equal(remove.color, await evaluate("getComputedStyle(document.documentElement).getPropertyValue('--error').trim()"));
   await until(`!${row(swiped)}`);
   const held = await swipeTask('Mehrere Tage planen');
   // Several days: two left clicks set a range, right clicks take days out of it or add days outside; then one trace with << and a copy per day.
@@ -2318,6 +2531,8 @@ try {
   await checkCalendars();
   await checkCalendarStart();
   await checkPixelTheme();
+  await checkLanguage();
+  await checkColors();
   }
   assert.deepEqual(errors, [], 'No browser runtime errors.');
   console.log('UI checks passed: calendar window (month, week, work week, year, day; keys, swiping, filters, remembered, live updates, open in journal), compact month window, calendar in the resizable sidebar (creating entries by marking quarter hours, composer, editing by right click), changing kinds (keys, orbit cluster, preview), saving by itself (after a pause, before leaving the day), actions reaching linked entries (following / all, Escape cancels), editable traces passing edits to their copies, swiping days, settings (orbit/inline/swipe layout, remembered), swipe gestures (the icon stays at the symbol, a bar in each action’s own colour grows, full height sideways; right: tomorrow/plan/several days, left: remove, down: done/cancel, up: priority, tap, hold is a tap, keys, trackpad), planning several days (range by two clicks, right-click flips, copies per day, linked removal), embedded inline actions (in the flow, no surface, preview, calendar), IBM Plex Sans UI and bold Lilex title, live-preview Markdown (markers only at the cursor, hidden when not editing, click into hidden parts), format shortcuts with undo, colours, right-click format menu; shortcuts (F1, Alt+A/Enter/Backspace outliner, Alt+D/X/P/U/T/M/Enter/Entf, Ctrl+arrows, Alt+arrows/H), clock as large as the calendar with back button, Tab and typed digits; clock dial (tap on both rings, wheel, keys, quick times), calendar stays open on inner clicks, time after text, linked removal both ways; planning (calendar keyboard, time, reminder, traces >/</outlined <, undo, tomorrow, same-day time, copies on target days), asterisk/outlined event/thick note priority symbols, automatic priority order, drag and keyboard boundaries, toolbar focus, saved priority; action pill, previews, removal, grouping, caret, saving, cached navigation, wrapping and reduced motion.');

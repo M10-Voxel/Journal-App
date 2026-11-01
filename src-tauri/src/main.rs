@@ -2,6 +2,7 @@
 mod reminders;
 mod storage;
 mod mail;
+mod ui_language;
 
 use std::sync::{atomic::{AtomicBool, Ordering}, Mutex};
 use tauri::{menu::{Menu, MenuItem}, tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
@@ -39,7 +40,7 @@ async fn import_calendar(app: tauri::AppHandle, entries: Vec<CalendarImport>, st
 
 #[tauri::command]
 async fn read_calendar_file() -> Result<Option<String>, String> {
-    let Some(file) = rfd::AsyncFileDialog::new().set_title("Kalender importieren").add_filter("iCalendar", &["ics"]).pick_file().await else { return Ok(None) };
+    let Some(file) = rfd::AsyncFileDialog::new().set_title(ui_language::text("Kalender importieren", "Import calendar")).add_filter("iCalendar", &["ics"]).pick_file().await else { return Ok(None) };
     if std::fs::metadata(file.path()).map_err(|e| e.to_string())?.len() > 5_000_000 { return Err("Die ICS-Datei ist zu groß (höchstens 5 MB)".into()); }
     String::from_utf8(file.read().await).map(Some).map_err(|_| "Die ICS-Datei muss UTF-8 enthalten".into())
 }
@@ -47,7 +48,7 @@ async fn read_calendar_file() -> Result<Option<String>, String> {
 #[tauri::command]
 async fn write_calendar_file(content: String) -> Result<bool, String> {
     if content.len() > 25_000_000 || !content.starts_with("BEGIN:VCALENDAR") { return Err("Ungültige Kalenderdatei".into()); }
-    let Some(file) = rfd::AsyncFileDialog::new().set_title("Kalender exportieren").set_file_name("Journal.ics").add_filter("iCalendar", &["ics"]).save_file().await else { return Ok(false) };
+    let Some(file) = rfd::AsyncFileDialog::new().set_title(ui_language::text("Kalender exportieren", "Export calendar")).set_file_name("Journal.ics").add_filter("iCalendar", &["ics"]).save_file().await else { return Ok(false) };
     file.write(content.as_bytes()).await.map_err(|e| e.to_string())?;
     Ok(true)
 }
@@ -167,14 +168,16 @@ fn main() {
         .setup(|app| {
             let dir = app.path().app_local_data_dir()?;
             std::fs::create_dir_all(&dir)?;
-            app.manage(Mutex::new(Store::open(&dir.join("journal.sqlite3"))?));
+            let store=Store::open(&dir.join("journal.sqlite3"))?;
+            ui_language::initialize(&store);
+            app.manage(Mutex::new(store));
             app.manage(mail::MailState::open(&dir.join("mail.sqlite3")).map_err(std::io::Error::other)?);
             reminders::start(app.handle().clone());
             mail::start(app.handle().clone());
             // Closing the window keeps Journal running in the background (see main.tsx); the icon in the notification area
             // opens it again (click) or ends it (menu).
-            let open = MenuItem::with_id(app, "open", "Journal öffnen", true, None::<&str>)?;
-            let quit = MenuItem::with_id(app, "quit", "Beenden", true, None::<&str>)?;
+            let open = MenuItem::with_id(app, "open", ui_language::text("Journal öffnen", "Open Journal"), true, None::<&str>)?;
+            let quit = MenuItem::with_id(app, "quit", ui_language::text("Beenden", "Quit"), true, None::<&str>)?;
             let mut tray = TrayIconBuilder::with_id("journal").tooltip("Journal").menu(&Menu::with_items(app, &[&open, &quit])?).show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id.as_ref() { "open" => show_main(app), "quit" => request_quit(app), _ => {} })
                 .on_tray_icon_event(|tray, event| if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event { show_main(tray.app_handle()); });
@@ -186,6 +189,6 @@ fn main() {
         .on_window_event(|window, event| {
             if window.label() == "main" && matches!(event, tauri::WindowEvent::Destroyed) { window.app_handle().exit(0); }
         })
-        .invoke_handler(tauri::generate_handler![load_day, load_range, save_day, load_linked, change_linked, load_series, extend_series, snooze_reminder, quit_app, popup_reminders, fit_popup, reminder_action, background_hint, open_window, show_day, export_calendar, import_calendar, read_calendar_file, write_calendar_file, mail::mail_accounts, mail::mail_save, mail::mail_cancel, mail::mail_sync, mail::mail_remove, mail::mail_pending, mail::mail_stage, mail::mail_candidates, mail::mail_resolve, mail::mail_enabled, mail::mail_notices, mail::mail_help, mail::ml::mail_ml_status, mail::ml::mail_ml_enabled, mail::ml::mail_ml_install, mail::ml::mail_ml_analyze])
+        .invoke_handler(tauri::generate_handler![ui_language::set_ui_language, load_day, load_range, save_day, load_linked, change_linked, load_series, extend_series, snooze_reminder, quit_app, popup_reminders, fit_popup, reminder_action, background_hint, open_window, show_day, export_calendar, import_calendar, read_calendar_file, write_calendar_file, mail::mail_accounts, mail::mail_save, mail::mail_cancel, mail::mail_sync, mail::mail_remove, mail::mail_pending, mail::mail_stage, mail::mail_candidates, mail::mail_resolve, mail::mail_enabled, mail::mail_notices, mail::mail_help, mail::ml::mail_ml_status, mail::ml::mail_ml_enabled, mail::ml::mail_ml_install, mail::ml::mail_ml_analyze])
         .run(tauri::generate_context!()).expect("Journal konnte nicht gestartet werden");
 }

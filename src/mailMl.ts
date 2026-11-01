@@ -1,3 +1,4 @@
+import { t } from './i18n.ts';
 import { de, en } from 'chrono-node';
 import { localDate } from './dates.ts';
 
@@ -21,7 +22,7 @@ function parseSpan(date: string, time: string | null, sentAt: number) {
   const range = time?.replace(/\bzwischen\s+/i, '').replace(/\s+und\s+/i, '-');
   const reference = new Date(sentAt * 1000);
   // A separator prevents "12. November 17 Uhr" from being read as the year 2017.
-  const german = de.parse(`${date}${range ? ` um ${range}` : ''}`, reference, { forwardDate: true });
+  const german = de.parse(`${date}${range ? t(" um {0}", range) : ''}`, reference, { forwardDate: true });
   const results = german.length ? german : en.parse(`${date}${range ? ` at ${range}` : ''}`, reference, { forwardDate: true });
   const result = results.find(result => result.start.isCertain('day') || result.start.isCertain('weekday'));
   if (!result) return null;

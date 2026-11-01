@@ -1,3 +1,4 @@
+import { t, useLanguage } from '../i18n';
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { KeyboardEvent, MouseEvent } from 'react';
 import { defaultPause, describe, describeMonths, describePattern, formatOccurrence, occurrences, onChoices, onLabel, unitNames, weekdayOf, weekdayShort } from '../repeat';
@@ -10,10 +11,11 @@ const units: RepeatUnit[] = ['day', 'week', 'month', 'year'];
 const keep = (event: MouseEvent) => event.preventDefault();
 
 function Stepper({ value, min, max, label, suffix = '', onChange }: { value: number; min: number; max: number; label: string; suffix?: string; onChange: (value: number) => void }) {
+  useLanguage();
   return <span className="repeat-step" role="group" aria-label={`${label}: ${value}`}>
-    <button type="button" aria-label={`${label} verringern`} disabled={value <= min} onMouseDown={keep} onClick={() => onChange(Math.max(min, value - 1))}>−</button>
+    <button type="button" aria-label={t("{0} verringern", label)} disabled={value <= min} onMouseDown={keep} onClick={() => onChange(Math.max(min, value - 1))}>−</button>
     <span className="repeat-value" key={value}>{value}{suffix}</span>
-    <button type="button" aria-label={`${label} erhöhen`} disabled={value >= max} onMouseDown={keep} onClick={() => onChange(Math.min(max, value + 1))}>+</button>
+    <button type="button" aria-label={t("{0} erhöhen", label)} disabled={value >= max} onMouseDown={keep} onClick={() => onChange(Math.min(max, value + 1))}>+</button>
   </span>;
 }
 
@@ -28,6 +30,7 @@ function Stepper({ value, min, max, label, suffix = '', onChange }: { value: num
 export function RepeatPanel({ rule, today, onChange, onBack, onOff, onPickEnd }: {
   rule: RepeatRule; today: string; onChange: (rule: RepeatRule) => void; onBack: () => void; onOff: () => void; onPickEnd: () => void;
 }) {
+  useLanguage();
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => { rootRef.current?.focus({ preventScroll: true }); }, []);
@@ -54,8 +57,8 @@ export function RepeatPanel({ rule, today, onChange, onBack, onOff, onPickEnd }:
     write(`${text.slice(0, text.length - typed(text).length)}${word} `);
   }
   const months = rule.unit !== 'year' && rule.months?.length ? rule.months : null;
-  const monthsChip = months && <button type="button" className="repeat-chip is-months" aria-label={`Nur ${describeMonths(months)}, Einschränkung entfernen`} title="Nur in diesen Monaten · Klick entfernt"
-    onMouseDown={keep} onClick={() => onChange({ ...rule, months: null })}>nur {describeMonths(months)} <Icon name="done" /></button>;
+  const monthsChip = months && <button type="button" className="repeat-chip is-months" aria-label={t("Nur {0}, Einschränkung entfernen", describeMonths(months))} title={t("Nur in diesen Monaten · Klick entfernt")}
+    onMouseDown={keep} onClick={() => onChange({ ...rule, months: null })}>{t("nur ")}{describeMonths(months)} <Icon name="done" /></button>;
   function write(text: string) {
     const before = draft?.before ?? rule;
     const parsed = text.trim() ? parseRepeat(text, before) : null;
@@ -107,14 +110,14 @@ export function RepeatPanel({ rule, today, onChange, onBack, onOff, onPickEnd }:
     event.stopPropagation();
   }
 
-  return <div className={`repeat${draft ? ' is-writing' : ''}`} ref={rootRef} tabIndex={-1} role="group" aria-label={`Wiederholen: ${describe(rule)}`} aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown 1 2 3 4 5 6 7 P Delete" onKeyDown={onKey}>
+  return <div className={`repeat${draft ? ' is-writing' : ''}`} ref={rootRef} tabIndex={-1} role="group" aria-label={t("Wiederholen: {0}", describe(rule))} aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown 1 2 3 4 5 6 7 P Delete" onKeyDown={onKey}>
     <div className="clock-head repeat-head">
-      <button type="button" className="clock-back" aria-label="Zurück zum Kalender" data-tip="Zurück · Esc" onMouseDown={keep} onClick={onBack}><Icon name="left" /></button>
+      <button type="button" className="clock-back" aria-label={t("Zurück zum Kalender")} data-tip={t("Zurück · Esc")} onMouseDown={keep} onClick={onBack}><Icon name="left" /></button>
       <span className="repeat-write-field">
       <Icon name="pencil" className="repeat-write-icon" />
       {ghost && <span className="repeat-ghost" aria-hidden="true"><span>{draft!.text}</span>{ghost}</span>}
-      <input ref={inputRef} className={`repeat-summary repeat-write${draft && !draft.understood && draft.text.trim() ? ' is-unclear' : ''}`} aria-label="Wiederholung in Worten (Deutsch oder Englisch)" aria-keyshortcuts="/" title="In Worten schreiben, z. B. „alle 2 Wochen am Mo, Mi“ · /"
-        value={draft?.text ?? describePattern(rule)} placeholder="z. B. alle 2 Wochen am Mo, Mi" spellCheck={false}
+      <input ref={inputRef} className={`repeat-summary repeat-write${draft && !draft.understood && draft.text.trim() ? ' is-unclear' : ''}`} aria-label={t("Wiederholung in Worten (Deutsch oder Englisch)")} aria-keyshortcuts="/" title={t("In Worten schreiben, z. B. „alle 2 Wochen am Mo, Mi“ · /")}
+        value={draft?.text ?? describePattern(rule)} placeholder={t("z. B. alle 2 Wochen am Mo, Mi")} spellCheck={false}
         onFocus={() => { if (!draft) { selectAll.current = true; setDraft({ text: describe(rule), before: rule, unknown: [], understood: true }); } }}
         onChange={event => { setCaretAtEnd(event.target.selectionStart === event.target.value.length); setClosed(false); setPick(0); write(event.target.value); }}
         onSelect={event => setCaretAtEnd(event.currentTarget.selectionStart === event.currentTarget.value.length && event.currentTarget.selectionEnd === event.currentTarget.value.length)} onBlur={() => { if (draft) setDraft(null); }}
@@ -130,25 +133,25 @@ export function RepeatPanel({ rule, today, onChange, onBack, onOff, onPickEnd }:
           else event.stopPropagation();
         }} />
       </span>
-      <button type="button" className="repeat-off" aria-label="Nicht wiederholen" data-tip="Aus · Entf" onMouseDown={keep} onClick={onOff}><Icon name="done" /></button>
+      <button type="button" className="repeat-off" aria-label={t("Nicht wiederholen")} data-tip={t("Aus · Entf")} onMouseDown={keep} onClick={onOff}><Icon name="done" /></button>
     </div>
-    {items.length > 0 && <div className="repeat-suggest" role="listbox" aria-label="Vorschläge">
+    {items.length > 0 && <div className="repeat-suggest" role="listbox" aria-label={t("Vorschläge")}>
       {items.map((item, index) => <div key={item.word} role="option" aria-selected={item === top} className={`repeat-suggest-item${item === top ? ' is-picked' : ''}`}
         onMouseDown={event => { event.preventDefault(); accept(draft!.text, item.word); }} onMouseEnter={() => setPick(index)}>
         <span className="repeat-suggest-word">{[...item.word].map((letter, at) => item.matches.includes(at) ? <b key={at}>{letter}</b> : letter)}</span>
         <span className="repeat-suggest-role">{item.description}</span>
       </div>)}
     </div>}
-    <div className="repeat-units" role="group" aria-label="Wiederholen jeden">
-      {units.map(unit => <button key={unit} type="button" aria-pressed={rule.unit === unit} onMouseDown={keep} onClick={() => setUnit(unit)}>{unitNames[unit][0]}</button>)}
+    <div className="repeat-units" role="group" aria-label={t("Wiederholen jeden")}>
+      {units.map(unit => <button key={unit} type="button" aria-pressed={rule.unit === unit} onMouseDown={keep} onClick={() => setUnit(unit)}>{unitNames()[unit][0]}</button>)}
     </div>
     {/* Monthly and yearly read as one line: "Alle 1 Monat am 30. / letzter Fr". */}
     <div className={`repeat-row${onUnit ? ' is-on' : ''}`}>
-      <span className="repeat-label">Alle</span>
-      <Stepper value={every} min={1} max={99} label="Abstand" onChange={value => onChange({ ...rule, every: value })} />
-      <span>{unitNames[rule.unit][every === 1 ? 0 : 1]}</span>
-      {onUnit && <span className="repeat-on" role="group" aria-label={rule.unit === 'year' ? 'Tag im Jahr' : 'Tag im Monat'}>
-        <span>am</span>
+      <span className="repeat-label">{t("Alle")}</span>
+      <Stepper value={every} min={1} max={99} label={t("Abstand")} onChange={value => onChange({ ...rule, every: value })} />
+      <span>{unitNames()[rule.unit][every === 1 ? 0 : 1]}</span>
+      {onUnit && <span className="repeat-on" role="group" aria-label={rule.unit === 'year' ? t("Tag im Jahr") : t("Tag im Monat")}>
+        <span>{t("am")}</span>
         {onChoices(rule.start, rule.unit).map((on, index) => <Fragment key={on}>
           {index > 0 && <span className="repeat-or" aria-hidden="true">/</span>}
           <button type="button" className="repeat-chip" aria-pressed={(rule.on ?? 'date') === on} onMouseDown={keep} onClick={() => onChange({ ...rule, on })}>{onLabel(rule.start, rule.unit, on)}</button>
@@ -156,31 +159,31 @@ export function RepeatPanel({ rule, today, onChange, onBack, onOff, onPickEnd }:
       </span>}
       {onUnit && monthsChip}
     </div>
-    {rule.unit === 'week' && <div className="repeat-weekdays" role="group" aria-label="Wochentage">
-      {weekdayShort.map((name, day) => <button key={name} type="button" aria-pressed={weekdays.includes(day)} aria-keyshortcuts={String(day + 1)} onMouseDown={keep} onClick={() => toggleDay(day)}>{name}</button>)}
+    {rule.unit === 'week' && <div className="repeat-weekdays" role="group" aria-label={t("Wochentage")}>
+      {weekdayShort().map((name, day) => <button key={name} type="button" aria-pressed={weekdays.includes(day)} aria-keyshortcuts={String(day + 1)} onMouseDown={keep} onClick={() => toggleDay(day)}>{name}</button>)}
     </div>}
     {pausing && <div className="repeat-row repeat-pause">
-      <button type="button" className="repeat-chip" aria-pressed={Boolean(pause)} data-tip="Pause · P" onMouseDown={keep} onClick={togglePause}>Pause</button>
+      <button type="button" className="repeat-chip" aria-pressed={Boolean(pause)} data-tip={t("Pause · P")} onMouseDown={keep} onClick={togglePause}>Pause</button>
       {!pause && monthsChip}
       {pause && <>
-        <Stepper value={pause.on} min={1} max={52} label="Zeiträume mit Terminen" suffix=" an" onChange={on => onChange({ ...rule, pause: { ...pause, on } })} />
-        <Stepper value={pause.off} min={1} max={52} label="Zeiträume Pause" suffix=" aus" onChange={off => onChange({ ...rule, pause: { ...pause, off } })} />
+        <Stepper value={pause.on} min={1} max={52} label={t("Zeiträume mit Terminen")} suffix={t(' an')} onChange={on => onChange({ ...rule, pause: { ...pause, on } })} />
+        <Stepper value={pause.off} min={1} max={52} label={t("Zeiträume Pause")} suffix={t(' aus')} onChange={off => onChange({ ...rule, pause: { ...pause, off } })} />
         {rule.unit === 'day'
-          ? <button type="button" className="repeat-chip" aria-label={`Zeiträume in ${pause.unit === 'week' ? 'Wochen' : 'Tagen'}, umschalten`} onMouseDown={keep} onClick={() => onChange({ ...rule, pause: { ...pause, unit: pause.unit === 'week' ? 'day' : 'week' } })}>{pause.unit === 'week' ? 'Wo' : 'Tg'}</button>
-          : <span className="repeat-unit">Wo</span>}
+          ? <button type="button" className="repeat-chip" aria-label={t("Zeiträume in {0}, umschalten", pause.unit === 'week' ? t("Wochen") : t("Tagen"))} onMouseDown={keep} onClick={() => onChange({ ...rule, pause: { ...pause, unit: pause.unit === 'week' ? 'day' : 'week' } })}>{pause.unit === 'week' ? t("Wo") : t("Tg")}</button>
+          : <span className="repeat-unit">{t("Wo")}</span>}
       </>}
     </div>}
     <div className="repeat-row">
-      <span className="repeat-label">Ende</span>
-      <span className="repeat-segments" role="group" aria-label="Ende">
+      <span className="repeat-label">{t("Ende")}</span>
+      <span className="repeat-segments" role="group" aria-label={t("Ende")}>
         {/* A chosen end date takes the place of "Datum" itself, so the row stays inside the panel; clicking it picks again. */}
-        {([['never', 'Nie'], ['count', 'Anzahl'], ['until', endMode === 'until' ? `bis ${formatOccurrence(rule.end!.until!)}` : 'Datum']] as const).map(([mode, label]) => <button key={mode} type="button" className={mode === 'until' && endMode === 'until' ? 'is-date' : undefined}
-          aria-pressed={endMode === mode} aria-label={mode === 'until' && endMode === 'until' ? `${label}, ändern` : undefined} onMouseDown={keep} onClick={() => setEnd(mode)}>{label}</button>)}
+        {([['never', t("Nie")], ['count', t("Anzahl")], ['until', endMode === 'until' ? t("bis {0}", formatOccurrence(rule.end!.until!)) : t("Datum")]] as const).map(([mode, label]) => <button key={mode} type="button" className={mode === 'until' && endMode === 'until' ? 'is-date' : undefined}
+          aria-pressed={endMode === mode} aria-label={mode === 'until' && endMode === 'until' ? t("{0}, ändern", label) : undefined} onMouseDown={keep} onClick={() => setEnd(mode)}>{label}</button>)}
       </span>
-      {endMode === 'count' && <Stepper value={rule.end!.count!} min={1} max={999} label="Anzahl" suffix="×" onChange={count => onChange({ ...rule, end: { count } })} />}
+      {endMode === 'count' && <Stepper value={rule.end!.count!} min={1} max={999} label={t("Anzahl")} suffix="×" onChange={count => onChange({ ...rule, end: { count } })} />}
     </div>
     {draft ? <div className={`repeat-next is-writing${draft.understood && !draft.unknown.length ? '' : ' is-unclear'}`} role="status">
-      {!draft.text.trim() ? 'Wiederholung beschreiben …' : !draft.understood ? 'Nicht verstanden' : draft.unknown.length ? `${describe(rule)} · ohne „${draft.unknown.join(' ')}“` : `${describe(rule)} ✓`}
-    </div> : <div className="repeat-next" aria-label="Nächste Termine">{upcoming.length ? upcoming.map(formatOccurrence).join(' · ') : 'Keine weiteren Termine'}</div>}
+      {!draft.text.trim() ? t("Wiederholung beschreiben …") : !draft.understood ? t("Nicht verstanden") : draft.unknown.length ? t("{0} · ohne „{1}“", describe(rule), draft.unknown.join(' ')) : `${describe(rule)} ✓`}
+    </div> : <div className="repeat-next" aria-label={t("Nächste Termine")}>{upcoming.length ? upcoming.map(formatOccurrence).join(' · ') : t("Keine weiteren Termine")}</div>}
   </div>;
 }

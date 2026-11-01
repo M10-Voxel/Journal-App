@@ -2,6 +2,8 @@
 // thu", "jährlich am 12. März", "last friday of the month", "Karfreitag", "täglich, 10 mal", "3 Wochen an, 1 aus", "bis 30.11.".
 // Everything `describe` writes reads back. Text that names no days at all only changes the pause or end of the current rule.
 import { shiftDate } from './dates.ts';
+import { getLanguage, t } from './i18n.ts';
+import type { Language } from './i18n.ts';
 import { cleanRule, daysBetween, easter, weekdayIndex, weekdayOf } from './repeat.ts';
 import type { RepeatOn, RepeatRule, RepeatUnit } from './repeat.ts';
 
@@ -270,7 +272,7 @@ function positionFrom(from: string, nth: number, weekday: number, month?: number
 // Kept for callers that want to know how far a written start moved.
 export const movedBy = (rule: RepeatRule, from: string) => daysBetween(from, rule.start);
 
-// Completing the word being typed: the words the parser knows, German first; English ones lead once the text is English.
+// Complete in the display language first; the other language is a fallback only.
 const german = ['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag', 'Sonntag', 'montags', 'dienstags', 'mittwochs', 'donnerstags', 'freitags', 'samstags', 'sonntags',
   'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember',
   'täglich', 'wöchentlich', 'monatlich', 'jährlich', 'werktags', 'Wochenende', 'zweiwöchentlich', 'alle', 'jeden', 'jede', 'jedes', 'Tage', 'Tag', 'Wochen', 'Woche', 'Monate', 'Monat', 'Jahre', 'Jahr',
@@ -280,18 +282,20 @@ const english = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturd
   'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December',
   'daily', 'weekly', 'monthly', 'yearly', 'weekdays', 'weekends', 'biweekly', 'every', 'other', 'days', 'day', 'weeks', 'week', 'months', 'month', 'years', 'year',
   'first', 'second', 'third', 'fourth', 'last', 'times', 'until', 'for', 'only', 'from', 'off', 'birthday', 'Good Friday', 'Easter Monday', 'Easter Sunday', 'Pentecost', 'Whit Monday', 'Ascension Day'];
-const englishHint = /\b(every|on|the|weeks?|days?|months?|years?|until|times|other|daily|weekly|monthly|yearly|of|and|in)\b/i;
 
 /** The rest of the word at the end of `text` that would complete it ("jeden Mit" → "twoch"), or "" when none fits. */
-export function completion(text: string): string {
+export function completion(text: string, preferred: Language = getLanguage()): string {
   const match = /([a-zäöüß]+(?: [a-zäöüß]+)?)$/i.exec(text);
   if (!match) return '';
-  const words = englishHint.test(text.slice(0, match.index)) ? [...english, ...german] : [...german, ...english];
+  const primary = preferred === 'en' ? english : german;
+  const words = [...primary, ...(preferred === 'en' ? german : english)];
   // The last word alone, or with the one before it for names of two words ("Good Fr" → "iday").
   for (const typed of [match[1], match[1].split(' ').at(-1)!]) {
     if (typed.length < 2) continue;
     // The shortest fitting word (in the order above), in the plural after a number above one ("3 Wo" → "Wochen").
-    const fitting = words.filter(candidate => candidate.length > typed.length && candidate.toLowerCase().startsWith(typed.toLowerCase()));
+    const candidates = words.filter(candidate => candidate.length > typed.length && candidate.toLowerCase().startsWith(typed.toLowerCase()));
+    const local = candidates.filter(word => primary.includes(word));
+    const fitting = local.length ? local : candidates;
     let word = fitting.reduce<string | undefined>((best, candidate) => !best || candidate.length < best.length ? candidate : best, undefined);
     const count = /(\d+)\s+\S*$/.exec(text)?.[1];
     if (word && count && Number(count) > 1) word = fitting.find(candidate => candidate.toLowerCase() === `${word!.toLowerCase()}n` || candidate.toLowerCase() === `${word!.toLowerCase()}s`) ?? word;
@@ -313,7 +317,7 @@ const roles: [RegExp, string][] = [
   [/^monatsende$/i, 'letzter Tag im Monat'], [/^(mal|times)$/i, 'Ende nach n-mal'], [/^(bis|until)$/i, 'Ende an einem Datum'], [/^(für|for)$/i, 'Dauer: für n Wochen …'],
   [/^(nur|only|von|from)$/i, 'nur in Monaten'], [/^(pause|aus|off)$/i, 'Pause: n an, n aus'], [/^(geburtstag|birthday)$/i, 'jedes Jahr am Datum'],
 ];
-const holidayRole = (word: string) => { const offset = find(easterWords, word.toLowerCase()); return offset === undefined ? undefined : `Feiertag · Ostern ${offset === 0 ? '' : offset > 0 ? `+${offset}` : `−${-offset}`}`.trim(); };
+const holidayRole = (word: string) => { const offset = find(easterWords, word.toLowerCase()); return offset === undefined ? undefined : `${getLanguage() === 'en' ? 'Holiday · Easter' : 'Feiertag · Ostern'} ${offset === 0 ? '' : offset > 0 ? `+${offset}` : `−${-offset}`}`.trim(); };
 const roleOf = (word: string) => roles.find(([pattern]) => pattern.test(word))?.[1] ?? holidayRole(word) ?? '';
 
 export interface Suggestion { word: string; description: string; matches: number[]; prefix: boolean }
@@ -322,15 +326,15 @@ export interface Suggestion { word: string; description: string; matches: number
  * plural after a number above one), then those that contain its letters in order ("mtw" → Mittwoch). `matches` are the
  * letters typed, to show in bold.
  */
-export function suggestions(text: string, limit = 6): Suggestion[] {
+export function suggestions(text: string, limit = 6, preferred: Language = getLanguage()): Suggestion[] {
   const match = /([a-zäöüß]+)$/i.exec(text);
   if (!match) return [];
   const typed = match[1].toLowerCase();
   const before = text.slice(0, match.index);
   // A word already complete needs nothing (Enter then finishes writing).
   if ([...german, ...english].some(word => word.toLowerCase() === typed)) return [];
-  const english_ = englishHint.test(before);
-  const words = english_ ? [...english, ...german] : [...german, ...english];
+  const english_ = preferred === 'en';
+  const words = [...new Set(english_ ? [...english, ...german] : [...german, ...english])];
   // The other language's words come after the text's own.
   const foreign = new Set(english_ ? german : english);
   const count = /(\d+)\s+$/.exec(before)?.[1];
@@ -351,5 +355,7 @@ export function suggestions(text: string, limit = 6): Suggestion[] {
     for (const letter of typed) { const at = lower.indexOf(letter, from); if (at < 0) break; matches.push(at); from = at + 1; }
     if (matches.length === typed.length) scored.push({ word, description: roleOf(word), matches, prefix: false, score: 1000 + (matches.at(-1)! - matches[0]) * 20 + matches[0] * 5 + lower.length + order / 100 });
   }
-  return scored.sort((a, b) => a.score - b.score).slice(0, limit).map(({ score: _, ...item }) => item);
+  const primary = new Set(english_ ? english : german);
+  const local = scored.filter(item => primary.has(item.word));
+  return (local.length ? local : scored).sort((a, b) => a.score - b.score).slice(0, limit).map(({ score: _, ...item }) => ({ ...item, description: t(item.description) }));
 }

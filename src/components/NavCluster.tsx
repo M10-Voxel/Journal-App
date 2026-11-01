@@ -1,3 +1,4 @@
+import { t, useLanguage } from '../i18n';
 import { Icon } from './Icon';
 
 /**
@@ -8,9 +9,10 @@ export function NavCluster({ label, prev, next, today, atToday, onPrev, onToday,
   label: string; prev: { label: string; tip: string }; next: { label: string; tip: string }; today: { tip: string; disabled?: boolean };
   atToday: boolean; onPrev: () => void; onToday: () => void; onNext: () => void;
 }) {
+  useLanguage();
   return <nav className="nav-cluster" aria-label={label}>
     <button type="button" className="nav-step" aria-label={prev.label} title={prev.tip} onClick={onPrev}><Icon name="left" /></button>
-    <button type="button" className={`nav-today${atToday ? ' is-current' : ''}`} title={today.tip} disabled={today.disabled} onClick={onToday}>Heute</button>
+    <button type="button" className={`nav-today${atToday ? ' is-current' : ''}`} title={today.tip} disabled={today.disabled} onClick={onToday}>{t("Heute")}</button>
     <button type="button" className="nav-step" aria-label={next.label} title={next.tip} onClick={onNext}><Icon name="right" /></button>
   </nav>;
 }

@@ -1,3 +1,4 @@
+import { t, useLanguage } from '../i18n';
 import { useLayoutEffect, useRef } from 'react';
 import type { CSSProperties, FocusEvent, ReactNode } from 'react';
 import type { Entry, EntryKind } from '../journal';
@@ -23,11 +24,11 @@ interface ActionItem {
 }
 
 // Clockwise from the bottom-left, so keyboard order follows the orbit: abgebrochen (lower left), offen (left), erledigt (upper left).
-const statusActions: { status: TaskStatus; icon: IconName; label: string; tip: string; angle: number; bar: number }[] = [
-  { status: 'cancelled', icon: 'cancel', label: 'Aufgabe abbrechen', tip: 'Abgebrochen · Alt X', angle: 135, bar: 2 },
-  { status: 'open', icon: 'task', label: 'Wieder öffnen', tip: 'Offen', angle: 180, bar: 0 },
-  { status: 'done', icon: 'check', label: 'Als erledigt markieren', tip: 'Erledigt · Alt D', angle: 225, bar: 1 },
-];
+const statusActions = (): { status: TaskStatus; icon: IconName; label: string; tip: string; angle: number; bar: number }[] => ([
+  { status: 'cancelled', icon: 'cancel', label: t("Aufgabe abbrechen"), tip: t("Abgebrochen · Alt X"), angle: 135, bar: 2 },
+  { status: 'open', icon: 'task', label: t("Wieder öffnen"), tip: t("Offen"), angle: 180, bar: 0 },
+  { status: 'done', icon: 'check', label: t("Als erledigt markieren"), tip: t("Erledigt · Alt D"), angle: 225, bar: 1 },
+]);
 const orbitRadius = 44;
 /** Position on the orbit around the entry symbol; 0° is right, 90° down (screen coordinates). */
 const onOrbit = (angle: number): CSSProperties => ({
@@ -35,11 +36,11 @@ const onOrbit = (angle: number): CSSProperties => ({
   '--y': `${Math.round(Math.sin(angle * Math.PI / 180) * orbitRadius)}px`,
 } as CSSProperties);
 const navigationKeys = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'];
-const kindActions: { kind: EntryKind; label: string; short: string; hint: string }[] = [
-  { kind: 'event', label: 'Als Ereignis', short: 'ereignis', hint: 'Alt ⇧ E' },
-  { kind: 'task', label: 'Als Aufgabe', short: 'aufgabe', hint: 'Alt ⇧ A' },
-  { kind: 'note', label: 'Als Notiz', short: 'notiz', hint: 'Alt ⇧ N' },
-];
+const kindActions = (): { kind: EntryKind; label: string; short: string; hint: string }[] => ([
+  { kind: 'event', label: t("Als Ereignis"), short: t('ereignis'), hint: 'Alt ⇧ E' },
+  { kind: 'task', label: t("Als Aufgabe"), short: t('aufgabe'), hint: 'Alt ⇧ A' },
+  { kind: 'note', label: t("Als Notiz"), short: t('notiz'), hint: 'Alt ⇧ N' },
+]);
 
 // The layouts share everything but their markup (styles are scoped by .actions-orbit / .actions-inline / .actions-swipe on the app):
 // Inline: no surface at all; the row opens a line of word-like actions in the document flow, in the writing font.
@@ -57,6 +58,7 @@ export function EntryActionDock({ layout, swipeActions, removeChoice, onClose, e
   onStatusChange: (status: TaskStatus) => void; onKindChange: (kind: EntryKind) => void; onPriorityChange: () => void; onMove: (offset: -1 | 1) => void; onRemove: () => void; onPreview: (preview: EntryPreview | null) => void;
   onPlanDatePreview: (date: string | null, count?: number) => void; onPlanningChange: (planning: boolean, view?: PlannerView) => void; onPlan: (change: PlanUpdate) => void; onNavigate: (date: string) => void;
 }) {
+  useLanguage();
   const dockRef = useRef<HTMLDivElement>(null);
   const wasPlanning = useRef(false);
   const trace = entry.plan;
@@ -72,37 +74,37 @@ export function EntryActionDock({ layout, swipeActions, removeChoice, onClose, e
   });
 
   // A linked entry asks on removing whether the others go too (ScopeChoice).
-  const removeTip = trace ? `Entfernen · auf Wunsch auch am ${trace.targets.map(target => formatShortDate(target.date)).join(', ')}` : entry.origin ? `Entfernen · auf Wunsch auch die Spur am ${formatShortDate(entry.origin)}` : 'Entfernen · Alt Entf';
+  const removeTip = trace ? t("Entfernen · auf Wunsch auch am {0}", trace.targets.map(target => formatShortDate(target.date)).join(', ')) : entry.origin ? t("Entfernen · auf Wunsch auch die Spur am {0}", formatShortDate(entry.origin)) : t("Entfernen · Alt Entf");
   const satellite = layout === 'orbit' ? 'dock-satellite ' : '';
   const place = (angle: number) => stagger(layout === 'orbit' ? onOrbit(angle) : {});
-  const up = () => <button type="button" className={`${satellite}dock-up`} style={place(270)} aria-label="Nach oben" data-tip="Nach oben · Alt ↑" disabled={!canMoveUp} {...previewing('up')} onClick={() => onMove(-1)}><Icon name="up" /></button>;
-  const down = () => <button type="button" className={`${satellite}dock-down`} style={place(90)} aria-label="Nach unten" data-tip="Nach unten · Alt ↓" disabled={!canMoveDown} {...previewing('down')} onClick={() => onMove(1)}><Icon name="down" /></button>;
-  const priority = () => <button type="button" className={`${satellite}dock-priority`} style={place(315)} aria-label={entry.priority ? 'Priorität entfernen' : 'Als Priorität markieren'} data-tip={entry.priority ? 'Priorität entfernen · Alt P' : 'Hohe Priorität · Alt P'} aria-pressed={entry.priority}
+  const up = () => <button type="button" className={`${satellite}dock-up`} style={place(270)} aria-label={t("Nach oben")} data-tip={t("Nach oben · Alt ↑")} disabled={!canMoveUp} {...previewing('up')} onClick={() => onMove(-1)}><Icon name="up" /></button>;
+  const down = () => <button type="button" className={`${satellite}dock-down`} style={place(90)} aria-label={t("Nach unten")} data-tip={t("Nach unten · Alt ↓")} disabled={!canMoveDown} {...previewing('down')} onClick={() => onMove(1)}><Icon name="down" /></button>;
+  const priority = () => <button type="button" className={`${satellite}dock-priority`} style={place(315)} aria-label={entry.priority ? t("Priorität entfernen") : t("Als Priorität markieren")} data-tip={entry.priority ? t("Priorität entfernen · Alt P") : t("Hohe Priorität · Alt P")} aria-pressed={entry.priority}
     {...previewing('priority')} onClick={onPriorityChange}><Icon name={priorityIcon(entry.kind)} /></button>;
-  const remove = () => <button type="button" className={`${satellite}dock-remove`} style={place(45)} aria-label="Eintrag entfernen" data-tip={removeTip} {...previewing('remove')} onClick={onRemove}><Icon name="trash" /></button>;
-  const unplan = () => <button type="button" className={`${satellite}dock-unplan`} style={place(135)} aria-label="Planung zurücknehmen" data-tip="Zurücknehmen" {...previewing('unplan')} onClick={() => onPlan({ plan: null })}><Icon name="undo" /></button>;
-  const jump = () => trace && <button type="button" className={`${satellite}dock-jump`} style={place(180)} aria-label={`Zum ${formatShortDate(trace.targets[0].date)} springen`} data-tip={formatShortDate(trace.targets[0].date)} data-primary-action="true" onClick={() => onNavigate(trace.targets[0].date)}><Icon name="jump" /></button>;
-  const states = (ordered: typeof statusActions) => <div className="status-track" data-status={status} role="group" aria-label="Status der Aufgabe">
+  const remove = () => <button type="button" className={`${satellite}dock-remove`} style={place(45)} aria-label={t("Eintrag entfernen")} data-tip={removeTip} {...previewing('remove')} onClick={onRemove}><Icon name="trash" /></button>;
+  const unplan = () => <button type="button" className={`${satellite}dock-unplan`} style={place(135)} aria-label={t("Planung zurücknehmen")} data-tip={t("Zurücknehmen")} {...previewing('unplan')} onClick={() => onPlan({ plan: null })}><Icon name="undo" /></button>;
+  const jump = () => trace && <button type="button" className={`${satellite}dock-jump`} style={place(180)} aria-label={t("Zum {0} springen", formatShortDate(trace.targets[0].date))} data-tip={formatShortDate(trace.targets[0].date)} data-primary-action="true" onClick={() => onNavigate(trace.targets[0].date)}><Icon name="jump" /></button>;
+  const states = (ordered: ReturnType<typeof statusActions>) => <div className="status-track" data-status={status} role="group" aria-label={t("Status der Aufgabe")}>
     {ordered.map(action => <button key={action.status} type="button" className={satellite.trim() || undefined} style={place(action.angle)} aria-label={action.label} data-tip={action.tip} aria-pressed={status === action.status}
       data-primary-action={action.status === (status === 'open' ? 'done' : 'open')} {...previewing(action.status)} onClick={() => onStatusChange(action.status)}>
       <Icon name={action.icon} />
     </button>)}
   </div>;
-  const planningGroup = () => <div className="dock-planning" role="group" aria-label="Planen">
-    {entry.kind === 'task' && <button type="button" className="dock-plan-tomorrow" style={stagger()} aria-label="Auf morgen verschieben" data-tip="Morgen · Alt M" {...previewing('tomorrow')} onClick={() => onPlan(tomorrowChange(entry, day))}><Icon name="plan-tomorrow" /></button>}
-    <button type="button" className="dock-plan-date" style={stagger()} aria-label="Datum und Uhrzeit planen" aria-haspopup="dialog" data-tip="Planen · Alt T" onClick={() => onPlanningChange(true)}><Icon name="calendar" /></button>
-    <button type="button" className="dock-plan-days" style={stagger()} aria-label="Mehrere Tage" aria-haspopup="dialog" data-tip="Mehrere Tage · Alt ⇧ T" onClick={() => onPlanningChange(true, 'days')}><Icon name="plan-days" /></button>
-    <button type="button" className="dock-plan-repeat" style={stagger()} aria-label="Wiederholen" aria-haspopup="dialog" aria-pressed={Boolean(entry.repeat?.rule)} data-tip="Wiederholen · Alt W" onClick={() => onPlanningChange(true, 'repeat')}><Icon name="repeat" /></button>
+  const planningGroup = () => <div className="dock-planning" role="group" aria-label={t("Planen")}>
+    {entry.kind === 'task' && <button type="button" className="dock-plan-tomorrow" style={stagger()} aria-label={t("Auf morgen verschieben")} data-tip={t("Morgen · Alt M")} {...previewing('tomorrow')} onClick={() => onPlan(tomorrowChange(entry, day))}><Icon name="plan-tomorrow" /></button>}
+    <button type="button" className="dock-plan-date" style={stagger()} aria-label={t("Datum und Uhrzeit planen")} aria-haspopup="dialog" data-tip={t("Planen · Alt T")} onClick={() => onPlanningChange(true)}><Icon name="calendar" /></button>
+    <button type="button" className="dock-plan-days" style={stagger()} aria-label={t("Mehrere Tage")} aria-haspopup="dialog" data-tip={t("Mehrere Tage · Alt ⇧ T")} onClick={() => onPlanningChange(true, 'days')}><Icon name="plan-days" /></button>
+    <button type="button" className="dock-plan-repeat" style={stagger()} aria-label={t("Wiederholen")} aria-haspopup="dialog" aria-pressed={Boolean(entry.repeat?.rule)} data-tip={t("Wiederholen · Alt W")} onClick={() => onPlanningChange(true, 'repeat')}><Icon name="repeat" /></button>
   </div>;
-  const kindGroup = () => <div className="dock-kind" role="group" aria-label="Art">
-    {kindActions.map(action => <button key={action.kind} type="button" className={`dock-kind-${action.kind}`} style={stagger()} aria-label={action.label} data-tip={`${action.label.replace('Als ', '')} · ${action.hint}`}
+  const kindGroup = () => <div className="dock-kind" role="group" aria-label={t("Art")}>
+    {kindActions().map(action => <button key={action.kind} type="button" className={`dock-kind-${action.kind}`} style={stagger()} aria-label={action.label} data-tip={`${action.label.replace(t("Als "), '')} · ${action.hint}`}
       aria-pressed={entry.kind === action.kind} disabled={action.kind === 'note' && entry.kind !== 'note' && !canBeNote(entry)}
       {...(entry.kind === action.kind ? {} : previewing(action.kind))} onClick={() => onKindChange(action.kind)}><Icon name={action.kind} /></button>)}
   </div>;
   const isTask = entry.kind === 'task' && !trace;
   // Inline groups: the actions as short, lower-case words as they read in a sentence.
   const groupOf: Record<string, number> = { jump: 0, unplan: 0, open: 1, done: 1, cancelled: 1, priority: 2, 'kind-event': 2.5, 'kind-task': 2.5, 'kind-note': 2.5, tomorrow: 3, plan: 3, days: 3, repeat: 3, up: 4, down: 4, remove: 5 };
-  const shortWords: Record<string, string> = { jump: 'zum tag', unplan: 'zurücknehmen', open: 'offen', done: 'erledigt', cancelled: 'abbrechen', priority: 'priorität', 'kind-event': 'als ereignis', 'kind-task': 'als aufgabe', 'kind-note': 'als notiz', tomorrow: 'morgen', plan: 'planen', days: 'mehrere tage', repeat: 'wiederholen', up: '', down: '', remove: 'löschen' };
+  const shortWords: Record<string, string> = { jump: t("zum tag"), unplan: t("zurücknehmen"), open: t('offen'), done: t('erledigt'), cancelled: t('abbrechen'), priority: t("priorität"), 'kind-event': t("als ereignis"), 'kind-task': t("als aufgabe"), 'kind-note': t("als notiz"), tomorrow: t('morgen'), plan: t('planen'), days: t("mehrere tage"), repeat: t('wiederholen'), up: '', down: '', remove: t("löschen") };
   const inlineGroups = () => {
     const items = actionItems().map(item => ({ ...item, short: shortWords[item.id] }));
     const order = ['open', 'done', 'cancelled'];
@@ -113,25 +115,25 @@ export function EntryActionDock({ layout, swipeActions, removeChoice, onClose, e
   };
   const actionItems = (): ActionItem[] => [
     ...trace ? [
-      { id: 'jump', label: `Zum ${formatShortDate(trace.targets[0].date)} springen`, icon: 'jump' as const, run: () => onNavigate(trace.targets[0].date) },
-      ...!traceSaved ? [{ id: 'unplan', label: 'Planung zurücknehmen', icon: 'undo' as const, preview: 'unplan' as const, run: () => onPlan({ plan: null }) }] : [],
+      { id: 'jump', label: t("Zum {0} springen", formatShortDate(trace.targets[0].date)), icon: 'jump' as const, run: () => onNavigate(trace.targets[0].date) },
+      ...!traceSaved ? [{ id: 'unplan', label: t("Planung zurücknehmen"), icon: 'undo' as const, preview: 'unplan' as const, run: () => onPlan({ plan: null }) }] : [],
     ] : [],
     ...isTask ? [
-      { id: 'done', label: 'Erledigt', icon: 'check' as const, preview: 'done' as const, current: status === 'done', run: () => onStatusChange('done') },
-      { id: 'cancelled', label: 'Abbrechen', icon: 'cancel' as const, preview: 'cancelled' as const, current: status === 'cancelled', run: () => onStatusChange('cancelled') },
-      { id: 'open', label: 'Wieder öffnen', icon: 'task' as const, preview: 'open' as const, current: status === 'open', run: () => onStatusChange('open') },
+      { id: 'done', label: t("Erledigt"), icon: 'check' as const, preview: 'done' as const, current: status === 'done', run: () => onStatusChange('done') },
+      { id: 'cancelled', label: t("Abbrechen"), icon: 'cancel' as const, preview: 'cancelled' as const, current: status === 'cancelled', run: () => onStatusChange('cancelled') },
+      { id: 'open', label: t("Wieder öffnen"), icon: 'task' as const, preview: 'open' as const, current: status === 'open', run: () => onStatusChange('open') },
     ] : [],
-    ...!trace ? [{ id: 'priority', label: entry.priority ? 'Priorität entfernen' : 'Hohe Priorität', icon: priorityIcon(entry.kind), preview: 'priority' as const, run: onPriorityChange }] : [],
-    ...kindActions.filter(action => action.kind !== entry.kind && (action.kind !== 'note' || canBeNote(entry))).map(action => ({ id: `kind-${action.kind}`, label: action.label, icon: action.kind, preview: action.kind, run: () => onKindChange(action.kind) })),
+    ...!trace ? [{ id: 'priority', label: entry.priority ? t("Priorität entfernen") : t("Hohe Priorität"), icon: priorityIcon(entry.kind), preview: 'priority' as const, run: onPriorityChange }] : [],
+    ...kindActions().filter(action => action.kind !== entry.kind && (action.kind !== 'note' || canBeNote(entry))).map(action => ({ id: `kind-${action.kind}`, label: action.label, icon: action.kind, preview: action.kind, run: () => onKindChange(action.kind) })),
     ...canPlan(entry) ? [
-      ...entry.kind === 'task' ? [{ id: 'tomorrow', label: 'Auf morgen', icon: 'plan-tomorrow' as const, preview: 'tomorrow' as const, run: () => onPlan(tomorrowChange(entry, day)) }] : [],
-      { id: 'plan', label: 'Planen …', icon: 'calendar' as const, run: () => onPlanningChange(true) },
-      { id: 'days', label: 'Mehrere Tage', icon: 'plan-days' as const, run: () => onPlanningChange(true, 'days') },
-      { id: 'repeat', label: 'Wiederholen …', icon: 'repeat' as const, run: () => onPlanningChange(true, 'repeat') },
+      ...entry.kind === 'task' ? [{ id: 'tomorrow', label: t("Auf morgen"), icon: 'plan-tomorrow' as const, preview: 'tomorrow' as const, run: () => onPlan(tomorrowChange(entry, day)) }] : [],
+      { id: 'plan', label: t("Planen …"), icon: 'calendar' as const, run: () => onPlanningChange(true) },
+      { id: 'days', label: t("Mehrere Tage"), icon: 'plan-days' as const, run: () => onPlanningChange(true, 'days') },
+      { id: 'repeat', label: t("Wiederholen …"), icon: 'repeat' as const, run: () => onPlanningChange(true, 'repeat') },
     ] : [],
-    { id: 'up', label: 'Nach oben', icon: 'up' as const, preview: 'up' as const, disabled: !canMoveUp, run: () => onMove(-1) },
-    { id: 'down', label: 'Nach unten', icon: 'down' as const, preview: 'down' as const, disabled: !canMoveDown, run: () => onMove(1) },
-    { id: 'remove', label: trace || entry.origin ? removeTip.replace('Entfernen', 'Löschen').replace(' · Alt Entf', '') : 'Löschen', icon: 'trash' as const, preview: 'remove' as const, run: onRemove },
+    { id: 'up', label: t("Nach oben"), icon: 'up' as const, preview: 'up' as const, disabled: !canMoveUp, run: () => onMove(-1) },
+    { id: 'down', label: t("Nach unten"), icon: 'down' as const, preview: 'down' as const, disabled: !canMoveDown, run: () => onMove(1) },
+    { id: 'remove', label: trace || entry.origin ? removeTip.replace(t("Entfernen"), t("Löschen")).replace(' · Alt Entf', '') : t("Löschen"), icon: 'trash' as const, preview: 'remove' as const, run: onRemove },
   ];
 
   useLayoutEffect(() => {
@@ -151,7 +153,7 @@ export function EntryActionDock({ layout, swipeActions, removeChoice, onClose, e
       onCancel={() => onPlanningChange(false)} onConfirm={(dates: string[], schedule: Schedule, repeat: RepeatRule | null) => onPlan(repeatChange(entry, day, dates, { ...schedule, end: keepDuration(entry, schedule.time) }, repeat, localDate()))} />
   </div>;
 
-  return <div ref={dockRef} className={`entry-dock-shell${isOpen ? ' is-open' : ''}`} inert={!isOpen} aria-hidden={!isOpen} role="toolbar" aria-label={`Aktionen für ${label}`} tabIndex={-1} onKeyDown={event => {
+  return <div ref={dockRef} className={`entry-dock-shell${isOpen ? ' is-open' : ''}`} inert={!isOpen} aria-hidden={!isOpen} role="toolbar" aria-label={t("Aktionen für {0}", label)} tabIndex={-1} onKeyDown={event => {
     if (event.altKey || !navigationKeys.includes(event.key) || (event.target as HTMLElement).tagName === 'INPUT') return;
     event.preventDefault();
     const buttons = Array.from(dockRef.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') ?? []);
@@ -180,7 +182,7 @@ export function EntryActionDock({ layout, swipeActions, removeChoice, onClose, e
       {removeChoice ? <div className="dock-remove-choice" style={onOrbit(45)}>{removeChoice}</div> : remove()}
       {down()}
       {trace && <>{!traceSaved && unplan()}{jump()}</>}
-      {isTask && states(statusActions)}
+      {isTask && states(statusActions())}
       <div className="dock-clusters">{kindGroup()}{canPlan(entry) && planningGroup()}</div>
     </div>}
   </div>;

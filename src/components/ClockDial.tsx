@@ -1,3 +1,4 @@
+import { t, useLanguage } from '../i18n';
 import { useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent, PointerEvent } from 'react';
 import { clockAngle, clockValue, formatTime, parseTime, stepTime, typeDigit } from '../planning';
@@ -15,6 +16,7 @@ const typingPause = 1500;
 // Keyboard: digits type the active part (see typeDigit), Tab switches hours/minutes, arrows and the wheel fine-tune.
 // It lies over the hidden calendar, so both views of the planner are exactly the same size.
 export function ClockDial({ time, onChange, onBack }: { time: string; onChange: (time: string) => void; onBack: () => void }) {
+  useLanguage();
   const [mode, setMode] = useState<ClockMode>('hour');
   const dragging = useRef(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -79,15 +81,15 @@ export function ClockDial({ time, onChange, onBack }: { time: string; onChange: 
 
   return <div className="clock" ref={rootRef} onKeyDown={onKey}>
     <div className="clock-head">
-      <button type="button" className="clock-back" aria-label="Zurück zum Kalender" data-tip="Zurück · Esc" onClick={onBack}><Icon name="left" /></button>
+      <button type="button" className="clock-back" aria-label={t("Zurück zum Kalender")} data-tip={t("Zurück · Esc")} onClick={onBack}><Icon name="left" /></button>
       <div className="clock-readout">
-        <button type="button" className="clock-part" aria-pressed={mode === 'hour'} aria-label={`Stunde ${hour}`} onClick={() => { switchMode('hour'); faceRef.current?.focus({ preventScroll: true }); }}><span key={hour}>{formatTime(hour, minute).slice(0, 2)}</span></button>
+        <button type="button" className="clock-part" aria-pressed={mode === 'hour'} aria-label={t("Stunde {0}", hour)} onClick={() => { switchMode('hour'); faceRef.current?.focus({ preventScroll: true }); }}><span key={hour}>{formatTime(hour, minute).slice(0, 2)}</span></button>
         <span className="clock-colon">:</span>
-        <button type="button" className="clock-part" aria-pressed={mode === 'minute'} aria-label={`Minute ${minute}`} onClick={() => { switchMode('minute'); faceRef.current?.focus({ preventScroll: true }); }}><span key={minute}>{formatTime(hour, minute).slice(3)}</span></button>
+        <button type="button" className="clock-part" aria-pressed={mode === 'minute'} aria-label={t("Minute {0}", minute)} onClick={() => { switchMode('minute'); faceRef.current?.focus({ preventScroll: true }); }}><span key={minute}>{formatTime(hour, minute).slice(3)}</span></button>
       </div>
     </div>
     <div className="clock-main">
-      <div ref={faceRef} className="clock-face" role="slider" tabIndex={0} aria-label={mode === 'hour' ? 'Stunde wählen' : 'Minute wählen'} aria-valuemin={0} aria-valuemax={mode === 'hour' ? 23 : 59} aria-valuenow={active} aria-valuetext={time}
+      <div ref={faceRef} className="clock-face" role="slider" tabIndex={0} aria-label={mode === 'hour' ? t("Stunde wählen") : t("Minute wählen")} aria-valuemin={0} aria-valuemax={mode === 'hour' ? 23 : 59} aria-valuenow={active} aria-valuetext={time}
         aria-keyshortcuts="Tab 0 1 2 3 4 5 6 7 8 9" style={{ width: size, height: size }}
         onPointerDown={event => { if (event.button !== 0) return; dragging.current = true; typed.current.pending = null; event.currentTarget.setPointerCapture(event.pointerId); event.currentTarget.focus({ preventScroll: true }); pick(event); }}
         onPointerMove={event => { if (dragging.current) pick(event); }}
@@ -103,7 +105,7 @@ export function ClockDial({ time, onChange, onBack }: { time: string; onChange: 
           })}
         </div>
       </div>
-      <div className="clock-quick" role="group" aria-label="Schnellwahl">
+      <div className="clock-quick" role="group" aria-label={t("Schnellwahl")}>
         {quickTimes.map(value => <button key={value} type="button" aria-pressed={value === time} onClick={() => { onChange(value); switchMode('hour'); faceRef.current?.focus({ preventScroll: true }); }}>{value.slice(0, 2)}</button>)}
       </div>
     </div>

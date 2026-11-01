@@ -1,3 +1,4 @@
+import { t, useLanguage, getLanguage } from '../i18n';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { formatDate, formatMonth, formatShortDate, localDate, monthGrid, shiftDate, shiftMonth } from '../dates';
@@ -9,7 +10,7 @@ import { ClockDial } from './ClockDial';
 import { RepeatPanel } from './RepeatPanel';
 import { Icon } from './Icon';
 
-const weekdayInitials = ['M', 'D', 'M', 'D', 'F', 'S', 'S'];
+const weekdayInitials = () => getLanguage() === 'en' ? ['M','T','W','T','F','S','S'] : ['M','D','M','D','F','S','S'];
 
 // Month calendar with optional time, reminder and repetition.
 // Keyboard: arrows move the day, Page↑/↓ the month, H today, U clock, W repeat, E reminder, Entf clears the time, Enter plans, Escape goes back.
@@ -24,6 +25,7 @@ export function PlanCalendar({ day, initial, initialView = 'date', onPreview, on
   day: string; initial: { date: string; repeat?: RepeatRule | null } & Schedule; initialView?: PlannerView;
   onPreview: (date: string, count: number) => void; onConfirm: (dates: string[], schedule: Schedule, repeat: RepeatRule | null) => void; onCancel: () => void;
 }) {
+  useLanguage();
   const [selected, setSelected] = useState(initial.date);
   const [month, setMonth] = useState(initial.date.slice(0, 7));
   const [time, setTime] = useState(initial.time || (initialView === 'time' ? nextFullHour() : ''));
@@ -163,29 +165,29 @@ export function PlanCalendar({ day, initial, initialView = 'date', onPreview, on
   const confirmIcon = multi ? 'scheduled-multi' : moved ? 'scheduled' : rule ? 'repeat' : 'check';
   // tabIndex -1: clicks on empty parts of the panel keep focus inside the entry instead of closing it.
   // The calendar stays rendered under the clock and the repeat view, so switching views never changes the panel's size.
-  return <div className={`planner is-${view}${multi ? ' is-multi' : ''}${pickEnd ? ' is-picking-end' : ''}`} role="dialog" aria-label="Planen" tabIndex={-1} onKeyDown={onKey}>
+  return <div className={`planner is-${view}${multi ? ' is-multi' : ''}${pickEnd ? ' is-picking-end' : ''}`} role="dialog" aria-label={t("Planen")} tabIndex={-1} onKeyDown={onKey}>
     <div className="planner-body">
     <div className="planner-calendar" inert={view !== 'date'} aria-hidden={view !== 'date'}>
     {/* Picking the end looks like the calendar card's end picker: back on the left, the month, ↑ ↓ to turn months. */}
     {pickEnd ? <div className="planner-head is-picking-end">
-      <button type="button" className="planner-nav" aria-label="Zurück zur Wiederholung" data-tip="Zurück · Esc" onClick={() => { setPickEnd(false); setView('repeat'); }}><Icon name="left" /></button>
-      <span className="planner-month" key={`${month}-end`} aria-live="polite"><em>Ende · </em>{formatMonth(month)}</span>
-      <button type="button" className="planner-nav" aria-label="Vorheriger Monat" onClick={() => setMonth(current => shiftMonth(current, -1))}><Icon name="up" /></button>
-      <button type="button" className="planner-nav" aria-label="Nächster Monat" onClick={() => setMonth(current => shiftMonth(current, 1))}><Icon name="down" /></button>
+      <button type="button" className="planner-nav" aria-label={t("Zurück zur Wiederholung")} data-tip={t("Zurück · Esc")} onClick={() => { setPickEnd(false); setView('repeat'); }}><Icon name="left" /></button>
+      <span className="planner-month" key={`${month}-end`} aria-live="polite"><em>{t("Ende · ")}</em>{formatMonth(month)}</span>
+      <button type="button" className="planner-nav" aria-label={t("Vorheriger Monat")} onClick={() => setMonth(current => shiftMonth(current, -1))}><Icon name="up" /></button>
+      <button type="button" className="planner-nav" aria-label={t("Nächster Monat")} onClick={() => setMonth(current => shiftMonth(current, 1))}><Icon name="down" /></button>
     </div> : <div className="planner-head">
-      <button type="button" className="planner-nav" aria-label="Vorheriger Monat" onClick={() => setMonth(current => shiftMonth(current, -1))}><Icon name="left" /></button>
+      <button type="button" className="planner-nav" aria-label={t("Vorheriger Monat")} onClick={() => setMonth(current => shiftMonth(current, -1))}><Icon name="left" /></button>
       <span className="planner-month" key={month} aria-live="polite">{formatMonth(month)}</span>
-      {!multi && <button type="button" className="planner-repeat" aria-pressed={Boolean(shownRule)} aria-label={shownRule ? `Wiederholen: ${describe(shownRule)}` : 'Wiederholen'} data-tip={shownRule ? `${describe(shownRule)} · W` : 'Wiederholen · W'} onClick={toggleRepeat}>
+      {!multi && <button type="button" className="planner-repeat" aria-pressed={Boolean(shownRule)} aria-label={shownRule ? t("Wiederholen: {0}", describe(shownRule)) : t("Wiederholen")} data-tip={shownRule ? `${describe(shownRule)} · W` : t("Wiederholen · W")} onClick={toggleRepeat}>
         <Icon name="repeat" />
       </button>}
-      <button type="button" className="planner-nav" aria-label="Nächster Monat" onClick={() => setMonth(current => shiftMonth(current, 1))}><Icon name="right" /></button>
+      <button type="button" className="planner-nav" aria-label={t("Nächster Monat")} onClick={() => setMonth(current => shiftMonth(current, 1))}><Icon name="right" /></button>
     </div>}
-    <div className="planner-weekdays" aria-hidden="true">{weekdayInitials.map((initial, index) => <span key={index}>{initial}</span>)}</div>
-    <div className="planner-grid" role="grid" aria-label={pickEnd ? `Ende wählen, ${formatMonth(month)}` : formatMonth(month)} ref={gridRef} onKeyDown={onGridKey}>
+    <div className="planner-weekdays" aria-hidden="true">{weekdayInitials().map((initial, index) => <span key={index}>{initial}</span>)}</div>
+    <div className="planner-grid" role="grid" aria-label={pickEnd ? t("Ende wählen, {0}", formatMonth(month)) : formatMonth(month)} ref={gridRef} onKeyDown={onGridKey}>
       {grid.map(date => <button key={date} type="button" role="gridcell" tabIndex={date === cursor ? 0 : -1}
         className={`planner-day${date.startsWith(month) ? '' : ' is-outside'}${date === today ? ' is-today' : ''}${date === day ? ' is-origin' : ''}${date < today ? ' is-past' : ''}${(multi || pickEnd) && date === cursor ? ' is-cursor' : ''}${multi ? rangeClass(date) : ''}${repeating.has(date) ? ' is-repeat' : ''}${shownRule?.end?.until === date ? ' is-repeat-end' : ''}`}
         aria-selected={multi ? picked.includes(date) : date === selected} aria-current={(multi || pickEnd) && date === cursor ? 'true' : undefined}
-        aria-label={`${formatDate(date)}${date === day ? ', aktueller Tag' : ''}${repeating.has(date) ? ', Wiederholung' : ''}`}
+        aria-label={`${formatDate(date)}${date === day ? t(", aktueller Tag") : ''}${repeating.has(date) ? t(", Wiederholung") : ''}`}
         onClick={() => { if (pickEnd) { chooseEnd(date); return; } select(date); if (multi) setPoint(date); }}
         onDoubleClick={() => { if (!multi && !pickEnd) onConfirm([date], { time: time || null, reminder }, ruleFor(date)); }}
         onContextMenu={event => { if (!multi) return; event.preventDefault(); select(date); flip(date); }}>
@@ -203,18 +205,18 @@ export function PlanCalendar({ day, initial, initialView = 'date', onPreview, on
     </div>
     <div className="planner-foot">
       <div className={`planner-time${time ? ' is-set' : ''}${view === 'time' ? ' is-active' : ''}`}>
-        <button type="button" className="planner-time-toggle" aria-pressed={view === 'time'} aria-label={view === 'time' ? 'Zurück zum Kalender' : time ? `Uhrzeit ${time} ändern` : 'Uhrzeit wählen (optional)'} data-tip={view === 'time' ? 'Kalender · U' : 'Uhrzeit · U'} onClick={toggleClock}>
+        <button type="button" className="planner-time-toggle" aria-pressed={view === 'time'} aria-label={view === 'time' ? t("Zurück zum Kalender") : time ? t("Uhrzeit {0} ändern", time) : t("Uhrzeit wählen (optional)")} data-tip={view === 'time' ? t("Kalender · U") : t("Uhrzeit · U")} onClick={toggleClock}>
           <Icon name={view === 'time' ? 'calendar' : 'clock'} /><span key={time}>{time || '--:--'}</span>
         </button>
-        {time && <button type="button" className="planner-clear" aria-label="Uhrzeit entfernen" data-tip="Entfernen · Entf" onClick={clearTime}><Icon name="done" /></button>}
+        {time && <button type="button" className="planner-clear" aria-label={t("Uhrzeit entfernen")} data-tip={t("Entfernen · Entf")} onClick={clearTime}><Icon name="done" /></button>}
       </div>
-      <button type="button" className="planner-reminder" aria-pressed={reminder} aria-label="Erinnern" data-tip={`${reminder ? 'Erinnerung an' : 'Erinnern'} ${time ? `um ${time}` : 'um 9:00'} · E`} onClick={() => setReminder(value => !value)}>
+      <button type="button" className="planner-reminder" aria-pressed={reminder} aria-label={t("Erinnern")} data-tip={`${reminder ? t("Erinnerung an") : t("Erinnern")} ${time ? t("um {0}", time) : t("um 9:00")} · E`} onClick={() => setReminder(value => !value)}>
         <Icon name="bell" key={String(reminder)} />
       </button>
       <button type="button" className={`planner-confirm${moved ? ' is-move' : ''}`} disabled={(multi && !picked.length) || pickEnd}
-        aria-label={`${multi ? `Planen auf ${picked.length} Tage` : moved ? `Planen auf ${formatDate(selected)}` : 'Übernehmen'}${time ? `, ${time} Uhr` : ''}${shownRule ? `, ${describe(shownRule)}` : ''}`} data-tip="Enter" onClick={confirm}>
+        aria-label={`${multi ? t("Planen auf {0} Tage", picked.length) : moved ? t("Planen auf {0}", formatDate(selected)) : t("Übernehmen")}${time ? t(", {0} Uhr", time) : ''}${shownRule ? `, ${describe(shownRule)}` : ''}`} data-tip="Enter" onClick={confirm}>
         <Icon name={confirmIcon} key={confirmIcon} />
-        <span key={multi ? picked.length : selected}>{multi ? picked.length === 1 ? formatShortDate(picked[0]) : `${picked.length} Tage` : moved ? formatShortDate(selected) : 'Hier'}</span>
+        <span key={multi ? picked.length : selected}>{multi ? picked.length === 1 ? formatShortDate(picked[0]) : t("{0} Tage", picked.length) : moved ? formatShortDate(selected) : t("Hier")}</span>
       </button>
     </div>
   </div>;

@@ -86,6 +86,8 @@ pub const REMINDER_DEFAULT: &str = "09:00";
 pub struct Store { conn: Connection }
 
 impl Store {
+    pub fn interface_language(&self) -> Result<String> { Ok(self.conn.query_row("SELECT value FROM settings WHERE key='ui-language'", [], |row|row.get(0)).optional()?.unwrap_or_else(||"de".into())) }
+    pub fn set_interface_language(&self, language: &str) -> Result<()> { self.conn.execute("INSERT INTO settings(key,value) VALUES('ui-language',?1) ON CONFLICT(key) DO UPDATE SET value=excluded.value",[language])?; Ok(()) }
     /// Export every task and event, including calendar-only entries, without the UI's range limit.
     pub fn export_calendar(&self) -> Result<Vec<CalendarDay>> {
         let mut stmt = self.conn.prepare("SELECT DISTINCT day_date FROM entries WHERE plan IS NULL AND kind <> 'note' ORDER BY day_date")?;
@@ -659,6 +661,13 @@ mod tests {
         assert_eq!(loaded.entries[0].id,item.id); assert_eq!(loaded.entries[0].time,item.time); assert!(loaded.entries[0].description.is_empty());
         loaded.entries[0].description="Nach der Migration".into(); migrated.save(loaded).unwrap();
         let reopened=Store::from_connection(migrated.conn).unwrap(); assert_eq!(reopened.load("2026-11-01").unwrap().entries[0].description,"Nach der Migration");
+    }
+    #[test] fn display_language_persists_independently_of_journal_entries() {
+        let db=store(); assert_eq!(db.interface_language().unwrap(),"de");
+        db.set_interface_language("en").unwrap();
+        let reopened=Store::from_connection(db.conn).unwrap();
+        assert_eq!(reopened.interface_language().unwrap(),"en");
+        assert!(reopened.export_calendar().unwrap().is_empty());
     }
     #[test] fn repeating_entries_become_linked_occurrences() {
         let mut db = store();

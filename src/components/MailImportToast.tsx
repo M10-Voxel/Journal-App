@@ -1,3 +1,4 @@
+import { t, useLanguage } from '../i18n';
 import { useEffect, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { formatShortDate } from '../dates';
@@ -8,6 +9,7 @@ interface Imported { id: string; text: string; date: string; time?: string | nul
 
 /** A confirmation after the calendar write succeeds, in journal and calendar windows. */
 export function MailImportToast() {
+  useLanguage();
   const [items, setItems] = useState<Imported[]>([]);
   useEffect(() => {
     const stop = listen<Imported[]>('journal:mail-imported', event => setItems(current => [...current, ...event.payload]));
@@ -19,12 +21,12 @@ export function MailImportToast() {
     return () => clearTimeout(timer);
   }, [items]);
   if (!items.length) return null;
-  return <aside className="mail-import-toast" role="status" aria-live="polite" aria-label="Kalendereinträge aus E-Mails">
+  return <aside className="mail-import-toast" role="status" aria-live="polite" aria-label={t("Kalendereinträge aus E-Mails")}>
     <Icon name="calendar" />
-    <div><strong>{items.length === 1 ? 'Termin aus E-Mail eingetragen' : `${items.length} Termine aus E-Mails eingetragen`}</strong>
-      {items.slice(-3).map((item, index) => <p key={`${item.id}-${index}`}><span>{item.text}</span><small>{formatShortDate(item.date)} · {item.time ? formatSpan(item.time, item.end) : 'ganztägig'}</small></p>)}
-      {items.length > 3 && <small>und {items.length - 3} weitere</small>}
+    <div><strong>{items.length === 1 ? t("Termin aus E-Mail eingetragen") : t("{0} Termine aus E-Mails eingetragen", items.length)}</strong>
+      {items.slice(-3).map((item, index) => <p key={`${item.id}-${index}`}><span>{item.text}</span><small>{formatShortDate(item.date)} · {item.time ? formatSpan(item.time, item.end) : t("ganztägig")}</small></p>)}
+      {items.length > 3 && <small>{t("und ")}{items.length - 3}{t(" weitere")}</small>}
     </div>
-    <button type="button" aria-label="Hinweis schließen" onClick={() => setItems([])}><Icon name="done" /></button>
+    <button type="button" aria-label={t("Hinweis schließen")} onClick={() => setItems([])}><Icon name="done" /></button>
   </aside>;
 }

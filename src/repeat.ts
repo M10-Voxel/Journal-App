@@ -1,6 +1,7 @@
 // Repeating entries. A rule describes which days an entry recurs on, starting with its first day (`start`, which is
 // always an occurrence, like DTSTART in iCalendar). Occurrences are real entries; see `Repeat` in journal.ts.
 import { shiftDate } from './dates.ts';
+import { getLanguage, t } from './i18n.ts';
 
 export type RepeatUnit = 'day' | 'week' | 'month' | 'year';
 /**
@@ -131,51 +132,76 @@ export function lastOccurrence(rule: RepeatRule): string | null {
   return null;
 }
 
-export const weekdayShort = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
-const monthShort = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
+export const weekdayShort = () => getLanguage() === 'en' ? ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'] : ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+const monthShort = () => getLanguage() === 'en' ? ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'] : ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
 /** The unit in the singular and plural: "Woche", "Wochen". */
-export const unitNames: Record<RepeatUnit, [string, string]> = { day: ['Tag', 'Tage'], week: ['Woche', 'Wochen'], month: ['Monat', 'Monate'], year: ['Jahr', 'Jahre'] };
+export const unitNames = (): Record<RepeatUnit, [string, string]> => getLanguage() === 'en' ? { day:['day','days'],week:['week','weeks'],month:['month','months'],year:['year','years'] } : { day: ['Tag', 'Tage'], week: ['Woche', 'Wochen'], month: ['Monat', 'Monate'], year: ['Jahr', 'Jahre'] };
 const adverbs: Record<RepeatUnit, string> = { day: 'Täglich', week: 'Wöchentlich', month: 'Monatlich', year: 'Jährlich' };
 const easterNames: Record<number, string> = { [-48]: 'Rosenmontag', [-47]: 'Fastnacht', [-46]: 'Aschermittwoch', [-3]: 'Gründonnerstag', [-2]: 'Karfreitag', [0]: 'Ostersonntag', [1]: 'Ostermontag', [39]: 'Christi Himmelfahrt', [49]: 'Pfingstsonntag', [50]: 'Pfingstmontag', [60]: 'Fronleichnam' };
-export const easterName = (offset: number) => easterNames[offset] ?? `Ostern ${offset > 0 ? '+' : '−'}${Math.abs(offset)}`;
+export const easterName = (offset: number) => easterNames[offset] ? t(easterNames[offset]) : `${getLanguage() === 'en' ? 'Easter' : 'Ostern'} ${offset > 0 ? '+' : '−'}${Math.abs(offset)}`;
 /** "Mo 2.11." */
-export const formatOccurrence = (date: string) => `${weekdayShort[weekdayOf(date)]} ${parts(date)[2]}.${parts(date)[1]}.`;
+export const formatOccurrence = (date: string) => `${weekdayShort()[weekdayOf(date)]} ${parts(date)[2]}.${parts(date)[1]}.`;
+
+function englishOn(rule: Pick<RepeatRule, 'start' | 'unit' | 'on' | 'every'>, sentence: boolean): string {
+  const [, month, day] = parts(rule.start), weekday = weekdayShort()[weekdayOf(rule.start)];
+  const ordinal = (n: number) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'th' : n % 10 === 1 ? 'st' : n % 10 === 2 ? 'nd' : n % 10 === 3 ? 'rd' : 'th'}`;
+  const inMonth = sentence && rule.unit === 'year' ? ` in ${monthShort()[month-1]}` : '';
+  const prefix = sentence ? 'on ' : '';
+  switch (rule.on ?? 'date') {
+    case 'weekday': return `${prefix}${ordinal(weekdayIndex(rule.start))} ${weekday}${inMonth}`;
+    case 'last-weekday': return `${prefix}last ${weekday}${inMonth}`;
+    case 'last-day': return sentence ? `on last day of the month${inMonth}` : 'Month end';
+    case 'easter': return `${sentence ? '· ' : ''}${easterName(easterOffset(rule.start))}`;
+    default: return `${prefix}${rule.unit === 'year' ? `${day} ${monthShort()[month-1]}` : ordinal(day)}`;
+  }
+}
 
 /** The choice of a monthly or yearly position as a short label: "30.", "30. Okt", "2. Fr", "letzter Fr", "Monatsende", "Karfreitag". */
 export function onLabel(start: string, unit: RepeatUnit, on: RepeatOn): string {
-  const [, month, day] = parts(start), weekday = weekdayShort[weekdayOf(start)];
+  if (getLanguage() === 'en') return englishOn({ start, unit, on, every:1 }, false);
+  const [, month, day] = parts(start), weekday = weekdayShort()[weekdayOf(start)];
   switch (on) {
     case 'weekday': return `${weekdayIndex(start)}. ${weekday}`;
     case 'last-weekday': return `letzter ${weekday}`;
     case 'last-day': return 'Monatsende';
     case 'easter': return easterName(easterOffset(start));
-    default: return unit === 'year' ? `${day}. ${monthShort[month - 1]}` : `${day}.`;
+    default: return unit === 'year' ? `${day}. ${monthShort()[month - 1]}` : `${day}.`;
   }
 }
 /** "am 30." / "am 2. Di" / "am letzten Fr" / "am Monatsende" – yearly in the start's month ("am 2. So im Mai"). */
 function describeOn(rule: RepeatRule): string {
   const [, month, day] = parts(rule.start);
-  const weekday = weekdayShort[weekdayOf(rule.start)], inMonth = rule.unit === 'year' ? ` im ${monthShort[month - 1]}` : '';
+  const weekday = weekdayShort()[weekdayOf(rule.start)], inMonth = rule.unit === 'year' ? ` im ${monthShort()[month - 1]}` : '';
   switch (rule.on ?? 'date') {
     case 'weekday': return `am ${weekdayIndex(rule.start)}. ${weekday}${inMonth}`;
     case 'last-weekday': return `am letzten ${weekday}${inMonth}`;
     case 'last-day': return `am Monatsende${inMonth}`;
     case 'easter': return `· ${easterName(easterOffset(rule.start))}`;
-    default: return rule.unit === 'year' ? `am ${day}. ${monthShort[month - 1]}` : `am ${day}.`;
+    default: return rule.unit === 'year' ? `am ${day}. ${monthShort()[month - 1]}` : `am ${day}.`;
   }
 }
 
 const sameDays = (a: readonly number[], b: readonly number[]) => a.length === b.length && a.every(day => b.includes(day));
 /** Which days, as a short German phrase: "Alle 4 Wochen am Mo, Do, Fr", "Werktags", "Jährlich am 12. Mär". */
 export function describePattern(rule: RepeatRule): string {
+  if (getLanguage() === 'en') {
+    const every = Math.max(1, rule.every);
+    const lead = every === 1 ? ({day:'Daily',week:'Weekly',month:'Monthly',year:'Yearly'})[rule.unit] : `Every ${every} ${unitNames()[rule.unit][1]}`;
+    if (rule.unit === 'day') return lead;
+    if (rule.unit !== 'week') return `${lead} ${englishOn(rule, true)}`;
+    const days = weekdaysOf(rule);
+    if (sameDays(days,[0,1,2,3,4])) return every === 1 ? 'Weekdays' : `${lead} on weekdays`;
+    if (days.length === 7) return every === 1 ? 'Daily' : `${lead} every day`;
+    return `${lead} on ${days.map(day=>weekdayShort()[day]).join(', ')}`;
+  }
   const every = Math.max(1, rule.every);
-  const lead = every === 1 ? adverbs[rule.unit] : `Alle ${every} ${unitNames[rule.unit][1]}`;
+  const lead = every === 1 ? adverbs[rule.unit] : `Alle ${every} ${unitNames()[rule.unit][1]}`;
   if (rule.unit === 'day') return lead;
   if (rule.unit !== 'week') return `${lead} ${describeOn(rule)}`;
   const days = weekdaysOf(rule);
   if (sameDays(days, [0, 1, 2, 3, 4])) return every === 1 ? 'Werktags' : `${lead} werktags`;
   if (days.length === 7) return every === 1 ? 'Täglich' : `${lead} jeden Tag`;
-  return `${lead} am ${days.map(day => weekdayShort[day]).join(', ')}`;
+  return `${lead} am ${days.map(day => weekdayShort()[day]).join(', ')}`;
 }
 /** "Mär", "Mär, Jun", "Mär–Mai" (runs of three and more as a range). */
 export function describeMonths(months: readonly number[]): string {
@@ -183,14 +209,24 @@ export function describeMonths(months: readonly number[]): string {
   for (let index = 0; index < months.length;) {
     let end = index;
     while (end + 1 < months.length && months[end + 1] === months[end] + 1) end++;
-    if (end - index >= 2) parts.push(`${monthShort[months[index] - 1]}–${monthShort[months[end] - 1]}`);
-    else for (let value = index; value <= end; value++) parts.push(monthShort[months[value] - 1]);
+    if (end - index >= 2) parts.push(`${monthShort()[months[index] - 1]}–${monthShort()[months[end] - 1]}`);
+    else for (let value = index; value <= end; value++) parts.push(monthShort()[months[value] - 1]);
     index = end + 1;
   }
   return parts.join(', ');
 }
 /** The whole rule: "Alle 4 Wochen am Mo, Do, Fr · nur im Mär · 3 an, 1 aus · 10×". */
 export function describe(rule: RepeatRule): string {
+  if (getLanguage() === 'en') {
+    let text = describePattern(rule);
+    const months = monthsOf(rule);
+    if (months) text += ` · only in ${describeMonths(months)}`;
+    const pause = rule.unit === 'day' || rule.unit === 'week' ? rule.pause : null;
+    if (pause && pause.on>0 && pause.off>0) text += ` · ${pause.on} on, ${pause.off} ${unitNames()[pause.unit][pause.off === 1 ? 0 : 1]} off`;
+    if (rule.end?.count) text += ` · ${rule.end.count} times`;
+    else if (rule.end?.until) text += ` · until ${formatOccurrence(rule.end.until)}`;
+    return text;
+  }
   let text = describePattern(rule);
   const months = monthsOf(rule);
   if (months) text += ` · nur ${months.length === 1 ? 'im ' : ''}${describeMonths(months)}`;

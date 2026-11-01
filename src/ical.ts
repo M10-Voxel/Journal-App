@@ -1,3 +1,4 @@
+import { t } from './i18n.ts';
 import ICAL from 'ical.js';
 import type { CalendarDay, CalendarImport } from './journal';
 import { localDate, shiftDate } from './dates.ts';
@@ -32,7 +33,7 @@ export function exportCalendar(days: readonly CalendarDay[], now = new Date()): 
     const component = new ICAL.Component('vevent');
     component.updatePropertyWithValue('uid', entry.calendarUid || `${entry.id}@journal.local`);
     component.updatePropertyWithValue('dtstamp', ICAL.Time.fromJSDate(now, true));
-    component.updatePropertyWithValue('summary', entry.text.split('\n')[0] || 'Ohne Titel');
+    component.updatePropertyWithValue('summary', entry.text.split('\n')[0] || t("Ohne Titel"));
     component.updatePropertyWithValue('description', entry.description ?? '');
     component.updatePropertyWithValue('x-journal-description-version', '1');
     const originalText = new ICAL.Property('x-journal-text');
@@ -120,7 +121,7 @@ export function importCalendar(content: string, year = new Date().getFullYear())
       if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end < start || !/^\d{4}-\d{2}-\d{2}$/.test(first)) throw new Error('Ein Termin enthält ein ungültiges Datum oder Ende.');
       const last = end > start ? localDate(new Date(end.getTime() - 1)) : first;
       if (first !== last) notices.add('Mehrtägige Termine werden in einzelne Tageseinträge aufgeteilt.');
-      const summary = String(source.getFirstPropertyValue('summary') || 'Ohne Titel');
+      const summary = String(source.getFirstPropertyValue('summary') || t("Ohne Titel"));
       const description = String(source.getFirstPropertyValue('description') || '');
       const location = String(source.getFirstPropertyValue('location') || '');
       const originalText = source.getFirstPropertyValue('x-journal-text');
