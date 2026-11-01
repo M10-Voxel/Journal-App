@@ -48,21 +48,27 @@ export function isoWeek(date: string): number {
 
 const monthName = new Intl.DateTimeFormat('de-DE', { month: 'long' });
 const shortMonth = new Intl.DateTimeFormat('de-DE', { month: 'short' });
-const dayTitle = new Intl.DateTimeFormat('de-DE', { day: 'numeric', month: 'long' });
 const weekdayLong = new Intl.DateTimeFormat('de-DE', { weekday: 'long' });
 export const formatMonthName = (date: string) => monthName.format(noon(date));
 export const formatWeekdayLong = (date: string) => weekdayLong.format(noon(date));
-/** The title like Apple's: the bold part ("Oktober", "30. Oktober") and the quiet part ("2026", "KW 44 · 2026"). */
+/** One-line calendar heading: what is shown, and – in the week views the week, in the day view the day – in grey after it. */
 export function viewTitle(view: CalendarView, date: string): { main: string; sub: string } {
   const year = date.slice(0, 4);
   if (view === 'year') return { main: year, sub: '' };
-  if (view === 'month') return { main: formatMonthName(date), sub: year };
-  if (view === 'day') return { main: dayTitle.format(noon(date)), sub: `${formatWeekdayLong(date)} · ${year}` };
+  if (view === 'month') return { main: `${formatMonthName(date)} ${year}`, sub: '' };
+  if (view === 'day') return { main: `${formatMonthName(date)} ${year}`, sub: `${formatWeekdayLong(date)}, ${Number(date.slice(8))}.` };
+  const sub = `KW ${isoWeek(date)}`;
   const dates = viewDates(view, date);
   const [first, last] = [dates[0], dates[dates.length - 1]];
-  const main = first.slice(0, 7) === last.slice(0, 7) ? formatMonthName(first) : `${shortMonth.format(noon(first))} – ${shortMonth.format(noon(last))}`;
-  return { main, sub: `KW ${isoWeek(date)} · ${last.slice(0, 4)}` };
+  const main = first.slice(0, 4) !== last.slice(0, 4)
+    ? `${shortMonth.format(noon(first))} ${first.slice(0, 4)} – ${shortMonth.format(noon(last))} ${last.slice(0, 4)}`
+    : `${first.slice(0, 7) === last.slice(0, 7) ? formatMonthName(first) : `${shortMonth.format(noon(first))} – ${shortMonth.format(noon(last))}`} ${year}`;
+  return { main, sub };
 }
+
+/** The heading's short form for a narrow calendar: "Nov 2026", "Okt – Nov 2026". */
+const monthNames = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+export const shortTitle = (main: string) => main.replace(new RegExp(`(${monthNames.join('|')})`, 'g'), month => shortMonth.format(noon(`2000-${String(monthNames.indexOf(month) + 1).padStart(2, '0')}-15`)));
 
 export const minutesOf = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
 /** Entries with a start but no end take an hour in the time grid. */
@@ -94,15 +100,20 @@ export function orderForCalendar(entries: readonly Entry[]): Entry[] {
 }
 
 /**
- * Columns for timed entries that overlap (each lasting `durationOf`): entries that overlap directly or through others
- * form a group that shares the width; each takes the first free column.
+ * Timed entries share lanes within each overlapping group. Cards span two half-width steps, so the next lane
+ * overlaps half of the previous card, leaving its left edge available to click. A lone card fills the day.
  */
-export function layoutTimed<T extends { id: string; time: string; end?: string | null }>(items: readonly T[]): { item: T; start: number; duration: number; column: number; columns: number }[] {
+export function layoutTimed<T extends { id: string; time: string; end?: string | null }>(items: readonly T[]): { item: T; start: number; duration: number; column: number; columns: number; left: number; width: number }[] {
   const sorted = [...items].sort((a, b) => minutesOf(a.time) - minutesOf(b.time) || durationOf(b) - durationOf(a) || a.id.localeCompare(b.id));
-  const placed: { item: T; start: number; duration: number; column: number; columns: number }[] = [];
+  const placed: { item: T; start: number; duration: number; column: number; columns: number; left: number; width: number }[] = [];
   let group: typeof placed = [];
   let groupEnd = -1;
-  const close = () => { const columns = Math.max(0, ...group.map(entry => entry.column)) + 1; for (const entry of group) entry.columns = columns; group = []; };
+  const close = () => {
+    const columns = Math.max(0, ...group.map(entry => entry.column)) + 1;
+    const step = 100 / (columns + 1);
+    for (const entry of group) { entry.columns = columns; entry.left = entry.column * step; entry.width = 2 * step; }
+    group = [];
+  };
   for (const item of sorted) {
     const start = minutesOf(item.time), duration = durationOf(item);
     if (start >= groupEnd) close();
@@ -110,7 +121,7 @@ export function layoutTimed<T extends { id: string; time: string; end?: string |
     for (const other of group) if (other.start + other.duration > start) ends[other.column] = 1;
     let column = 0;
     while (ends[column]) column++;
-    const entry = { item, start, duration, column, columns: 1 };
+    const entry = { item, start, duration, column, columns: 1, left: 0, width: 100 };
     group.push(entry);
     placed.push(entry);
     groupEnd = Math.max(groupEnd, start + duration);

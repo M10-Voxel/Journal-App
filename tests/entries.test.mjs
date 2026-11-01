@@ -1,5 +1,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { mergeCalendarImport } from '../src/entries.ts';
+
+test('calendar import keeps concurrent daily edits and deletions, and removes moved occurrences', () => {
+  const item = (id, extra = {}) => ({ id, kind:'event', text:id, priority:false, done:false, cancelled:false, ...extra });
+  const before = { date:'2026-10-30', title:'Old', body:'', revision:1, entries:[item('edited'),item('deleted'),item('moved', { showInJournal:true })] };
+  const current = { ...before, title:'Still typing', entries:[item('edited', { text:'Local edit' }), item('moved'), item('new-local')] };
+  const refreshed = { ...before, revision:3, entries:[item('edited', { priority:true, showInJournal:false }),item('deleted'),item('new-import')] };
+  const merged = mergeCalendarImport(current, before, refreshed);
+  assert.equal(merged.title, 'Still typing');
+  assert.equal(merged.revision, 3);
+  assert.deepEqual(merged.entries.map(entry => entry.id), ['edited','new-local','new-import']);
+  assert.equal(merged.entries[0].text, 'Local edit');
+  assert.equal(merged.entries[0].priority, true);
+  assert.equal(merged.entries[0].showInJournal, false);
+});
 import { orderEntries, moveEntry, moveEntryByOffset } from '../src/entries.ts';
 
 const entry = (id, kind) => ({ id, kind, text:`Beispiel ${id}`, done:false, cancelled:false, priority:false });

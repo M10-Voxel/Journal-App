@@ -1,0 +1,90 @@
+{
+  "model": "GLiNER2.5 multilingual",
+  "repository": "jugaadsrl/gliner2.5-multi-v1-onnx",
+  "revision": "3de2c11f55853b7919f985a59bfc8df27b5ec991",
+  "files": [
+    {
+      "name": "fp32_25/boundary_head_L128_fp32.onnx",
+      "size": 704445,
+      "sha256": "c91dc84be821c1e398c9cc06aaa0b338c47d6600516418be4b1dd1d6195cf56e"
+    },
+    {
+      "name": "fp32_25/boundary_head_L128_fp32.onnx.data",
+      "size": 5739290,
+      "sha256": "ee5e988ab875ae9ad827aa06a5c7348ddac3f98e3ce1321bf56709d5a4377b22"
+    },
+    {
+      "name": "fp32_25/boundary_head_L256_fp32.onnx",
+      "size": 704491,
+      "sha256": "d30977bddc299a6e9895ca4b1a90bf607f07c8ab48560cc37d0d973159ba9172"
+    },
+    {
+      "name": "fp32_25/boundary_head_L256_fp32.onnx.data",
+      "size": 7418138,
+      "sha256": "252d6be6d4ce8e7f74c3a7848b7f24a472bf42142911ead998f8bc503bb2550c"
+    },
+    {
+      "name": "fp32_25/boundary_head_L512_fp32.onnx",
+      "size": 697625,
+      "sha256": "f7e2215a533d8bd0d189651b726394a8bd4301a3d434f5e31707b6665a1e50bd"
+    },
+    {
+      "name": "fp32_25/boundary_head_L512_fp32.onnx.data",
+      "size": 4662548,
+      "sha256": "2e4c8223a8c8b4973e54b1b078633bfc9047505efc76cb6644700e617ecc30b1"
+    },
+    {
+      "name": "fp32_25/boundary_head_L64_fp32.onnx",
+      "size": 691076,
+      "sha256": "cecbefaa270613bd27f544c0a9396a5e093e63a248d707fe92394a659dd957de"
+    },
+    {
+      "name": "fp32_25/boundary_head_L64_fp32.onnx.data",
+      "size": 5061900,
+      "sha256": "a4007ba257c99ad3067f13ddb05a95d9f3738fc95760a3d186fc8d0efc26a239"
+    },
+    {
+      "name": "fp32_25/boundary_manifest.json",
+      "size": 748,
+      "sha256": "961fc1564942247bf1c2e7cf3b2d57e244211151b91fc0102ef66d9d0461ff20"
+    },
+    {
+      "name": "fp32_25/classifier_fp32.onnx",
+      "size": 4731802,
+      "sha256": "3c06934244a4763a7411d9dceb002ba2d5c84d1bb7f7d66aa64acd5653314454"
+    },
+    {
+      "name": "fp32_25/encoder_fp32.onnx",
+      "size": 1111055955,
+      "sha256": "cba26576eef7e14eba87f3485395d5b24e5047f819c859a9d667a63915ed404f"
+    },
+    {
+      "name": "fp32_25/routed_gather_fp32.onnx",
+      "size": 2735,
+      "sha256": "20731feeefc8e42747ba9410e2cab4f15d136e028c9b271d1d11c227c1ce0611"
+    },
+    {
+      "name": "fp32_25/tokenizer.json",
+      "size": 16035853,
+      "sha256": "c62446df87ae18ec98b133f8f84fc449a07cc89bbf8ef192a4cb5f9c53777a7a"
+    }
+  ],
+  "runtime": {
+    "version": "1.23.2",
+    "url": "https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/1.23.2/microsoft.ml.onnxruntime.1.23.2.nupkg",
+    "size": 123371574,
+    "sha256": "25fe172f7fcdf34f2b5b02c8b997f6b88abc282956849d4af4335af23d0c4e4a",
+    "files": [
+      {
+        "name": "onnxruntime.dll",
+        "size": 14186016,
+        "sha256": "dec964ab1ee36cc9b0ae247d13b376627992fc57dec0454354017ab8fd84f1ea"
+      },
+      {
+        "name": "onnxruntime_providers_shared.dll",
+        "size": 22088,
+        "sha256": "a2b3a50956aa75a9879c8472bc7df4f7a8072bcd2db19a1b7d988e7688f293ef"
+      }
+    ]
+  }
+}

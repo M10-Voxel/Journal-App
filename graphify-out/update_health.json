@@ -1,0 +1,306 @@
+{
+  "changed_extraction": {
+    "node_count": 326,
+    "unverified_node_count": 0,
+    "raw_edge_count": 927,
+    "non_object_edges": 0,
+    "missing_endpoint_edges": 0,
+    "dangling_endpoint_edges": 122,
+    "external_reference_edges": 13,
+    "self_loop_edges": 0,
+    "valid_candidate_edges": 792,
+    "exact_duplicate_edges": 0,
+    "directed_unique_endpoint_pairs": 758,
+    "directed_same_endpoint_collapsed_edges": 34,
+    "undirected_unique_endpoint_pairs": 758,
+    "undirected_same_endpoint_collapsed_edges": 34,
+    "same_endpoint_group_count": 31,
+    "relation_variant_groups": 18,
+    "source_file_variant_groups": 0,
+    "source_location_variant_groups": 11,
+    "context_variant_groups": 2,
+    "post_build_graph_type": "Graph",
+    "post_build_node_count": 415,
+    "post_build_edge_count": 878,
+    "post_build_error": "",
+    "producer_suppression": {
+      "path": "C:\\Users\\marvi\\AppData\\Roaming\\uv\\tools\\graphifyy\\Lib\\site-packages\\graphify\\extract.py",
+      "total_sites": 12,
+      "sites": [
+        {
+          "line": 1829,
+          "name": "seen_ids",
+          "tuple_arity": 0,
+          "sample": "seen_ids = {n[\"id\"] for n in nodes}"
+        },
+        {
+          "line": 2393,
+          "name": "seen_ids",
+          "tuple_arity": 0,
+          "sample": "seen_ids = {n[\"id\"] for n in nodes}"
+        },
+        {
+          "line": 2395,
+          "name": "seen_doc_refs",
+          "tuple_arity": 0,
+          "sample": "seen_doc_refs: set[str] = set()"
+        },
+        {
+          "line": 3062,
+          "name": "seen_ids",
+          "tuple_arity": 0,
+          "sample": "seen_ids: set[str] = {n[\"id\"] for n in nodes}"
+        },
+        {
+          "line": 3209,
+          "name": "seen_ids",
+          "tuple_arity": 0,
+          "sample": "seen_ids = {n.get(\"id\") for n in nodes}"
+        },
+        {
+          "line": 4350,
+          "name": "seen_keys",
+          "tuple_arity": 0,
+          "sample": "seen_keys: set[tuple] = set()"
+        },
+        {
+          "line": 4536,
+          "name": "seen_keys",
+          "tuple_arity": 0,
+          "sample": "seen_keys: set[tuple] = set()"
+        },
+        {
+          "line": 7947,
+          "name": "seen_ids",
+          "tuple_arity": 0,
+          "sample": "seen_ids: set[str] = set()"
+        },
+        {
+          "line": 8055,
+          "name": "seen_ids",
+          "tuple_arity": 0,
+          "sample": "seen_ids: set[str] = set()"
+        },
+        {
+          "line": 8134,
+          "name": "seen_ids",
+          "tuple_arity": 0,
+          "sample": "seen_ids: set[str] = set()"
+        },
+        {
+          "line": 8659,
+          "name": "seen_ids",
+          "tuple_arity": 0,
+          "sample": "seen_ids: set[str] = set()"
+        },
+        {
+          "line": 8660,
+          "name": "seen_edges",
+          "tuple_arity": 4,
+          "sample": "seen_edges: set[tuple[str, str, str, str | None]] = set()"
+        }
+      ],
+      "error": ""
+    },
+    "examples": [
+      {
+        "source": "src_main",
+        "target": "ref_fontsource_lilex",
+        "edge_count": 4,
+        "relations": [
+          "imports_from"
+        ],
+        "source_files": [
+          "src/main.tsx"
+        ],
+        "source_locations": [
+          "L27",
+          "L28",
+          "L29",
+          "L30"
+        ],
+        "contexts": [
+          "import"
+        ]
+      },
+      {
+        "source": "src_main",
+        "target": "ref_fontsource_ibm_plex_sans",
+        "edge_count": 3,
+        "relations": [
+          "imports_from"
+        ],
+        "source_files": [
+          "src/main.tsx"
+        ],
+        "source_locations": [
+          "L24",
+          "L25",
+          "L26"
+        ],
+        "contexts": [
+          "import"
+        ]
+      },
+      {
+        "source": "src_tauri_src_main_save_day",
+        "target": "day",
+        "edge_count": 2,
+        "relations": [
+          "references"
+        ],
+        "source_files": [
+          "src-tauri/src/main.rs"
+        ],
+        "source_locations": [
+          "L49"
+        ],
+        "contexts": [
+          "generic_arg",
+          "parameter_type"
+        ]
+      },
+      {
+        "source": "src_tauri_src_storage_store_save",
+        "target": "src_tauri_src_storage_day",
+        "edge_count": 2,
+        "relations": [
+          "references"
+        ],
+        "source_files": [
+          "src-tauri/src/storage.rs"
+        ],
+        "source_locations": [
+          "L178"
+        ],
+        "contexts": [
+          "generic_arg",
+          "parameter_type"
+        ]
+      },
+      {
+        "source": "src_components_calendarcomposer",
+        "target": "ref_react",
+        "edge_count": 2,
+        "relations": [
+          "imports_from"
+        ],
+        "source_files": [
+          "src/components/CalendarComposer.tsx"
+        ],
+        "source_locations": [
+          "L1",
+          "L2"
+        ],
+        "contexts": [
+          "import"
+        ]
+      }
+    ]
+  },
+  "merged_graph": {
+    "node_count": 599,
+    "unverified_node_count": 0,
+    "raw_edge_count": 1513,
+    "non_object_edges": 0,
+    "missing_endpoint_edges": 0,
+    "dangling_endpoint_edges": 0,
+    "external_reference_edges": 0,
+    "self_loop_edges": 4,
+    "valid_candidate_edges": 1513,
+    "exact_duplicate_edges": 0,
+    "directed_unique_endpoint_pairs": 1513,
+    "directed_same_endpoint_collapsed_edges": 0,
+    "undirected_unique_endpoint_pairs": 1513,
+    "undirected_same_endpoint_collapsed_edges": 0,
+    "same_endpoint_group_count": 0,
+    "relation_variant_groups": 0,
+    "source_file_variant_groups": 0,
+    "source_location_variant_groups": 0,
+    "context_variant_groups": 0,
+    "post_build_graph_type": "Graph",
+    "post_build_node_count": 599,
+    "post_build_edge_count": 1513,
+    "post_build_error": "",
+    "producer_suppression": {
+      "path": "C:\\Users\\marvi\\AppData\\Roaming\\uv\\tools\\graphifyy\\Lib\\site-packages\\graphify\\extract.py",
+      "total_sites": 12,
+      "sites": [
+        {
+          "line": 1829,
+          "name": "seen_ids",
+          "tuple_arity": 0,
+          "sample": "seen_ids = {n[\"id\"] for n in nodes}"
+        },
+        {
+          "line": 2393,
+          "name": "seen_ids",
+          "tuple_arity": 0,
+          "sample": "seen_ids = {n[\"id\"] for n in nodes}"
+        },
+        {
+          "line": 2395,
+          "name": "seen_doc_refs",
+          "tuple_arity": 0,
+          "sample": "seen_doc_refs: set[str] = set()"
+        },
+        {
+          "line": 3062,
+          "name": "seen_ids",
+          "tuple_arity": 0,
+          "sample": "seen_ids: set[str] = {n[\"id\"] for n in nodes}"
+        },
+        {
+          "line": 3209,
+          "name": "seen_ids",
+          "tuple_arity": 0,
+          "sample": "seen_ids = {n.get(\"id\") for n in nodes}"
+        },
+        {
+          "line": 4350,
+          "name": "seen_keys",
+          "tuple_arity": 0,
+          "sample": "seen_keys: set[tuple] = set()"
+        },
+        {
+          "line": 4536,
+          "name": "seen_keys",
+          "tuple_arity": 0,
+          "sample": "seen_keys: set[tuple] = set()"
+        },
+        {
+          "line": 7947,
+          "name": "seen_ids",
+          "tuple_arity": 0,
+          "sample": "seen_ids: set[str] = set()"
+        },
+        {
+          "line": 8055,
+          "name": "seen_ids",
+          "tuple_arity": 0,
+          "sample": "seen_ids: set[str] = set()"
+        },
+        {
+          "line": 8134,
+          "name": "seen_ids",
+          "tuple_arity": 0,
+          "sample": "seen_ids: set[str] = set()"
+        },
+        {
+          "line": 8659,
+          "name": "seen_ids",
+          "tuple_arity": 0,
+          "sample": "seen_ids: set[str] = set()"
+        },
+        {
+          "line": 8660,
+          "name": "seen_edges",
+          "tuple_arity": 4,
+          "sample": "seen_edges: set[tuple[str, str, str, str | None]] = set()"
+        }
+      ],
+      "error": ""
+    },
+    "examples": []
+  }
+}

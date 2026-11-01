@@ -1,0 +1,1044 @@
+[
+  {
+    "classifications": [
+      {
+        "label": "a future appointment, invitation or announced delivery",
+        "score": 0.3680858910083771,
+        "task": "event_status"
+      },
+      {
+        "label": "a cancelled appointment or delivery",
+        "score": 0.30707281827926636,
+        "task": "event_status"
+      },
+      {
+        "label": "a past event or retrospective statement",
+        "score": 0.25691846013069153,
+        "task": "event_status"
+      },
+      {
+        "label": "a hypothetical event or unrelated information",
+        "score": 0.06792280822992325,
+        "task": "event_status"
+      }
+    ],
+    "id": "simple-relative",
+    "mentions": [
+      {
+        "end": 7,
+        "field": "event",
+        "score": 0.9886472821235657,
+        "start": 0,
+        "text": "Treffen"
+      },
+      {
+        "end": 14,
+        "field": "date",
+        "score": 0.9765461087226868,
+        "start": 8,
+        "text": "morgen"
+      },
+      {
+        "end": 21,
+        "field": "time",
+        "score": 0.9274699091911316,
+        "start": 15,
+        "text": "17 Uhr"
+      }
+    ],
+    "milliseconds": 243,
+    "text": "Treffen morgen 17 Uhr"
+  },
+  {
+    "classifications": [
+      {
+        "label": "a future appointment, invitation or announced delivery",
+        "score": 0.3129037618637085,
+        "task": "event_status"
+      },
+      {
+        "label": "a cancelled appointment or delivery",
+        "score": 0.2803851366043091,
+        "task": "event_status"
+      },
+      {
+        "label": "a past event or retrospective statement",
+        "score": 0.2698778510093689,
+        "task": "event_status"
+      },
+      {
+        "label": "a hypothetical event or unrelated information",
+        "score": 0.13683323562145233,
+        "task": "event_status"
+      }
+    ],
+    "id": "no-event-keyword",
+    "mentions": [
+      {
+        "end": 42,
+        "field": "time",
+        "score": 0.9984233379364014,
+        "start": 37,
+        "text": "17:30"
+      },
+      {
+        "end": 33,
+        "field": "date",
+        "score": 0.9975566864013672,
+        "start": 21,
+        "text": "12. November"
+      }
+    ],
+    "milliseconds": 132,
+    "text": "Hallo! Passt dir der 12. November um 17:30 bei mir? Viele Grüße, Anna"
+  },
+  {
+    "classifications": [
+      {
+        "label": "a future appointment, invitation or announced delivery",
+        "score": 0.6459644436836243,
+        "task": "event_status"
+      },
+      {
+        "label": "a cancelled appointment or delivery",
+        "score": 0.13643936812877655,
+        "task": "event_status"
+      },
+      {
+        "label": "a past event or retrospective statement",
+        "score": 0.12507788836956024,
+        "task": "event_status"
+      },
+      {
+        "label": "a hypothetical event or unrelated information",
+        "score": 0.09251827001571655,
+        "task": "event_status"
+      }
+    ],
+    "id": "split-lines",
+    "mentions": [
+      {
+        "end": 65,
+        "field": "location",
+        "score": 0.9981532692909241,
+        "start": 58,
+        "text": "Bahnhof"
+      },
+      {
+        "end": 53,
+        "field": "time",
+        "score": 0.9953500032424927,
+        "start": 47,
+        "text": "17 Uhr"
+      },
+      {
+        "end": 25,
+        "field": "date",
+        "score": 0.9829819798469543,
+        "start": 15,
+        "text": "übermorgen"
+      }
+    ],
+    "milliseconds": 148,
+    "text": "Wollen wir uns übermorgen sehen?\nIch könnte um 17 Uhr.\nAm Bahnhof wäre gut."
+  },
+  {
+    "classifications": [
+      {
+        "label": "a future appointment, invitation or announced delivery",
+        "score": 0.8100915551185608,
+        "task": "event_status"
+      },
+      {
+        "label": "a cancelled appointment or delivery",
+        "score": 0.08328361064195633,
+        "task": "event_status"
+      },
+      {
+        "label": "a past event or retrospective statement",
+        "score": 0.061131130903959274,
+        "task": "event_status"
+      },
+      {
+        "label": "a hypothetical event or unrelated information",
+        "score": 0.04549378901720047,
+        "task": "event_status"
+      }
+    ],
+    "id": "delivery",
+    "mentions": [
+      {
+        "end": 65,
+        "field": "date",
+        "score": 0.9959439635276794,
+        "start": 53,
+        "text": "12. November"
+      },
+      {
+        "end": 20,
+        "field": "event",
+        "score": 0.9381375312805176,
+        "start": 15,
+        "text": "Paket"
+      },
+      {
+        "end": 88,
+        "field": "time",
+        "score": 0.7097749710083008,
+        "start": 75,
+        "text": "10 und 12 Uhr"
+      }
+    ],
+    "milliseconds": 145,
+    "text": "Guten Tag, Ihr Paket erreicht Sie voraussichtlich am 12. November zwischen 10 und 12 Uhr."
+  },
+  {
+    "classifications": [
+      {
+        "label": "a future appointment, invitation or announced delivery",
+        "score": 0.13409970700740814,
+        "task": "event_status"
+      },
+      {
+        "label": "a cancelled appointment or delivery",
+        "score": 0.702150821685791,
+        "task": "event_status"
+      },
+      {
+        "label": "a past event or retrospective statement",
+        "score": 0.10599452257156372,
+        "task": "event_status"
+      },
+      {
+        "label": "a hypothetical event or unrelated information",
+        "score": 0.05775493010878563,
+        "task": "event_status"
+      }
+    ],
+    "id": "cancellation",
+    "mentions": [
+      {
+        "end": 18,
+        "field": "date",
+        "score": 0.9976814985275269,
+        "start": 12,
+        "text": "morgen"
+      },
+      {
+        "end": 28,
+        "field": "time",
+        "score": 0.9973093271255493,
+        "start": 22,
+        "text": "17 Uhr"
+      },
+      {
+        "end": 11,
+        "field": "event",
+        "score": 0.9935275912284851,
+        "start": 4,
+        "text": "Treffen"
+      }
+    ],
+    "milliseconds": 136,
+    "text": "Das Treffen morgen um 17 Uhr fällt leider aus. Bitte komm nicht vorbei."
+  },
+  {
+    "classifications": [
+      {
+        "label": "a future appointment, invitation or announced delivery",
+        "score": 0.26178276538848877,
+        "task": "event_status"
+      },
+      {
+        "label": "a cancelled appointment or delivery",
+        "score": 0.2656359076499939,
+        "task": "event_status"
+      },
+      {
+        "label": "a past event or retrospective statement",
+        "score": 0.40079134702682495,
+        "task": "event_status"
+      },
+      {
+        "label": "a hypothetical event or unrelated information",
+        "score": 0.07178995013237,
+        "task": "event_status"
+      }
+    ],
+    "id": "past",
+    "mentions": [
+      {
+        "end": 31,
+        "field": "time",
+        "score": 0.9968333840370178,
+        "start": 25,
+        "text": "17 Uhr"
+      },
+      {
+        "end": 21,
+        "field": "date",
+        "score": 0.9944425225257874,
+        "start": 14,
+        "text": "gestern"
+      },
+      {
+        "end": 13,
+        "field": "event",
+        "score": 0.9939332604408264,
+        "start": 6,
+        "text": "Treffen"
+      }
+    ],
+    "milliseconds": 136,
+    "text": "Unser Treffen gestern um 17 Uhr war schön. Danke für den netten Abend!"
+  },
+  {
+    "classifications": [
+      {
+        "label": "a future appointment, invitation or announced delivery",
+        "score": 0.20514166355133057,
+        "task": "event_status"
+      },
+      {
+        "label": "a cancelled appointment or delivery",
+        "score": 0.16369473934173584,
+        "task": "event_status"
+      },
+      {
+        "label": "a past event or retrospective statement",
+        "score": 0.14070428907871246,
+        "task": "event_status"
+      },
+      {
+        "label": "a hypothetical event or unrelated information",
+        "score": 0.49045929312705994,
+        "task": "event_status"
+      }
+    ],
+    "id": "hypothetical",
+    "mentions": [
+      {
+        "end": 51,
+        "field": "date",
+        "score": 0.9954010248184204,
+        "start": 38,
+        "text": "nächste Woche"
+      },
+      {
+        "end": 61,
+        "field": "time",
+        "score": 0.9940074682235718,
+        "start": 55,
+        "text": "17 Uhr"
+      }
+    ],
+    "milliseconds": 154,
+    "text": "Vielleicht könnten wir uns irgendwann nächste Woche um 17 Uhr sehen, aber ich weiß noch keinen Tag."
+  },
+  {
+    "classifications": [
+      {
+        "label": "a future appointment, invitation or announced delivery",
+        "score": 0.11533824354410172,
+        "task": "event_status"
+      },
+      {
+        "label": "a cancelled appointment or delivery",
+        "score": 0.5416961312294006,
+        "task": "event_status"
+      },
+      {
+        "label": "a past event or retrospective statement",
+        "score": 0.3117161691188812,
+        "task": "event_status"
+      },
+      {
+        "label": "a hypothetical event or unrelated information",
+        "score": 0.03124946728348732,
+        "task": "event_status"
+      }
+    ],
+    "id": "invoice",
+    "mentions": [
+      {
+        "end": 62,
+        "field": "time",
+        "score": 0.9957692623138428,
+        "start": 53,
+        "text": "17:00 Uhr"
+      },
+      {
+        "end": 33,
+        "field": "date",
+        "score": 0.993906557559967,
+        "start": 16,
+        "text": "12. November 2026"
+      }
+    ],
+    "milliseconds": 151,
+    "text": "Rechnungsdatum: 12. November 2026. Bearbeitungszeit: 17:00 Uhr. Dies ist eine Rechnung zu Ihrem bereits abgeschlossenen Einkauf."
+  },
+  {
+    "classifications": [
+      {
+        "label": "a future appointment, invitation or announced delivery",
+        "score": 0.3767005503177643,
+        "task": "event_status"
+      },
+      {
+        "label": "a cancelled appointment or delivery",
+        "score": 0.2583602964878082,
+        "task": "event_status"
+      },
+      {
+        "label": "a past event or retrospective statement",
+        "score": 0.22993344068527222,
+        "task": "event_status"
+      },
+      {
+        "label": "a hypothetical event or unrelated information",
+        "score": 0.13500575721263885,
+        "task": "event_status"
+      }
+    ],
+    "id": "two-dates",
+    "mentions": [
+      {
+        "end": 71,
+        "field": "time",
+        "score": 0.9971557855606079,
+        "start": 65,
+        "text": "18 Uhr"
+      },
+      {
+        "end": 40,
+        "field": "time",
+        "score": 0.9957712292671204,
+        "start": 34,
+        "text": "17 Uhr"
+      },
+      {
+        "end": 61,
+        "field": "date",
+        "score": 0.9953746199607849,
+        "start": 49,
+        "text": "13. November"
+      },
+      {
+        "end": 30,
+        "field": "date",
+        "score": 0.9894472360610962,
+        "start": 18,
+        "text": "12. November"
+      }
+    ],
+    "milliseconds": 141,
+    "text": "Wir können uns am 12. November um 17 Uhr oder am 13. November um 18 Uhr treffen. Welche Alternative passt dir?"
+  },
+  {
+    "classifications": [
+      {
+        "label": "a future appointment, invitation or announced delivery",
+        "score": 0.4603049159049988,
+        "task": "event_status"
+      },
+      {
+        "label": "a cancelled appointment or delivery",
+        "score": 0.26668551564216614,
+        "task": "event_status"
+      },
+      {
+        "label": "a past event or retrospective statement",
+        "score": 0.2073439508676529,
+        "task": "event_status"
+      },
+      {
+        "label": "a hypothetical event or unrelated information",
+        "score": 0.06566552072763443,
+        "task": "event_status"
+      }
+    ],
+    "id": "quoted-history",
+    "mentions": [
+      {
+        "end": 62,
+        "field": "date",
+        "score": 0.9973028898239136,
+        "start": 51,
+        "text": "30. Oktober"
+      },
+      {
+        "end": 35,
+        "field": "date",
+        "score": 0.9950483441352844,
+        "start": 23,
+        "text": "13. November"
+      },
+      {
+        "end": 45,
+        "field": "time",
+        "score": 0.9895421266555786,
+        "start": 39,
+        "text": "18 Uhr"
+      },
+      {
+        "end": 100,
+        "field": "time",
+        "score": 0.9818612337112427,
+        "start": 94,
+        "text": "17 Uhr"
+      },
+      {
+        "end": 86,
+        "field": "event",
+        "score": 0.821178674697876,
+        "start": 79,
+        "text": "Treffen"
+      }
+    ],
+    "milliseconds": 145,
+    "text": "Der neue Termin ist am 13. November um 18 Uhr.\n\nAm 30. Oktober schrieb Anna:\n> Treffen morgen 17 Uhr"
+  },
+  {
+    "classifications": [
+      {
+        "label": "a future appointment, invitation or announced delivery",
+        "score": 0.6344764232635498,
+        "task": "event_status"
+      },
+      {
+        "label": "a cancelled appointment or delivery",
+        "score": 0.2244371920824051,
+        "task": "event_status"
+      },
+      {
+        "label": "a past event or retrospective statement",
+        "score": 0.11074376106262207,
+        "task": "event_status"
+      },
+      {
+        "label": "a hypothetical event or unrelated information",
+        "score": 0.03034265711903572,
+        "task": "event_status"
+      }
+    ],
+    "id": "two-events",
+    "mentions": [
+      {
+        "end": 41,
+        "field": "location",
+        "score": 0.9978323578834534,
+        "start": 37,
+        "text": "Café"
+      },
+      {
+        "end": 63,
+        "field": "time",
+        "score": 0.9939796924591064,
+        "start": 57,
+        "text": "10 Uhr"
+      },
+      {
+        "end": 16,
+        "field": "time",
+        "score": 0.9924197793006897,
+        "start": 10,
+        "text": "17 Uhr"
+      },
+      {
+        "end": 6,
+        "field": "date",
+        "score": 0.9822023510932922,
+        "start": 0,
+        "text": "Morgen"
+      },
+      {
+        "end": 53,
+        "field": "date",
+        "score": 0.9699071645736694,
+        "start": 43,
+        "text": "Übermorgen"
+      }
+    ],
+    "milliseconds": 162,
+    "text": "Morgen um 17 Uhr treffen wir Anna im Café. Übermorgen um 10 Uhr holen wir das Paket ab."
+  },
+  {
+    "classifications": [
+      {
+        "label": "a future appointment, invitation or announced delivery",
+        "score": 0.1997719258069992,
+        "task": "event_status"
+      },
+      {
+        "label": "a cancelled appointment or delivery",
+        "score": 0.08597181737422943,
+        "task": "event_status"
+      },
+      {
+        "label": "a past event or retrospective statement",
+        "score": 0.07762326300144196,
+        "task": "event_status"
+      },
+      {
+        "label": "a hypothetical event or unrelated information",
+        "score": 0.636633038520813,
+        "task": "event_status"
+      }
+    ],
+    "id": "no-time",
+    "mentions": [
+      {
+        "end": 23,
+        "field": "date",
+        "score": 0.996703565120697,
+        "start": 17,
+        "text": "morgen"
+      },
+      {
+        "end": 10,
+        "field": "event",
+        "score": 0.974183201789856,
+        "start": 5,
+        "text": "Paket"
+      },
+      {
+        "end": 37,
+        "field": "time",
+        "score": 0.9696455001831055,
+        "start": 30,
+        "text": "Uhrzeit"
+      }
+    ],
+    "milliseconds": 149,
+    "text": "Dein Paket kommt morgen. Eine Uhrzeit steht noch nicht fest."
+  },
+  {
+    "classifications": [
+      {
+        "label": "a future appointment, invitation or announced delivery",
+        "score": 0.3505990505218506,
+        "task": "event_status"
+      },
+      {
+        "label": "a cancelled appointment or delivery",
+        "score": 0.33966585993766785,
+        "task": "event_status"
+      },
+      {
+        "label": "a past event or retrospective statement",
+        "score": 0.2425885945558548,
+        "task": "event_status"
+      },
+      {
+        "label": "a hypothetical event or unrelated information",
+        "score": 0.06714644283056259,
+        "task": "event_status"
+      }
+    ],
+    "id": "range-clock",
+    "mentions": [
+      {
+        "end": 7,
+        "field": "event",
+        "score": 0.9643524885177612,
+        "start": 0,
+        "text": "Treffen"
+      },
+      {
+        "end": 14,
+        "field": "date",
+        "score": 0.7969633340835571,
+        "start": 8,
+        "text": "morgen"
+      },
+      {
+        "end": 34,
+        "field": "time",
+        "score": 0.7223405838012695,
+        "start": 29,
+        "text": "20:15"
+      },
+      {
+        "end": 20,
+        "field": "time",
+        "score": 0.6154032349586487,
+        "start": 15,
+        "text": "20:00"
+      }
+    ],
+    "milliseconds": 139,
+    "text": "Treffen morgen 20:00 Uhr bis 20:15."
+  },
+  {
+    "classifications": [
+      {
+        "label": "a future appointment, invitation or announced delivery",
+        "score": 0.4429985284805298,
+        "task": "event_status"
+      },
+      {
+        "label": "a cancelled appointment or delivery",
+        "score": 0.25623634457588196,
+        "task": "event_status"
+      },
+      {
+        "label": "a past event or retrospective statement",
+        "score": 0.23705828189849854,
+        "task": "event_status"
+      },
+      {
+        "label": "a hypothetical event or unrelated information",
+        "score": 0.06370691955089569,
+        "task": "event_status"
+      }
+    ],
+    "id": "range-mixed",
+    "mentions": [
+      {
+        "end": 7,
+        "field": "event",
+        "score": 0.981671154499054,
+        "start": 0,
+        "text": "Treffen"
+      },
+      {
+        "end": 14,
+        "field": "date",
+        "score": 0.9324249029159546,
+        "start": 8,
+        "text": "morgen"
+      }
+    ],
+    "milliseconds": 151,
+    "text": "Treffen morgen 20 bis 21:20."
+  },
+  {
+    "classifications": [
+      {
+        "label": "a future appointment, invitation or announced delivery",
+        "score": 0.4139104187488556,
+        "task": "event_status"
+      },
+      {
+        "label": "a cancelled appointment or delivery",
+        "score": 0.29936763644218445,
+        "task": "event_status"
+      },
+      {
+        "label": "a past event or retrospective statement",
+        "score": 0.22321400046348572,
+        "task": "event_status"
+      },
+      {
+        "label": "a hypothetical event or unrelated information",
+        "score": 0.06350793689489365,
+        "task": "event_status"
+      }
+    ],
+    "id": "range-uhr",
+    "mentions": [
+      {
+        "end": 14,
+        "field": "date",
+        "score": 0.9905346035957336,
+        "start": 8,
+        "text": "morgen"
+      },
+      {
+        "end": 7,
+        "field": "event",
+        "score": 0.9437580108642578,
+        "start": 0,
+        "text": "Treffen"
+      },
+      {
+        "end": 35,
+        "field": "time",
+        "score": 0.831099808216095,
+        "start": 30,
+        "text": "21:20"
+      },
+      {
+        "end": 25,
+        "field": "time",
+        "score": 0.7826027870178223,
+        "start": 19,
+        "text": "20 Uhr"
+      }
+    ],
+    "milliseconds": 136,
+    "text": "Treffen morgen von 20 Uhr bis 21:20."
+  },
+  {
+    "classifications": [
+      {
+        "label": "a future appointment, invitation or announced delivery",
+        "score": 0.27396124601364136,
+        "task": "event_status"
+      },
+      {
+        "label": "a cancelled appointment or delivery",
+        "score": 0.38520076870918274,
+        "task": "event_status"
+      },
+      {
+        "label": "a past event or retrospective statement",
+        "score": 0.26192113757133484,
+        "task": "event_status"
+      },
+      {
+        "label": "a hypothetical event or unrelated information",
+        "score": 0.07891684025526047,
+        "task": "event_status"
+      }
+    ],
+    "id": "range-before-date",
+    "mentions": [
+      {
+        "end": 7,
+        "field": "event",
+        "score": 0.9817453026771545,
+        "start": 0,
+        "text": "Treffen"
+      },
+      {
+        "end": 31,
+        "field": "time",
+        "score": 0.9622985124588013,
+        "start": 26,
+        "text": "20:15"
+      },
+      {
+        "end": 38,
+        "field": "date",
+        "score": 0.8850695490837097,
+        "start": 32,
+        "text": "morgen"
+      },
+      {
+        "end": 21,
+        "field": "time",
+        "score": 0.7650899887084961,
+        "start": 12,
+        "text": "20:00 Uhr"
+      }
+    ],
+    "milliseconds": 125,
+    "text": "Treffen von 20:00 Uhr bis 20:15 morgen."
+  },
+  {
+    "classifications": [
+      {
+        "label": "a future appointment, invitation or announced delivery",
+        "score": 0.34809058904647827,
+        "task": "event_status"
+      },
+      {
+        "label": "a cancelled appointment or delivery",
+        "score": 0.3127201199531555,
+        "task": "event_status"
+      },
+      {
+        "label": "a past event or retrospective statement",
+        "score": 0.25499287247657776,
+        "task": "event_status"
+      },
+      {
+        "label": "a hypothetical event or unrelated information",
+        "score": 0.08419636636972427,
+        "task": "event_status"
+      }
+    ],
+    "id": "range-dash",
+    "mentions": [
+      {
+        "end": 7,
+        "field": "event",
+        "score": 0.9749293327331543,
+        "start": 0,
+        "text": "Treffen"
+      },
+      {
+        "end": 14,
+        "field": "date",
+        "score": 0.8522301316261292,
+        "start": 8,
+        "text": "morgen"
+      },
+      {
+        "end": 30,
+        "field": "time",
+        "score": 0.6847611665725708,
+        "start": 15,
+        "text": "20:00–20:15 Uhr"
+      }
+    ],
+    "milliseconds": 120,
+    "text": "Treffen morgen 20:00–20:15 Uhr."
+  },
+  {
+    "classifications": [
+      {
+        "label": "a future appointment, invitation or announced delivery",
+        "score": 0.40011581778526306,
+        "task": "event_status"
+      },
+      {
+        "label": "a cancelled appointment or delivery",
+        "score": 0.29568514227867126,
+        "task": "event_status"
+      },
+      {
+        "label": "a past event or retrospective statement",
+        "score": 0.23620325326919556,
+        "task": "event_status"
+      },
+      {
+        "label": "a hypothetical event or unrelated information",
+        "score": 0.06799576431512833,
+        "task": "event_status"
+      }
+    ],
+    "id": "range-between",
+    "mentions": [
+      {
+        "end": 14,
+        "field": "date",
+        "score": 0.9870373010635376,
+        "start": 8,
+        "text": "morgen"
+      },
+      {
+        "end": 7,
+        "field": "event",
+        "score": 0.9680061936378479,
+        "start": 0,
+        "text": "Treffen"
+      },
+      {
+        "end": 36,
+        "field": "time",
+        "score": 0.649974524974823,
+        "start": 34,
+        "text": "20"
+      },
+      {
+        "end": 26,
+        "field": "time",
+        "score": 0.6311533451080322,
+        "start": 24,
+        "text": "20"
+      }
+    ],
+    "milliseconds": 127,
+    "text": "Treffen morgen zwischen 20 und 21:20 Uhr."
+  },
+  {
+    "classifications": [
+      {
+        "label": "a future appointment, invitation or announced delivery",
+        "score": 0.357170969247818,
+        "task": "event_status"
+      },
+      {
+        "label": "a cancelled appointment or delivery",
+        "score": 0.3418753445148468,
+        "task": "event_status"
+      },
+      {
+        "label": "a past event or retrospective statement",
+        "score": 0.23387286067008972,
+        "task": "event_status"
+      },
+      {
+        "label": "a hypothetical event or unrelated information",
+        "score": 0.06708087772130966,
+        "task": "event_status"
+      }
+    ],
+    "id": "range-clock-von",
+    "mentions": [
+      {
+        "end": 14,
+        "field": "date",
+        "score": 0.9918689727783203,
+        "start": 8,
+        "text": "morgen"
+      },
+      {
+        "end": 7,
+        "field": "event",
+        "score": 0.9583261013031006,
+        "start": 0,
+        "text": "Treffen"
+      },
+      {
+        "end": 38,
+        "field": "time",
+        "score": 0.9208588600158691,
+        "start": 33,
+        "text": "20:15"
+      },
+      {
+        "end": 28,
+        "field": "time",
+        "score": 0.7290003895759583,
+        "start": 19,
+        "text": "20:00 Uhr"
+      }
+    ],
+    "milliseconds": 126,
+    "text": "Treffen morgen von 20:00 Uhr bis 20:15."
+  },
+  {
+    "classifications": [
+      {
+        "label": "a future appointment, invitation or announced delivery",
+        "score": 0.46110326051712036,
+        "task": "event_status"
+      },
+      {
+        "label": "a cancelled appointment or delivery",
+        "score": 0.2592563331127167,
+        "task": "event_status"
+      },
+      {
+        "label": "a past event or retrospective statement",
+        "score": 0.22060970962047577,
+        "task": "event_status"
+      },
+      {
+        "label": "a hypothetical event or unrelated information",
+        "score": 0.059030625969171524,
+        "task": "event_status"
+      }
+    ],
+    "id": "range-mixed-von",
+    "mentions": [
+      {
+        "end": 14,
+        "field": "date",
+        "score": 0.9887318015098572,
+        "start": 8,
+        "text": "morgen"
+      },
+      {
+        "end": 7,
+        "field": "event",
+        "score": 0.9700465798377991,
+        "start": 0,
+        "text": "Treffen"
+      },
+      {
+        "end": 31,
+        "field": "time",
+        "score": 0.51982182264328,
+        "start": 26,
+        "text": "21:20"
+      }
+    ],
+    "milliseconds": 117,
+    "text": "Treffen morgen von 20 bis 21:20."
+  }
+]

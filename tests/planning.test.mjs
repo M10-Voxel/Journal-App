@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { linkedScopes, canPlan, clockAngle, clockValue, isValidTime, nextFullHour, planChange, stepTime, tomorrowChange, typeDigit } from '../src/planning.ts';
+import { formatSpan, keepDuration, linkedScopes, canPlan, clockAngle, clockValue, isValidTime, nextFullHour, planChange, stepTime, tomorrowChange, typeDigit } from '../src/planning.ts';
 import { monthGrid, shiftMonth, shiftDate } from '../src/dates.ts';
 
 const entry = (kind, extra = {}) => ({ id:'e', kind, text:'Beispiel', done:false, cancelled:false, priority:false, time:null, reminder:false, plan:null, ...extra });
@@ -101,4 +101,11 @@ test('actions on linked entries offer the following ones and, when removing or c
   assert.deepEqual(shape(linkedScopes(group, 'd', 'done')), ['this:'], 'Nothing to ask.');
   assert.deepEqual(shape(linkedScopes([], 'x', 'remove')), ['this:'], 'An unsaved entry has no group yet.');
   assert.deepEqual(shape(linkedScopes([item('e', '2026-10-28', { kind:'event' }), item('f', '2026-10-29', { kind:'event' })], 'e', 'cancelled')), ['this:'], 'Events are never cancelled.');
+});
+
+test('appointments past midnight end on the next day', () => {
+  assert.equal(formatSpan('22:00', '26:30'), '22:00–02:30⁺¹');
+  assert.equal(formatSpan('23:00', '24:00'), '23:00–24:00', 'Midnight itself stays 24:00.');
+  assert.equal(keepDuration({ time: '20:00', end: '23:00' }, '23:30'), '26:30', 'Moving it later keeps the length past midnight.');
+  assert.equal(keepDuration({ time: '00:00', end: '23:00' }, '23:30'), '46:30');
 });

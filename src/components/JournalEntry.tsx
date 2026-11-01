@@ -9,6 +9,7 @@ import type { PlannerView } from './PlanCalendar';
 import { Icon, IconName, priorityIcon, traceIcon } from './Icon';
 import { formatShortDate } from '../dates';
 import { canBeNote, canPlan, formatSpan, linkedScopes, tomorrowChange } from '../planning';
+import { describe } from '../repeat';
 import type { ScopeAction, ScopeOption } from '../planning';
 import { ScopeChoice } from './ScopeChoice';
 import { adjacentText, focusText, titleInput } from './focus';
@@ -19,7 +20,7 @@ import type { TextField } from './entryEditor';
 import type { EntryDragHandlers } from './useEntryDrag';
 
 export const entryLabels = { task: 'Aufgabe', event: 'Ereignis', note: 'Notiz' };
-export type EntryChange = Partial<Pick<Entry, 'kind' | 'text' | 'done' | 'cancelled' | 'priority' | 'time' | 'end' | 'reminder' | 'plan'>>;
+export type EntryChange = Partial<Pick<Entry, 'kind' | 'text' | 'done' | 'cancelled' | 'priority' | 'time' | 'end' | 'reminder' | 'plan' | 'repeat'>>;
 export type DragState = 'source' | 'drop-before' | 'drop-after' | null;
 interface TextSelection { start: number; end: number; direction: 'forward' | 'backward' | 'none' }
 
@@ -51,6 +52,7 @@ export const JournalEntry = memo(function JournalEntry({ layout, entry, day, tra
   const [planCount, setPlanCount] = useState(1);
   const [scopeAsk, setScopeAsk] = useState<{ action: ScopeAction; options: ScopeOption[]; apply: () => void; fromOrbit: boolean } | null>(null);
   const trace = entry.plan ?? null;
+  const rule = entry.repeat?.rule ?? null;
   const status: TaskStatus | undefined = entry.kind === 'task' && !trace ? entry.done ? 'done' : entry.cancelled ? 'cancelled' : 'open' : undefined;
   const previewStatus = status && (preview === 'open' || preview === 'done' || preview === 'cancelled') ? preview : undefined;
   const shownStatus = previewStatus ?? status;
@@ -92,7 +94,7 @@ export const JournalEntry = memo(function JournalEntry({ layout, entry, day, tra
     }
   });
 
-  useEffect(() => { if (!isOpen) { setPreview(null); setPlanning(false); setPlanDate(null); } }, [isOpen]);
+  useEffect(() => { if (!isOpen) { setPreview(null); setPlanning(false); setPlanDate(null); setPlannerView('date'); setPlanCount(1); } }, [isOpen]);
   // While the actions or the calendar are open, a press anywhere outside this entry closes them, and Escape works even when
   // focus is not inside (e.g. after opening the calendar by a swipe). Handlers inside that already took Escape mark it handled.
   useEffect(() => {
@@ -120,24 +122,22 @@ export const JournalEntry = memo(function JournalEntry({ layout, entry, day, tra
     closeActions();
   }
   // Switching between pill and calendar removes the hovered button without a pointerleave, so the preview is reset here.
-  function changePlanning(next: boolean, view?: PlannerView) {
+  function changePlanning(next: boolean, view: PlannerView = 'date') {
     setPreview(null);
-    if (next && view) setPlannerView(view);
     // Leaving the calendar (Escape) leaves the actions altogether, in every layout.
     if (!next) { closeActions(); return; }
-    setPlanning(next);
-    if (!next) setPlanDate(null);
+    setPlannerView(view);
+    setPlanning(true);
   }
   function openPlanner(view: PlannerView = 'date', fromText = false) {
     returnToText.current = fromText;
-    setPlannerView(view);
     onOpenChange(entry.id, true);
-    changePlanning(true);
+    changePlanning(true, view);
   }
   // A moved entry (its trace, a copy, one of several days) may take the others along: finishing reaches the following
-  // ones, removing and cancelling also the earlier ones. The group comes from the store; with nothing to ask, the action
-  // happens at once.
-  const linked = Boolean(entry.plan || entry.origin);
+  // ones, removing and cancelling also the earlier ones; removing an occurrence of a series may take the following ones
+  // or all of them. The group comes from the store; with nothing to ask, the action happens at once.
+  const linked = Boolean(entry.plan || entry.origin || rule);
   async function withScope(action: ScopeAction, apply: () => void) {
     if (!linked) { apply(); return; }
     const group = await journal.linked(entry.id).catch(() => []);
@@ -198,6 +198,7 @@ export const JournalEntry = memo(function JournalEntry({ layout, entry, day, tra
         case 'KeyM': if (entry.kind !== 'task' || !canPlan(entry)) return false; returnToText.current = Boolean(text); plan(tomorrowChange(entry, day)); return true;
         case 'KeyT': if (trace) { onNavigate(trace.targets[0].date); return true; } if (!canPlan(entry)) return false; openPlanner('date', Boolean(text)); return true;
         case 'KeyU': if (!canPlan(entry)) return false; openPlanner('time', Boolean(text)); return true;
+        case 'KeyW': if (!canPlan(entry)) return false; openPlanner('repeat', Boolean(text)); return true;
         case 'Enter': if (isOpen) closeActions(); else { returnToText.current = Boolean(text); onOpenChange(entry.id, true); } return true;
         case 'Delete': { if (linked) { remove(); return true; } const neighbor = adjacentText(rootRef.current, 1) ?? adjacentText(rootRef.current, -1); remove(); if (!focusText(neighbor)) titleInput()?.focus(); return true; }
       }
@@ -328,11 +329,12 @@ export const JournalEntry = memo(function JournalEntry({ layout, entry, day, tra
         </button>
       </div>
       <EntryText entry={entry} label={entry.priority ? `${label} mit hoher Priorität` : label} strike={strike} focusEntryId={focusEntryId} onChange={text => onChange(entry.id, { text })} />
-      {!trace && (entry.time || entry.reminder) && <button type="button" className="entry-when" aria-label={`Termin${entry.time ? ` ${formatSpan(entry.time, entry.end)}` : ''}${entry.reminder ? ', mit Erinnerung' : ''} ändern`} onClick={() => openPlanner()}>
-        {entry.time && <span>{formatSpan(entry.time, entry.end)}</span>}{entry.reminder && <Icon name="bell" />}
+      {!trace && (entry.time || entry.reminder || rule) && <button type="button" className="entry-when" title={rule ? describe(rule) : undefined}
+        aria-label={`Termin${entry.time ? ` ${formatSpan(entry.time, entry.end)}` : ''}${entry.reminder ? ', mit Erinnerung' : ''}${rule ? `, ${describe(rule)}` : ''} ändern`} onClick={() => openPlanner()}>
+        {entry.time && <span>{formatSpan(entry.time, entry.end)}</span>}{entry.reminder && <Icon name="bell" />}{rule && <Icon name="repeat" className="entry-repeat" />}
       </button>}
-      {trace && <button type="button" className="entry-trace-target" aria-label={`Zum ${formatShortDate(trace.targets[0].date)} springen`} onClick={() => onNavigate(trace.targets[0].date)}>
-        <span>{trace.targets.length > 1 ? `${trace.targets.length} Tage` : formatShortDate(trace.targets[0].date)}</span>{trace.time && <span className="entry-trace-time">{formatSpan(trace.time, trace.end)}</span>}{trace.reminder && <Icon name="bell" />}
+      {trace && <button type="button" className="entry-trace-target" aria-label={`Zum ${formatShortDate(trace.targets[0].date)} springen${trace.repeat?.rule ? `, ${describe(trace.repeat.rule)}` : ''}`} title={trace.repeat?.rule ? describe(trace.repeat.rule) : undefined} onClick={() => onNavigate(trace.targets[0].date)}>
+        <span>{trace.targets.length > 1 ? `${trace.targets.length} Tage` : formatShortDate(trace.targets[0].date)}</span>{trace.time && <span className="entry-trace-time">{formatSpan(trace.time, trace.end)}</span>}{trace.reminder && <Icon name="bell" />}{trace.repeat?.rule && <Icon name="repeat" className="entry-repeat" />}
       </button>}
     </div>
     {scopeAsk && !fromSatellite && scopeChoice()}

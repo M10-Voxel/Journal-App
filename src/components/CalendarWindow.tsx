@@ -1,14 +1,17 @@
 import { memo, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { CSSProperties, KeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { CalendarDay, Entry, EntryKind, formatDate, formatWeekday, localDate } from '../journal';
-import { monthGrid } from '../dates';
+import { monthGrid, shiftDate } from '../dates';
 import { plainText } from '../markdown';
-import { CalendarView, calendarViews, durationOf, formatDuration, formatMonthName, isoWeek, layoutTimed, minutesOf, orderForCalendar, shiftView, slotMinutes, snapMinutes, snapRange, viewDates, viewRange, viewTitle } from '../calendar';
-import { timeOfMinutes } from '../planning';
+import { shortTitle, CalendarView, calendarViews, durationOf, formatDuration, formatMonthName, isoWeek, layoutTimed, minutesOf, orderForCalendar, shiftView, slotMinutes, snapMinutes, snapRange, viewDates, viewRange, viewTitle } from '../calendar';
+import { formatEnd, timeOfMinutes } from '../planning';
 import { CalendarComposer } from './CalendarComposer';
 import type { Draft, EntryEdit, NewEntry } from './CalendarComposer';
 import { CalendarItem, CompactMonth, EditInCalendar, OpenInJournal, dayLabel, entrySymbol, openInJournal, useCalendarData, useJournalDate, useNow } from './calendarShared';
+import { NavCluster } from './NavCluster';
 import { Icon } from './Icon';
+import { CalendarTransfer } from './CalendarTransfer';
+import type { CalendarImport } from '../journal';
 import { useWheelSwipe } from './useWheelSwipe';
 
 // The calendar: in the journal's sidebar, or in a window of its own (currently not offered). Year and month like
@@ -40,7 +43,8 @@ export function CalendarWindow() {
 // Memoized: in the sidebar it must not re-render while the journal is being typed in (`onOpen` is stable).
 /** An entry being edited (right click): its day and the element the card is placed at. */
 type Editing = { entry: Entry; date: string; element: HTMLElement };
-export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, onEdit, onRemove, embedded = false, autoFocus = false }: {
+export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, onEdit, onRemove, onExport, onImport, embedded = false, autoFocus = false }: {
+  onExport?: () => Promise<CalendarDay[]>; onImport?: (entries: CalendarImport[]) => Promise<void>;
   journalDate: string | null; onOpen: (date: string, entry?: string) => void; embedded?: boolean; autoFocus?: boolean;
   onCreate?: (date: string, entry: NewEntry) => Promise<void>; onEdit?: (date: string, id: string, change: EntryEdit) => Promise<void>; onRemove?: (date: string, id: string, others: { id: string; date: string }[]) => Promise<void>;
 }) {
@@ -53,7 +57,8 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
   const [editing, setEditing] = useState<Editing | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const range = viewRange(view, date);
-  const { days, error } = useCalendarData(range.from, range.to);
+  // One day more before: an appointment from the evening before may reach into the first shown day.
+  const { days, error } = useCalendarData(shiftDate(range.from, -1), range.to);
   const title = viewTitle(view, date);
   const entriesOn = (value: string) => orderForCalendar((days.get(value)?.entries ?? []).filter(entry => kinds[entry.kind]));
 
@@ -101,19 +106,18 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
             <span className="cal-view-long">{item.label}</span><span className="cal-view-short" aria-hidden="true">{item.short}</span>
           </button>)}
         </div>
+        {onExport && onImport && <CalendarTransfer onExport={onExport} onImport={onImport} />}
       </nav>
-      <header className="cal-toolbar">
-        <h1 className="cal-title" key={`${view}-${title.main}-${title.sub}`}><strong>{title.main}</strong>{title.sub && <span>{title.sub}</span>}</h1>
+      {/* The same toolbar as the journal's: turning first (the same capsule), then the title, the filters at the end. */}
+      <header className="cal-toolbar toolbar">
+        <div className="cal-nav"><NavCluster label="Kalendernavigation" prev={{ label: 'Zurück', tip: 'Zurück · ←' }} next={{ label: 'Weiter', tip: 'Weiter · →' }} today={{ tip: 'Heute · H' }}
+          atToday={viewDates(view, date).includes(today)} onPrev={() => step(-1)} onToday={() => go(today)} onNext={() => step(1)} /></div>
+        <h1 className="cal-title" title={`${title.main} ${title.sub}`} key={`${view}-${title.main}-${title.sub}`}><strong><span className="cal-title-long">{title.main}</span><span className="cal-title-short" aria-hidden="true">{shortTitle(title.main)}</span></strong>{title.sub && <> <span className="cal-title-sub">{title.sub}</span></>}</h1>
         <div className="cal-actions">
+          {/* Like the orbit's satellites: round, the shown kinds lit. */}
           <div className="cal-filter" role="group" aria-label="Angezeigte Einträge">
-            {(['event', 'task', 'note'] as EntryKind[]).map(kind => <button key={kind} type="button" className={`cal-filter-${kind}`} aria-pressed={kinds[kind]} title={`${kindPlurals[kind]} zeigen`}
+            {(['event', 'task', 'note'] as EntryKind[]).map(kind => <button key={kind} type="button" className={`cal-filter-${kind}`} aria-pressed={kinds[kind]} title={`${kindPlurals[kind]} ${kinds[kind] ? 'ausblenden' : 'zeigen'}`}
               onClick={() => setPrefs(current => ({ ...current, kinds: { ...current.kinds, [kind]: !current.kinds[kind] } }))}><Icon name={kind} /></button>)}
-          </div>
-          <span className="cal-separator" />
-          <div className="cal-nav">
-            <button type="button" className="cal-icon-button" aria-label="Zurück" title="Zurück · ←" onClick={() => step(-1)}><Icon name="left" /></button>
-            <button type="button" className="cal-today" title="Heute · H" onClick={() => go(today)}>Heute</button>
-            <button type="button" className="cal-icon-button" aria-label="Weiter" title="Weiter · →" onClick={() => step(1)}><Icon name="right" /></button>
           </div>
         </div>
       </header>
@@ -202,10 +206,12 @@ function MonthView({ date, today, journalDate, days, entriesOn, onDay, onMore, o
   </div>;
 }
 
-const hourHeight = 48;
 /** How close (px) to the visible grid's top or bottom edge a drag starts scrolling, and how fast at most (px per frame). */
 const scrollZone = 40, scrollSpeed = 14;
-type Gesture = { mode: 'new' | 'start' | 'end' | 'move'; column: HTMLElement; date: string; anchor: number; origin: Draft; y: number; moved: boolean };
+// `anchor` and every position are minutes from the start of the origin's day, so a range can run on into the next day.
+// `beyond` (px) grows while the pointer rests at the bottom or top with nothing left to scroll: the range runs on into the next
+// (or previous) day.
+type Gesture = { mode: 'new' | 'start' | 'end' | 'move'; column: HTMLElement; date: string; anchor: number; origin: Draft; x: number; y: number; beyond: number; moved: boolean };
 /**
  * Days as columns over 24 hours. Entries without time sit in the band on top, timed ones in the grid (as long as they
  * last, an hour without an end; side by side where they overlap). Today's column shows the current time as a line, like
@@ -218,19 +224,68 @@ function TimeGrid({ dates, today, now, journalDate, entriesOn, onDay, onCreate, 
   editing: Editing | null; onEditEnd: (byKey: boolean) => void; onSave: (change: EntryEdit) => Promise<void>; onRemove: (others: { id: string; date: string }[]) => Promise<void>;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [hourHeight, setHourHeight] = useState(48);
+  const previousHourHeight = useRef(hourHeight);
+  const scrollAnchor = useRef<number | null>(4);
+  const pendingStart = useRef(true);
+  const restoreStart = (scroller: HTMLElement, height: number) => {
+    if (!scroller.clientHeight) return;
+    scroller.scrollTop = 4 * height;
+    // Before the first measurement, a tall window can fit the entire default grid.
+    // Its scrollTop is clamped to zero; retain 04:00 until the scaled grid can scroll.
+    if (Math.abs(scroller.scrollTop - 4 * height) < 1) {
+      pendingStart.current = false;
+      scrollAnchor.current = null;
+    }
+  };
+  // Aim for twenty visible hours on a tall display. Smaller windows retain readable quarter-hour targets.
+  // Observe the actual grid viewport and sticky header, so sidebar resizing and all-day entries count too.
+  useLayoutEffect(() => {
+    const scroller = scrollRef.current;
+    const header = scroller?.querySelector<HTMLElement>('.cal-time-top');
+    if (!scroller || !header) return;
+    const measure = () => {
+      const available = scroller.clientHeight - header.offsetHeight;
+      if (available <= 0) return;
+      const next = Math.max(36, Math.ceil(available / 20 * 4) / 4);
+      if (next === previousHourHeight.current) {
+        if (pendingStart.current) restoreStart(scroller, next);
+        return;
+      }
+      scrollAnchor.current = pendingStart.current ? 4 : scroller.scrollTop / previousHourHeight.current;
+      setHourHeight(next);
+    };
+    const observer = new ResizeObserver(measure);
+    observer.observe(scroller); observer.observe(header);
+    return () => observer.disconnect();
+  }, []);
+  useLayoutEffect(() => {
+    previousHourHeight.current = hourHeight;
+    if (scrollRef.current) {
+      if (pendingStart.current) restoreStart(scrollRef.current, hourHeight);
+      else if (scrollAnchor.current !== null) scrollRef.current.scrollTop = scrollAnchor.current * hourHeight;
+    }
+    if (!pendingStart.current) scrollAnchor.current = null;
+  }, [hourHeight]);
   const selectionRef = useRef<HTMLDivElement>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [marking, setMarking] = useState(false);
   const gesture = useRef<Gesture | null>(null);
   const frame = useRef(0);
+  // Appointments past midnight: the block ends at 24:00 on its day and goes on from 00:00 on the next.
   const columns = dates.map(date => {
-    const entries = entriesOn(date);
-    return { date, untimed: entries.filter(entry => !entry.time), timed: layoutTimed(entries.filter((entry): entry is Entry & { time: string } => Boolean(entry.time))) };
+    const entries = entriesOn(date), before = shiftDate(date, -1);
+    const own = entries.filter((entry): entry is Entry & { time: string } => Boolean(entry.time))
+      .map(entry => ({ id: entry.id, time: entry.time, end: entry.end && entry.end > '24:00' ? '24:00' : entry.end, entry, from: date, night: entry.end && entry.end > '24:00' ? 'start' as const : undefined }));
+    const carried = entriesOn(before).filter((entry): entry is Entry & { time: string; end: string } => Boolean(entry.time && entry.end && entry.end > '24:00'))
+      .map(entry => ({ id: `${entry.id}:rest`, time: '00:00', end: timeOfMinutes(minutesOf(entry.end) - 24 * 60), entry, from: before, night: 'rest' as const }));
+    return { date, untimed: entries.filter(entry => !entry.time), timed: layoutTimed([...carried, ...own]) };
   });
-  const earliest = Math.min(7 * 60, ...columns.flatMap(column => column.timed.map(item => item.start)));
-  // Scroll to the morning (or the first entry before it) when the shown days change, not on every reload.
+  // Always open the shown days at 04:00, independently of their appointments.
   useLayoutEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = Math.max(0, (earliest - 30) / 60 * hourHeight);
+    pendingStart.current = true;
+    scrollAnchor.current = 4;
+    if (scrollRef.current) restoreStart(scrollRef.current, hourHeight);
     setDraft(null);
   }, [dates[0], dates.length]);
   useEffect(() => () => cancelAnimationFrame(frame.current), []);
@@ -252,20 +307,42 @@ function TimeGrid({ dates, today, now, journalDate, entriesOn, onDay, onCreate, 
   const refocus = () => (scrollRef.current?.closest('.cal') as HTMLElement | null)?.focus({ preventScroll: true });
   const minutesAt = (column: HTMLElement, y: number) => (y - column.getBoundingClientRect().top) / hourHeight * 60;
   const snap = (value: number) => Math.round(value / snapMinutes) * snapMinutes;
-  function follow(y: number) {
+  // The column under the pointer (the nearest at the sides), and the pointer as minutes from the start of `date`'s day.
+  const columnAt = (x: number) => {
+    const all = [...scrollRef.current?.querySelectorAll<HTMLElement>('.cal-time-column') ?? []];
+    return all.find(column => { const r = column.getBoundingClientRect(); return x >= r.left && x < r.right; }) ?? (x < (all[0]?.getBoundingClientRect().left ?? 0) ? all[0] : all.at(-1)!);
+  };
+  const minutesFrom = (date: string, x: number, y: number) => {
+    const column = columnAt(x);
+    return (dates.indexOf(column.dataset.date!) - dates.indexOf(date)) * 24 * 60 + minutesAt(column, y);
+  };
+  /** A range in minutes from `date`'s day, kept within the shown days, at most a day long, moved onto the day it starts on. */
+  function placed(date: string, start: number, end: number): Draft {
+    const first = -dates.indexOf(date) * 24 * 60, last = (dates.length - dates.indexOf(date)) * 24 * 60;
+    if (start < first) { end += first - start; start = first; }
+    if (end > last + 24 * 60) { start -= end - last - 24 * 60; end = last + 24 * 60; }
+    start = Math.min(start, last - snapMinutes);
+    const days = Math.floor(start / (24 * 60));
+    return { date: shiftDate(date, days), start: start - days * 24 * 60, end: Math.min(end, start + 24 * 60) - days * 24 * 60 };
+  }
+  function follow(x: number, y: number) {
     const current = gesture.current;
     if (!current) return;
-    current.y = y;
-    const at = minutesAt(current.column, y);
+    current.x = x; current.y = y;
     const { origin } = current;
-    if (Math.abs(at - current.anchor) / 60 * hourHeight > 3) current.moved = true;
-    if (current.mode === 'new') setDraft({ date: current.date, ...snapRange(current.anchor, at) });
-    else if (current.mode === 'start') setDraft({ ...origin, start: Math.min(origin.end - snapMinutes, Math.max(0, snap(at))) });
-    else if (current.mode === 'end') setDraft({ ...origin, end: Math.max(origin.start + snapMinutes, Math.min(24 * 60, snap(at))) });
+    const at = minutesFrom(origin.date, x, y) + current.beyond / hourHeight * 60;
+    if (Math.abs(at - current.anchor) / 60 * hourHeight > 3 || columnAt(x) !== current.column) current.moved = true;
+    if (current.mode === 'new') {
+      // In whole quarters from the anchor's to the pointer's, either way, also into the next or previous day.
+      const [from, to] = [Math.floor(current.anchor / snapMinutes) * snapMinutes, Math.floor(at / snapMinutes) * snapMinutes];
+      const [start, end] = [Math.min(from, to), Math.max(from, to) + snapMinutes];
+      setDraft(end - start > 24 * 60 ? placed(origin.date, to < from ? end - 24 * 60 : start, to < from ? end : start + 24 * 60) : placed(origin.date, start, end));
+    }
+    else if (current.mode === 'start') setDraft(placed(origin.date, Math.min(origin.end - snapMinutes, Math.max(origin.end - 24 * 60, snap(at))), origin.end));
+    else if (current.mode === 'end') setDraft(placed(origin.date, origin.start, Math.max(origin.start + snapMinutes, Math.min(origin.start + 24 * 60, snap(at)))));
     else {
-      const length = origin.end - origin.start;
-      const start = Math.min(24 * 60 - length, Math.max(0, origin.start + snap(at - current.anchor)));
-      setDraft({ ...origin, start, end: start + length });
+      const delta = snap(at - current.anchor);
+      setDraft(placed(origin.date, origin.start + delta, origin.end + delta));
     }
   }
   // While dragging near the top or bottom of the visible hours, the grid scrolls (faster the closer) and the range follows.
@@ -275,8 +352,10 @@ function TimeGrid({ dates, today, now, journalDate, entriesOn, onDay, onCreate, 
     const top = scroller.querySelector('.cal-time-top')!.getBoundingClientRect().bottom, bottom = scroller.getBoundingClientRect().bottom;
     const speed = current.y < top + scrollZone ? -(top + scrollZone - current.y) : current.y > bottom - scrollZone ? current.y - (bottom - scrollZone) : 0;
     if (speed) {
+      const before = scroller.scrollTop;
       scroller.scrollTop += Math.max(-scrollSpeed, Math.min(scrollSpeed, speed / 2));
-      follow(current.y);
+      if (scroller.scrollTop === before) current.beyond = Math.max(-24 * hourHeight, Math.min(24 * hourHeight, current.beyond + Math.max(-scrollSpeed, Math.min(scrollSpeed, speed / 2))));
+      follow(current.x, current.y);
     }
     frame.current = requestAnimationFrame(autoScroll);
   }
@@ -288,8 +367,9 @@ function TimeGrid({ dates, today, now, journalDate, entriesOn, onDay, onCreate, 
     event.preventDefault();
     event.stopPropagation();
     column.setPointerCapture(event.pointerId);
-    const anchor = minutesAt(column, event.clientY);
-    gesture.current = { mode, column, date, anchor, origin: mode === 'new' ? { date, ...snapRange(anchor, anchor) } : draft!, y: event.clientY, moved: false };
+    const origin: Draft = mode === 'new' ? { date, ...snapRange(minutesAt(column, event.clientY), minutesAt(column, event.clientY)) } : draft!;
+    const anchor = minutesFrom(origin.date, event.clientX, event.clientY);
+    gesture.current = { mode, column, date, anchor, origin, x: event.clientX, y: event.clientY, beyond: 0, moved: false };
     setMarking(true);
     if (mode === 'new') setDraft(gesture.current.origin);
     cancelAnimationFrame(frame.current);
@@ -309,7 +389,7 @@ function TimeGrid({ dates, today, now, journalDate, entriesOn, onDay, onCreate, 
   }
   const columnHandlers = (date: string) => onCreate ? {
     onPointerDown: (event: ReactPointerEvent<HTMLElement>) => { if (!(event.target as Element).closest('.cal-item, .cal-selection')) begin(event, 'new', date); },
-    onPointerMove: (event: ReactPointerEvent<HTMLElement>) => { if (gesture.current) follow(event.clientY); },
+    onPointerMove: (event: ReactPointerEvent<HTMLElement>) => { if (gesture.current) follow(event.clientX, event.clientY); },
     onPointerUp: finish,
     onLostPointerCapture: finish,
   } : {};
@@ -324,7 +404,7 @@ function TimeGrid({ dates, today, now, journalDate, entriesOn, onDay, onCreate, 
           return <button key={date} type="button" className={classes} title={`${formatDate(date)} im Journal öffnen`} onClick={() => onDay(date)}>{label}</button>;
         })}
       </div>
-      <div className="cal-time-allday">
+      <div className={`cal-time-allday${columns.some(column => column.untimed.length) ? '' : ' is-empty'}`}>
         <span className="cal-time-corner">ohne Zeit</span>
         {columns.map(column => <div key={column.date} className={`cal-time-allday-cell${weekendClass(column.date)}`}>
           {column.untimed.map(entry => <CalendarItem key={entry.id} entry={entry} date={column.date} />)}
@@ -333,15 +413,21 @@ function TimeGrid({ dates, today, now, journalDate, entriesOn, onDay, onCreate, 
     </div>
     <div className="cal-time-body">
       <div className="cal-time-hours" aria-hidden="true">{Array.from({ length: 24 }, (_, hour) => <span key={hour} style={{ top: hour * hourHeight }}>{hour ? `${String(hour).padStart(2, '0')}:00` : ''}</span>)}</div>
-      {columns.map(column => <div key={column.date} className={`cal-time-column${weekendClass(column.date)}${column.date === today ? ' is-today' : ''}`} {...columnHandlers(column.date)}>
-        {column.timed.map(({ item, start, duration, column: index, columns: count }) => <CalendarItem key={item.id} entry={item} date={column.date} variant="block" short={duration < 45}
-          style={{ top: start / 60 * hourHeight + 1, height: Math.max(10, duration / 60 * hourHeight - 3), left: `calc(${index / count * 100}% + 2px)`, width: `calc(${100 / count}% - 4px)` }} />)}
+      {columns.map(column => <div key={column.date} data-date={column.date} className={`cal-time-column${weekendClass(column.date)}${column.date === today ? ' is-today' : ''}`} {...columnHandlers(column.date)}>
+        {column.timed.map(({ item, start, duration, left, width }) => <CalendarItem key={item.id} entry={item.entry} date={item.from} variant="block" short={duration < 45} night={item.night}
+          style={{ top: start / 60 * hourHeight + (item.night === 'rest' ? 0 : 1), height: Math.max(10, duration / 60 * hourHeight - (item.night ? 1 : 3)), left: `calc(${left}% + 2px)`, width: `calc(${width}% - 4px)` }} />)}
         {column.date === today && <div className="cal-now" style={{ top: nowMinutes / 60 * hourHeight }} aria-hidden="true" />}
-        {draft?.date === column.date && <div ref={selectionRef} className={`cal-selection${marking ? ' is-marking' : ''}${draft.end - draft.start < 45 ? ' is-short' : ''}`}
-          style={{ top: draft.start / 60 * hourHeight, height: (draft.end - draft.start) / 60 * hourHeight }} onPointerDown={event => begin(event, 'move', column.date)}>
+        {draft?.date === column.date && <div ref={selectionRef} className={`cal-selection${marking ? ' is-marking' : ''}${draft.end - draft.start < 45 ? ' is-short' : ''}${draft.end > 24 * 60 ? ' is-night-start' : ''}`}
+          style={{ top: draft.start / 60 * hourHeight, height: (Math.min(draft.end, 24 * 60) - draft.start) / 60 * hourHeight }} onPointerDown={event => begin(event, 'move', column.date)}>
           <i className="cal-selection-edge is-start" title="Beginn ziehen" onPointerDown={event => begin(event, 'start', column.date)} />
-          <span className="cal-selection-time">{timeOfMinutes(draft.start)} – {timeOfMinutes(draft.end)}</span>
+          <span className="cal-selection-time">{timeOfMinutes(draft.start)} – {formatEnd(timeOfMinutes(draft.end))}</span>
           <span className="cal-selection-length">{formatDuration(draft.end - draft.start)}</span>
+          {draft.end <= 24 * 60 && <i className="cal-selection-edge is-end" title="Ende ziehen" onPointerDown={event => begin(event, 'end', column.date)} />}
+        </div>}
+        {/* Past midnight the range goes on in the next day's column, where its end can be dragged. */}
+        {draft && draft.end > 24 * 60 && shiftDate(draft.date, 1) === column.date && <div className={`cal-selection is-night-rest${marking ? ' is-marking' : ''}`}
+          style={{ top: 0, height: (draft.end - 24 * 60) / 60 * hourHeight }} onPointerDown={event => begin(event, 'move', column.date)}>
+          <span className="cal-selection-time">bis {formatEnd(timeOfMinutes(draft.end))}</span>
           <i className="cal-selection-edge is-end" title="Ende ziehen" onPointerDown={event => begin(event, 'end', column.date)} />
         </div>}
       </div>)}

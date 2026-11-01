@@ -1,0 +1,20 @@
+{"id":"simple-relative","text":"Treffen morgen 17 Uhr","expected":"appointment","date":"morgen","time":"17 Uhr"}
+{"id":"no-event-keyword","text":"Hallo! Passt dir der 12. November um 17:30 bei mir? Viele Grüße, Anna","expected":"appointment","date":"12. November","time":"17:30"}
+{"id":"split-lines","text":"Wollen wir uns übermorgen sehen?\nIch könnte um 17 Uhr.\nAm Bahnhof wäre gut.","expected":"appointment","date":"übermorgen","time":"17 Uhr"}
+{"id":"delivery","text":"Guten Tag, Ihr Paket erreicht Sie voraussichtlich am 12. November zwischen 10 und 12 Uhr.","expected":"delivery","date":"12. November","time":"zwischen 10 und 12 Uhr"}
+{"id":"cancellation","text":"Das Treffen morgen um 17 Uhr fällt leider aus. Bitte komm nicht vorbei.","expected":"cancellation"}
+{"id":"past","text":"Unser Treffen gestern um 17 Uhr war schön. Danke für den netten Abend!","expected":"past"}
+{"id":"hypothetical","text":"Vielleicht könnten wir uns irgendwann nächste Woche um 17 Uhr sehen, aber ich weiß noch keinen Tag.","expected":"uncertain"}
+{"id":"invoice","text":"Rechnungsdatum: 12. November 2026. Bearbeitungszeit: 17:00 Uhr. Dies ist eine Rechnung zu Ihrem bereits abgeschlossenen Einkauf.","expected":"no_appointment"}
+{"id":"two-dates","text":"Wir können uns am 12. November um 17 Uhr oder am 13. November um 18 Uhr treffen. Welche Alternative passt dir?","expected":"alternatives"}
+{"id":"quoted-history","text":"Der neue Termin ist am 13. November um 18 Uhr.\n\nAm 30. Oktober schrieb Anna:\n> Treffen morgen 17 Uhr","expected":"appointment_with_quoted_history","date":"13. November","time":"18 Uhr"}
+{"id":"two-events","text":"Morgen um 17 Uhr treffen wir Anna im Café. Übermorgen um 10 Uhr holen wir das Paket ab.","expected":"two_appointments"}
+{"id":"no-time","text":"Dein Paket kommt morgen. Eine Uhrzeit steht noch nicht fest.","expected":"date_only"}
+{"id":"range-clock","text":"Treffen morgen 20:00 Uhr bis 20:15.","expected":"appointment_range","time":"20:00","end":"20:15"}
+{"id":"range-mixed","text":"Treffen morgen 20 bis 21:20.","expected":"appointment_range","time":"20:00","end":"21:20"}
+{"id":"range-uhr","text":"Treffen morgen von 20 Uhr bis 21:20.","expected":"appointment_range","time":"20:00","end":"21:20"}
+{"id":"range-before-date","text":"Treffen von 20:00 Uhr bis 20:15 morgen.","expected":"appointment_range","time":"20:00","end":"20:15"}
+{"id":"range-dash","text":"Treffen morgen 20:00–20:15 Uhr.","expected":"appointment_range","time":"20:00","end":"20:15"}
+{"id":"range-between","text":"Treffen morgen zwischen 20 und 21:20 Uhr.","expected":"appointment_range","time":"20:00","end":"21:20"}
+{"id":"range-clock-von","text":"Treffen morgen von 20:00 Uhr bis 20:15.","expected":"appointment_range","time":"20:00","end":"20:15"}
+{"id":"range-mixed-von","text":"Treffen morgen von 20 bis 21:20.","expected":"appointment_range","time":"20:00","end":"21:20"}

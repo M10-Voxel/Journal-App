@@ -1,6 +1,9 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Settings } from '../settings';
 import type { ActionLayout } from './EntryActionDock';
+import type { CalendarImport } from '../journal';
+import { MailSettings } from './MailSettings';
+import { Icon } from './Icon';
 
 const layouts: { value: ActionLayout; title: string; text: string }[] = [
   { value: 'orbit', title: 'Orbit', text: 'Aktionen kreisen um den Punkt, Planen sitzt am Zeilenende.' },
@@ -32,25 +35,58 @@ function Preview({ layout }: { layout: ActionLayout }) {
   </svg>;
 }
 
-export function SettingsDialog({ settings, onChange, onClose }: { settings: Settings; onChange: (settings: Settings) => void; onClose: () => void }) {
+export function SettingsDialog({ settings, onChange, onClose, onImport, mailStatus }: { settings: Settings; onChange: (settings: Settings) => void; onClose: () => void; onImport: (entries: CalendarImport[]) => Promise<void>; mailStatus: { count: number; error: string } }) {
   const dialogRef = useRef<HTMLDivElement>(null);
+  const [tab, setTab] = useState('appearance');
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
-    dialogRef.current?.querySelector<HTMLElement>('[aria-checked="true"]')?.focus();
+    dialogRef.current?.querySelector<HTMLElement>('.settings-option[aria-checked="true"]')?.focus();
     return () => previous?.focus({ preventScroll: true });
   }, []);
   return <div className="shortcut-backdrop" onPointerDown={event => { if (event.target === event.currentTarget) onClose(); }}>
-    <div ref={dialogRef} className="shortcuts settings" role="dialog" aria-modal="true" aria-label="Einstellungen" tabIndex={-1}
+    <div ref={dialogRef} className="shortcuts settings dialog-panes" role="dialog" aria-modal="true" aria-label="Einstellungen" tabIndex={-1}
       onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); onClose(); } }}>
-      <div className="shortcuts-head"><strong>Einstellungen</strong><span><kbd>Strg</kbd> <kbd>,</kbd></span></div>
+      <div className="settings-head">
+        <Icon name="settings" /><strong>Einstellungen</strong>
+        <span className="settings-keys"><kbd>Strg</kbd> <kbd>,</kbd></span>
+        <button type="button" className="settings-close" aria-label="Einstellungen schließen" title="Schließen · Esc" onClick={onClose}><Icon name="done" /></button>
+      </div>
+      <div className="settings-body">
+      <div className="settings-tabs" role="tablist" aria-label="Einstellungsbereich" aria-orientation="vertical" onKeyDown={event => {
+        if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
+        event.preventDefault();
+        const next = event.key === 'Home' ? 'appearance' : event.key === 'End' ? 'mail' : tab === 'appearance' ? 'mail' : 'appearance';
+        setTab(next); dialogRef.current?.querySelector<HTMLButtonElement>(`#settings-${next}-tab`)?.focus();
+      }}>
+        <button id="settings-appearance-tab" type="button" role="tab" tabIndex={tab === 'appearance' ? 0 : -1} aria-selected={tab === 'appearance'} aria-controls="settings-appearance" onClick={event => { event.currentTarget.focus(); setTab('appearance'); }}><Icon name="layout" />Darstellung</button>
+        <button id="settings-mail-tab" type="button" role="tab" tabIndex={tab === 'mail' ? 0 : -1} aria-selected={tab === 'mail'} aria-controls="settings-mail" onClick={event => { event.currentTarget.focus(); setTab('mail'); }}><Icon name="mail" />E-Mail-Konten{mailStatus.count > 0 && <span className="mail-badge">{mailStatus.count}</span>}</button>
+      </div>
+      {tab === 'appearance' ? <div className="settings-panel" role="tabpanel" id="settings-appearance" aria-labelledby="settings-appearance-tab">
+      <h3 id="settings-theme">Theme</h3>
+      <p className="settings-hint">Gleiche Farben und Bedienung, ein anderer Stil.</p>
+      <div className="theme-options" role="radiogroup" aria-labelledby="settings-theme" onKeyDown={event => {
+        if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
+        event.preventDefault();
+        const theme = settings.theme === 'pixel' ? 'classic' : 'pixel';
+        onChange({ ...settings, theme });
+        requestAnimationFrame(() => dialogRef.current?.querySelector<HTMLElement>(`[data-theme-choice="${theme}"]`)?.focus());
+      }}>
+        {(['classic', 'pixel'] as const).map(theme => <button key={theme} type="button" role="radio" aria-checked={settings.theme === theme} tabIndex={settings.theme === theme ? 0 : -1} data-theme-choice={theme}
+          onClick={() => onChange({ ...settings, theme })}>
+          <span className={`theme-sample is-${theme}`} aria-hidden="true"><span>Aa</span><i /><i /><i /></span>
+          <strong>{theme === 'classic' ? 'Klassisch' : 'Pixel'}</strong>
+          <small>{theme === 'classic' ? 'IBM Plex Sans · Lilex' : 'Pixelify Sans · VT323'}</small>
+        </button>)}
+      </div>
       <h3 id="settings-layout">Aktionen am Eintrag</h3>
+      <p className="settings-hint">Wie sich die Aktionen eines Eintrags zeigen, wenn man auf seinen Punkt klickt. <kbd>←</kbd> <kbd>→</kbd> wählt.</p>
       <div className="settings-options" role="radiogroup" aria-labelledby="settings-layout" onKeyDown={event => {
         if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
         event.preventDefault();
         const step = event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 1;
         const next = layouts[(layouts.findIndex(layout => layout.value === settings.actionLayout) + step + layouts.length) % layouts.length].value;
         onChange({ ...settings, actionLayout: next });
-        requestAnimationFrame(() => dialogRef.current?.querySelector<HTMLElement>('[aria-checked="true"]')?.focus());
+        requestAnimationFrame(() => dialogRef.current?.querySelector<HTMLElement>('.settings-option[aria-checked="true"]')?.focus());
       }}>
         {layouts.map(layout => <button key={layout.value} type="button" role="radio" className="settings-option" aria-checked={settings.actionLayout === layout.value}
           tabIndex={settings.actionLayout === layout.value ? 0 : -1} data-layout={layout.value} onClick={event => { event.currentTarget.focus(); onChange({ ...settings, actionLayout: layout.value }); }}>
@@ -58,6 +94,8 @@ export function SettingsDialog({ settings, onChange, onClose }: { settings: Sett
           <strong>{layout.title}</strong>
           <span>{layout.text}</span>
         </button>)}
+      </div>
+      </div> : <div className="settings-panel" role="tabpanel" id="settings-mail" aria-labelledby="settings-mail-tab"><MailSettings onImport={onImport} importError={mailStatus.error} /></div>}
       </div>
     </div>
   </div>;

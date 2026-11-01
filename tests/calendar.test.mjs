@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { durationOf, formatDuration, isoWeek, layoutTimed, orderForCalendar, shiftMonthKeepingDay, shiftView, snapRange, viewDates, viewRange, viewTitle } from '../src/calendar.ts';
+import { durationOf, formatDuration, isoWeek, layoutTimed, orderForCalendar, shiftMonthKeepingDay, shiftView, shortTitle, snapRange, viewDates, viewRange, viewTitle } from '../src/calendar.ts';
 import { formatSpan, keepDuration, planChange, tomorrowChange } from '../src/planning.ts';
 
 const entry = (id, kind, extra = {}) => ({ id, kind, text:id, done:false, cancelled:false, priority:false, time:null, reminder:false, plan:null, ...extra });
@@ -28,11 +28,14 @@ test('ISO week numbers', () => {
   assert.equal(isoWeek('2025-12-29'), 1, 'Monday 29 December 2025 starts week 1 of 2026.');
 });
 
-test('titles read like a calendar app', () => {
-  assert.deepEqual(viewTitle('month', '2026-10-30'), { main:'Oktober', sub:'2026' });
-  assert.deepEqual(viewTitle('week', '2026-10-21'), { main:'Oktober', sub:'KW 43 · 2026' });
-  assert.deepEqual(viewTitle('week', '2026-11-01'), { main:'Okt – Nov', sub:'KW 44 · 2026' });
-  assert.deepEqual(viewTitle('day', '2026-10-30'), { main:'30. Oktober', sub:'Freitag · 2026' });
+test('calendar headings put month/year before the selected date and weekday', () => {
+  assert.deepEqual(viewTitle('month', '2026-10-30'), { main:'Oktober 2026', sub:'' });
+  assert.deepEqual(viewTitle('week', '2026-10-21'), { main:'Oktober 2026', sub:'KW 43' });
+  assert.deepEqual(viewTitle('week', '2026-11-01'), { main:'Okt – Nov 2026', sub:'KW 44' });
+  assert.deepEqual(viewTitle('day', '2026-10-30'), { main:'Oktober 2026', sub:'Freitag, 30.' });
+  assert.deepEqual(viewTitle('year', '2026-10-30'), { main:'2026', sub:'' });
+  assert.deepEqual(viewTitle('week', '2027-01-01'), { main:'Dez 2026 – Jan 2027', sub:'KW 53' });
+  assert.deepEqual(['November 2026', 'Okt – Nov 2026', 'März 2027', 'Mai 2027'].map(shortTitle), ['Nov 2026', 'Okt – Nov 2026', 'Mär 2027', 'Mai 2027'], 'Narrow calendars abbreviate the month.');
 });
 
 test('entries without time come first, then by time; priority and events lead', () => {
@@ -40,13 +43,26 @@ test('entries without time come first, then by time; priority and events lead', 
   assert.deepEqual(ordered.map(item => item.id), ['urgent', 'event', 'task', 'early', 'late']);
 });
 
-test('overlapping timed entries share the width', () => {
+test('overlapping timed entries reuse free lanes', () => {
   const layout = layoutTimed([{ id:'a', time:'09:00' }, { id:'b', time:'09:30' }, { id:'c', time:'10:15' }, { id:'d', time:'12:00' }]);
   const by = Object.fromEntries(layout.map(item => [item.item.id, item]));
   assert.deepEqual([by.a.column, by.b.column, by.c.column], [0, 1, 0], 'c starts after a ended and takes its column.');
   assert.equal(by.a.columns, 2); assert.equal(by.c.columns, 2, 'c overlaps b, so it belongs to the same group.');
   assert.deepEqual([by.d.column, by.d.columns], [0, 1]);
   assert.equal(by.b.start, 570);
+});
+
+test('overlapping cards are wider and staggered, while staying inside their day', () => {
+  for (const count of [1, 2, 3, 8]) {
+    const cards = layoutTimed(Array.from({ length: count }, (_, index) => ({ id:String(index), time:`09:${String(index * 5).padStart(2, '0')}`, end:'11:00' })));
+    for (const card of cards) {
+      assert(card.left >= 0 && card.left + card.width <= 100.000001);
+      if (count > 1) assert(card.width > 100 / count, 'Cards stay wider than the old equal slices.');
+    }
+    assert(Math.abs(cards.at(-1).left + cards.at(-1).width - 100) < 0.000001);
+    if (count > 1) assert(Math.abs(cards[1].left - cards[0].width / 2) < 0.000001, 'The next card overlaps half of its neighbour.');
+    else assert.deepEqual([cards[0].left, cards[0].width], [0, 100]);
+  }
 });
 
 test('spans last until their end; without an end an hour, but not past midnight', () => {
@@ -70,7 +86,7 @@ test('a marked range snaps to quarter hours in either direction', () => {
 test('planning keeps a span; moving its start keeps the duration', () => {
   const span = { id:'e', kind:'event', text:'Termin', done:false, cancelled:false, priority:false, time:'09:00', end:'10:30', reminder:false, plan:null };
   assert.equal(keepDuration(span, '14:15'), '15:45');
-  assert.equal(keepDuration(span, '23:00'), null, 'Past midnight the end is dropped.');
+  assert.equal(keepDuration(span, '23:00'), '24:30', 'Past midnight the end lies on the next day.');
   assert.equal(keepDuration({ time:'09:00', end:null }, '10:00'), null);
   assert.deepEqual(planChange('2026-10-30', ['2026-10-30'], { time:'14:15', end:'15:45', reminder:false }), { time:'14:15', end:'15:45', reminder:false });
   assert.deepEqual(planChange('2026-10-30', ['2026-10-30'], { time:null, end:'15:45', reminder:false }), { time:null, end:null, reminder:false }, 'No end without a start.');

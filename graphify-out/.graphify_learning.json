@@ -1,0 +1,54 @@
+{
+  "generated_at": "2026-10-31T18:44:37.797551+00:00",
+  "nodes": {
+    "src_components_entryactiondock": {
+      "code_fingerprint": "1a3544c8818752d1ae1926ab3ef92e3871b7ae3da7597b45e9e795b4d2631a6f",
+      "label": "EntryActionDock.tsx",
+      "last": "2026-10-30T18:18:20.268652+00:00",
+      "provenance": [
+        {
+          "date": "2026-10-30T18:18:20.268652+00:00",
+          "outcome": "useful",
+          "q": "Daily Note: Planen und Wiederholen beim Schliessen zuruecksetzen und ihre Felder und Zurueck-Buttons angleichen."
+        }
+      ],
+      "score": 0.976747831,
+      "source_file": "src/components/EntryActionDock.tsx",
+      "status": "tentative",
+      "uses": 1
+    },
+    "src_components_journalentry": {
+      "code_fingerprint": "60913cf473d3527cbb4954748733fe97a74edbc3d0dc41ac429d53ce9a936a72",
+      "label": "JournalEntry.tsx",
+      "last": "2026-10-30T18:18:20.268652+00:00",
+      "provenance": [
+        {
+          "date": "2026-10-30T18:18:20.268652+00:00",
+          "outcome": "useful",
+          "q": "Daily Note: Planen und Wiederholen beim Schliessen zuruecksetzen und ihre Felder und Zurueck-Buttons angleichen."
+        }
+      ],
+      "score": 0.976747831,
+      "source_file": "src/components/JournalEntry.tsx",
+      "status": "tentative",
+      "uses": 1
+    },
+    "src_components_plancalendar_plancalendar": {
+      "code_fingerprint": "f017a238574906c8a68a76012348c873c0de5d8b5c42025274fcfb1104efa00a",
+      "label": "PlanCalendar()",
+      "last": "2026-10-30T18:18:20.268652+00:00",
+      "provenance": [
+        {
+          "date": "2026-10-30T18:18:20.268652+00:00",
+          "outcome": "useful",
+          "q": "Daily Note: Planen und Wiederholen beim Schliessen zuruecksetzen und ihre Felder und Zurueck-Buttons angleichen."
+        }
+      ],
+      "score": 0.976747831,
+      "source_file": "src/components/PlanCalendar.tsx",
+      "status": "tentative",
+      "uses": 1
+    }
+  },
+  "version": 1
+}

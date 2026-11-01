@@ -1,6 +1,6 @@
 /* Calendar window and compact month window. Same palette as the journal; layout after Apple's calendar (title, segmented
    views, red "now" line), Samsung's (event bars, Saturday blue / Sunday red) and TaskNotes (kind filters, task symbols). */
-.cal, .mini { --saturday: #7fb2ff; --sunday: #e57b7b; --now: #ff5f57; --event: #569eff; --line: #ffffff0f; }
+.cal, .mini, .mini-picker-panel { --saturday: #7fb2ff; --sunday: #e57b7b; --now: #ff5f57; --event: #569eff; --line: #ffffff21; }
 /* The calendar adapts to its own width (the sidebar's), not the window's. */
 .cal { container: cal / inline-size; }
 .cal:focus { outline: none; }
@@ -11,10 +11,12 @@
 .is-sunday { --weekend: var(--sunday); }
 
 /* On top the view switch, as high as the journal's toolbar; below it the title with filters and paging. */
-.cal-viewbar { display: flex; align-items: center; flex: none; height: 45px; padding: 0 10px; background: var(--surface); border-bottom: 1px solid var(--border); }
+.cal-viewbar { display: flex; align-items: stretch; flex: none; height: 45px; padding: 0; background: var(--surface); border-bottom: 1px solid var(--divider); }
 .cal-viewbar .cal-views { flex: 1; }
-.cal-toolbar { display: flex; flex-wrap: wrap; align-items: center; column-gap: 16px; row-gap: 2px; min-height: 52px; padding: 6px 10px 6px 16px; background: var(--surface); border-bottom: 1px solid var(--border); }
-.cal-toolbar .cal-title { flex: 1 1 auto; min-height: 30px; align-items: center; }
+.cal-toolbar { flex-wrap: wrap; column-gap: 12px; row-gap: 4px; padding: 6px 12px; }
+.cal-toolbar .cal-title { flex: 1 1 auto; min-height: 30px; align-items: center; flex-wrap: nowrap; font-size: 14px; gap: 8px; }
+.cal-toolbar .cal-title > .cal-title-sub { font: 12px var(--mono); color: var(--muted); }
+.cal-title-short { display: none; }
 /* When the title does not leave room, filters and paging wrap below it, still on the right. */
 .cal-toolbar .cal-actions { margin-left: auto; }
 .cal-title { display: flex; align-items: baseline; gap: 8px; min-width: 0; margin: 0; font-size: 19px; font-weight: 600; letter-spacing: -.01em; color: #e6e6e6; white-space: nowrap; animation: cal-title-in 260ms var(--ease); }
@@ -71,13 +73,17 @@
 .cal-item.is-note { color: var(--muted) !important; }
 .cal-item.is-priority .icon { color: var(--priority); }
 .cal-item.is-event.is-priority { box-shadow: inset 2px 0 var(--priority); }
-.cal-item.is-done .cal-item-text, .cal-item.is-cancelled .cal-item-text { color: var(--disabled); text-decoration: line-through; text-decoration-color: #ffffff40; }
+.cal-item.is-done .cal-item-text, .cal-item.is-cancelled .cal-item-text { color: var(--disabled); }
+.cal-item.is-cancelled .cal-item-text { text-decoration: line-through; text-decoration-color: #ffffff40; }
 .cal-item.is-done .icon, .cal-item.is-cancelled .icon { color: var(--disabled); }
-.cal-item.is-block { position: absolute; z-index: 1; align-items: flex-start; height: auto; padding: 4px 6px !important; overflow: hidden; background: #2d2d2d !important; box-shadow: inset 2px 0 var(--muted), 0 1px 2px #00000080; }
+.cal-item.is-task:is(.is-done, .is-cancelled) { --priority: var(--disabled); color: var(--disabled) !important; }
+.cal-item.is-task:is(.is-done, .is-cancelled) .cal-item-time { color: var(--disabled); }
+.cal-item.is-block { --block-radius: 4px; position: absolute; z-index: 1; align-items: flex-start; height: auto; padding: 4px 6px !important; overflow: hidden; border-radius: var(--block-radius); background: #2d2d2d !important; box-shadow: 0 1px 2px #00000080; }
 .cal-item.is-block:hover { background: #363636 !important; z-index: 2; }
-.cal-item.is-block.is-event { background: #1d2b40 !important; box-shadow: inset 2px 0 var(--event), 0 1px 2px #00000080; }
+.cal-item.is-block.is-event { background: #1d2b40 !important; box-shadow: 0 1px 2px #00000080; }
 .cal-item.is-block.is-event:hover { background: #243752 !important; }
-.cal-item.is-block.is-priority { box-shadow: inset 2px 0 var(--priority), 0 1px 2px #00000080; }
+/* The priority stripe follows only the straight edge, with rounded ends before the card's corners. */
+.cal-item.is-block.is-priority::before { content: ''; position: absolute; left: 0; top: var(--block-radius); bottom: var(--block-radius); width: 2px; border-radius: 999px; background: var(--priority); pointer-events: none; }
 .cal-item.is-block .icon { position: absolute; top: 6px; right: 6px; }
 .cal-item.is-block .cal-item-text { width: 100%; padding-right: 12px; white-space: normal; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 17px; }
 
@@ -134,13 +140,13 @@
 
 /* Week, work week and day: a time grid. The header and the band without time stay on top while the hours scroll. */
 .cal-split { flex: 1; min-height: 0; display: flex; }
-.cal-time { flex: 1; min-width: 0; overflow-y: auto; scrollbar-gutter: stable; }
+.cal-time { flex: 1; min-width: 0; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; overflow-anchor: none; }
 .cal-time-top { position: sticky; top: 0; z-index: 4; background: var(--background); box-shadow: 0 1px 0 var(--line), 0 8px 12px -10px #000; }
 .cal-time-head, .cal-time-allday, .cal-time-body { display: grid; grid-template-columns: 56px repeat(var(--days), minmax(0, 1fr)); }
 .cal-time-corner { align-self: center; white-space: nowrap; padding-right: 8px; text-align: right; font: 9.5px var(--mono); color: var(--placeholder); }
-.cal-time-day { display: flex; align-items: center; justify-content: center; gap: 6px; height: 44px; color: var(--muted); font-size: 12px; }
+.cal-time-day { display: flex; align-items: center; justify-content: center; gap: 6px; height: 34px; color: var(--muted); font-size: 11px; }
 button.cal-time-day:hover { background: #ffffff08; }
-.cal-time-day strong { display: grid; place-items: center; min-width: 26px; height: 26px; padding: 0 4px; border-radius: 13px; font-size: 15px; font-weight: 500; color: #e6e6e6; font-variant-numeric: tabular-nums; }
+.cal-time-day strong { display: grid; place-items: center; min-width: 22px; height: 22px; padding: 0 4px; border-radius: 11px; font-size: 13px; font-weight: 500; color: #e6e6e6; font-variant-numeric: tabular-nums; }
 .cal-time-day.is-saturday, .cal-time-day.is-sunday { color: var(--weekend); }
 .cal-time-day.is-journal strong { box-shadow: inset 0 0 0 1px #569eff99; }
 .cal-time-day.is-today { color: var(--now); }
@@ -148,6 +154,8 @@ button.cal-time-day:hover { background: #ffffff08; }
 .cal-time-allday { border-top: 1px solid var(--line); }
 .cal-time-allday .cal-time-corner { align-self: start; padding-top: 5px; white-space: normal; line-height: 1.25; }
 .cal-time-allday-cell { display: flex; flex-direction: column; gap: 2px; min-width: 0; min-height: 28px; max-height: 112px; padding: 4px; overflow-y: auto; border-left: 1px solid var(--line); scrollbar-width: none; }
+.cal-time-allday.is-empty .cal-time-allday-cell { min-height: 22px; padding-block: 0; }
+.cal-time-allday.is-empty .cal-time-corner { padding-top: 0; align-self: center; }
 .cal-time-body { position: relative; height: calc(24 * var(--hour)); }
 .cal-time-hours { position: relative; }
 .cal-time-hours span { position: absolute; right: 8px; transform: translateY(-50%); font: 10px var(--mono); color: var(--placeholder); font-variant-numeric: tabular-nums; }
@@ -160,7 +168,7 @@ button.cal-time-day:hover { background: #ffffff08; }
 .cal-now-row span { position: absolute; right: 100%; top: -8px; margin-right: 4px; padding: 1px 4px; border-radius: 4px; background: var(--now); color: #fff; font: 600 10px var(--mono); }
 
 /* The day view's side: month and the day as the journal has it. */
-.cal-day-side { flex: none; width: 280px; display: flex; flex-direction: column; gap: 18px; padding: 16px; overflow-y: auto; background: var(--surface); border-left: 1px solid var(--border); }
+.cal-day-side { flex: none; width: 280px; display: flex; flex-direction: column; gap: 18px; padding: 16px; overflow-y: auto; background: var(--surface); border-left: 1px solid var(--divider); }
 .cal-day-summary h2 { margin: 0; font-size: 13px; font-weight: 600; color: #e6e6e6; }
 .cal-day-name { margin: 4px 0 0; font: italic 13px var(--write); color: var(--text); }
 .cal-day-name.is-empty { color: var(--placeholder); }
@@ -210,10 +218,9 @@ button.cal-time-day:hover { background: #ffffff08; }
 .mini .cal-compact-day { height: auto; min-height: 30px; }
 
 /* In the journal's sidebar: on the sidebar's surface, filling the space between brand and footer. */
-.cal.is-embedded { flex: 1; height: auto; min-height: 0; background: transparent; }
-.cal.is-embedded .cal-toolbar { background: transparent; }
+.cal.is-embedded { flex: 1; height: auto; min-height: 0; background: var(--background); }
 .cal.is-embedded .cal-month-day.is-saturday, .cal.is-embedded .cal-month-day.is-sunday, .cal.is-embedded .cal-time-column.is-saturday, .cal.is-embedded .cal-time-column.is-sunday { background-color: #ffffff06; }
-.cal.is-embedded .cal-time-top { background: var(--surface); }
+.cal.is-embedded .cal-time-top { background: var(--background); }
 .cal-view-short { display: none; }
 
 @container cal (max-width: 880px) {
@@ -237,7 +244,7 @@ button.cal-time-day:hover { background: #ffffff08; }
   .cal-more { padding: 0 3px !important; font-size: 10px; }
   .cal-time-head, .cal-time-allday, .cal-time-body { grid-template-columns: 42px repeat(var(--days), minmax(0, 1fr)); }
   .cal-now-row { left: 42px; }
-  .cal-time-day { flex-direction: column; gap: 0; height: 46px; font-size: 10px; }
+  .cal-time-day { flex-direction: column; gap: 0; height: 36px; font-size: 10px; }
   .cal-time-day strong { min-width: 22px; height: 22px; font-size: 12.5px; }
   .cal-item.is-block { padding: 3px 4px !important; }
   .cal-item.is-block .icon { display: none; }
@@ -294,7 +301,8 @@ button.cal-time-day:hover { background: #ffffff08; }
 .cal-composer.is-right::before { left: -4px; box-shadow: -1px 1px 0 var(--edge); }
 .cal-composer.is-left::before { right: -4px; box-shadow: 1px -1px 0 var(--edge); }
 .cal-composer.is-below::before { display: none; }
-.cal-composer button { position: relative; border: 0; padding: 0; background: transparent; color: var(--muted); font: inherit; cursor: pointer; }
+/* The repeat view keeps the planner's look. */
+.cal-composer button:not(.cal-composer-repeat-panel button) { position: relative; border: 0; padding: 0; background: transparent; color: var(--muted); font: inherit; cursor: pointer; }
 .cal-composer-head, .cal-composer-foot { display: flex; align-items: center; gap: 4px; }
 .cal-composer-kinds { display: flex; gap: 2px; }
 .cal-satellite { display: grid; place-items: center; flex: none; width: 30px; height: 30px; border-radius: 50% !important; animation: satellite-in 440ms var(--spring) backwards; animation-delay: calc(var(--i, 0) * 32ms + 60ms);
@@ -312,9 +320,12 @@ button.cal-time-day:hover { background: #ffffff08; }
 .cal-composer-text { flex: 1; min-width: 0; height: 30px; padding: 0 10px; border: 0; border-radius: 15px; outline: none; background: var(--background); color: var(--text); font: 13px var(--write); user-select: text; }
 .cal-composer-text::placeholder { color: var(--placeholder); }
 .cal-composer-text:focus { box-shadow: inset 0 0 0 1px #569eff80; }
+.cal-composer-description { width: 100%; min-height: 54px; max-height: 110px; resize: vertical; padding: 8px 10px; border: 0; border-radius: 10px; outline: none; background: var(--background); color: var(--text); font: 12px/1.5 var(--write); user-select: text; }
+.cal-composer-description::placeholder { color: var(--placeholder); }
+.cal-composer-description:focus { box-shadow: inset 0 0 0 1px #569eff80; }
 .cal-composer-text.is-shaking { animation: composer-shake 320ms ease; }
 @keyframes composer-shake { 25% { transform: translateX(-4px); } 50% { transform: translateX(4px); } 75% { transform: translateX(-2px); } }
-.cal-composer-when { flex: 1; min-width: 0; display: flex; align-items: center; gap: 1px; height: 30px; padding: 0 4px 0 10px; border-radius: 15px; box-shadow: inset 0 0 0 1px #569eff40; color: var(--accent); font: 12px var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cal-composer-when { flex: 1; min-width: 0; display: flex; align-items: center; gap: 1px; height: 30px; padding: 0 12px 0 10px; border-radius: 15px; box-shadow: inset 0 0 0 1px #569eff40; color: var(--accent); font: 12px var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .cal-composer-day { margin-right: 6px; color: var(--muted); font-family: var(--sans); font-size: 11.5px; }
 .cal-composer-time { height: 22px; padding: 0 3px !important; border-radius: 5px; color: var(--accent) !important; }
 .cal-composer-time:hover, .cal-composer-time:focus-visible { background: #569eff26 !important; }
@@ -339,3 +350,73 @@ button.cal-time-day:hover { background: #ffffff08; }
 .cal-composer-remove:hover:not(:disabled) { background: #ff55551f !important; color: var(--error) !important; }
 .cal-composer-remove:hover:not(:disabled) > .icon { animation: wiggle 420ms ease; }
 .cal-item.is-editing .cal-item-time { display: none; }
+
+.cal-transfer { position:relative; flex:none; margin-left:6px; }
+.cal-transfer-panel { position:absolute; top:36px; right:0; z-index:60; width:276px; max-width:calc(100vw - 24px); max-height:calc(100vh - 80px); overflow-y:auto; padding:12px; border-radius:14px; background:var(--surface); box-shadow:0 0 0 1px var(--edge),0 14px 40px #0009; font:12px/1.5 var(--sans); text-align:left; }
+.cal-transfer-title { display:flex; justify-content:space-between; color:var(--text); }
+.cal-transfer-title span { color:var(--muted); font-family:var(--mono); }
+.cal-transfer-panel p { margin:8px 0; color:var(--muted); }
+.cal .cal-transfer-panel button { display:flex; align-items:center; gap:9px; width:100%; padding:9px; border-radius:8px; text-align:left; font:inherit; }
+.cal .cal-transfer-panel button:hover:not(:disabled) { background:var(--hover); }
+.cal .cal-transfer-panel button.cal-transfer-confirm { color:var(--accent); }
+.cal-transfer-panel button:disabled { opacity:.5; cursor:wait; }
+.cal-transfer-panel .cal-transfer-error { color:var(--error); overflow-wrap:anywhere; }
+.cal-transfer-notice { padding-left:8px; border-left:2px solid var(--accent); }
+
+.cal-viewbar { position:relative; z-index:5; }
+.cal-viewbar .cal-views { flex:1; min-width:0; }
+.cal-transfer-panel { width:min(276px, calc(100cqw - 24px)); }
+
+/* Repeating, under the card's lines: the planner's repeat view (and a small month for its end) at the planner's size. */
+.cal-composer-repeat-panel { position: relative; height: 236px; padding-top: 8px; border-top: 1px solid var(--hover); animation: composer-in 300ms var(--spring); }
+.cal-composer-repeat-panel .repeat { inset: 8px 0 0; }
+.cal-composer-end { display: flex; flex-direction: column; gap: 6px; }
+/* The end's month: back on the left (like the repeat view), the month's name, then up/down to turn months; compact cells so it fits the panel. */
+.cal-composer-end { position: absolute; inset: 8px 0 0; gap: 4px; }
+.cal-composer-end-head { position: relative; display: flex; align-items: center; gap: 2px; height: 32px; flex: none; padding-left: 34px; }
+.cal-composer-end-head .repeat-summary { flex: 1; max-width: none; }
+.cal-composer-end-head .cal-icon-button { width: 26px; height: 24px; }
+.cal-composer-end .cal-compact-day { height: 26px; font-size: 12px; }
+.cal-composer-end .cal-compact-weekdays span { padding-bottom: 2px; }
+.cal-composer-end .repeat-summary em { font-style: normal; color: var(--accent); }
+:where(.cal-composer-repeat-panel button) { border: 0; padding: 0; background: transparent; color: var(--muted); font: inherit; cursor: pointer; transition: color var(--fast) ease, background-color var(--fast) ease; }
+
+/* The views as tabs, like the journal's tab beside them (and Zed's): flat, the shown one on the dark ground of what lies under it. */
+.cal-viewbar .cal-views { display: flex; padding: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.cal-viewbar .cal-views-indicator { display: none; }
+.cal-viewbar .cal-views button { flex: 1 1 0; height: auto; padding: 0 6px; border-radius: 0; border-right: 1px solid var(--divider); transition: color var(--fast) ease, background-color var(--fast) ease; }
+.cal-viewbar .cal-views button:hover:not([aria-selected='true']) { background: #ffffff08; }
+.cal-viewbar .cal-views button[aria-selected='true'] { background: var(--background); color: var(--text); font-weight: 500; }
+.cal-viewbar > :not(.cal-views) { align-self: center; margin: 0 8px; }
+/* The kinds shown, as round satellites like the orbit's: lit when shown, a faint ring when not. */
+.cal-filter { gap: 4px; }
+.cal-filter button { width: 26px; height: 26px; border-radius: 50%; box-shadow: inset 0 0 0 1px var(--edge); transition: color var(--fast) ease, background-color var(--fast) ease, box-shadow var(--fast) ease, transform 220ms var(--spring); }
+.cal-filter button[aria-pressed='true'] { background: var(--surface); box-shadow: none; }
+.cal-filter button:hover { background: var(--hover); }
+.cal-filter button:active { transform: scale(.86); }
+
+/* A narrow calendar keeps its toolbar in one row, level with the journal's: the month abbreviated, the detail and the
+   capsule's gaps dropped, the satellites a little smaller. */
+@container cal (max-width: 420px) {
+  .cal-toolbar { flex-wrap: nowrap; column-gap: 8px; padding: 6px 8px; }
+  .cal-toolbar .cal-title { min-width: 0; font-size: 13px; }
+  .cal-toolbar .cal-title-sub { display: none; }
+  .cal-title-long { display: none; }
+  .cal-title-short { display: inline; }
+  .cal-toolbar .nav-cluster .nav-today { padding: 0 8px; }
+  .cal-filter { gap: 2px; }
+  .cal-filter button { width: 22px; height: 22px; }
+  .cal-filter button .icon { width: 12px; height: 12px; }
+}
+/* The bold part stays bold in both of its forms (the grey style above is for the detail after it). */
+.cal-title strong > span { font: inherit; color: inherit; }
+
+/* Its popups (the file exchange) open over the toolbar under it. */
+.cal-viewbar { position: relative; z-index: 41; }
+/* The year's months as framed sections. */
+.cal-year-month { padding: 8px 10px 6px; border-radius: 10px; box-shadow: inset 0 0 0 1px var(--line); }
+
+/* Past midnight: the block runs to the bottom of its day and on from the top of the next, open at the cut. */
+.cal-item.is-block.is-night-start, .cal-selection.is-night-start { border-bottom-left-radius: 0 !important; border-bottom-right-radius: 0 !important; }
+.cal-item.is-block.is-night-rest, .cal-selection.is-night-rest { border-top-left-radius: 0 !important; border-top-right-radius: 0 !important; }
+.cal-item.is-block.is-night-rest { opacity: .85; background-image: repeating-linear-gradient(-45deg, transparent 0 6px, #ffffff06 6px 12px) !important; }

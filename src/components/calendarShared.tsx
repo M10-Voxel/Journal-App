@@ -7,6 +7,7 @@ import { monthGrid } from '../dates';
 import { plainText } from '../markdown';
 import { shiftMonthKeepingDay } from '../calendar';
 import { formatSpan } from '../planning';
+import { describe } from '../repeat';
 import { Icon, IconName, priorityIcon } from './Icon';
 import { entryLabels } from './JournalEntry';
 import '../calendar.css';
@@ -61,7 +62,7 @@ export function entrySymbol(entry: Entry): IconName {
   if (entry.done) return 'done';
   return entry.priority ? priorityIcon(entry.kind) : entry.kind;
 }
-export const entryTitle = (entry: Entry) => `${entryLabels[entry.kind]}${entry.time ? entry.end ? ` von ${entry.time} bis ${entry.end}` : ` um ${entry.time}` : ''}${entry.done ? ', erledigt' : entry.cancelled ? ', abgebrochen' : ''}: ${plainText(entry.text) || 'ohne Text'}`;
+export const entryTitle = (entry: Entry) => `${entryLabels[entry.kind]}${entry.time ? entry.end ? ` von ${entry.time} bis ${entry.end}` : ` um ${entry.time}` : ''}${entry.done ? ', erledigt' : entry.cancelled ? ', abgebrochen' : ''}${entry.repeat?.rule ? `, ${describe(entry.repeat.rule)}` : ''}: ${plainText(entry.text) || 'ohne Text'}`;
 
 /** How fast the time scrolls when it does not fit (px per second). */
 const tickerSpeed = 36;
@@ -86,12 +87,13 @@ function measureTime(item: HTMLElement) {
 }
 
 /** One entry: its journal symbol and the text. Events are filled bars, tasks and notes lines (like Samsung's calendar). */
-export function CalendarItem({ entry, date, variant = 'line', short = false, style }: { entry: Entry; date: string; variant?: 'line' | 'block'; short?: boolean; style?: CSSProperties }) {
+/** `night`: a block past midnight – `start` on its own day (cut at 24:00), `rest` its continuation on the next. */
+export function CalendarItem({ entry, date, variant = 'line', short = false, style, night }: { entry: Entry; date: string; variant?: 'line' | 'block'; short?: boolean; style?: CSSProperties; night?: 'start' | 'rest' }) {
   const open = useContext(OpenInJournal);
   const { edit, editingId } = useContext(EditInCalendar);
   const state = entry.done ? ' is-done' : entry.cancelled ? ' is-cancelled' : '';
-  return <button type="button" className={`cal-item is-${entry.kind} is-${variant}${short ? ' is-short' : ''}${state}${entry.priority ? ' is-priority' : ''}${editingId === entry.id ? ' is-editing' : ''}`} style={style}
-    title={`${entryTitle(entry)} · Im Journal zeigen${edit ? ' · Rechtsklick: bearbeiten' : ''}`} aria-label={`${entryTitle(entry)}. Im Journal zeigen`}
+  return <button type="button" className={`cal-item is-${entry.kind} is-${variant}${short ? ' is-short' : ''}${state}${entry.priority ? ' is-priority' : ''}${editingId === entry.id ? ' is-editing' : ''}${night ? ` is-night-${night}` : ''}`} style={style}
+    title={`${entryTitle(entry)}${entry.description ? `\n${entry.description}` : ''} · Im Journal zeigen${edit ? ' · Rechtsklick: bearbeiten' : ''}`} aria-label={`${entryTitle(entry)}. Im Journal zeigen`}
     onContextMenu={event => { if (!edit) return; event.preventDefault(); event.stopPropagation(); edit(entry, date, event.currentTarget); }}
     onKeyDown={event => { if (edit && (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10'))) { event.preventDefault(); edit(entry, date, event.currentTarget); } }}
     onPointerEnter={event => measureTime(event.currentTarget)} onFocus={event => measureTime(event.currentTarget)}

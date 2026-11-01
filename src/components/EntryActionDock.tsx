@@ -5,12 +5,13 @@ import { Icon, IconName, priorityIcon } from './Icon';
 import { PlanCalendar } from './PlanCalendar';
 import type { PlannerView } from './PlanCalendar';
 import type { SwipeActions } from './useSwipe';
-import { formatShortDate } from '../dates';
-import { Schedule, canBeNote, canPlan, keepDuration, planChange, tomorrowChange } from '../planning';
+import { formatShortDate, localDate } from '../dates';
+import { Schedule, canBeNote, canPlan, keepDuration, repeatChange, tomorrowChange } from '../planning';
+import type { RepeatRule } from '../repeat';
 
 export type TaskStatus = 'open' | 'done' | 'cancelled';
 export type EntryPreview = TaskStatus | EntryKind | 'remove' | 'up' | 'down' | 'priority' | 'tomorrow' | 'unplan';
-export type PlanUpdate = Partial<Pick<Entry, 'time' | 'end' | 'reminder' | 'plan'>>;
+export type PlanUpdate = Partial<Pick<Entry, 'time' | 'end' | 'reminder' | 'plan' | 'repeat'>>;
 /** How the actions appear: satellites around the symbol, words in the text flow, or gestures (setting, see SettingsDialog). */
 export type ActionLayout = 'orbit' | 'inline' | 'swipe';
 /** One action as the inline layout lists it. */
@@ -91,6 +92,7 @@ export function EntryActionDock({ layout, swipeActions, removeChoice, onClose, e
     {entry.kind === 'task' && <button type="button" className="dock-plan-tomorrow" style={stagger()} aria-label="Auf morgen verschieben" data-tip="Morgen · Alt M" {...previewing('tomorrow')} onClick={() => onPlan(tomorrowChange(entry, day))}><Icon name="plan-tomorrow" /></button>}
     <button type="button" className="dock-plan-date" style={stagger()} aria-label="Datum und Uhrzeit planen" aria-haspopup="dialog" data-tip="Planen · Alt T" onClick={() => onPlanningChange(true)}><Icon name="calendar" /></button>
     <button type="button" className="dock-plan-days" style={stagger()} aria-label="Mehrere Tage" aria-haspopup="dialog" data-tip="Mehrere Tage · Alt ⇧ T" onClick={() => onPlanningChange(true, 'days')}><Icon name="plan-days" /></button>
+    <button type="button" className="dock-plan-repeat" style={stagger()} aria-label="Wiederholen" aria-haspopup="dialog" aria-pressed={Boolean(entry.repeat?.rule)} data-tip="Wiederholen · Alt W" onClick={() => onPlanningChange(true, 'repeat')}><Icon name="repeat" /></button>
   </div>;
   const kindGroup = () => <div className="dock-kind" role="group" aria-label="Art">
     {kindActions.map(action => <button key={action.kind} type="button" className={`dock-kind-${action.kind}`} style={stagger()} aria-label={action.label} data-tip={`${action.label.replace('Als ', '')} · ${action.hint}`}
@@ -99,8 +101,8 @@ export function EntryActionDock({ layout, swipeActions, removeChoice, onClose, e
   </div>;
   const isTask = entry.kind === 'task' && !trace;
   // Inline groups: the actions as short, lower-case words as they read in a sentence.
-  const groupOf: Record<string, number> = { jump: 0, unplan: 0, open: 1, done: 1, cancelled: 1, priority: 2, 'kind-event': 2.5, 'kind-task': 2.5, 'kind-note': 2.5, tomorrow: 3, plan: 3, days: 3, up: 4, down: 4, remove: 5 };
-  const shortWords: Record<string, string> = { jump: 'zum tag', unplan: 'zurücknehmen', open: 'offen', done: 'erledigt', cancelled: 'abbrechen', priority: 'priorität', 'kind-event': 'als ereignis', 'kind-task': 'als aufgabe', 'kind-note': 'als notiz', tomorrow: 'morgen', plan: 'planen', days: 'mehrere tage', up: '', down: '', remove: 'löschen' };
+  const groupOf: Record<string, number> = { jump: 0, unplan: 0, open: 1, done: 1, cancelled: 1, priority: 2, 'kind-event': 2.5, 'kind-task': 2.5, 'kind-note': 2.5, tomorrow: 3, plan: 3, days: 3, repeat: 3, up: 4, down: 4, remove: 5 };
+  const shortWords: Record<string, string> = { jump: 'zum tag', unplan: 'zurücknehmen', open: 'offen', done: 'erledigt', cancelled: 'abbrechen', priority: 'priorität', 'kind-event': 'als ereignis', 'kind-task': 'als aufgabe', 'kind-note': 'als notiz', tomorrow: 'morgen', plan: 'planen', days: 'mehrere tage', repeat: 'wiederholen', up: '', down: '', remove: 'löschen' };
   const inlineGroups = () => {
     const items = actionItems().map(item => ({ ...item, short: shortWords[item.id] }));
     const order = ['open', 'done', 'cancelled'];
@@ -125,6 +127,7 @@ export function EntryActionDock({ layout, swipeActions, removeChoice, onClose, e
       ...entry.kind === 'task' ? [{ id: 'tomorrow', label: 'Auf morgen', icon: 'plan-tomorrow' as const, preview: 'tomorrow' as const, run: () => onPlan(tomorrowChange(entry, day)) }] : [],
       { id: 'plan', label: 'Planen …', icon: 'calendar' as const, run: () => onPlanningChange(true) },
       { id: 'days', label: 'Mehrere Tage', icon: 'plan-days' as const, run: () => onPlanningChange(true, 'days') },
+      { id: 'repeat', label: 'Wiederholen …', icon: 'repeat' as const, run: () => onPlanningChange(true, 'repeat') },
     ] : [],
     { id: 'up', label: 'Nach oben', icon: 'up' as const, preview: 'up' as const, disabled: !canMoveUp, run: () => onMove(-1) },
     { id: 'down', label: 'Nach unten', icon: 'down' as const, preview: 'down' as const, disabled: !canMoveDown, run: () => onMove(1) },
@@ -144,8 +147,8 @@ export function EntryActionDock({ layout, swipeActions, removeChoice, onClose, e
   }, [planning]);
 
   if (planning) return <div ref={dockRef} className={`entry-dock-shell${isOpen ? ' is-open' : ''}`} inert={!isOpen} aria-hidden={!isOpen}>
-    <PlanCalendar day={day} initialView={plannerView} initial={{ date: day, time: entry.time ?? null, reminder: entry.reminder ?? false }} onPreview={onPlanDatePreview}
-      onCancel={() => onPlanningChange(false)} onConfirm={(dates: string[], schedule: Schedule) => onPlan(planChange(day, dates, { ...schedule, end: keepDuration(entry, schedule.time) }))} />
+    <PlanCalendar day={day} initialView={plannerView} initial={{ date: day, time: entry.time ?? null, reminder: entry.reminder ?? false, repeat: entry.repeat?.rule ?? null }} onPreview={onPlanDatePreview}
+      onCancel={() => onPlanningChange(false)} onConfirm={(dates: string[], schedule: Schedule, repeat: RepeatRule | null) => onPlan(repeatChange(entry, day, dates, { ...schedule, end: keepDuration(entry, schedule.time) }, repeat, localDate()))} />
   </div>;
 
   return <div ref={dockRef} className={`entry-dock-shell${isOpen ? ' is-open' : ''}`} inert={!isOpen} aria-hidden={!isOpen} role="toolbar" aria-label={`Aktionen für ${label}`} tabIndex={-1} onKeyDown={event => {

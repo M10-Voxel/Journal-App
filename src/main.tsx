@@ -1,24 +1,32 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { invoke } from '@tauri-apps/api/core';
 import { emit, listen } from '@tauri-apps/api/event';
 import { Day, Entry, EntryKind, formatDate, journal, localDate, shiftDate, weekDates } from './journal';
-import type { LinkedAction } from './journal';
+import type { CalendarImport, LinkedAction, Reminder } from './journal';
+import { ReminderPopup, ReminderToasts, chime } from './components/ReminderToasts';
 import { Icon } from './components/Icon';
 import { EntryChange, JournalEntry, entryLabels } from './components/JournalEntry';
 import { useEntryDrag } from './components/useEntryDrag';
 import { useListMotion } from './components/useListMotion';
 import { ShortcutHelp } from './components/ShortcutHelp';
 import { SettingsDialog } from './components/SettingsDialog';
-import { Settings, loadSettings, saveSettings } from './settings';
+import { useMailImport } from './components/useMailImport';
+import { MailImportToast } from './components/MailImportToast';
+import { Settings, applyTheme, loadSettings, saveSettings } from './settings';
+import { ThemeSync } from './components/ThemeSync';
 import { adjacentText, focusText, titleInput } from './components/focus';
 import type { TextField } from './components/entryEditor';
-import { entryKindOrder, orderEntries, moveEntry, moveEntryByOffset } from './entries';
+import { entryKindOrder, orderEntries, moveEntry, moveEntryByOffset, mergeCalendarImport } from './entries';
 import { Calendar, CalendarWindow } from './components/CalendarWindow';
 import type { EntryEdit, NewEntry } from './components/CalendarComposer';
 import { useSidebarWidth } from './components/useSidebarWidth';
 import { useWheelSwipe } from './components/useWheelSwipe';
 import { MiniCalendar } from './components/MiniCalendar';
+import { MiniCalendarPicker } from './components/MiniCalendarPicker';
+import { WindowControls } from './components/WindowControls';
+import { NavCluster } from './components/NavCluster';
 import '@fontsource/ibm-plex-sans/400.css';
 import '@fontsource/ibm-plex-sans/500.css';
 import '@fontsource/ibm-plex-sans/600.css';
@@ -27,6 +35,15 @@ import '@fontsource/lilex/400-italic.css';
 import '@fontsource/lilex/700.css';
 import '@fontsource/lilex/700-italic.css';
 import './styles.css';
+import './mail.css';
+import '@fontsource/pixelify-sans/400.css';
+import '@fontsource/pixelify-sans/500.css';
+import '@fontsource/pixelify-sans/600.css';
+import '@fontsource/pixelify-sans/700.css';
+import '@fontsource/vt323/400.css';
+import './pixel.css';
+
+applyTheme(loadSettings().theme);
 
 // Bold and italic would otherwise load on first use, briefly rendering a fallback of a different width under the caret.
 for (const face of ['400 13px Lilex', 'italic 400 13px Lilex', '700 13px Lilex', 'italic 700 13px Lilex']) void document.fonts.load(face);
@@ -56,8 +73,10 @@ function App() {
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [slide, setSlide] = useState<'next' | 'prev' | null>(null);
+  const [reminders, setReminders] = useState<Reminder[]>([]);
   const sidebar = useSidebarWidth();
-  const dateInputRef = useRef<HTMLInputElement>(null);
+  const datePickerButtonRef = useRef<HTMLButtonElement>(null);
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
   const focusEntryId = useRef<string | null>(null);
   const focusMoveEntryId = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -87,23 +106,30 @@ function App() {
   useEffect(() => {
     let disposed = false;
     let unlisten: (() => void) | undefined;
-    let allowClose = false;
-    getCurrentWindow().onCloseRequested(async event => {
-      if (allowClose) return;
-      // Pending edits are saved before the window closes; only if that fails, closing anyway is up to the user.
-      if (!busyRef.current && !dirtyRef.current) return;
-      event.preventDefault();
+    // Closing (×, Alt+F4) keeps Journal running in the background, so reminders keep coming; the icon in the notification
+    // area opens it again or ends it ("Beenden" sends journal:quit). Either way pending edits are saved first; only if that
+    // fails, going on anyway is up to the user.
+    const whenSaved = (then: () => Promise<void>, question: string) => {
       closing.current = async () => {
-        if (errorRef.current && !window.confirm(`${errorRef.current}\nFenster trotzdem schließen?`)) return;
-        allowClose = true;
-        await getCurrentWindow().close();
+        if (errorRef.current) { await getCurrentWindow().show(); if (!window.confirm(`${errorRef.current}\n${question}`)) return; }
+        await then();
       };
-      if (!busyRef.current) void save();
+      if (!busyRef.current && !dirtyRef.current) { const run = closing.current; closing.current = null; void run(); }
+      else if (!busyRef.current) void save();
+    };
+    const toBackground = async () => {
+      await getCurrentWindow().hide();
+      if (!localStorage.getItem('journal.backgroundHint')) { localStorage.setItem('journal.backgroundHint', '1'); void invoke('background_hint').catch(() => {}); }
+    };
+    getCurrentWindow().onCloseRequested(event => {
+      event.preventDefault();
+      whenSaved(toBackground, 'Fenster trotzdem schließen?');
     }).then(stop => { if (disposed) stop(); else unlisten = stop; })
       .catch(reason => setError(`Schließschutz konnte nicht eingerichtet werden: ${String(reason)}`));
+    const quit = listen('journal:quit', () => whenSaved(() => invoke('quit_app'), 'Journal trotzdem beenden?'));
     const handleKey = (event: KeyboardEvent) => onGlobalKey(event);
     window.addEventListener('keydown', handleKey);
-    return () => { disposed = true; unlisten?.(); window.removeEventListener('keydown', handleKey); };
+    return () => { disposed = true; unlisten?.(); void quit.then(stop => stop()); window.removeEventListener('keydown', handleKey); };
   }, []);
 
   // The calendar windows highlight the day shown here and send clicked days (and entries) back.
@@ -114,6 +140,16 @@ function App() {
     const stops = [
       listen('journal:hello', () => { void emit('journal:date', dateRef.current); }),
       listen<{ date: string; entry: string | null }>('journal:navigate', event => showFromCalendar(event.payload.date, event.payload.entry)),
+      // Reminders while this window is in front (otherwise the popup shows them, see reminders.rs), and "Erledigt" from there.
+      listen<Reminder>('journal:reminder', event => {
+        const reminder = event.payload;
+        setReminders(current => [...current.filter(item => item.id !== reminder.id), reminder].slice(-4));
+        chime();
+      }),
+      listen<{ id: string; date: string; action: string }>('journal:reminder-action', event => {
+        const { action } = event.payload;
+        if (action === 'done' || action === 'cancelled') void changeLinked([event.payload], action);
+      }),
     ];
     return () => { for (const stop of stops) void stop.then(unlisten => unlisten()); };
   }, []);
@@ -162,7 +198,8 @@ function App() {
   // Saving does not lock the editor: edits made while the request is running stay in place and remain unsaved.
   // The journal saves by itself shortly after the last change (like the calendar does at once); Ctrl+S saves right away.
   const save = useStableCallback(async () => {
-    if (!day || !ready || busyRef.current || !dirty) return;
+    if (!day || !ready || busyRef.current) return false;
+    if (!dirty) return true;
     const snapshot = day;
     const editsAtStart = editCount.current;
     busyRef.current = true;
@@ -176,8 +213,9 @@ function App() {
       else setDay(current => current && current.date === saved.date ? { ...current, revision: saved.revision } : current);
       if (unchanged) setDirty(false);
       setSavedCount(count => count + 1);
+      return unchanged;
     }
-    catch (reason) { setError(`Speichern fehlgeschlagen: ${String(reason)}`); pendingNavigation.current = null; }
+    catch (reason) { setError(`Speichern fehlgeschlagen: ${String(reason)}`); pendingNavigation.current = null; return false; }
     finally { busyRef.current = false; setBusy(false); }
   });
   const pendingNavigation = useRef<string | null>(null);
@@ -201,7 +239,7 @@ function App() {
   const pendingSave = useRef(false);
   useEffect(() => { if (pendingSave.current && !busy && ready) { pendingSave.current = false; void save(); } }, [day, busy]);
   const createFromCalendar = useStableCallback(async (target: string, made: NewEntry) => {
-    const entry: Entry = { id: crypto.randomUUID(), kind: made.kind, text: made.text, done: false, cancelled: false, priority: made.priority, time: made.time, end: made.end, reminder: made.reminder, plan: null };
+    const entry: Entry = { id: crypto.randomUUID(), kind: made.kind, text: made.text, description: made.description, done: false, cancelled: false, priority: made.priority, time: made.time, end: made.end, reminder: made.reminder, showInJournal: made.showInJournal, plan: null, repeat: made.repeat ?? null };
     if (target === date && ready) {
       captureLayout();
       update(current => ({ ...current, entries: orderEntries([...current.entries, entry]) }));
@@ -211,6 +249,30 @@ function App() {
     const stored = await journal.load(target);
     await journal.save({ ...stored, entries: [...stored.entries, entry] });
   });
+
+  const exportFromCalendar = useStableCallback(async () => {
+    if (!await save()) throw new Error('Bitte laufende Änderungen zuerst speichern und erneut versuchen.');
+    return journal.exportCalendar();
+  });
+  const importFromCalendar = useStableCallback(async (entries: CalendarImport[]) => {
+    if (!await save()) throw new Error('Bitte laufende Änderungen zuerst speichern und erneut versuchen.');
+    const target = date;
+    const before = journal.cached(target);
+    busyRef.current = true; setBusy(true);
+    try {
+      const touched = await journal.importCalendar(entries);
+      if (touched.includes(target)) {
+        const refreshed = await journal.load(target);
+        // Keep typing done during the import, and merge only the imported fields into untouched entries.
+        setDay(current => {
+          if (!current || current.date !== target) return current;
+          return mergeCalendarImport(current, before, refreshed);
+        });
+      }
+    } finally { busyRef.current = false; setBusy(false); }
+  });
+
+  const mailStatus = useMailImport(importFromCalendar);
 
   // Editing or removing an entry from the calendar works the same way: on the day shown here through the editor, elsewhere in the store.
   const editFromCalendar = useStableCallback(async (target: string, id: string, change: EntryEdit) => {
@@ -236,6 +298,8 @@ function App() {
     try { if (elsewhere.length) await journal.changeLinked(elsewhere.map(other => ({ id: other.id, action }))); }
     catch (reason) { setError(`Ändern fehlgeschlagen: ${String(reason)}`); }
   });
+
+  const dismissReminder = (reminder: Reminder) => setReminders(current => current.filter(item => !(item.id === reminder.id && item.due === reminder.due)));
 
   // New entries go directly below `afterId` when it is of the same kind, otherwise to the end of their group.
   const addEntry = useStableCallback((kind: EntryKind, afterId?: string) => {
@@ -264,11 +328,11 @@ function App() {
     if (ctrl && event.code === 'KeyS') save();
     else if (event.key === 'F1' || (event.key === '?' && !typing && !event.ctrlKey && !event.altKey)) setHelp(open => !open);
     else if (ctrl && event.key === ',') setSettingsOpen(open => !open);
-    else if (help || settingsOpen) return;
+    else if (ctrl && event.code === 'KeyG') setDatePickerOpen(open => !open);
+    else if (help || settingsOpen || datePickerOpen) return;
     else if (alt && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) stepDay(event.key === 'ArrowLeft' ? -1 : 1);
     else if (alt && event.code === 'KeyH') navigate(today);
     else if (alt && event.code in kinds) addEntry(kinds[event.code], target.closest<HTMLElement>('[data-entry-id]')?.dataset.entryId);
-    else if (ctrl && event.code === 'KeyG') { dateInputRef.current?.focus(); try { dateInputRef.current?.showPicker(); } catch { /* not supported */ } }
     else if (ctrl && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) focusText(event.key === 'ArrowDown' ? adjacentText(null, 1) : titleInput());
     else return;
     event.preventDefault();
@@ -293,7 +357,7 @@ function App() {
   function applyOrder(entries: Entry[], id: string, keepTextFocus = false): boolean {
     if (!day || entries === day.entries) return false;
     const entry = entries.find(item => item.id === id)!;
-    const siblings = entries.filter(item => item.kind === entry.kind);
+    const siblings = entries.filter(item => item.kind === entry.kind && item.showInJournal !== false);
     focusMoveEntryId.current = keepTextFocus ? null : id;
     setNewEntryId(null);
     setOpenEntryId(null);
@@ -308,28 +372,37 @@ function App() {
     if (day) applyOrder(moveEntry(day.entries, source, target, placement), source);
   });
 
-  const entryCount = ready ? day.entries.length : 0;
+  const visibleEntries = ready ? day.entries.filter(entry => entry.showInJournal !== false) : [];
+  const entryCount = visibleEntries.length;
   // A trace whose plan is already stored has created its target entries; only unsaved plans can be taken back.
   const savedTraces = new Set(ready ? journal.cached(day.date)?.entries.filter(entry => entry.plan).map(entry => entry.id) : []);
   return <div className={`app actions-${settings.actionLayout}${sidebar.dragging ? ' is-resizing' : ''}`}>
     {/* The sidebar is the calendar (its view switch in line with the toolbar next to it); dragging its edge sets the width. */}
     <aside className="sidebar" aria-label="Kalender und Navigation" style={{ width: sidebar.width }}>
-      <Calendar embedded journalDate={date} onOpen={openFromCalendar} onCreate={createFromCalendar} onEdit={editFromCalendar} onRemove={removeFromCalendar} />
+      <Calendar embedded journalDate={date} onOpen={openFromCalendar} onCreate={createFromCalendar} onEdit={editFromCalendar} onRemove={removeFromCalendar} onExport={exportFromCalendar} onImport={importFromCalendar} />
       <div className="sidebar-resizer" {...sidebar.handle} />
     </aside>
 
     {/* Swiping sideways on a trackpad, or Shift + wheel, turns the day; entries that are swiped themselves keep the gesture. */}
     <main className="main" onWheel={event => { if (!(event.target as Element).closest('.entry-dock-shell, .planner')) swipeDays(event); }}>
-      <header className="topbar">
+      <header className="topbar" onMouseDown={event => {
+        if (event.button !== 0 || (event.target as Element).closest('button, input, [role="dialog"]')) return;
+        event.preventDefault();
+        const window = getCurrentWindow();
+        void (event.detail === 2 ? window.toggleMaximize() : window.startDragging()).catch(reason => setError(`Fensteraktion fehlgeschlagen: ${String(reason)}`));
+      }}>
         <div className="document-tab"><Icon name="journal" /><span>Tagesjournal</span>{dirty && <span className="unsaved-dot" aria-label="Ungespeicherte Änderungen" />}</div>
-        <nav className="navigation" aria-label="Tagesnavigation">
-          <button type="button" className="icon-button" aria-label="Vorheriger Tag" title="Vorheriger Tag · Alt ←" onClick={() => stepDay(-1)}><Icon name="left" /></button>
-          <button type="button" className="today-button" title="Heute · Alt H" disabled={date === today} onClick={() => navigate(today)}>Heute</button>
-          <button type="button" className="icon-button" aria-label="Nächster Tag" title="Nächster Tag · Alt →" onClick={() => stepDay(1)}><Icon name="right" /></button>
-          <span className="toolbar-separator" />
-          <input ref={dateInputRef} type="date" aria-label="Datum auswählen" title="Gehe zu Datum · Strg G" value={date} onChange={event => navigate(event.target.value)} />
-        </nav>
+        <div className="titlebar-space" />
+        {/* Settings sit with the window's own controls, where Zed and most apps keep them. */}
+        <button type="button" className="titlebar-button settings-button" data-mail-count={mailStatus.count || undefined} aria-label="Einstellungen" aria-keyshortcuts="Control+," title="Einstellungen · Strg ," onClick={() => setSettingsOpen(true)}><Icon name="settings" /></button>
+        <WindowControls onError={setError} />
       </header>
+      {/* Like the calendar's toolbar (and Zed's under its tabs): turning the days first, then what is shown. */}
+      <div className="toolbar">
+        <NavCluster label="Tagesnavigation" prev={{ label: 'Vorheriger Tag', tip: 'Vorheriger Tag · Alt ←' }} next={{ label: 'Nächster Tag', tip: 'Nächster Tag · Alt →' }}
+          today={{ tip: 'Heute · Alt H', disabled: date === today }} atToday={date === today} onPrev={() => stepDay(-1)} onToday={() => navigate(today)} onNext={() => stepDay(1)} />
+        <MiniCalendarPicker date={date} open={datePickerOpen} onOpenChange={setDatePickerOpen} onPick={navigate} buttonRef={datePickerButtonRef} />
+      </div>
 
       <div className="scroll" ref={scrollRef}>
         <div className="content">
@@ -345,7 +418,7 @@ function App() {
               onKeyDown={event => { if ((event.key === 'Enter' || event.key === 'ArrowDown') && !event.altKey && !event.shiftKey && focusText(adjacentText(null, 1), 'end')) event.preventDefault(); }} onChange={event => { const title = event.target.value; update(current => ({ ...current, title })); }} />
             <section className="journal-section" aria-labelledby="entries-heading">
               <div className="section-heading">
-                <div className="section-title"><h2 id="entries-heading">Einträge</h2><span className="entry-count">{day.entries.length}</span></div>
+                <div className="section-title"><h2 id="entries-heading">Einträge</h2><span className="entry-count">{entryCount}</span></div>
                 <div className="kind-picker" role="group" aria-label="Eintrag hinzufügen">
                   {entryKindOrder.map(kind => <button type="button" key={kind} title={`Neu · Alt ${{ task: 'A', event: 'E', note: 'N' }[kind]}`} onClick={() => addEntry(kind)}><Icon name={kind} />{entryLabels[kind]}</button>)}
                 </div>
@@ -353,11 +426,11 @@ function App() {
               <div className="entries" ref={entriesRef}>
                 <span className="visually-hidden" id="entry-reorder-help">Innerhalb desselben Typs und derselben Priorität ziehen oder mit Alt und den Pfeiltasten nach oben und unten verschieben. Das funktioniert auch direkt im Text.</span>
                 <span className="visually-hidden" role="status">{moveAnnouncement}</span>
-                {day.entries.length === 0 && <div className="empty"><Icon name="journal" /><p>Ein neuer Tag. Platz für deine Gedanken.</p><span>Füge oben eine Aufgabe, Notiz oder ein Ereignis hinzu.</span></div>}
-                {day.entries.map((entry, index) => <JournalEntry key={entry.id} layout={settings.actionLayout} entry={entry} day={day.date} onCreate={addEntry} traceSaved={savedTraces.has(entry.id)} onNavigate={navigate} isNew={entry.id === newEntryId} isOpen={entry.id === openEntryId} focusEntryId={focusEntryId} focusMoveEntryId={focusMoveEntryId}
-                  isGroupStart={index > 0 && day.entries[index - 1].kind !== entry.kind}
-                  canMoveUp={index > 0 && day.entries[index - 1].kind === entry.kind && day.entries[index - 1].priority === entry.priority}
-                  canMoveDown={index < day.entries.length - 1 && day.entries[index + 1].kind === entry.kind && day.entries[index + 1].priority === entry.priority}
+                {visibleEntries.length === 0 && <div className="empty"><Icon name="journal" /><p>Ein neuer Tag. Platz für deine Gedanken.</p><span>Füge oben eine Aufgabe, Notiz oder ein Ereignis hinzu.</span></div>}
+                {visibleEntries.map((entry, index) => <JournalEntry key={entry.id} layout={settings.actionLayout} entry={entry} day={day.date} onCreate={addEntry} traceSaved={savedTraces.has(entry.id)} onNavigate={navigate} isNew={entry.id === newEntryId} isOpen={entry.id === openEntryId} focusEntryId={focusEntryId} focusMoveEntryId={focusMoveEntryId}
+                  isGroupStart={index > 0 && visibleEntries[index - 1].kind !== entry.kind}
+                  canMoveUp={index > 0 && visibleEntries[index - 1].kind === entry.kind && visibleEntries[index - 1].priority === entry.priority}
+                  canMoveDown={index < visibleEntries.length - 1 && visibleEntries[index + 1].kind === entry.kind && visibleEntries[index + 1].priority === entry.priority}
                   dragState={drag.view?.sourceId === entry.id ? 'source' : drag.view?.targetId === entry.id ? `drop-${drag.view.placement}` : null}
                   drag={drag.handlers} onMoveOffset={moveByOffset} onOpenChange={changeOpen} onChange={changeEntry} onRemove={removeEntry} onLinkedChange={changeLinked}
                 />)}
@@ -369,14 +442,19 @@ function App() {
 
       <footer className="statusbar">
         <div className={`save-status${dirty ? ' is-dirty' : ''}`} role="status"><span key={savedCount} className={`status-dot${savedCount && !dirty ? ' just-saved' : ''}`} />{busy ? 'Wird gespeichert …' : dirty ? (error ? 'Nicht gespeichert' : 'Wird gleich gespeichert …') : ready ? 'Gespeichert' : 'Wird geöffnet …'}</div>
-        <div className="statusbar-actions"><button type="button" className="help-button settings-button" aria-label="Einstellungen" aria-keyshortcuts="Control+," title="Einstellungen · Strg ," onClick={() => setSettingsOpen(true)}><Icon name="settings" /></button><button type="button" className="help-button" aria-label="Tastenkürzel" aria-keyshortcuts="F1" onClick={() => setHelp(true)}><span>?</span><kbd>F1</kbd></button><span className="toolbar-separator" /><span className="status-count">{entryCount} {entryCount === 1 ? 'Eintrag' : 'Einträge'}</span><span className="toolbar-separator" /><button type="button" className="save" disabled={!ready || !dirty || busy} onClick={() => { void save(); }}><Icon name="save" /><span>Speichern</span><kbd>Strg S</kbd></button></div>
+        <div className="statusbar-actions"><button type="button" className="help-button" aria-label="Tastenkürzel" aria-keyshortcuts="F1" onClick={() => setHelp(true)}><span>?</span><kbd>F1</kbd></button><span className="toolbar-separator" /><span className="status-count">{entryCount} {entryCount === 1 ? 'Eintrag' : 'Einträge'}</span><span className="toolbar-separator" /><button type="button" className="save" disabled={!ready || !dirty || busy} onClick={() => { void save(); }}><Icon name="save" /><span>Speichern</span><kbd>Strg S</kbd></button></div>
       </footer>
     </main>
+    <ReminderToasts reminders={reminders} today={today} snoozeMinutes={10}
+      onStatus={(reminder, status) => { dismissReminder(reminder); void changeLinked([reminder], status); }}
+      onSnooze={reminder => { dismissReminder(reminder); journal.snoozeReminder(reminder).catch(reason => setError(`Erinnerung: ${String(reason)}`)); }}
+      onOpen={reminder => { dismissReminder(reminder); showFromCalendar(reminder.date, reminder.id); }} onDismiss={dismissReminder} />
     {help && <ShortcutHelp onClose={() => setHelp(false)} />}
-    {settingsOpen && <SettingsDialog settings={settings} onClose={() => setSettingsOpen(false)} onChange={next => { setOpenEntryId(null); setSettings(next); saveSettings(next); }} />}
+    {settingsOpen && <SettingsDialog settings={settings} mailStatus={mailStatus} onImport={importFromCalendar} onClose={() => setSettingsOpen(false)} onChange={next => { setOpenEntryId(null); setSettings(next); saveSettings(next); }} />}
   </div>;
 }
 
 // One bundle for all windows; the window's label decides what it shows.
 const windowLabel = getCurrentWindow().label;
-createRoot(document.getElementById('root')!).render(windowLabel === 'calendar' ? <CalendarWindow /> : windowLabel === 'mini' ? <MiniCalendar /> : <App />);
+if (windowLabel === 'reminder') document.documentElement.classList.add('is-popup');
+createRoot(document.getElementById('root')!).render(<><ThemeSync />{windowLabel === 'calendar' ? <CalendarWindow /> : windowLabel === 'mini' ? <MiniCalendar /> : windowLabel === 'reminder' ? <ReminderPopup /> : <App />}{!['mini', 'reminder'].includes(windowLabel) && <MailImportToast />}</>);

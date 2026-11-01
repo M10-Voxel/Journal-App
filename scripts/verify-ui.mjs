@@ -37,7 +37,7 @@ const bootstrap = `
   const item = (id, kind, text, extra = {}) => ({ id:\`20000000-0000-4000-8000-\${String(id).padStart(12, '0')}\`, kind, text, done:false, cancelled:false, priority:false, time:null, reminder:false, plan:null, ...extra });
   if (label !== 'main') {
     fixture.entries[2].time = '15:00';
-    days.set(shift(1), { date:shift(1), title:'', body:'', revision:1, entries:[item(1, 'event', 'Zahnarzt', { time:'09:00' }), item(2, 'event', 'Telefonat mit **Anna**', { time:'09:30' }), item(3, 'task', 'Bericht abgeben', { priority:true }), item(4, 'note', 'Gute Laune'),
+    days.set(shift(1), { date:shift(1), title:'', body:'', revision:1, entries:[item(1, 'event', 'Zahnarzt', { time:'09:00' }), item(2, 'event', 'Telefonat mit **Anna**', { time:'09:30', end:'10:30' }), item(3, 'task', 'Bericht abgeben', { priority:true }), item(4, 'note', 'Gute Laune'),
       item(5, 'task', 'Schon verschoben', { plan:{ via:'date', targets:[{ date:shift(9), id:item(6, 'task', '').id }], time:null, reminder:false } })] });
     days.set(shift(-2), { date:shift(-2), title:'', body:'', revision:1, entries:[item(7, 'task', 'Einkaufen', { done:true }), item(8, 'event', 'Kino', { time:'18:30' })] });
     days.set(shift(3), { date:shift(3), title:'Großer Tag', body:'', revision:1, entries:Array.from({ length:7 }, (_, index) => item(10 + index, 'task', \`Aufgabe \${index + 1}\`)) });
@@ -55,26 +55,133 @@ const bootstrap = `
   // Mirrors storage.rs: traces create their target entries once, entries know their trace's day, removing an entry
   // removes only it, and linked groups (load_linked) can be changed together on other days (change_linked).
   const origin = id => { for (const [day, value] of days) if (value.entries.some(entry => entry.plan?.targets.some(target => target.id === id))) return day; };
+  // Repeating series (Repeat in storage.rs): entries keep their series as seriesId; loading shows it as repeat.
+  const series = new Map();
+  window.__uiTest.series = series;
+  const withRepeat = entry => { const { seriesId, ...rest } = entry; const known = seriesId && series.get(seriesId); return known ? { ...rest, repeat:{ series:seriesId, rule:structuredClone(known.rule), horizon:known.horizon } } : rest; };
   const loadDay = date => {
     const value = structuredClone(days.get(date) ?? { date, title:'', body:'', revision:0, entries:[] });
+    value.entries = value.entries.map(withRepeat);
     for (const entry of value.entries) { const from = origin(entry.id); if (from) entry.origin = from; }
     return value;
   };
+  const dayBefore = date => { const [y, m, d] = date.split('-').map(Number); const value = new Date(y, m - 1, d - 1, 12); return [value.getFullYear(), String(value.getMonth()+1).padStart(2,'0'), String(value.getDate()).padStart(2,'0')].join('-'); };
+  const addCopy = (date, id, entry, schedule, seriesId) => {
+    const other = days.get(date) ?? { date, title:'', body:'', revision:0, entries:[] };
+    other.revision += 1;
+    other.entries.push({ id, kind:entry.kind, text:entry.text, done:false, cancelled:false, priority:entry.priority, time:schedule.time ?? null, end:schedule.end ?? null, reminder:Boolean(schedule.reminder), showInJournal:entry.showInJournal !== false, plan:null, seriesId });
+    days.set(date, other);
+  };
+  // An entry leaving its series on \`date\` ends it the day before; open later occurrences go, finished ones may join the successor.
+  const endSeries = (id, date, successor, touched) => {
+    for (const [day, value] of days) {
+      if (day <= date) continue;
+      const before = value.entries.length;
+      value.entries = value.entries.filter(entry => !(entry.seriesId === id && !entry.plan && !entry.done && !entry.cancelled));
+      for (const entry of value.entries) if (entry.seriesId === id && successor?.dates.includes(day)) { entry.seriesId = successor.id; successor.dates.splice(successor.dates.indexOf(day), 1); touched.add(day); }
+      if (value.entries.length !== before) { value.revision += 1; touched.add(day); }
+    }
+    const known = series.get(id);
+    if (known) known.rule = { ...known.rule, end:{ until:dayBefore(date) } };
+  };
+  const dropEmptySeries = () => { for (const id of series.keys()) if (![...days.values()].some(day => day.entries.some(entry => entry.seriesId === id))) series.delete(id); };
+  const linkedNext = id => {
+    const current = [...days.values()].flatMap(day => day.entries).find(entry => entry.id === id);
+    return [...(current?.plan?.targets ?? []).map(target => target.id), ...[...days.values()].flatMap(day => day.entries.filter(entry => entry.plan?.targets.some(target => target.id === id) || (current?.seriesId && entry.seriesId === current.seriesId)).map(entry => entry.id))];
+  };
   const take = id => { for (const [day, value] of days) { const index = value.entries.findIndex(entry => entry.id === id); if (index >= 0) return [day, value.entries.splice(index, 1)[0]]; } };
+  const mail = { accounts:[], pending:[], candidates:[], notices:[], delivered:new Set(), analyzed:[], model:{installed:false,enabled:false,installing:false,downloaded:0,total:0,error:''} };
+  window.__uiTest.mail = mail;
+  const mailChanged = () => { void window.__TAURI_INTERNALS__.invoke('plugin:event|emit', { event:'mail:changed', payload:null }); };
   mockIPC((command, payload) => {
+    if (command === 'mail_ml_status') return structuredClone(mail.model);
+    if (command === 'mail_ml_install') { mail.model.installed=true; mail.model.enabled=true; void window.__uiTest.emit('mail:ml',null); mailChanged(); return; }
+    if (command === 'mail_ml_enabled') { mail.model.enabled=payload.value; void window.__uiTest.emit('mail:ml',null); mailChanged(); return; }
+    if (command === 'mail_ml_analyze') {
+      if (!mail.model.enabled) throw new Error('Lokales Modell ist nicht aktiv');
+      mail.analyzed.push(payload.text);
+      const date=window.__uiTest.shift(1).split('-').reverse().join('.');
+      const spans=payload.text.includes('Treffen morgen 20 bis 21:20') ? [['date','morgen'],['event','Treffen']] : payload.text.includes('Treffen morgen 17 Uhr') ? [['date','morgen'],['time','17 Uhr'],['event','Treffen']] : [['date',date],['time','zwischen 10 und 12 Uhr'],['event','Lieferung']];
+      return {text:payload.text,milliseconds:100,classifications:[{label:'a future appointment, invitation or announced delivery',score:.8}],mentions:spans.filter(([,text])=>payload.text.includes(text)).map(([field,text])=>({field,text,score:.95,start:payload.text.indexOf(text),end:payload.text.indexOf(text)+text.length}))};
+    }
+    if (command === 'mail_accounts') return structuredClone(mail.accounts);
+    if (command === 'mail_pending') return structuredClone(mail.pending);
+    if (command === 'mail_candidates') return structuredClone(mail.candidates);
+    if (command === 'mail_notices') return [...mail.notices];
+    if (command === 'mail_save') {
+      if (payload.account.host === 'bad.example') throw new Error('Testverbindung fehlgeschlagen');
+      const account = structuredClone(payload.account);
+      mail.accounts = [...mail.accounts.filter(a => a.id !== account.id), account]; mailChanged(); return account;
+    }
+    if (command === 'mail_enabled') { mail.accounts.find(a => a.id === payload.id).enabled = payload.enabled; mailChanged(); return; }
+    if (command === 'mail_cancel' || command === 'mail_help') return;
+    if (command === 'mail_remove') {
+      mail.accounts = mail.accounts.filter(a => a.id !== payload.id); mail.pending = mail.pending.filter(p => p.account.id !== payload.id); mail.candidates = mail.candidates.filter(p => p.accountId !== payload.id); mailChanged(); return;
+    }
+    if (command === 'mail_stage') {
+      if (mail.pending.some(p => p.account.id === payload.accountId && p.message.key === payload.messageKey)) {
+        mail.candidates.push(...payload.candidates); if (payload.notice) mail.notices.push(payload.notice);
+        mail.pending = mail.pending.filter(p => p.account.id !== payload.accountId || p.message.key !== payload.messageKey); mailChanged();
+      }
+      return;
+    }
+    if (command === 'mail_resolve') { mail.candidates = mail.candidates.filter(c => !payload.ids.includes(c.id)); mailChanged(); return; }
+    if (command === 'mail_sync') {
+      const account = mail.accounts.find(a => a.id === payload.id); account.lastSync = Date.now()/1000;
+      if (!mail.delivered.has(account.id)) {
+        mail.delivered.add(account.id); const target = shift(1).split('-').reverse().join('.');
+        mail.pending.push({ account:structuredClone(account), message:{ key:'mail-test-1', subject:'Lieferung UI-Test',sender:'Carrier <notify@carrier.example>',sentAt:Date.now()/1000,text:'Ihre Lieferung kommt am ' + target + ' zwischen 10 und 12 Uhr.',html:'',calendars:[] } });
+      }
+      mailChanged(); return;
+    }
+    if (command === 'read_calendar_file') return window.__uiTest.icsInput ?? null;
+    if (command === 'write_calendar_file') { window.__uiTest.icsOutput = payload.content; return true; }
+    if (command === 'export_calendar') return [...days.values()].map(day => ({ date:day.date, title:day.title, entries:structuredClone(day.entries.filter(entry => !entry.plan && entry.kind !== 'note')) }));
+    if (command === 'import_calendar') {
+      const touched = new Set();
+      for (const { date, entry } of payload.entries) {
+        let id = entry.id;
+        for (const [oldDate, oldDay] of days) {
+          const index = oldDay.entries.findIndex(item => item.calendarUid === entry.calendarUid || item.id === entry.id);
+          if (index >= 0) { id = oldDay.entries[index].id; oldDay.entries.splice(index, 1); touched.add(oldDate); }
+        }
+        const day = days.get(date) ?? { date, title:'', body:'', revision:0, entries:[] };
+        day.entries.push({ ...entry, id }); days.set(date, day); touched.add(date);
+      }
+      for (const date of touched) days.get(date).revision++;
+      void window.__TAURI_INTERNALS__.invoke('plugin:event|emit', { event:'journal:changed', payload:[...touched] });
+      return [...touched];
+    }
     if (command === 'load_day') return loadDay(payload.date);
     if (command === 'load_range') return [...days.values()].filter(day => day.date >= payload.from && day.date <= payload.to)
-      .map(day => ({ date:day.date, title:day.title, entries:structuredClone(day.entries.filter(entry => !entry.plan)) })).filter(day => day.title || day.entries.length).sort((a, b) => a.date.localeCompare(b.date));
+      .map(day => ({ date:day.date, title:day.title, entries:structuredClone(day.entries.filter(entry => !entry.plan).map(withRepeat)) })).filter(day => day.title || day.entries.length).sort((a, b) => a.date.localeCompare(b.date));
+    if (command === 'snooze_reminder' || command === 'fit_popup' || command === 'reminder_action' || command === 'background_hint' || command === 'quit_app') { invoked.push([command, payload]); return null; }
+    if (command === 'popup_reminders') return label !== 'reminder' ? [] : [
+      { id:'10000000-0000-4000-8000-000000000001', date, kind:'task', text:'Eine Runde durch den **Park** gehen', time:'14:15', end:null, due:date + 'T14:15', late:false, snoozed:false },
+      { id:'10000000-0000-4000-8000-000000000003', date, kind:'event', text:'Kaffee am Nachmittag', time:'15:00', end:'15:30', due:date + 'T15:00', late:true, snoozed:false },
+      { id:'background', date:'', kind:'info', text:'Journal läuft im Hintergrund weiter und erinnert dich. Öffnen und Beenden über das Symbol im Infobereich.', time:null, end:null, due:'', late:false, snoozed:false }];
+    if (command === 'load_series') return [...series].map(([id, known]) => ({ series:id, rule:structuredClone(known.rule), horizon:known.horizon }));
+    if (command === 'extend_series') {
+      const touched = new Set();
+      for (const extension of payload.extensions) {
+        const known = series.get(extension.series);
+        if (!known || known.horizon !== extension.from) continue;
+        const latest = [...days.values()].flatMap(day => day.entries.filter(entry => entry.seriesId === extension.series).map(entry => [day.date, entry])).sort((a, b) => b[0].localeCompare(a[0]))[0]?.[1];
+        if (!latest) continue;
+        for (const date of extension.dates) { addCopy(date, crypto.randomUUID(), latest, latest, extension.series); touched.add(date); }
+        known.horizon = extension.to;
+      }
+      window.__uiTest.extended = (window.__uiTest.extended ?? 0) + payload.extensions.length;
+      return [...touched].sort();
+    }
+    if (command === 'plugin:window|is_maximized') return Boolean(window.__uiTest.maximized);
+    if (command === 'plugin:window|toggle_maximize') { window.__uiTest.maximized = !window.__uiTest.maximized; invoked.push([command, payload]); return null; }
     if (command === 'open_window' || command === 'show_day' || command.startsWith('plugin:window|')) { invoked.push([command, payload]); return null; }
     if (command === 'load_linked') {
       const where = id => { for (const [day, value] of days) { const found = value.entries.find(entry => entry.id === id); if (found) return [day, found]; } };
       const group = [payload.id], queue = [payload.id];
-      while (queue.length) {
-        const id = queue.shift(), [, current] = where(id) ?? [];
-        const next = [...(current?.plan?.targets ?? []).map(target => target.id), ...[...days.values()].flatMap(day => day.entries.filter(entry => entry.plan?.targets.some(target => target.id === id)).map(entry => entry.id))];
-        for (const other of next) if (!group.includes(other)) { group.push(other); queue.push(other); }
-      }
-      return group.map(id => where(id)).filter(Boolean).map(([date, entry]) => ({ id:entry.id, date, kind:entry.kind, done:entry.done, cancelled:entry.cancelled, trace:Boolean(entry.plan) })).sort((a, b) => a.date.localeCompare(b.date));
+      while (queue.length) for (const other of linkedNext(queue.shift())) if (!group.includes(other)) { group.push(other); queue.push(other); }
+      return group.map(id => where(id)).filter(Boolean).map(([date, entry]) => ({ id:entry.id, date, kind:entry.kind, done:entry.done, cancelled:entry.cancelled, trace:Boolean(entry.plan), series:entry.seriesId ?? null })).sort((a, b) => a.date.localeCompare(b.date));
     }
     if (command === 'change_linked') {
       const changed = new Set();
@@ -88,6 +195,7 @@ const bootstrap = `
         changed.add(day);
       }
       for (const day of changed) days.get(day).revision += 1;
+      dropEmptySeries();
       window.__uiTest.linkedChanges = (window.__uiTest.linkedChanges ?? 0) + 1;
       void window.__TAURI_INTERNALS__.invoke('plugin:event|emit', { event:'journal:changed', payload:[...changed] });
       return [...changed].sort();
@@ -97,16 +205,30 @@ const bootstrap = `
       for (const entry of value.entries) delete entry.origin;
       const previous = days.get(value.date)?.entries ?? [];
       const created = new Set(previous.flatMap(entry => entry.plan?.targets ?? []).map(target => target.id));
-      const kept = new Set(value.entries.map(entry => entry.id));
       const touched = new Set(), linked = new Set();
-      for (const entry of value.entries) for (const target of entry.plan?.targets ?? []) {
-        if (created.has(target.id)) continue;
-        const other = structuredClone(days.get(target.date) ?? { date:target.date, title:'', body:'', revision:0, entries:[] });
-        other.revision += 1;
-        other.entries.push({ id:target.id, kind:entry.kind, text:entry.text, done:false, cancelled:false, priority:entry.priority, time:entry.plan.time, end:entry.plan.end ?? null, reminder:entry.plan.reminder, plan:null });
-        days.set(target.date, other); touched.add(target.date);
+      // Without repeat an entry keeps its series; an unknown series starts here; leaving a series ends it on this day.
+      const started = [];
+      for (const entry of value.entries) {
+        const old = previous.find(item => item.id === entry.id)?.seriesId ?? null, repeat = entry.repeat;
+        let next = old;
+        if (repeat && series.has(repeat.series)) next = repeat.series;
+        else if (repeat && !repeat.rule) next = null;
+        else if (repeat) { series.set(repeat.series, { rule:structuredClone(repeat.rule), horizon:repeat.horizon }); next = repeat.series; started.push({ entry, dates:[...repeat.dates ?? []] }); }
+        if (old && old !== next) endSeries(old, value.date, started.at(-1)?.entry === entry ? { id:next, dates:started.at(-1).dates } : null, touched);
+        delete entry.repeat; entry.seriesId = next ?? undefined;
       }
       days.set(value.date, value);
+      for (const { entry, dates } of started) for (const date of dates) { addCopy(date, crypto.randomUUID(), entry, entry, entry.seriesId); touched.add(date); }
+      for (const entry of value.entries) for (const target of entry.plan?.targets ?? []) {
+        if (created.has(target.id)) continue;
+        const repeat = entry.plan.repeat, dates = [...repeat?.dates ?? []];
+        if (repeat && !series.has(repeat.series)) {
+          series.set(repeat.series, { rule:structuredClone(repeat.rule), horizon:repeat.horizon });
+          if (entry.seriesId) endSeries(entry.seriesId, value.date, { id:repeat.series, dates }, touched);
+        }
+        addCopy(target.date, target.id, entry, entry.plan, repeat?.series); touched.add(target.date);
+        for (const date of dates) { addCopy(date, crypto.randomUUID(), entry, entry.plan, repeat.series); touched.add(date); }
+      }
       // Edited text, kind or priority reach the linked entries in both directions (sync_linked).
       const find = id => { for (const [day, other] of days) { const found = other.entries.find(entry => entry.id === id); if (found) return [day, found]; } };
       for (const entry of value.entries) {
@@ -114,9 +236,7 @@ const bootstrap = `
         if (!before || (before.kind === entry.kind && before.text === entry.text && before.priority === entry.priority)) continue;
         const seenLinks = new Set([entry.id]), links = [entry.id];
         while (links.length) {
-          const id = links.shift(), [, current] = find(id) ?? [];
-          const next = [...(current?.plan?.targets ?? []).map(target => target.id), ...[...days.values()].flatMap(day => day.entries.filter(other => other.plan?.targets.some(target => target.id === id)).map(other => other.id))];
-          for (const other of next) {
+          for (const other of linkedNext(links.shift())) {
             if (seenLinks.has(other)) continue;
             seenLinks.add(other); links.push(other);
             const [day, found] = find(other) ?? [];
@@ -127,6 +247,8 @@ const bootstrap = `
         }
       }
       for (const day of linked) { days.get(day).revision += 1; touched.add(day); }
+      touched.delete(value.date);
+      dropEmptySeries();
       window.__uiTest.saves += 1;
       // Like save_day in main.rs: every calendar hears which days changed.
       void window.__TAURI_INTERNALS__.invoke('plugin:event|emit', { event:'journal:changed', payload:[value.date, ...touched] });
@@ -181,6 +303,97 @@ async function screenshot(name) {
   const result = await command('Page.captureScreenshot', { format: 'png' });
   await writeFile(join(artifacts, name), Buffer.from(result.data, 'base64'));
 }
+async function checkMailSettings() {
+  const click = text => evaluate(`Array.from(document.querySelectorAll('.mail-settings button')).find(button => button.textContent.trim() === ${JSON.stringify(text)}).click()`);
+  const fill = (label, value) => evaluate(`(() => { const input=Array.from(document.querySelectorAll('.mail-settings label')).find(label => label.textContent.startsWith(${JSON.stringify(label)})).querySelector('input'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input, ${JSON.stringify(value)}); input.dispatchEvent(new Event('input',{bubbles:true})); })()`);
+  await key(',', 'Comma', 2);
+  await until("Boolean(document.querySelector('.settings'))");
+  await evaluate("document.querySelector('#settings-mail-tab').click()");
+  await until("Boolean(document.querySelector('.mail-empty'))");
+  await click('Modell herunterladen und aktivieren');
+  await until('window.__uiTest.mail.model.enabled === true && Boolean(document.querySelector(".mail-model .mail-check"))');
+  await click('Konto hinzufügen');
+  await until("document.querySelectorAll('.mail-provider').length === 7");
+  await pause(350); await screenshot('mail-providers.png');
+  await evaluate("document.querySelector('.mail-provider-gmail').click()");
+  await until("Boolean(document.querySelector('.mail-oauth'))");
+  assert.match(await evaluate("document.querySelector('.mail-form').textContent"), /Desktop-App.*gmail.readonly/s);
+  assert.equal(await evaluate("document.querySelector('.mail-oauth input').required"), true, 'OAuth cannot silently pretend that an app registration exists.');
+  await click('Zurück');
+  await evaluate("document.querySelector('.mail-provider-microsoft').click()");
+  assert.match(await evaluate("document.querySelector('.mail-form').textContent"), /http:\/\/localhost:42813\//);
+  assert.equal(await evaluate("document.querySelector('.mail-form input[type=password]')"), null, 'Microsoft uses a public PKCE client without a client secret.');
+  await click('Zurück');
+  await evaluate("document.querySelector('.mail-provider-proton').click()");
+  assert.equal(await evaluate("document.querySelector('.mail-server input').value"), '127.0.0.1');
+  assert.match(await evaluate("document.querySelector('.mail-provider-help').textContent"), /bezahlten Proton-Tarif/);
+  await click('Zurück');
+  await evaluate("document.querySelector('.mail-provider-custom').click()");
+  await fill('E-Mail-Adresse','test@example.org'); await fill('Kontoname','Mein Testpostfach');
+  await fill('Posteingangsserver','bad.example'); await fill('Passwort / App-Passwort','synthetic-only-not-a-real-password');
+  await evaluate("document.querySelector('.mail-form').requestSubmit()");
+  await until("document.querySelector('.mail-error')?.textContent.includes('Testverbindung fehlgeschlagen')");
+  assert.equal(await evaluate('window.__uiTest.mail.accounts.length'), 0, 'Failed connections do not create an account.');
+  await fill('Posteingangsserver','imap.example.org');
+  await evaluate("document.querySelector('.mail-form button[type=submit]').focus()");
+  await evaluate("document.querySelector('.mail-form').requestSubmit()");
+  await until("document.querySelectorAll('.mail-account').length === 1 && window.__uiTest.day(window.__uiTest.shift(1))?.entries.some(entry=>entry.text==='Lieferung' && entry.time==='10:00' && entry.end==='12:00' && entry.showInJournal===false)");
+  await until("Boolean(document.activeElement.closest('.settings'))");
+  assert.equal(await evaluate("document.querySelector('.mail-settings input[type=password]')"), null, 'Credentials leave the form after saving.');
+  assert.equal(await evaluate('window.__uiTest.mail.accounts[0].password'), undefined, 'Account metadata never exposes the password.');
+  assert(await evaluate('window.__uiTest.mail.analyzed.some(text=>text.includes("Lieferung UI-Test"))'), 'Free-text mail proposals use the isolated ML analysis API.');
+  await until("Boolean(document.querySelector('.mail-import-toast')) && !document.querySelector('.mail-suggestion')");
+  assert.match(await evaluate("document.querySelector('.mail-import-toast').textContent"),/Lieferung.*10:00.*12:00/s);
+  await pause(350); await screenshot('mail-auto-import.png');
+  await evaluate("document.querySelector('.mail-import-toast button').click()");
+  await until("!document.querySelector('.mail-import-toast')");
+  await click('Bearbeiten');
+  await until("Boolean(document.querySelector('.mail-form'))");
+  assert.equal(await evaluate("document.querySelectorAll('.mail-form .mail-check input').length"),1, 'Import is always automatic; only fetching remains optional.');
+  await evaluate("document.querySelector('.mail-form').requestSubmit()");
+  await until("!document.querySelector('.mail-form')");
+  await click('Pausieren'); await until('window.__uiTest.mail.accounts[0].enabled === false');
+  await click('Aktivieren'); await until('window.__uiTest.mail.accounts[0].enabled === true');
+  await until("Boolean(document.activeElement?.closest('.settings'))");
+  await evaluate("new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
+  // Mail events also process while Settings is closed, including updates to an existing UID.
+  await key('Escape');
+  await until("!document.querySelector('.settings')");
+  const enqueueCalendar = async (key, ahead) => evaluate(`(() => { const account=window.__uiTest.mail.accounts[0], date=window.__uiTest.shift(${ahead}).replaceAll('-','');
+    window.__uiTest.mail.pending.push({account:structuredClone(account),message:{key:${JSON.stringify(key)},subject:'Automatischer Termin',sender:'calendar@example.org',sentAt:Date.now()/1000,text:'',html:'',calendars:['BEGIN:VCALENDAR\\r\\nVERSION:2.0\\r\\nBEGIN:VEVENT\\r\\nUID:mail-auto-test@example.org\\r\\nDTSTART:'+date+'T130000\\r\\nSUMMARY:Mail-Auto-Test\\r\\nEND:VEVENT\\r\\nEND:VCALENDAR']}});
+    return window.__uiTest.emit('mail:changed',null); })()`);
+  await enqueueCalendar('auto-1',1);
+  await until("window.__uiTest.day(window.__uiTest.shift(1))?.entries.some(entry => entry.text === 'Mail-Auto-Test') && window.__uiTest.mail.candidates.length === 0");
+  await enqueueCalendar('auto-2',3);
+  await until("window.__uiTest.day(window.__uiTest.shift(3))?.entries.some(entry => entry.text === 'Mail-Auto-Test') && window.__uiTest.mail.candidates.length === 0");
+  assert.equal(await evaluate("window.__uiTest.day(window.__uiTest.shift(1))?.entries.some(entry=>entry.text==='Mail-Auto-Test') ?? false"),false, 'The update moves the existing UID without leaving a duplicate.');
+  await key(',', 'Comma', 2); await until("Boolean(document.querySelector('.settings'))");
+  await evaluate("document.querySelector('#settings-mail-tab').click()");
+  await until("Boolean(document.querySelector('.mail-model .mail-check input'))");
+  // Pausing the optional model retains plain text and still allows structured invitations through.
+  await evaluate("document.querySelector('.mail-model .mail-check input').click()");
+  await until('window.__uiTest.mail.model.enabled === false');
+  await evaluate(`(() => { const account=structuredClone(window.__uiTest.mail.accounts[0]);
+    window.__uiTest.mail.pending.push({account,message:{key:'deferred-text',subject:'',sender:'person@example.org',sentAt:Date.now()/1000,text:'Treffen morgen 17 Uhr',html:'',calendars:[]}});
+    return window.__uiTest.emit('mail:changed',null); })()`);
+  await enqueueCalendar('paused-model-ics',4);
+  await until("window.__uiTest.day(window.__uiTest.shift(4))?.entries.some(entry=>entry.text==='Mail-Auto-Test') && window.__uiTest.mail.candidates.length === 0 && window.__uiTest.mail.pending.length === 1");
+  assert.equal(await evaluate('window.__uiTest.mail.pending[0].message.key'),'deferred-text');
+  await evaluate("document.querySelector('.mail-model .mail-check input').click()");
+  await until("window.__uiTest.mail.pending.length === 0 && window.__uiTest.day(window.__uiTest.shift(1))?.entries.some(entry=>entry.text==='Treffen' && entry.time==='17:00')");
+  await evaluate(`(() => { const account=structuredClone(window.__uiTest.mail.accounts[0]);
+    window.__uiTest.mail.pending.push({account,message:{key:'range-ui',subject:'',sender:'person@example.org',sentAt:Date.now()/1000,text:'Treffen morgen 20 bis 21:20',html:'',calendars:[]}});
+    return window.__uiTest.emit('mail:changed',null); })()`);
+  await until("!document.querySelector('.mail-suggestion') && window.__uiTest.day(window.__uiTest.shift(1))?.entries.some(entry=>entry.text==='Treffen' && entry.time==='20:00' && entry.end==='21:20')");
+  await until("document.querySelector('.mail-import-toast')?.textContent.includes('21:20')");
+  await evaluate("document.querySelector('.mail-account .is-danger').click()");
+  await until('window.__uiTest.mail.accounts.length === 0');
+  assert(await evaluate("window.__uiTest.day(window.__uiTest.shift(4))?.entries.some(entry => entry.text === 'Mail-Auto-Test')"), 'Removing a mail connection retains calendar entries.');
+  await key('Escape');
+  // The confirmation intentionally overlays the lower calendar; dismiss it before grid pointer tests.
+  await evaluate("document.querySelector('.mail-import-toast button')?.click()");
+  await until("!document.querySelector('.mail-import-toast')");
+}
 async function key(keyName, code = keyName, modifiers = 0) {
   const virtualKey = keyName === 'Enter' ? { windowsVirtualKeyCode:13, nativeVirtualKeyCode:13 } : {};
   await command('Input.dispatchKeyEvent', { type:'keyDown', key:keyName, code, modifiers, ...virtualKey, ...(keyName === 'Enter' ? { text:'\r', unmodifiedText:'\r' } : {}) });
@@ -218,6 +431,94 @@ async function dragRow(sourceId, targetId, placement = 'before', escape = false)
 
 // Calendar window and compact month window: the same page loaded as those windows, with a few days of synthetic entries.
 const longDate = date => `new Intl.DateTimeFormat('de-DE', { weekday:'long', day:'numeric', month:'long', year:'numeric' }).format(new Date('${date}T12:00'))`;
+async function checkPixelTheme() {
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  await command('Page.navigate', { url:origin });
+  await until("document.querySelectorAll('.entry').length===5");
+  const palette = () => evaluate("['--background','--surface','--text','--muted','--accent','--priority','--success','--error'].map(name=>getComputedStyle(document.documentElement).getPropertyValue(name).trim())");
+  const colors = await palette();
+  const layout = await evaluate("[document.querySelector('.sidebar').getBoundingClientRect().width,document.querySelector('.topbar').getBoundingClientRect().height]");
+  await key(',', 'Comma', 2);
+  await until("Boolean(document.querySelector('[data-theme-choice=pixel]'))");
+  await evaluate("document.querySelector('[data-theme-choice=pixel]').click()");
+  await until("document.documentElement.dataset.theme==='pixel'");
+  await evaluate("Promise.all([document.fonts.load('400 16px VT323'),document.fonts.load('400 13px \"Pixelify Sans\"')])");
+  assert.deepEqual(await palette(),colors, 'The pixel theme preserves every palette token.');
+  assert.equal(await evaluate("document.querySelector('[data-theme-choice=pixel]').getAttribute('aria-checked')"),'true');
+  assert(await evaluate("[...document.querySelectorAll('.theme-options button')].every(button=>button.scrollWidth<=button.clientWidth+1)"));
+  await pause(250); await screenshot('pixel-settings.png');
+  await command('Emulation.setDeviceMetricsOverride',{width:760,height:520,deviceScaleFactor:1,mobile:false});
+  await pause(250);
+  assert(await evaluate("(() => {const panel=document.querySelector('.settings'),r=panel.getBoundingClientRect();return r.left>=0 && r.right<=innerWidth && r.bottom<=innerHeight && panel.scrollWidth<=panel.clientWidth+1;})()"),'Pixel settings remain usable in a small window.');
+  await screenshot('pixel-settings-compact.png');
+  await command('Emulation.setDeviceMetricsOverride',{width:1180,height:780,deviceScaleFactor:1,mobile:false});
+  await pause(100);
+  await key('Escape');
+  assert.deepEqual(await evaluate("[document.querySelector('.sidebar').getBoundingClientRect().width,document.querySelector('.topbar').getBoundingClientRect().height]"),layout,'Theme selection preserves panel dimensions.');
+  assert.match(await evaluate("getComputedStyle(document.querySelector('.cm-editor')).fontFamily"),/VT323/);
+  assert(await evaluate("(() => { const c=document.createElement('canvas').getContext('2d'); c.font='16px VT323'; return Math.abs(c.measureText('iiii').width-c.measureText('WWWW').width)<.01; })()"),'The writing font is genuinely monospaced.');
+  assert.equal(await evaluate("getComputedStyle(document.querySelector('.icon-pixel')).display"),'inline');
+  await pause(250); await screenshot('pixel-journal.png');
+  await command('Page.reload');
+  await until("document.documentElement.dataset.theme==='pixel' && document.querySelectorAll('.entry').length===5");
+  await evaluate("document.querySelector('.entry-text').focus()");
+  await command('Input.insertText', { text:'Pixel ÄÖÜ äöü ß – lesbar' });
+  await key('s', 'KeyS', 2);
+  await until("window.__uiTest.saves>0");
+  await key('F1');
+  await until("Boolean(document.querySelector('.shortcuts'))");
+  await pause(400);
+  await screenshot('pixel-shortcuts.png');
+  await key('Escape');
+  await evaluate("document.querySelector('.sidebar .cal').focus()");
+  await key('t','KeyT');
+  await until("Boolean(document.querySelector('.cal-time-column'))");
+  await pause(250);
+  const point=await evaluate("(() => { const g=document.querySelector('.cal-time'), c=g.querySelector('.cal-time-column').getBoundingClientRect(), h=parseFloat(getComputedStyle(g).getPropertyValue('--hour')); return {x:c.left+c.width/2,y:c.top+9.25*h}; })()");
+  await command('Input.dispatchMouseEvent',{type:'mousePressed',...point,button:'left',buttons:1,clickCount:1});
+  await command('Input.dispatchMouseEvent',{type:'mouseReleased',...point,button:'left',buttons:0,clickCount:1});
+  await until("Boolean(document.querySelector('.cal-composer.is-placed'))");
+  await pause(400);
+  assert(await evaluate("(() => {const r=document.querySelector('.cal-composer').getBoundingClientRect(); return r.left>=0 && r.right<=innerWidth && r.bottom<=innerHeight;})()"));
+  await command('Input.insertText',{text:'Pixel-Termin'});
+  await screenshot('pixel-calendar.png');
+  await key('Enter');
+  await until("!document.querySelector('.cal-composer') && window.__uiTest.day().entries.some(entry=>entry.text==='Pixel-Termin')");
+  await command('Page.navigate',{url:`${origin}/?window=calendar`});
+  await until("document.documentElement.dataset.theme==='pixel' && Boolean(document.querySelector('.cal'))");
+  // Cross-window events also update windows already open, without reloading their content.
+  await evaluate("window.__uiTest.emit('journal:theme','classic')");
+  await until("document.documentElement.dataset.theme==='classic'");
+  await command('Page.navigate',{url:origin});
+  await until("Boolean(document.querySelector('.settings-button'))");
+  await key(',', 'Comma', 2);
+  await until("Boolean(document.querySelector('[data-theme-choice=classic]'))");
+  await evaluate("document.querySelector('[data-theme-choice=classic]').click()");
+  await until("document.documentElement.dataset.theme==='classic'");
+  await key('Escape');
+  console.log('Pixel theme checks passed: unchanged palette/layout, bundled mono font, saved preference, editing/saving, shortcuts, calendar drawing and cross-window synchronization.');
+}
+async function checkCalendarStart() {
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  const atHour = hour => `(() => { const grid=document.querySelector('.cal-time'); return grid && Math.abs(grid.scrollTop/parseFloat(getComputedStyle(grid).getPropertyValue('--hour'))-${hour}) < .05; })()`;
+  for (const [index, view] of ['workweek', 'week', 'day'].entries()) {
+    await command('Emulation.setDeviceMetricsOverride', { width:1560, height:2160, deviceScaleFactor:1, mobile:false });
+    const script = await command('Page.addScriptToEvaluateOnNewDocument', { source:`localStorage.setItem('journal.calendar', JSON.stringify({view:${JSON.stringify(view)},kinds:{event:true,task:true,note:false}}))` });
+    try { await command('Page.navigate', { url:`${origin}/?window=calendar&start-test=${index}` }); }
+    finally { await command('Page.removeScriptToEvaluateOnNewDocument', { identifier:script.identifier }); }
+    await until(`document.readyState==='complete' && document.querySelector('.cal')?.dataset.view===${JSON.stringify(view)} && parseFloat(getComputedStyle(document.querySelector('.cal-time')).getPropertyValue('--hour'))>70`);
+    await until(atHour(4));
+    await screenshot(`calendar-start-${view}-tall.png`);
+    // Resizing after a deliberate scroll must preserve the user's chosen hour.
+    await evaluate("(() => { const grid=document.querySelector('.cal-time'); grid.scrollTop=2*parseFloat(getComputedStyle(grid).getPropertyValue('--hour')); })()");
+    await command('Emulation.setDeviceMetricsOverride', { width:1560, height:900, deviceScaleFactor:1, mobile:false });
+    await until(atHour(2));
+    await evaluate("document.querySelector('.cal').focus()");
+    await key('ArrowRight', 'ArrowRight');
+    await until(atHour(4));
+  }
+  console.log('Calendar start checks passed: fresh tall day/week/workweek opens at 04:00, manual scrolling survives resizing, changing dates resets to 04:00.');
+}
 async function checkCalendars() {
   const origin = `http://127.0.0.1:${server.address().port}`;
   await command('Emulation.setDeviceMetricsOverride', { width:1180, height:780, deviceScaleFactor:1, mobile:false });
@@ -330,7 +631,9 @@ async function checkCalendars() {
   await key('t', 'KeyT');
   await until(`${side()}.dataset.view === 'day' && Boolean(${side('.cal-time-column')})`);
   await pause(350);
-  const at = minutes => evaluate(`(() => { const r=document.querySelector('.sidebar .cal-time-column').getBoundingClientRect(); return { x:r.left+r.width/2, y:r.top+${minutes}/60*48 }; })()`);
+  const gridHour = () => evaluate("parseFloat(getComputedStyle(document.querySelector('.sidebar .cal-time')).getPropertyValue('--hour'))");
+  assert(Math.abs(await evaluate("document.querySelector('.sidebar .cal-time').scrollTop / parseFloat(getComputedStyle(document.querySelector('.sidebar .cal-time')).getPropertyValue('--hour'))") - 4) < .05, 'The time grid always opens at 04:00.');
+  const at = minutes => evaluate(`(() => { const grid=document.querySelector('.sidebar .cal-time'), r=grid.querySelector('.cal-time-column').getBoundingClientRect(), hour=parseFloat(getComputedStyle(grid).getPropertyValue('--hour')); return { x:r.left+r.width/2, y:r.top+${minutes}/60*hour }; })()`);
   const markRange = async (from, ...through) => {
     const start = await at(from);
     await command('Input.dispatchMouseEvent', { type:'mouseMoved', x:start.x, y:start.y });
@@ -348,7 +651,18 @@ async function checkCalendars() {
   await until("document.querySelector('.cal-composer.is-placed') && document.activeElement === document.querySelector('.cal-composer-text')");
   assert.equal(await evaluate("(() => { const c=document.querySelector('.cal-composer').getBoundingClientRect(), s=document.querySelector('.sidebar .cal-selection').getBoundingClientRect(); return c.left >= 0 && c.right <= innerWidth && c.bottom <= innerHeight && (c.left >= s.right || c.right <= s.left || c.top >= s.bottom); })()"), true, 'Next to the range, inside the window.');
   assert.equal(await evaluate("document.querySelector('.cal-composer-length').textContent"), '1 h 30');
+  assert.equal(await evaluate("(() => { const pill=document.querySelector('.cal-composer-when'), length=pill.querySelector('.cal-composer-length'); return pill.scrollWidth <= pill.clientWidth && pill.getBoundingClientRect().right - length.getBoundingClientRect().right >= 10; })()"), true, 'The time pill leaves breathing room after the duration.');
+  // A marked range becomes a calendar entry unless chosen otherwise; that choice comes first.
+  assert.deepEqual(await evaluate("[...document.querySelectorAll('.cal-composer-kinds [role=radio]')].map(kind => [kind.getAttribute('aria-label'), kind.getAttribute('aria-checked')])").then(kinds => kinds[0]), ['Nur im Kalender', 'true']);
+  await key('e', 'KeyE', 1);
+  await until("document.querySelector('.cal-composer-kinds [role=radio][aria-checked=true]').getAttribute('aria-label') === 'Ereignis'");
   await command('Input.insertText', { text:'Zahnarzt-Test' });
+  await evaluate("document.querySelector('.cal-composer-description').focus()");
+  await command('Input.insertText', { text:'Raum 2' });
+  await key('Enter', 'Enter');
+  assert(await evaluate("Boolean(document.querySelector('.cal-composer'))"), 'Enter adds a line in the description without submitting.');
+  await command('Input.insertText', { text:'Unterlagen mitbringen' });
+  await evaluate("document.querySelector('.cal-composer-text').focus()");
   await key('ArrowDown', 'ArrowDown');
   await until(`${selection} === '09:15 – 10:45'`);
   await key('ArrowUp', 'ArrowUp', 8);
@@ -363,8 +677,10 @@ async function checkCalendars() {
   const created = "[...document.querySelectorAll('.entry')].find(row => row.textContent.includes('Zahnarzt-Test'))";
   assert.equal(await evaluate(`${created}?.querySelector('.entry-when')?.textContent`), '09:15–10:30', 'On the day shown, the entry joins the journal and is saved.');
   assert.equal(await evaluate(`${created}.dataset.priority`), 'high');
+  assert(await evaluate("window.__uiTest.day(window.__uiTest.date).entries.some(entry=>entry.text==='Zahnarzt-Test' && entry.description==='Raum 2\\nUnterlagen mitbringen')"), 'The description is saved separately from the title.');
   await until("[...document.querySelectorAll('.sidebar .cal-item.is-block')].some(block => block.textContent.includes('Zahnarzt-Test'))");
-  assert.equal(await evaluate("Math.round([...document.querySelectorAll('.sidebar .cal-item.is-block')].find(block => block.textContent.includes('Zahnarzt-Test')).getBoundingClientRect().height)"), 57, 'The block lasts as long as the range (75 min).');
+  assert.equal(await evaluate("Math.round([...document.querySelectorAll('.sidebar .cal-item.is-block')].find(block => block.textContent.includes('Zahnarzt-Test')).getBoundingClientRect().height)"), Math.round(75 / 60 * await gridHour() - 3), 'The block lasts as long as the range (75 min), using the current hour scale.');
+  await evaluate("new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
   // A click marks an hour; the edges resize it; Escape discards.
   point = await markRange(14 * 60 + 10);
   await release(point);
@@ -372,8 +688,9 @@ async function checkCalendars() {
   const edge = await evaluate("(() => { const r=document.querySelector('.sidebar .cal-selection-edge.is-end').getBoundingClientRect(); return { x:r.left+r.width/2, y:r.top+r.height/2 }; })()");
   await command('Input.dispatchMouseEvent', { type:'mouseMoved', x:edge.x, y:edge.y });
   await command('Input.dispatchMouseEvent', { type:'mousePressed', x:edge.x, y:edge.y, button:'left', buttons:1, clickCount:1 });
-  await command('Input.dispatchMouseEvent', { type:'mouseMoved', x:edge.x, y:edge.y + 36, button:'left', buttons:1 });
-  await command('Input.dispatchMouseEvent', { type:'mouseReleased', x:edge.x, y:edge.y + 36, button:'left', buttons:0, clickCount:1 });
+  const resizeDistance = await gridHour() * .75;
+  await command('Input.dispatchMouseEvent', { type:'mouseMoved', x:edge.x, y:edge.y + resizeDistance, button:'left', buttons:1 });
+  await command('Input.dispatchMouseEvent', { type:'mouseReleased', x:edge.x, y:edge.y + resizeDistance, button:'left', buttons:0, clickCount:1 });
   await until(`${selection} === '14:00 – 15:45'`);
   await until("Boolean(document.querySelector('.cal-composer.is-placed'))");
   await evaluate("document.querySelector('.cal-composer-text').focus()");
@@ -384,10 +701,11 @@ async function checkCalendars() {
   await until(`!document.querySelector('.cal-composer') && !document.querySelector('.sidebar .cal-selection')`);
   // Dragging into the bottom edge scrolls the hours along.
   const scrolled = await evaluate("document.querySelector('.sidebar .cal-time').scrollTop");
+  const scrollRoom = await evaluate("(() => { const grid=document.querySelector('.sidebar .cal-time'); return grid.scrollHeight-grid.clientHeight-grid.scrollTop; })()");
   const bottom = await evaluate("(() => { const r=document.querySelector('.sidebar .cal-time').getBoundingClientRect(); return r.bottom - 6; })()");
   const startDrag = await markRange(16 * 60);
   await command('Input.dispatchMouseEvent', { type:'mouseMoved', x:startDrag.x, y:bottom, button:'left', buttons:1 });
-  await until(`document.querySelector('.sidebar .cal-time').scrollTop > ${scrolled + 100}`);
+  if (scrollRoom > 1) await until(`document.querySelector('.sidebar .cal-time').scrollTop > ${scrolled + Math.min(40, scrollRoom / 2)}`);
   await release({ x:startDrag.x, y:bottom });
   assert(await evaluate("Number(document.querySelector('.sidebar .cal-selection-time').textContent.slice(8, 10))") >= 18, 'The range follows the scrolling.');
   await key('Escape');
@@ -399,14 +717,45 @@ async function checkCalendars() {
   const nextDay = await evaluate('window.__uiTest.shift(1)');
   await until(`${side('.cal-day-side h2')}?.textContent === ${longDate(nextDay)} || ${side('.cal-time-day')}?.title.startsWith(${longDate(nextDay)})`);
   await evaluate(`${side('.cal-time')}.scrollTop = 0`);
+  await evaluate("new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
   point = await markRange(60 + 5, 60 + 35);
   await release(point);
   await until("document.activeElement === document.querySelector('.cal-composer-text')");
   await evaluate("document.querySelector('.cal-composer [aria-label^=\"Aufgabe\"]').click()");
   await evaluate("document.querySelector('.cal-composer-text').focus()");
   await command('Input.insertText', { text:'Früh los' });
+  // The card repeats too (↻ or Alt W): the planner's repeat view opens under it; "Jahr" makes it yearly.
+  await key('w', 'KeyW', 1);
+  await until("document.activeElement === document.querySelector('.cal-composer .repeat')");
+  // Written in the card, another weekday stays (the card's day is the first occurrence, the rule keeps Wednesday).
+  const otherDay = await evaluate("['Montag', 'Mittwoch'][new Date(window.__uiTest.shift(1) + 'T12:00').getDay() === 3 ? 0 : 1]");
+  await evaluate("document.querySelector('.cal-composer .repeat-write').focus()");
+  await evaluate("new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
+  await evaluate("document.querySelector('.cal-composer .repeat-write').select()");
+  await command('Input.insertText', { text:`Wöchentlich am ${otherDay}` });
+  await key('Enter', 'Enter');
+  await until(`document.querySelector('.cal-composer .repeat-write').value === 'Wöchentlich am ${otherDay.slice(0, 2)}'`);
+  await evaluate("[...document.querySelectorAll('.cal-composer .repeat-units button')].find(button => button.textContent === 'Jahr').click()");
+  await until("/^Jährlich am /.test(document.querySelector('.cal-composer .repeat-write').value) && document.querySelector('.cal-composer-repeat').getAttribute('aria-pressed') === 'true'");
+  assert(await evaluate("(() => { const card=document.querySelector('.cal-composer').getBoundingClientRect(); return [...document.querySelectorAll('.cal-composer .repeat *')].every(item => { const r=item.getBoundingClientRect(); return r.width === 0 || (r.right <= card.right && r.bottom <= card.bottom); }); })()"), 'The repeat view fits the card.');
+  // The end date is picked in a small month that fits the card as well.
+  await pause(350);
+  const composerBack = await evaluate("(() => { const r=document.querySelector('.cal-composer .clock-back').getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top)]; })()");
+  await evaluate("[...document.querySelectorAll('.cal-composer .repeat-segments button')].find(button => button.textContent === 'Datum').click()");
+  await until("Boolean(document.querySelector('.cal-composer-end .cal-compact-day'))");
+  assert(await evaluate("(() => { const card=document.querySelector('.cal-composer').getBoundingClientRect(); return [...document.querySelectorAll('.cal-composer-end *')].every(item => { const r=item.getBoundingClientRect(); return r.width === 0 || (r.right <= card.right && r.bottom <= card.bottom); }); })()"), 'The end month fits the card.');
+  await pause(300);
+  assert.deepEqual(await evaluate("(() => { const r=document.querySelector('.cal-composer-end .clock-back').getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top)]; })()"), composerBack, 'The end picker keeps the back button exactly where it was in the repeat menu.');
+  await screenshot('composer-end.png');
+  await evaluate("[...document.querySelectorAll('.cal-composer-end .cal-compact-day:not(.is-outside)')].at(-1).click()");
+  await until("document.querySelector('.cal-composer .repeat-segments .is-date')?.textContent.startsWith('bis ')");
+  await evaluate("[...document.querySelectorAll('.cal-composer .repeat-segments button')].find(button => button.textContent === 'Nie').click()");
+  await pause(350);
+  await screenshot('composer-repeat.png');
   await key('Enter', 'Enter');
   await until(`(window.__uiTest.day('${nextDay}')?.entries ?? []).some(entry => entry.text === 'Früh los')`);
+  const nextYear = `${Number(nextDay.slice(0, 4)) + 1}${nextDay.slice(4)}`;
+  assert.equal(await evaluate(`Boolean(window.__uiTest.day('${nextDay}').entries.find(entry => entry.text === 'Früh los').seriesId) && (window.__uiTest.day('${nextYear}')?.entries ?? []).some(entry => entry.text === 'Früh los')`), true, 'A yearly series made in the calendar recurs a year later.');
   assert.deepEqual(await evaluate(`(({ kind, time, end, priority }) => ({ kind, time, end, priority }))(window.__uiTest.day('${nextDay}').entries.find(entry => entry.text === 'Früh los'))`), { kind:'task', time:'01:00', end:'01:45', priority:false });
   assert.equal(await evaluate(heading), journalDay, 'The journal stays where it was.');
   await until("[...document.querySelectorAll('.sidebar .cal-item.is-block')].some(block => block.textContent.includes('Früh los'))");
@@ -424,12 +773,37 @@ async function checkCalendars() {
     await command('Input.dispatchMouseEvent', { type:'mouseReleased', x:target.x, y:target.y, button:'right', buttons:0, clickCount:1 });
   };
   const sideBlock = text => `[...document.querySelectorAll('.sidebar .cal-item')].find(item => item.textContent.includes(${JSON.stringify(text)}))`;
+  // Past midnight: the end goes on into the next day (Shift+↓ in the card, or dragging on at the bottom), saved as one
+  // entry ending at 26:00 (02:00 the next morning), drawn on both days.
+  {
+    await evaluate(`${side()}.focus()`); await key('t', 'KeyT');
+    await until(`${side()}.dataset.view === 'day'`);
+    await evaluate("document.querySelector('.sidebar .cal-time').scrollTop = 1e6");
+    await pause(150);
+    const late = await markRange(23 * 60 + 5);
+    await release(late);
+    await until("document.querySelector('.cal-composer.is-placed') && document.activeElement === document.querySelector('.cal-composer-text')");
+    await command('Input.insertText', { text:'Nachtschicht' });
+    for (let step = 0; step < 8; step++) await key('ArrowDown', 'ArrowDown', 8);
+    await until("document.querySelector('.sidebar .cal-selection.is-night-start') && /02:00⁺¹/.test(document.querySelector('.cal-composer-when').textContent)");
+    await key('Enter', 'Enter');
+    await until(`!document.querySelector('.cal-composer') && window.__uiTest.day(window.__uiTest.date).entries.some(entry => entry.text === 'Nachtschicht' && entry.time === '23:00' && entry.end === '26:00')`);
+    await evaluate(`${side()}.focus()`); await key('w', 'KeyW');
+    await until(`${side()}.dataset.view === 'week' && Boolean(document.querySelector('.sidebar .cal-item.is-night-start')) && (window.__uiTest.date.slice(0, 10) === window.__uiTest.shift(0) && new Date(window.__uiTest.date + 'T12:00').getDay() === 0 || Boolean(document.querySelector('.sidebar .cal-item.is-night-rest')))`);
+    assert.match(await evaluate("document.querySelector('.sidebar .cal-item.is-night-start').title"), /23:00 bis 26:00|23:00/, 'The block names its time.');
+    await pause(300);
+    await screenshot('calendar-overnight.png');
+    await evaluate(`${side()}.focus()`); await key('h', 'KeyH'); await key('t', 'KeyT');
+    await until(`${side()}.dataset.view === 'day' && ${side('.cal-time-day')}?.title.startsWith(${longDate(sideToday)})`);
+  }
   await rightClick(sideBlock('Zahnarzt-Test'));
   await until("document.querySelector('.cal-composer.is-editing.is-placed') && document.activeElement === document.querySelector('.cal-composer-text')");
   assert.equal(await evaluate("document.querySelector('.cal-composer-text').value"), 'Zahnarzt-Test');
+  assert.equal(await evaluate("document.querySelector('.cal-composer-description').value"), 'Raum 2\nUnterlagen mitbringen');
+  await evaluate("(() => { const input=document.querySelector('.cal-composer-description'); Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(input,'Raum 3\\nGeänderte Details'); input.dispatchEvent(new Event('input',{bubbles:true})); })()");
   assert.equal(await evaluate(selection), '09:15 – 10:30', 'The entry shows as its range.');
   assert.equal(await evaluate(`${sideBlock('Zahnarzt-Test')}.classList.contains('is-editing')`), true);
-  assert.deepEqual(await evaluate("[...document.querySelectorAll('.cal-composer-kinds [role=radio]')].map(kind => kind.getAttribute('aria-label') + ':' + kind.getAttribute('aria-checked'))"), ['Ereignis:true', 'Aufgabe:false'], 'A timed entry cannot become a note.');
+  assert.deepEqual(await evaluate("[...document.querySelectorAll('.cal-composer-kinds [role=radio]')].map(kind => kind.getAttribute('aria-label') + ':' + kind.getAttribute('aria-checked'))"), ['Nur im Kalender:false', 'Ereignis:true', 'Aufgabe:false'], 'A timed entry cannot become a note.');
   await key('a', 'KeyA', 1);
   await key('ArrowDown', 'ArrowDown');
   await until(`${selection} === '09:30 – 10:45'`);
@@ -441,12 +815,15 @@ async function checkCalendars() {
   await until("!document.querySelector('.cal-composer') && [...document.querySelectorAll('.entry')].some(row => row.textContent.includes('Zahnarzt verschoben'))");
   const moved = "[...document.querySelectorAll('.entry')].find(row => row.textContent.includes('Zahnarzt verschoben'))";
   assert.deepEqual(await evaluate(`[${moved}.dataset.entryKind, ${moved}.querySelector('.entry-when').textContent]`), ['task', '09:30–10:45'], 'Kind, time and text change in the journal.');
+  assert(await evaluate("window.__uiTest.day().entries.some(entry=>entry.text==='Zahnarzt verschoben' && entry.description==='Raum 3\\nGeänderte Details')"), 'Edited descriptions survive saving.');
   // In the month (another day), the card edits in place and can remove the entry.
   await key('m', 'KeyM');
   await until(`${side()}.dataset.view === 'month'`);
   await rightClick(sideBlock('Früh los'));
   await until("document.querySelector('.cal-composer.is-editing.is-placed') && !document.querySelector('.cal-composer-time')");
-  await evaluate("document.querySelector('.cal-composer-text').focus()");
+  // The card selects its text once it settled; typing then goes to the end on purpose.
+  await until("(() => { const t=document.querySelector('.cal-composer-text'); return document.activeElement === t && t.selectionStart === 0 && t.selectionEnd === t.value.length; })()");
+  await evaluate("(() => { const t=document.querySelector('.cal-composer-text'); t.setSelectionRange(t.value.length, t.value.length); })()");
   await command('Input.insertText', { text:'!' });
   await key('Enter', 'Enter');
   await until(`window.__uiTest.day('${nextDay}').entries.some(entry => entry.text === 'Früh los!')`);
@@ -455,8 +832,57 @@ async function checkCalendars() {
   await rightClick(sideBlock('Früh los!'));
   await until("Boolean(document.querySelector('.cal-composer.is-editing .cal-composer-remove'))");
   await evaluate("document.querySelector('.cal-composer-remove').click()");
-  await until(`!window.__uiTest.day('${nextDay}').entries.some(entry => entry.text.startsWith('Früh los'))`);
+  // It repeats yearly, so removing asks how far: the first occurrence takes the following ones along.
+  await until("Boolean(document.querySelector('.cal-composer .scope-choice'))");
+  await evaluate("[...document.querySelectorAll('.cal-composer .scope-choice button')].find(button => button.textContent.includes('folgenden')).click()");
+  await until(`!window.__uiTest.day('${nextDay}').entries.some(entry => entry.text.startsWith('Früh los')) && !(window.__uiTest.day('${nextYear}')?.entries ?? []).some(entry => entry.text.startsWith('Früh los'))`);
 
+  // Calendar-only is an exclusive third kind choice, and choosing a task restores its daily-note entry.
+  await evaluate(`${side()}.focus()`);
+  await key('h', 'KeyH'); await key('t', 'KeyT');
+  await until(`${side()}.dataset.view === 'day' && Boolean(${sideBlock('Zahnarzt verschoben')} )`);
+  await rightClick(sideBlock('Zahnarzt verschoben'));
+  await until("Boolean(document.querySelector('.cal-composer.is-editing.is-placed'))");
+  assert.equal(await evaluate("document.querySelector('.cal-composer-kinds [aria-label=\"Aufgabe\"]').getAttribute('aria-checked')"), 'true');
+  await evaluate("document.querySelector('.cal-composer-kinds [aria-label=\"Nur im Kalender\"]').click()");
+  await screenshot('calendar-daily-toggle.png');
+  await evaluate("document.querySelector('.cal-composer-create').click()");
+  await until("!document.querySelector('.cal-composer') && ![...document.querySelectorAll('.entry')].some(row => row.textContent.includes('Zahnarzt verschoben'))");
+  assert.equal(await evaluate("window.__uiTest.day().entries.find(entry => entry.text === 'Zahnarzt verschoben').showInJournal"), false);
+  await until(`Boolean(${sideBlock('Zahnarzt verschoben')})`);
+  await rightClick(sideBlock('Zahnarzt verschoben'));
+  await until("Boolean(document.querySelector('.cal-composer-kinds [aria-label=\"Nur im Kalender\"][aria-checked=true]'))");
+  await evaluate("document.querySelector('.cal-composer-kinds [aria-label=\"Aufgabe\"]').click()");
+  await until("document.querySelector('.cal-composer-kinds [aria-label=\"Aufgabe\"]').getAttribute('aria-checked') === 'true'");
+  await evaluate("document.querySelector('.cal-composer-create').click()");
+  await until("!document.querySelector('.cal-composer') && [...document.querySelectorAll('.entry')].some(row => row.textContent.includes('Zahnarzt verschoben'))");
+
+  // ICS uses native file dialogs in production; IPC mocks exercise file contents, preview and repeated import here.
+  const transfer = "document.querySelector('.sidebar [aria-label=\"Kalender importieren oder exportieren\"]')";
+  const transferButton = label => `[...document.querySelectorAll('.cal-transfer-panel button')].find(button => button.textContent.includes(${JSON.stringify(label)}))`;
+  await evaluate(`${transfer}.click()`);
+  await until("Boolean(document.querySelector('.cal-transfer-panel'))");
+  await screenshot('calendar-transfer.png');
+  await evaluate(`${transferButton('exportieren')}.click()`);
+  await until("Boolean(window.__uiTest.icsOutput)");
+  assert.equal(await evaluate("window.__uiTest.icsOutput.includes('BEGIN:VCALENDAR') && window.__uiTest.icsOutput.includes('Zahnarzt verschoben')"), true);
+  await evaluate(`window.__uiTest.icsInput = ['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Test//EN','BEGIN:VEVENT','UID:ui-import','DTSTAMP:20261030T120000Z','DTSTART;VALUE=DATE:' + window.__uiTest.date.replaceAll('-', ''),'SUMMARY:ICS Import-Test','X-JOURNAL-SHOW-IN-JOURNAL:FALSE','END:VEVENT','END:VCALENDAR'].join(String.fromCharCode(13, 10))`);
+  await evaluate(`${transferButton('Datei importieren')}.click()`);
+  await until("Boolean(document.querySelector('.cal-transfer-confirm'))");
+  await screenshot('calendar-import-preview.png');
+  await evaluate("document.querySelector('.cal-transfer-confirm').click()");
+  await until("window.__uiTest.day().entries.some(entry => entry.text === 'ICS Import-Test')");
+  assert.equal(await evaluate("[...document.querySelectorAll('.entry')].some(row => row.textContent.includes('ICS Import-Test'))"), false);
+  await until(`Boolean(${sideBlock('ICS Import-Test')})`);
+  await evaluate(`${transferButton('Datei importieren')}.click()`);
+  await until("Boolean(document.querySelector('.cal-transfer-confirm'))");
+  await evaluate("document.querySelector('.cal-transfer-confirm').click()");
+  await until("document.querySelector('.cal-transfer-panel [role=status]')?.textContent.includes('importiert')");
+  assert.equal(await evaluate("window.__uiTest.day().entries.filter(entry => entry.calendarUid === 'ui-import').length"), 1);
+  await key('Escape');
+  await until("!document.querySelector('.cal-transfer-panel')");
+
+  await evaluate(`${side()}.focus()`); await key('m', 'KeyM');
   // Kinds change in the journal too: Alt ⇧ E / A / N, or the kind cluster next to the orbit's planning (with a preview).
   await evaluate("[...document.querySelectorAll('.kind-picker button')].find(button => button.textContent === 'Aufgabe').click()");
   await until("Boolean(document.activeElement?.closest('.entry'))");
@@ -574,7 +1000,7 @@ async function checkCalendars() {
   await until("document.querySelector('.cal').dataset.view === 'week' && document.querySelectorAll('.cal-time-column').length === 7");
   assert.equal(await evaluate("document.querySelector('.cal-views [aria-selected=true]').getAttribute('aria-label')"), 'Woche');
   assert.equal(await evaluate("document.querySelectorAll('.cal-time-column.is-today .cal-now').length"), 1, 'Today shows the current time.');
-  assert(await evaluate("document.querySelector('.cal-time').scrollTop") > 200, 'The hours start scrolled to the morning.');
+  assert(await evaluate("document.querySelector('.cal-time').scrollTop") > 0, 'The hours start scrolled towards the morning at the current scale.');
   await pause(350);
   await screenshot('calendar-week.png');
   await key('a', 'KeyA');
@@ -595,8 +1021,10 @@ async function checkCalendars() {
   // Where the time does not fit (overlapping entries in a narrow week), it runs through the corner from right to left.
   await key('w', 'KeyW');
   await until("document.querySelector('.cal').dataset.view === 'week'");
-  if (!await evaluate("document.querySelectorAll('.cal-item.is-block.is-event').length >= 2")) await key('ArrowRight', 'ArrowRight');
-  await until("document.querySelectorAll('.cal-item.is-block.is-event').length >= 2");
+  if (!await evaluate("[...document.querySelectorAll('.cal-item.is-block.is-event')].some(item=>item.textContent.includes('Telefonat'))")) await key('ArrowRight', 'ArrowRight');
+  await until("[...document.querySelectorAll('.cal-item.is-block.is-event')].some(item=>item.textContent.includes('Telefonat'))");
+  await evaluate("[...document.querySelectorAll('.cal-item.is-block.is-event')].find(item => item.textContent.includes('Telefonat')).scrollIntoView({ block:'center' })");
+  await pause(350);
   await hoverAt("[...document.querySelectorAll('.cal-item.is-block.is-event')].find(item => item.textContent.includes('Telefonat'))");
   await until("[...document.querySelectorAll('.cal-item.is-block.is-event')].find(item => item.textContent.includes('Telefonat')).querySelector('.cal-item-time.is-scrolling')?.firstElementChild.getAnimations().length === 1");
   await pause(500);
@@ -620,13 +1048,25 @@ async function checkCalendars() {
   await key('t', 'KeyT');
   await until("document.querySelector('.cal').dataset.view === 'day' && document.querySelectorAll('.cal-time-column').length === 1");
   const blocks = await evaluate("[...document.querySelectorAll('.cal-item.is-block')].map(block => { const r=block.getBoundingClientRect(); return { left:Math.round(r.left), width:Math.round(r.width) }; })");
-  assert.equal(blocks.length, 2); assert(blocks[0].left !== blocks[1].left && Math.abs(blocks[0].width - blocks[1].width) < 2, 'Overlapping entries stand side by side.');
+  assert.equal(blocks.length, 2); assert(blocks[0].left < blocks[1].left && blocks[0].left + blocks[0].width > blocks[1].left && Math.abs(blocks[0].width - blocks[1].width) < 2, 'Overlapping cards are wide and staggered, not squeezed into equal slices.');
   assert.deepEqual(await texts('.cal-time-allday .cal-item'), ['Bericht abgeben']);
   await evaluate("document.querySelector('.cal-filter-note').click()");
   await until("[...document.querySelectorAll('.cal-time-allday .cal-item-text')].some(item => item.textContent === 'Gute Laune')");
   assert.equal(await evaluate("document.querySelector('.cal-day-notes').textContent.includes('Gute Laune')"), true);
   await pause(350);
   await screenshot('calendar-day.png');
+  await evaluate(`(() => { const day=window.__uiTest.day('${tomorrow}'); day.entries.push({ id:'30000000-0000-4000-8000-000000000001', kind:'task', text:'Code review', done:false, cancelled:false, priority:true, time:'09:45', end:'11:00' }); return window.__uiTest.store(day); })()`);
+  await until("document.querySelectorAll('.cal-item.is-block').length === 3");
+  assert.equal(await evaluate("(() => { const column=document.querySelector('.cal-time-column').getBoundingClientRect(), cards=[...document.querySelectorAll('.cal-item.is-block')].map(card => card.getBoundingClientRect()); return cards.every(card => card.width >= column.width * .5 - 5 && card.left >= column.left && card.right <= column.right) && cards[0].right > cards[1].left && cards[1].right > cards[2].left; })()"), true, 'Three cards overlap by half while remaining inside their day.');
+  await screenshot('calendar-overlapping.png');
+  // Actual viewport resizing must resize the timeline, keep the date row compact and avoid dead space below it.
+  for (const height of [460, 780, 1500, 2160]) {
+    await command('Emulation.setDeviceMetricsOverride', { width:1120, height, deviceScaleFactor:1, mobile:false });
+    await until("(() => { const grid=document.querySelector('.cal-time'), head=grid.querySelector('.cal-time-top'), hour=parseFloat(getComputedStyle(grid).getPropertyValue('--hour')); return Math.abs(hour - Math.max(36, Math.round((grid.clientHeight-head.offsetHeight)/20*4)/4)) < .3; })()");
+    assert.equal(await evaluate("(() => { const grid=document.querySelector('.cal-time'), body=grid.querySelector('.cal-time-body'); grid.scrollTop=grid.scrollHeight; return body.getBoundingClientRect().bottom >= grid.getBoundingClientRect().bottom - 1 && grid.scrollHeight/grid.clientHeight < 2.8 && grid.querySelector('.cal-time-day').getBoundingClientRect().height <= 36; })()"), true, 'The grid fills the height with bounded scrolling and a compact date row.');
+    if (height === 1500) await screenshot('calendar-tall.png');
+  }
+  await command('Emulation.setDeviceMetricsOverride', { width:1120, height:760, deviceScaleFactor:1, mobile:false });
   await evaluate("document.querySelector('.cal-open').click()");
   assert.deepEqual(await evaluate('window.__uiTest.invoked.at(-1)'), ['show_day', { date:tomorrow, entry:null }]);
   await key('ArrowRight', 'ArrowRight');
@@ -653,6 +1093,23 @@ async function checkCalendars() {
   const month = await evaluate("document.querySelector('.mini .cal-title').textContent");
   await key('PageDown', 'PageDown');
   await until(`document.querySelector('.mini .cal-title').textContent !== ${JSON.stringify(month)}`);
+
+  // The popup outside the app: the same cards on a transparent page, the window sized to them; buttons answer the store.
+  await command('Emulation.setDeviceMetricsOverride', { width:360, height:520, deviceScaleFactor:1, mobile:false });
+  await command('Page.navigate', { url:`${origin}/?window=reminder` });
+  await until("document.querySelectorAll('.reminder-popup .reminder').length === 3");
+  assert.deepEqual(await evaluate("['html', 'body', '#root', '.reminder-popup'].map(selector => getComputedStyle(document.querySelector(selector)).backgroundColor)"), Array(4).fill('rgba(0, 0, 0, 0)'), 'The popup page is transparent around the cards.');
+  assert.equal(await evaluate("document.querySelector('.reminder-popup .reminder-text').textContent"), 'Eine Runde durch den Park gehen');
+  await until("window.__uiTest.invoked.some(([command, payload]) => command === 'fit_popup' && Math.abs(payload.height - document.querySelector('.reminder-popup').offsetHeight) < 1)");
+  assert(await evaluate("document.querySelector('.reminder-popup').offsetWidth <= 360"), 'The cards fit the popup window.');
+  await command('Emulation.setDefaultBackgroundColorOverride', { color:{ r:40, g:60, b:90, a:1 } });
+  await pause(700);
+  await screenshot('reminder-popup.png');
+  await command('Emulation.setDefaultBackgroundColorOverride', {});
+  await evaluate("document.querySelector('.reminder-popup .reminder-done').click()");
+  await until("window.__uiTest.invoked.some(([command, payload]) => command === 'reminder_action' && payload.action === 'done' && payload.id.endsWith('0001'))");
+  await evaluate("document.querySelector('.reminder-popup .reminder.is-info .reminder-quit').click()");
+  await until("window.__uiTest.invoked.some(([command, payload]) => command === 'reminder_action' && payload.action === 'quit' && payload.id === 'background')");
 }
 
 try {
@@ -680,6 +1137,54 @@ try {
   await command('Page.navigate', { url:`http://127.0.0.1:${server.address().port}/` });
   await until("document.querySelectorAll('.entry').length === 5");
   await pause(250);
+  await evaluate('document.fonts.ready.then(() => true)');
+  if (process.env.JOURNAL_UI_SCOPE === 'pixel') {
+    await checkPixelTheme();
+  } else if (process.env.JOURNAL_UI_SCOPE === 'calendar-start') {
+    await checkCalendarStart();
+  } else if (process.env.JOURNAL_UI_SCOPE === 'mail') {
+    await checkMailSettings();
+  } else if (process.env.JOURNAL_UI_SCOPE === 'calendar') {
+    await command('Emulation.setEmulatedMedia', { features:[{name:'prefers-reduced-motion',value:'reduce'}] });
+    await checkCalendars();
+    await checkCalendarStart();
+  } else {
+  // The custom titlebar keeps all controls in one row and replaces the OS date picker with the compact calendar.
+  assert.equal(await evaluate("document.querySelector('input[type=date]')"), null);
+  assert.equal(await evaluate("document.querySelectorAll('.window-controls button').length"), 3);
+  await evaluate("document.querySelector('[aria-label=\"Datum auswählen\"]').click()");
+  await until("document.querySelectorAll('.mini-picker-panel .cal-compact-day').length === 42 && document.activeElement?.classList.contains('cal-compact-day')");
+  await screenshot('mini-calendar-picker.png');
+  const pickerMonth = await evaluate("document.querySelector('.mini-picker-head strong').textContent");
+  await evaluate("document.querySelector('.mini-picker-panel [aria-label=\"Nächster Monat\"]').click()");
+  await until(`document.querySelector('.mini-picker-head strong').textContent !== ${JSON.stringify(pickerMonth)}`);
+  await key('Escape');
+  await until("!document.querySelector('.mini-picker-panel') && document.activeElement?.classList.contains('date-picker-button')");
+  await key('g', 'KeyG', 2);
+  await until("document.activeElement?.classList.contains('cal-compact-day')");
+  await key('ArrowRight', 'ArrowRight');
+  await key('Enter', 'Enter');
+  await until("!document.querySelector('.mini-picker-panel') && document.querySelector('.date-picker-button span:not(.date-picker-weekday)').textContent === window.__uiTest.shift(1).split('-').reverse().join('.')");
+  await key('h', 'KeyH', 1);
+  await until("document.querySelector('.date-picker-button span:not(.date-picker-weekday)').textContent === window.__uiTest.date.split('-').reverse().join('.')");
+  await evaluate("document.querySelector('.window-controls [aria-label=\"Minimieren\"]').click()");
+  await until("window.__uiTest.invoked.at(-1)?.[0] === 'plugin:window|minimize'");
+  await evaluate("document.querySelector('.window-controls [aria-label=\"Maximieren\"]').click()");
+  await until("Boolean(document.querySelector('.window-controls [aria-label=\"Wiederherstellen\"]'))");
+  await evaluate("document.querySelector('.window-controls [aria-label=\"Wiederherstellen\"]').click()");
+  await until("Boolean(document.querySelector('.window-controls [aria-label=\"Maximieren\"]'))");
+  await evaluate("document.querySelector('.titlebar-space').dispatchEvent(new MouseEvent('mousedown', { bubbles:true, button:0, detail:1 }))");
+  await until("window.__uiTest.invoked.at(-1)?.[0] === 'plugin:window|start_dragging'");
+  await evaluate("document.querySelector('.titlebar-space').dispatchEvent(new MouseEvent('mousedown', { bubbles:true, button:0, detail:2 }))");
+  await until("window.__uiTest.invoked.at(-1)?.[0] === 'plugin:window|toggle_maximize'");
+  await evaluate("document.querySelector('.window-controls [aria-label=\"Schließen\"]').click()");
+  await until("window.__uiTest.invoked.at(-1)?.[0] === 'plugin:window|close'");
+  for (const width of [720, 1180]) {
+    await command('Emulation.setDeviceMetricsOverride', { width, height:780, deviceScaleFactor:1, mobile:false });
+    await pause(150);
+    assert.equal(await evaluate("(() => { const parts=[...document.querySelectorAll('.topbar > .document-tab, .topbar > .navigation, .topbar > .window-controls')].map(p => p.getBoundingClientRect()); return parts.every((p, i) => p.right <= innerWidth + 1 && (i === 0 || p.left >= parts[i-1].right)); })()"), true, 'The navigation and window controls fit even at the minimum width.');
+    if (width === 720) await screenshot('journal-titlebar-narrow.png');
+  }
   assert.equal(await evaluate("Boolean(document.querySelector('#body'))"), false, 'Freiraum must be absent.');
   assert.equal(await evaluate("Boolean(document.querySelector('.entry-type'))"), false);
   assert.equal(await evaluate("getComputedStyle(document.querySelector('.entry-text')).backgroundColor"), 'rgba(0, 0, 0, 0)');
@@ -818,7 +1323,7 @@ try {
   await evaluate("document.querySelector('.entry-dock-shell.is-open [aria-label=\"Als Priorität markieren\"]').click()");
   await hover('h1');
   await until(`${firstTaskRow}.dataset.priority === 'high'`);
-  assert.deepEqual(await evaluate("Array.from(document.querySelectorAll('.entry-dock-shell.is-open .dock-planning button')).map(button => ({label:button.getAttribute('aria-label'), disabled:button.disabled}))"), [{label:'Auf morgen verschieben',disabled:false},{label:'Datum und Uhrzeit planen',disabled:false},{label:'Mehrere Tage',disabled:false}]);
+  assert.deepEqual(await evaluate("Array.from(document.querySelectorAll('.entry-dock-shell.is-open .dock-planning button')).map(button => ({label:button.getAttribute('aria-label'), disabled:button.disabled}))"), [{label:'Auf morgen verschieben',disabled:false},{label:'Datum und Uhrzeit planen',disabled:false},{label:'Mehrere Tage',disabled:false},{label:'Wiederholen',disabled:false}]);
   await evaluate("document.querySelector('.entry-dock-shell.is-open [aria-label=\"Als erledigt markieren\"]').click()");
   await until("document.querySelector('.entry-dock-shell.is-open .status-track').dataset.status === 'done'");
   assert.equal(await evaluate(`${firstTaskRow}.dataset.priority`), 'high', 'Completing a task must retain priority.');
@@ -833,7 +1338,7 @@ try {
   await until("document.querySelector('.entry-dock-shell.is-open .status-track').dataset.status === 'open'");
   await closeDock();
   await evaluate(`document.querySelector('[data-entry-id="${eventId}"] .entry-symbol').click()`);
-  assert.deepEqual(await evaluate("Array.from(document.querySelectorAll('.entry-dock-shell.is-open .dock-planning button')).map(button => button.getAttribute('aria-label'))"), ['Datum und Uhrzeit planen','Mehrere Tage'], 'Events can be planned but not moved to tomorrow in one click.');
+  assert.deepEqual(await evaluate("Array.from(document.querySelectorAll('.entry-dock-shell.is-open .dock-planning button')).map(button => button.getAttribute('aria-label'))"), ['Datum und Uhrzeit planen','Mehrere Tage','Wiederholen'], 'Events can be planned and repeated but not moved to tomorrow in one click.');
   assert.equal(await evaluate("Boolean(document.querySelector('.entry-dock-shell.is-open .status-track'))"), false);
   assert.equal(await evaluate("document.activeElement.classList.contains('entry-dock-shell')"), true, 'Without a status, the toolbar itself takes focus instead of a destructive action.');
   await pause(450);
@@ -1218,7 +1723,15 @@ try {
   await until(`${row(md)}.querySelector('.entry-text').value.includes('~~==Tag==~~')`);
 
   const contextAt = async () => {
-    const point = await evaluate(`(() => { const r=${row(md)}.querySelector('.entry-text').getBoundingClientRect(); return { x:r.left+16, y:r.top+12 }; })()`);
+    // The row may still be scrolling smoothly into view; the click waits until it stands still, in the middle of the list
+    // (formatting scrolls the text into view, and scrolling closes the menu).
+    await evaluate(`${row(md)}.scrollIntoView({ block:'center' })`);
+    let point = null, still = 0;
+    for (let attempt = 0; attempt < 40 && still < 4; attempt++) {
+      const next = await evaluate(`(() => { const r=${row(md)}.querySelector('.entry-text').getBoundingClientRect(); return { x:r.left+16, y:r.top+12, scroll:document.querySelector('.scroll').scrollTop }; })()`);
+      still = point && next.x === point.x && next.y === point.y && next.scroll === point.scroll ? still + 1 : 0;
+      point = next; await pause(60);
+    }
     await command('Input.dispatchMouseEvent', { type:'mousePressed', x:point.x, y:point.y, button:'right', buttons:2, clickCount:1 });
     await command('Input.dispatchMouseEvent', { type:'mouseReleased', x:point.x, y:point.y, button:'right', buttons:0, clickCount:1 });
   };
@@ -1251,7 +1764,19 @@ try {
   const active = () => evaluate("({ tag: document.activeElement.classList.contains('entry-text') ? 'EDITOR' : document.activeElement.tagName, id: document.activeElement.closest('.entry')?.dataset.entryId ?? null })");
   await key('F1', 'F1');
   await until("Boolean(document.querySelector('.shortcuts'))");
-  assert(await evaluate("document.querySelectorAll('.shortcut').length") >= 28);
+  // One page per part of the app; typing searches all of them; the keys stay inside their rows.
+  assert(await evaluate("document.querySelectorAll('.shortcuts .settings-tabs [role=tab]').length") >= 7);
+  assert(await evaluate("document.querySelectorAll('.shortcut').length") >= 6);
+  for (let page = 0; page < 9; page++) {
+    const fits = await evaluate(`(() => { const tab=document.querySelectorAll('.shortcuts .settings-tabs [role=tab]')[${page}]; if (!tab) return true; tab.click(); return true; })()`);
+    await pause(60);
+    assert(fits && await evaluate("[...document.querySelectorAll('.shortcut')].every(row => { const r=row.getBoundingClientRect(); return [...row.querySelectorAll('kbd, .shortcut-gesture')].every(key => { const k=key.getBoundingClientRect(); return k.left >= r.left && k.right <= r.right + 0.5 && k.top >= r.top && k.bottom <= r.bottom + 0.5; }); })"), `Every key sits inside its row (page ${page + 1}).`);
+  }
+  await evaluate("document.querySelector('.shortcut-search input').focus()");
+  await command('Input.insertText', { text:'Uhr' });
+  await until("document.querySelectorAll('.shortcut-pages h3').length >= 2 && [...document.querySelectorAll('.shortcut')].every(row => /uhr/i.test(row.textContent))");
+  await key('Escape');
+  await until("document.querySelector('.shortcut-search input').value === '' && Boolean(document.querySelector('.shortcuts'))");
   await pause(400);
   await screenshot('shortcuts.png');
   await key('Escape');
@@ -1507,14 +2032,23 @@ try {
   await evaluate(`${row(held)}.querySelector('.entry-text').focus()`);
   await key('T', 'KeyT', 9);
   await until(`Boolean(${row(held)}.querySelector('.planner.is-multi')) && ${row(held)}.querySelector('.planner-confirm').disabled`);
+  assert.equal(await evaluate(`Boolean(${row(held)}.querySelector('.planner-repeat, .planner-multi'))`), false, 'Several days have neither a repeat nor a mode toggle.');
   const plusDays = n => evaluate(`(() => { const d=new Date(); d.setDate(d.getDate()+${n}); return [d.getFullYear(), String(d.getMonth()+1).padStart(2,'0'), String(d.getDate()).padStart(2,'0')].join('-'); })()`);
   const days = [await plusDays(1), await plusDays(2), await plusDays(3), await plusDays(5)];
   const clickDay = async (date, right = false) => {
+    // Focus can scroll the planner; locate the next day after the movement settles.
+    await pause(350);
     const point = await evaluate(`(() => { const label=new Intl.DateTimeFormat('de-DE', { weekday:'long', day:'numeric', month:'long', year:'numeric' }).format(new Date('${date}T12:00')); const r=${row(held)}.querySelector('.planner-day[aria-label^="' + label + '"]').getBoundingClientRect(); return { x:r.left+r.width/2, y:r.top+r.height/2 }; })()`);
     await command('Input.dispatchMouseEvent', { type:'mousePressed', x:point.x, y:point.y, button:right ? 'right' : 'left', buttons:right ? 2 : 1, clickCount:1 });
     await command('Input.dispatchMouseEvent', { type:'mouseReleased', x:point.x, y:point.y, button:right ? 'right' : 'left', buttons:0, clickCount:1 });
+    await evaluate("new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
   };
   const outside = await plusDays(7), excluded = await plusDays(4);
+  // Near a month's end the days lie in the next month: turn there first, so no click lands in the month's animation.
+  if (days[0].slice(0, 7) !== await evaluate("window.__uiTest.date.slice(0, 7)")) {
+    await evaluate(`${row(held)}.querySelector('.planner-nav[aria-label="Nächster Monat"]').click()`);
+    await pause(400);
+  }
   await clickDay(days[0]);
   await until(`${row(held)}.querySelectorAll('.planner-day.is-pending').length === 1`);
   await clickDay(days[3]);
@@ -1559,6 +2093,216 @@ try {
   await evaluate("document.querySelector('.entry-dock-shell.is-open .swipe-legend [aria-label=\"löschen\"]').click()");
   await until(`!${row(wheeled)}`);
 
+  // Reminders while the journal is in front pop up in the app: finishing a task, later, closing.
+  const reminded = await swipeTask('Wäsche aufhängen');
+  const reminderBase = { id:reminded, kind:'task', text:'**Wäsche** aufhängen', time:'14:15', end:null, late:false, snoozed:false };
+  const remind = extra => evaluate(`window.__uiTest.emit('journal:reminder', Object.assign(${JSON.stringify(reminderBase)}, { date: window.__uiTest.date }, ${JSON.stringify(extra)}))`);
+  await remind({ due:'2026-01-01T14:15' });
+  await until("Boolean(document.querySelector('.reminder')) && document.querySelector('.reminder-text').textContent === 'Wäsche aufhängen'");
+  assert.equal(await evaluate("document.querySelector('.reminder-when').textContent"), 'Erinnerung · 14:15');
+  await pause(600);
+  await screenshot('reminder.png');
+  const placement = await evaluate("(() => { const card=document.querySelector('.reminder').getBoundingClientRect(), bar=document.querySelector('.statusbar').getBoundingClientRect(); return { bottom:card.bottom, top:bar.top, right:card.right, width:innerWidth }; })()");
+  assert(placement.bottom <= placement.top && placement.right <= placement.width - 8, `The card sits above the status bar, inside the window (${JSON.stringify(placement)}).`);
+  await pause(600);
+  await screenshot('reminder.png');
+  await evaluate("document.querySelector('.reminder-done').click()");
+  await until(`!document.querySelector('.reminder') && ${row(reminded)}.dataset.status === 'done'`);
+  await remind({ due:'2026-01-01T14:18' });
+  await until("Boolean(document.querySelector('.reminder-cancel'))");
+  await evaluate("document.querySelector('.reminder-cancel').click()");
+  await until(`!document.querySelector('.reminder') && ${row(reminded)}.dataset.status === 'cancelled'`);
+  await remind({ due:'2026-01-01T14:16', late:true, snoozed:true });
+  await until("document.querySelector('.reminder-when')?.textContent === 'Erneut · 14:15'");
+  await evaluate("document.querySelector('.reminder-snooze').click()");
+  await until("/^Wieder um [0-9]{2}:[0-9]{2}$/.test(document.querySelector('.reminder-later')?.textContent ?? '')");
+  await until(`!document.querySelector('.reminder') && window.__uiTest.invoked.some(([command, payload]) => command === 'snooze_reminder' && payload.id === '${reminded}' && payload.due === '2026-01-01T14:16')`);
+  await remind({ due:'2026-01-01T14:17', kind:'event' });
+  await until("Boolean(document.querySelector('.reminder')) && !document.querySelector('.reminder-done')");
+  await evaluate("document.querySelector('.reminder-close').click()");
+  await until("!document.querySelector('.reminder')");
+  await evaluate(`${row(reminded)}.querySelector('.entry-text').focus()`);
+  await key('Delete', 'Delete', 1);
+  await until(`!${row(reminded)}`);
+
+  // Repeating: Alt+W opens the repeat view over the calendar, exactly as large; the user's example: Mo, Do and Fr every
+  // 4 weeks, with a 3-weeks-on, 1-off pause, ending after 10 times. The calendar then marks the occurrences, the row shows ↻.
+  const repeated = await swipeTask('Sport');
+  const panel = `${row(repeated)}.querySelector('.repeat')`, summary = () => evaluate(`${panel}.querySelector('.repeat-write').value`);
+  // Closing discards the draft and its view: each action opens its own menu again, in either toolbar layout.
+  for (const layout of ['orbit', 'inline']) {
+    await key(',', 'Comma', 2);
+    await until("Boolean(document.querySelector('.settings'))");
+    await evaluate(`document.querySelector('.settings-option[data-layout=${layout}]').click()`);
+    await until(`document.querySelector('.app').classList.contains('actions-${layout}')`);
+    await key('Escape');
+    const openAction = async action => {
+      await evaluate(`${row(repeated)}.querySelector('.entry-text').focus()`);
+      await key('Enter', 'Enter', 1);
+      const selector = layout === 'orbit' ? `.dock-plan-${action === 'repeat' ? 'repeat' : 'date'}` : `.dock-${action}`;
+      await until(`Boolean(${row(repeated)}.querySelector('${selector}'))`);
+      await evaluate(`${row(repeated)}.querySelector('${selector}').click()`);
+    };
+    await openAction('repeat');
+    await until(`Boolean(${panel}) && document.activeElement === ${panel}`);
+    await key('ArrowUp');
+    await until(`${panel}.querySelector('.repeat-value').textContent === '2'`);
+    await tap(await evaluate("(() => { const r=document.querySelector('.save-status').getBoundingClientRect(); return { x:r.left+r.width/2, y:r.top+r.height/2 }; })()"));
+    await until("!document.querySelector('.entry-dock-shell.is-open')");
+    await openAction('plan');
+    await until(`Boolean(${row(repeated)}.querySelector('.planner.is-date')) && !${panel}`);
+    assert.equal(await evaluate(`${row(repeated)}.querySelector('.planner-repeat').getAttribute('aria-pressed')`), 'false', 'Cancelled repetition is not kept in the next planning draft.');
+    await evaluate(`${row(repeated)}.querySelector('.planner-time-toggle').click()`);
+    await until(`Boolean(${row(repeated)}.querySelector('.clock'))`);
+    await key('Enter', 'Enter', 1);
+    await until("!document.querySelector('.entry-dock-shell.is-open')");
+    await openAction('repeat');
+    await until(`Boolean(${panel}) && document.activeElement === ${panel}`);
+    assert.equal(await evaluate(`${panel}.querySelector('.repeat-value').textContent`), '1', 'Reopening starts with the saved rule or the default interval.');
+    assert.equal(await evaluate(`${row(repeated)}.querySelector('.planner-time-toggle span').textContent`), '--:--', 'Cancelled clock edits are not kept.');
+    await key('Enter', 'Enter', 1);
+    await until("!document.querySelector('.entry-dock-shell.is-open')");
+  }
+  await key(',', 'Comma', 2);
+  await until("Boolean(document.querySelector('.settings'))");
+  await evaluate("document.querySelector('.settings-option[data-layout=swipe]').click()");
+  await until("document.querySelector('.app').classList.contains('actions-swipe')");
+  await key('Escape');
+  await evaluate(`${row(repeated)}.querySelector('.entry-text').focus()`);
+  await key('w', 'KeyW', 1);
+  await until(`Boolean(${panel}) && document.activeElement === ${panel}`);
+  await pause(400);
+  assert.deepEqual(await evaluate(`(() => { const body=${row(repeated)}.querySelector('.planner-body').getBoundingClientRect(), calendar=${row(repeated)}.querySelector('.planner-calendar'), box=${panel}.getBoundingClientRect();
+    const inside = [...${panel}.querySelectorAll('button, span, div')].every(item => { const r=item.getBoundingClientRect(); return r.width === 0 || (r.left >= box.left - 1 && r.right <= box.right + 1 && r.bottom <= box.bottom + 1); });
+    return [Math.round(box.width) === Math.round(body.width), Math.round(box.height) === calendar.offsetHeight, inside]; })()`), [true, true, true], 'The repeat view covers the calendar exactly and everything fits inside it.');
+  assert.match(await summary(), /^Wöchentlich am (Mo|Di|Mi|Do|Fr|Sa|So)$/, 'Turning it on repeats weekly on the chosen day.');
+  for (const [index, wanted] of [[0, true], [1, false], [2, false], [3, true], [4, true], [5, false], [6, false]]) {
+    if (await evaluate(`${panel}.querySelectorAll('.repeat-weekdays button')[${index}].getAttribute('aria-pressed') === 'true'`) !== wanted) await key(String(index + 1), `Digit${index + 1}`);
+  }
+  for (let step = 0; step < 3; step++) await key('ArrowUp');
+  await until(`${panel}.querySelector('.repeat-write').value === 'Alle 4 Wochen am Mo, Do, Fr'`);
+  await key('p', 'KeyP');
+  await until(`${panel}.querySelector('.repeat-pause').textContent.includes('3 an') && ${panel}.getAttribute('aria-label').endsWith('3 an, 1 Woche aus')`);
+  // The year unit is yearly at once and offers the date (a birthday) and weekday positions; back to weeks, the chosen
+  // days and the pause are still there, the interval starts again at 1.
+  await evaluate(`[...${panel}.querySelectorAll('.repeat-units button')].find(button => button.textContent === 'Jahr').click()`);
+  await until(`/^Jährlich am /.test(${panel}.querySelector('.repeat-write').value) && ${panel}.querySelectorAll('.repeat-on button').length >= 2 && !${panel}.querySelector('.repeat-pause')`);
+  assert(await evaluate(`(() => { const chips=[...${panel}.querySelectorAll('.repeat-on .repeat-chip')].slice(0, 2); return Math.abs(chips[0].getBoundingClientRect().top - chips[1].getBoundingClientRect().top) < 1; })()`), 'The yearly date and weekday choices fit on the same line.');
+  await pause(350);
+  assert(await evaluate(`(() => { const box=${panel}.closest('.planner').getBoundingClientRect(), scroll=document.querySelector('.scroll').getBoundingClientRect(); return box.left >= scroll.left && box.right <= scroll.right; })()`), 'The wider planner stays inside the narrow journal pane.');
+  await screenshot('repeat-year.png');
+  assert.equal(await evaluate(`document.activeElement === ${panel}`), true, 'Choosing keeps the keys working.');
+  await key('ArrowLeft'); await key('ArrowLeft');
+  await until(`${panel}.querySelector('.repeat-write').value === 'Wöchentlich am Mo, Do, Fr' && ${panel}.querySelector('.repeat-pause').textContent.includes('3 an')`);
+  for (let step = 0; step < 3; step++) await key('ArrowUp');
+  await until(`${panel}.querySelector('.repeat-write').value === 'Alle 4 Wochen am Mo, Do, Fr'`);
+  // "Datum" picks the end in the calendar; "Anzahl" counts instead.
+  await pause(350);
+  const plannerBack = await evaluate(`(() => { const r=${panel}.querySelector('.clock-back').getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top)]; })()`);
+  await evaluate(`[...${panel}.querySelectorAll('.repeat-segments button')].find(button => button.textContent === 'Datum').click()`);
+  await until(`Boolean(${row(repeated)}.querySelector('.planner.is-picking-end')) && !${panel} && ${row(repeated)}.querySelector('.planner-month').textContent.startsWith('Ende')`);
+  assert.deepEqual(await evaluate(`[...${row(repeated)}.querySelectorAll('.planner-head button')].map(button => button.getAttribute('aria-label'))`), ['Zurück zur Wiederholung', 'Vorheriger Monat', 'Nächster Monat'], 'Picking the end shows only back and the months, like the calendar card.');
+  assert.deepEqual(await evaluate(`(() => { const r=${row(repeated)}.querySelector('.planner-head .planner-nav').getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top)]; })()`), plannerBack, 'The planner also keeps the back button in place when picking the end.');
+  await evaluate(`[...${row(repeated)}.querySelectorAll('.planner-day:not(.is-outside)')].at(-1).click()`);
+  await until(`Boolean(${panel}) && ${panel}.querySelector('.repeat-segments .is-date')?.textContent.startsWith('bis ')`);
+  assert(await evaluate(`(() => { const box=${panel}.getBoundingClientRect(); return [...${panel}.querySelectorAll('.repeat-row *')].every(item => item.getBoundingClientRect().right <= box.right + 1); })()`), 'With an end date the row stays inside the panel.');
+  await evaluate(`[...${panel}.querySelectorAll('.repeat-segments button')].find(button => button.textContent === 'Anzahl').click()`);
+  await until(`${panel}.getAttribute('aria-label').endsWith('· 10×')`);
+  await pause(350);
+  await screenshot('repeat.png');
+  await key('Escape');
+  await until(`!${panel} && ${row(repeated)}.querySelector('.planner-repeat').getAttribute('aria-pressed') === 'true' && ${row(repeated)}.querySelectorAll('.planner-day.is-repeat').length > 0`);
+  assert.equal(await evaluate(`${row(repeated)}.querySelector('.planner-confirm svg').dataset.icon`), 'repeat');
+  await pause(300);
+  await screenshot('repeat-calendar.png');
+  await key('Enter');
+  await until(`!document.querySelector('.entry-dock-shell.is-open') && Boolean(${row(repeated)}.querySelector('.entry-when .entry-repeat'))`);
+  assert.match(await evaluate(`${row(repeated)}.querySelector('.entry-when').title`), /^Alle 4 Wochen am Mo, Do, Fr · 3 an, 1 Woche aus · 10×$/);
+  const savesBeforeRepeat = await evaluate('window.__uiTest.saves');
+  await key('s', 'KeyS', 2);
+  await until(`window.__uiTest.saves === ${savesBeforeRepeat + 1}`);
+  // The days (from today on) with an occurrence, as [days ahead, weekday].
+  const sportDays = () => evaluate(`(() => { const out=[]; for (let n = 0; n < 1200; n++) { const d=new Date(); d.setDate(d.getDate()+n); const date=[d.getFullYear(), String(d.getMonth()+1).padStart(2,'0'), String(d.getDate()).padStart(2,'0')].join('-'); if (window.__uiTest.day(date)?.entries.some(entry => entry.text === 'Sport')) out.push([n, d.getDay()]); } return out; })()`);
+  const saved = await sportDays();
+  assert.equal(saved.length, 10, 'Ten occurrences, the entry itself included.');
+  assert.equal(await evaluate('window.__uiTest.series.size'), 1);
+  assert(saved.every(([ahead, weekday]) => ahead === 0 || [1, 4, 5].includes(weekday)), 'After the entry itself only Mondays, Thursdays and Fridays.');
+  // Opened again from the ↻ chip, the planner shows the rule; turning it off ends the series here: the later open ones go.
+  await evaluate(`${row(repeated)}.querySelector('.entry-when').click()`);
+  await until(`${row(repeated)}.querySelector('.planner-repeat')?.getAttribute('aria-pressed') === 'true'`);
+  await key('w', 'KeyW');
+  await until(`${panel}?.querySelector('.repeat-write').value === 'Alle 4 Wochen am Mo, Do, Fr'`);
+  await key('Delete');
+  await until(`!${panel} && ${row(repeated)}.querySelector('.planner-repeat').getAttribute('aria-pressed') === 'false'`);
+  await key('Enter');
+  await until(`!document.querySelector('.entry-dock-shell.is-open') && !${row(repeated)}.querySelector('.entry-repeat')`);
+  await key('s', 'KeyS', 2);
+  await until(`window.__uiTest.saves === ${savesBeforeRepeat + 2}`);
+  assert.deepEqual(await sportDays(), [[0, saved[0][1]]], 'Stopping keeps the entry and removes the later open occurrences.');
+  assert.equal(await evaluate('window.__uiTest.series.size'), 0, 'A series without occurrences is gone.');
+  await evaluate(`${row(repeated)}.querySelector('.entry-text').focus()`);
+  await key('Delete', 'Delete', 1);
+  await until(`!${row(repeated)}`);
+
+  // Writing the repetition: "/" focuses the head; German and English set the rule at once, the foot says what was understood.
+  const written = await swipeTask('In Worten');
+  const writeField = `${row(written)}.querySelector('.repeat-write')`;
+  const writeRule = async text => {
+    await evaluate(`(() => { const field=${writeField}; field.select(); })()`);
+    await command('Input.insertText', { text });
+  };
+  await key('w', 'KeyW', 1);
+  await until(`Boolean(${writeField}) && document.activeElement === ${row(written)}.querySelector('.repeat')`);
+  await key('/', 'Slash');
+  await until(`document.activeElement === ${writeField}`);
+  await writeRule('alle 3 Wochen am Montag, Mittwoch');
+  await until(`${row(written)}.querySelector('.repeat-next').textContent === 'Alle 3 Wochen am Mo, Mi ✓' && ${row(written)}.querySelectorAll('.repeat-weekdays [aria-pressed=true]').length === 2`);
+  await pause(300);
+  await screenshot('repeat-write.png');
+  await key('Enter', 'Enter');
+  await until(`document.activeElement === ${row(written)}.querySelector('.repeat') && ${writeField}.value === 'Alle 3 Wochen am Mo, Mi'`);
+  await key('/', 'Slash');
+  await writeRule('every other week on tue and thu, 6 times bitte');
+  await until(`${row(written)}.querySelector('.repeat-next').textContent === 'Alle 2 Wochen am Di, Do · 6× · ohne „bitte“'`);
+  await key('Escape', 'Escape');
+  await until(`${writeField}.value === 'Alle 3 Wochen am Mo, Mi' && Boolean(${row(written)}.querySelector('.repeat'))`);
+  // Typing completes the word (grey after the cursor, Tab takes it), and months restrict the days.
+  await key('/', 'Slash');
+  await writeRule('jeden Mit');
+  await until(`${row(written)}.querySelector('.repeat-ghost')?.textContent === 'jeden Mittwoch'`);
+  // Suggestions open under the field like an editor's completions (the typed letters bold, what the word does on the
+  // right), and the rows below step back while writing.
+  await until(`${row(written)}.querySelector('.repeat-suggest-item.is-picked .repeat-suggest-word')?.textContent === 'Mittwoch' && ${row(written)}.querySelector('.repeat-suggest-item.is-picked b')?.textContent === 'M'`);
+  assert.equal(await evaluate(`${row(written)}.querySelector('.repeat-suggest-item.is-picked .repeat-suggest-role').textContent`), 'Wochentag');
+  await pause(260);
+  assert(await evaluate(`Number(getComputedStyle(${row(written)}.querySelector('.repeat-units')).opacity) < 0.5 && ${row(written)}.querySelector('.repeat').classList.contains('is-writing')`), 'The rows below fade while writing.');
+  await pause(200);
+  await screenshot('repeat-suggest.png');
+  await key('Tab', 'Tab');
+  await command('Input.insertText', { text:'im Mä' });
+  await until(`${row(written)}.querySelector('.repeat-ghost')?.textContent === 'jeden Mittwoch im März'`);
+  await key('Tab', 'Tab');
+  await until(`${writeField}.value === 'jeden Mittwoch im März ' && ${row(written)}.querySelector('.repeat-next').textContent === 'Wöchentlich am Mi · nur im Mär ✓'`);
+  await pause(300);
+  await screenshot('repeat-write-months.png');
+  await key('Enter', 'Enter');
+  await until(`${row(written)}.querySelector('.repeat-chip.is-months')?.textContent.startsWith('nur Mär')`);
+  await evaluate(`${row(written)}.querySelector('.repeat-chip.is-months').click()`);
+  await until(`!${row(written)}.querySelector('.repeat-chip.is-months') && ${writeField}.value === 'Wöchentlich am Mi'`);
+  // A date of its own moves the entry there (a new repetition starts on its first day).
+  await key('/', 'Slash');
+  await writeRule('jedes Jahr am 24.12.');
+  await until(`/^Jährlich am 24\. Dez/.test(${row(written)}.querySelector('.repeat-next').textContent)`);
+  await key('Enter', 'Enter');
+  assert.match(await evaluate(`${row(written)}.querySelector('.planner-confirm').textContent`), /24\.12\./, 'The planner now plans to that day.');
+  await key('Escape');
+  await until(`!${row(written)}.querySelector('.repeat') && document.activeElement?.classList.contains('planner-day')`);
+  await key('Escape');
+  await until("!document.querySelector('.entry-dock-shell.is-open')");
+  await evaluate(`${row(written)}.querySelector('.entry-text').focus()`);
+  await key('Delete', 'Delete', 1);
+  await until(`!${row(written)}`);
+
   await key(',', 'Comma', 2);
   await until("Boolean(document.querySelector('.settings'))");
   await evaluate("document.querySelector('.settings-option[data-layout=orbit]').click()");
@@ -1568,10 +2312,24 @@ try {
   await command('Emulation.setEmulatedMedia', { features:[{name:'prefers-reduced-motion',value:'reduce'}] });
   await evaluate("document.querySelector('.entry-symbol').click()");
   assert.equal(await evaluate("getComputedStyle(document.querySelector('.entry-dock-shell.is-open')).transitionDuration"), '0s');
+  await key('Escape');
+  await checkMailSettings();
+  console.log('Mail UI checks passed: providers, OAuth configuration, Proton Bridge restrictions, failed connection, automatic ML/ICS imports and updates, confirmation popup, model pause/resume, and account removal.');
   await checkCalendars();
+  await checkCalendarStart();
+  await checkPixelTheme();
+  }
   assert.deepEqual(errors, [], 'No browser runtime errors.');
   console.log('UI checks passed: calendar window (month, week, work week, year, day; keys, swiping, filters, remembered, live updates, open in journal), compact month window, calendar in the resizable sidebar (creating entries by marking quarter hours, composer, editing by right click), changing kinds (keys, orbit cluster, preview), saving by itself (after a pause, before leaving the day), actions reaching linked entries (following / all, Escape cancels), editable traces passing edits to their copies, swiping days, settings (orbit/inline/swipe layout, remembered), swipe gestures (the icon stays at the symbol, a bar in each action’s own colour grows, full height sideways; right: tomorrow/plan/several days, left: remove, down: done/cancel, up: priority, tap, hold is a tap, keys, trackpad), planning several days (range by two clicks, right-click flips, copies per day, linked removal), embedded inline actions (in the flow, no surface, preview, calendar), IBM Plex Sans UI and bold Lilex title, live-preview Markdown (markers only at the cursor, hidden when not editing, click into hidden parts), format shortcuts with undo, colours, right-click format menu; shortcuts (F1, Alt+A/Enter/Backspace outliner, Alt+D/X/P/U/T/M/Enter/Entf, Ctrl+arrows, Alt+arrows/H), clock as large as the calendar with back button, Tab and typed digits; clock dial (tap on both rings, wheel, keys, quick times), calendar stays open on inner clicks, time after text, linked removal both ways; planning (calendar keyboard, time, reminder, traces >/</outlined <, undo, tomorrow, same-day time, copies on target days), asterisk/outlined event/thick note priority symbols, automatic priority order, drag and keyboard boundaries, toolbar focus, saved priority; action pill, previews, removal, grouping, caret, saving, cached navigation, wrapping and reduced motion.');
   console.log(`Screenshots: ${join(artifacts, 'journal.png')} and menu.png`);
+} catch (error) {
+  if (socket?.readyState === WebSocket.OPEN) {
+    try {
+      await screenshot('failure.png');
+      await writeFile(join(artifacts, 'failure.json'), JSON.stringify(await evaluate("({repeat:[...document.querySelectorAll('.repeat-write')].map(input=>input.value),repeatPressed:document.querySelector('.cal-composer-repeat')?.getAttribute('aria-pressed'),active:document.activeElement?.outerHTML.slice(0,500),pill:(() => {const length=document.querySelector('.cal-composer-length'),pill=length?.parentElement;return length && {gap:pill.getBoundingClientRect().right-length.getBoundingClientRect().right,width:pill.getBoundingClientRect().width,text:length.textContent};})()})")));
+    } catch {}
+  }
+  throw error;
 } finally {
   if (socket?.readyState === WebSocket.OPEN) {
     try { await command('Browser.close'); } catch {}

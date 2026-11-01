@@ -5,7 +5,7 @@
   "identifier": "de.journal.local",
   "build": { "beforeDevCommand": "npm run dev", "devUrl": "http://localhost:1420", "beforeBuildCommand": "npm run build", "frontendDist": "../dist" },
   "app": {
-    "windows": [{ "title": "Journal", "width": 1180, "height": 780, "minWidth": 720, "minHeight": 520, "theme": "Dark", "backgroundColor": "#000000" }],
+    "windows": [{ "title": "Journal", "width": 1180, "height": 780, "minWidth": 720, "minHeight": 520, "decorations": false, "theme": "Dark", "backgroundColor": "#000000", "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --autoplay-policy=no-user-gesture-required" }],
     "security": { "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; connect-src ipc: http://ipc.localhost" }
   },
   "bundle": { "active": true, "targets": ["nsis"], "windows": { "nsis": { "languages": ["German"] }, "webviewInstallMode": { "type": "offlineInstaller" } } }

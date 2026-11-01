@@ -1,14 +1,16 @@
-import type { Entry, LinkedEntry, Plan, PlanVia } from './journal';
+import type { Entry, LinkedEntry, Plan, PlanVia, Repeat } from './journal';
 import { shiftDate } from './dates.ts';
+import { cleanRule, continued, occurrences, sameRule, seriesHorizon, withStart } from './repeat.ts';
+import type { RepeatRule } from './repeat.ts';
 
 /** `end` (optional) closes a time span that starts at `time`. */
 export interface Schedule { time: string | null; end?: string | null; reminder: boolean }
-type PlanChange = Partial<Pick<Entry, 'time' | 'end' | 'reminder' | 'plan'>>;
+type PlanChange = Partial<Pick<Entry, 'time' | 'end' | 'reminder' | 'plan' | 'repeat'>>;
 
 export const canPlan = (entry: Entry) => entry.kind !== 'note' && !entry.plan;
 export const isTrace = (entry: Entry) => Boolean(entry.plan);
-/** Notes have no time, reminder or planning, so only an entry without them can become one. */
-export const canBeNote = (entry: Entry) => !entry.time && !entry.end && !entry.reminder && !entry.plan;
+/** Notes have no time, reminder, planning or repetition, so only an entry without them can become one. */
+export const canBeNote = (entry: Entry) => !entry.time && !entry.end && !entry.reminder && !entry.plan && !entry.repeat?.rule;
 
 /**
  * The change that planning an entry living on `day` to `dates` produces.
@@ -22,19 +24,45 @@ export function planChange(day: string, dates: readonly string[], schedule: Sche
   const plan: Plan = { via: targets.length > 1 ? 'days' : via === 'days' ? 'date' : via, targets: targets.map(date => ({ date, id: newId() })), time: schedule.time, end, reminder: schedule.reminder };
   return { plan };
 }
+/**
+ * Planning with the repetition the planner shows (`rule`, null for none). Unchanged, it is plain planning: an occurrence
+ * of a series only changes or moves itself. A new or changed rule starts a series – on the entry's day, where an
+ * occurrence continues its series differently from then on (earlier ones stay; see `continued`), or, planned to another
+ * date, from that date. Without a rule the entry leaves its series, whose open later occurrences go.
+ */
+export function repeatChange(entry: Entry, day: string, dates: readonly string[], schedule: Schedule, rule: RepeatRule | null, today: string, newId: () => string = () => crypto.randomUUID()): PlanChange {
+  const change = planChange(day, dates, schedule, undefined, newId);
+  const current = entry.repeat?.rule ?? null;
+  if (sameRule(rule, current) || (change.plan && change.plan.targets.length > 1)) return change;
+  const series = (rule: RepeatRule, first: string): Repeat => {
+    const horizon = seriesHorizon(today, first);
+    return { series: newId(), rule: cleanRule(rule), horizon, dates: occurrences(rule, shiftDate(first, 1), horizon) };
+  };
+  const leave = current ? { repeat: { series: newId(), rule: null, horizon: '' } } : {};
+  if (change.plan) {
+    const target = change.plan.targets[0].date;
+    return rule ? { ...change, plan: { ...change.plan, repeat: series(withStart(rule, target), target) } } : { ...change, ...leave };
+  }
+  if (!rule) return { ...change, ...leave };
+  return { ...change, repeat: series(current ? continued(rule, day) : withStart(rule, day), day) };
+}
 export const tomorrowChange = (entry: Entry, day: string, newId?: () => string) =>
   planChange(day, [shiftDate(day, 1)], { time: entry.time ?? null, end: entry.end ?? null, reminder: entry.reminder ?? false }, 'tomorrow', newId);
 
 const minutes = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
 export const timeOfMinutes = (value: number) => formatTime(Math.floor(value / 60), value % 60);
 /** The end that keeps an entry's duration when it starts at `time` instead; none if it would pass midnight. */
+/** The end that keeps an entry's duration when it starts at `time` instead (also past midnight); none beyond the next day. */
 export function keepDuration(entry: Pick<Entry, 'time' | 'end'>, time: string | null): string | null {
   if (!time || !entry.time || !entry.end) return null;
   const end = minutes(time) + minutes(entry.end) - minutes(entry.time);
-  return end < 24 * 60 ? timeOfMinutes(end) : null;
+  return end < 48 * 60 ? timeOfMinutes(end) : null;
 }
 /** "09:00", or "09:00–10:30" for a span. */
-export const formatSpan = (time: string | null | undefined, end?: string | null) => time ? end ? `${time}–${end}` : time : '';
+/** An end on the next day ("26:00") as that day's clock time with a raised +1: "02:00⁺¹". */
+export const formatEnd = (end: string) => end > '24:00' ? `${String(Number(end.slice(0, 2)) - 24).padStart(2, '0')}${end.slice(2)}⁺¹` : end;
+/** "09:00", "09:00–10:30", or past midnight "22:00–02:00⁺¹". */
+export const formatSpan = (time: string | null | undefined, end?: string | null) => time ? end ? `${time}–${formatEnd(end)}` : time : '';
 
 export function isValidTime(time: string | null | undefined): boolean {
   return time == null || /^([01]\d|2[0-3]):[0-5]\d$/.test(time);
@@ -113,12 +141,13 @@ export interface ScopeOption { scope: Scope; others: Pick<LinkedEntry, 'id' | 'd
  * The choices an action on `id` offers within its linked group (in date order): only this entry, also the following
  * ones, and – when removing or cancelling – all of them, the earlier ones included. Only choices that reach more than
  * the one before are offered; a single choice means there is nothing to ask. Removing reaches traces too; finishing and
- * cancelling only tasks that are not traces and not in that state already.
+ * cancelling only tasks that are not traces, not in that state already and not occurrences of a series (each of those
+ * is done on its own day).
  */
 export function linkedScopes(group: readonly LinkedEntry[], id: string, action: ScopeAction): ScopeOption[] {
   const index = group.findIndex(item => item.id === id);
   if (index < 0) return [{ scope: 'this', others: [] }];
-  const reached = (item: LinkedEntry) => item.id !== id && (action === 'remove' || (item.kind === 'task' && !item.trace && !(action === 'done' ? item.done : item.cancelled)));
+  const reached = (item: LinkedEntry) => item.id !== id && (action === 'remove' || (item.kind === 'task' && !item.trace && !item.series && !(action === 'done' ? item.done : item.cancelled)));
   const pick = (items: readonly LinkedEntry[]) => items.filter(reached).map(({ id, date }) => ({ id, date }));
   const following = pick(group.slice(index + 1)), earlier = pick(group.slice(0, index));
   const options: ScopeOption[] = [{ scope: 'this', others: [] }];
