@@ -7,8 +7,9 @@ import { MailSettings } from './MailSettings';
 import { Icon } from './Icon';
 import { ColorSettings } from './ColorSettings';
 import { TagSettings } from './TagSettings';
+import { ActivitySettings } from './ActivitySettings';
 
-const tabs = ['appearance', 'colors', 'tags', 'mail'] as const;
+const tabs = ['appearance', 'colors', 'tags', 'activities', 'mail'] as const;
 export type SettingsTab = typeof tabs[number];
 
 const layouts = (): { value: ActionLayout; title: string; text: string }[] => ([
@@ -43,12 +44,13 @@ function Preview({ layout }: { layout: ActionLayout }) {
 }
 
 export function SettingsDialog({ settings, onChange, onClose, onImport, mailStatus, initialTab = 'appearance' }: { initialTab?: SettingsTab; settings: Settings; onChange: (settings: Settings) => void; onClose: () => void; onImport: (entries: CalendarImport[]) => Promise<void>; mailStatus: { count: number; error: string } }) {
-  useLanguage();
+  const language = useLanguage();
   const dialogRef = useRef<HTMLDivElement>(null);
   const [tab, setTab] = useState<string>(initialTab);
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
-    dialogRef.current?.querySelector<HTMLElement>(initialTab === 'tags' ? '#settings-tags .tag-name' : '.settings-option[aria-checked="true"]')?.focus();
+    const selector = initialTab === 'tags' ? '#settings-tags .tag-name' : initialTab === 'activities' ? '#settings-activities input' : '.settings-option[aria-checked="true"]';
+    (dialogRef.current?.querySelector<HTMLElement>(selector) ?? dialogRef.current?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]'))?.focus();
     return () => previous?.focus({ preventScroll: true });
   }, []);
   return <div className="shortcut-backdrop" onPointerDown={event => { if (event.target === event.currentTarget) onClose(); }}>
@@ -70,6 +72,7 @@ export function SettingsDialog({ settings, onChange, onClose, onImport, mailStat
         <button id="settings-appearance-tab" type="button" role="tab" tabIndex={tab === 'appearance' ? 0 : -1} aria-selected={tab === 'appearance'} aria-controls="settings-appearance" onClick={event => { event.currentTarget.focus(); setTab('appearance'); }}><Icon name="layout" />{t("Darstellung")}</button>
         <button id="settings-colors-tab" type="button" role="tab" tabIndex={tab === 'colors' ? 0 : -1} aria-selected={tab === 'colors'} aria-controls="settings-colors" onClick={event => { event.currentTarget.focus(); setTab('colors'); }}><Icon name="pencil" />{t('Farben')}</button>
         <button id="settings-tags-tab" type="button" role="tab" tabIndex={tab === 'tags' ? 0 : -1} aria-selected={tab === 'tags'} aria-controls="settings-tags" onClick={event => { event.currentTarget.focus(); setTab('tags'); }}><Icon name="tag" />{t('Tags')}</button>
+        <button id="settings-activities-tab" type="button" role="tab" tabIndex={tab === 'activities' ? 0 : -1} aria-selected={tab === 'activities'} aria-controls="settings-activities" onClick={event => { event.currentTarget.focus(); setTab('activities'); }}><Icon name="check" />{language === 'en' ? 'Activities' : 'Aktivit\u00e4ten'}</button>
         <button id="settings-mail-tab" type="button" role="tab" tabIndex={tab === 'mail' ? 0 : -1} aria-selected={tab === 'mail'} aria-controls="settings-mail" onClick={event => { event.currentTarget.focus(); setTab('mail'); }}><Icon name="mail" />{t("E-Mail-Konten")}{mailStatus.count > 0 && <span className="mail-badge">{mailStatus.count}</span>}</button>
       </div>
       {tab === 'appearance' ? <div className="settings-panel" role="tabpanel" id="settings-appearance" aria-labelledby="settings-appearance-tab">
@@ -116,7 +119,7 @@ export function SettingsDialog({ settings, onChange, onClose, onImport, mailStat
         </button>)}
       </div>
       </div> : tab === 'colors' ? <div className="settings-panel" role="tabpanel" id="settings-colors" aria-labelledby="settings-colors-tab"><ColorSettings settings={settings} onChange={onChange} /></div>
-        : tab === 'tags' ? <div className="settings-panel" role="tabpanel" id="settings-tags" aria-labelledby="settings-tags-tab"><TagSettings /></div> : <div className="settings-panel" role="tabpanel" id="settings-mail" aria-labelledby="settings-mail-tab"><MailSettings onImport={onImport} importError={mailStatus.error} /></div>}
+        : tab === 'tags' ? <div className="settings-panel" role="tabpanel" id="settings-tags" aria-labelledby="settings-tags-tab"><TagSettings /></div> : tab === 'activities' ? <div className="settings-panel" role="tabpanel" id="settings-activities" aria-labelledby="settings-activities-tab"><ActivitySettings /></div> : <div className="settings-panel" role="tabpanel" id="settings-mail" aria-labelledby="settings-mail-tab"><MailSettings onImport={onImport} importError={mailStatus.error} /></div>}
       </div>
     </div>
   </div>;

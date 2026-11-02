@@ -20,13 +20,15 @@ export function useListMotion(containerRef: RefObject<HTMLElement | null>) {
     if (!before || !container || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     const rows = Array.from(container.querySelectorAll<HTMLElement>('[data-entry-id]'));
     for (const row of rows) for (const animation of row.getAnimations()) if (animation.id === 'list-motion') animation.cancel();
+    // The pixel theme moves in square steps, a little faster (see pixel.css).
+    const pixel = document.documentElement.dataset.theme === 'pixel';
     const origin = container.getBoundingClientRect().top;
     for (const row of rows) {
       const top = before.get(row.dataset.entryId!);
       if (top === undefined) continue;
       const delta = top - (row.getBoundingClientRect().top - origin);
       if (Math.abs(delta) < 1) continue;
-      row.animate([{ transform: `translateY(${delta}px)` }, { transform: 'translateY(0)' }], { id: 'list-motion', duration: 320, easing: 'cubic-bezier(.22, 1.2, .36, 1)' });
+      row.animate([{ transform: `translateY(${delta}px)` }, { transform: 'translateY(0)' }], pixel ? { id: 'list-motion', duration: 160, easing: 'steps(8, end)' } : { id: 'list-motion', duration: 320, easing: 'cubic-bezier(.22, 1.2, .36, 1)' });
     }
   });
 

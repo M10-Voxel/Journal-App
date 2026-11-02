@@ -3,6 +3,10 @@ import { emit, listen } from '@tauri-apps/api/event';
 import type { CalendarImport } from '../journal';
 import { latestMailCandidates, recognizeMail } from '../mail';
 import { mailApi } from '../mailApi';
+import { getLanguage } from '../i18n';
+import { saveTags } from '../tagStore';
+import { classifyMailTag, ensureMailTags, mailTagId } from '../mailTags';
+import { mailText } from '../mail';
 
 /** Native polling continues in the tray. Mail events wake extraction in the main webview; imports use the editor's save/merge path. */
 export function useMailImport(onImport: (entries: CalendarImport[]) => Promise<void>) {
@@ -23,6 +27,12 @@ export function useMailImport(onImport: (entries: CalendarImport[]) => Promise<v
             let result;
             try { result = await recognizeMail(item, undefined, mailApi.analyze); }
             catch (error) { deferredError = String(error); continue; }
+            if (result.candidates.length) {
+              const tags = await saveTags(current => ensureMailTags(current, getLanguage()));
+              const message = item.message;
+              const kind = classifyMailTag(message.subject, message.sender, message.text || mailText(message.html), /"(?:https?:\/\/schema\.org\/)?ParcelDelivery"/i.test(message.html));
+              for (const candidate of result.candidates) candidate.entry.tag ??= mailTagId(tags, kind);
+            }
             await mailApi.stage(item.account.id, item.message.key, result.candidates, result.notice);
             processed++;
           }

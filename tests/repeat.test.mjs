@@ -28,7 +28,7 @@ test('daily for n days, or until a date', () => {
 test('pauses: three weeks on, one off', () => {
   const rule = weekly('2026-11-02', [0], { pause: { on: 3, off: 1, unit: 'week' } });
   assert.deepEqual(until(rule, '2026-12-31'), ['2026-11-02', '2026-11-09', '2026-11-16', '2026-11-30', '2026-12-07', '2026-12-14', '2026-12-28']);
-  assert.equal(describe(rule), 'Wöchentlich am Mo · 3 an, 1 Woche aus');
+  assert.equal(describe(rule), 'Wöchentlich am Mo · 3 Wochen an, 1 Woche aus');
   // Daily (a 21/7 cycle) counts from the start itself, in days or in weeks alike.
   const days = { start: '2026-11-04', unit: 'day', every: 1, pause: { on: 21, off: 7, unit: 'day' } };
   const weeks = { ...days, pause: { on: 3, off: 1, unit: 'week' } };

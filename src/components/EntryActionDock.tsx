@@ -36,6 +36,20 @@ const onOrbit = (angle: number): CSSProperties => ({
   '--x': `${Math.round(Math.cos(angle * Math.PI / 180) * orbitRadius)}px`,
   '--y': `${Math.round(Math.sin(angle * Math.PI / 180) * orbitRadius)}px`,
 } as CSSProperties);
+// The pixel theme draws the orbit from 2px squares (midpoint circle), split into clockwise arcs from the top that
+// appear one after another instead of the smooth stroke.
+const pixelOrbitArcs = (() => {
+  const cell = 2, r = orbitRadius / cell, arcs: string[][] = Array.from({ length: 12 }, () => []);
+  const seen = new Set<string>();
+  for (let x = 0, y = r, d = 1 - r; x <= y; x++, d += d < 0 ? 2 * x + 1 : 2 * (x - --y) + 1)
+    for (const [px, py] of [[x, y], [y, x], [-x, y], [-y, x], [x, -y], [y, -x], [-x, -y], [-y, -x]]) {
+      if (seen.has(`${px},${py}`)) continue;
+      seen.add(`${px},${py}`);
+      const turn = (Math.atan2(py, px) * 180 / Math.PI + 450) % 360;
+      arcs[Math.min(11, Math.floor(turn / 30))].push(`M${px * cell - 1} ${py * cell - 1}h2v2h-2z`);
+    }
+  return arcs.map(arc => arc.join(''));
+})();
 const navigationKeys = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'];
 const kindActions = (): { kind: EntryKind; label: string; short: string; hint: string }[] => ([
   { kind: 'event', label: t("Als Ereignis"), short: t('ereignis'), hint: 'Alt ⇧ E' },
@@ -184,7 +198,8 @@ export function EntryActionDock({ layout, swipeActions, removeChoice, onClose, e
         </button>)}
       </span>)}
     </div> : <div className={`entry-dock${removeChoice ? ' is-asking' : ''}`}>
-      <svg className="dock-orbit" aria-hidden="true" viewBox="-50 -50 100 100"><circle r={orbitRadius} pathLength={1} /></svg>
+      <svg className="dock-orbit" aria-hidden="true" viewBox="-50 -50 100 100"><circle r={orbitRadius} pathLength={1} />
+        <g className="dock-orbit-pixel">{pixelOrbitArcs.map((d, i) => <path key={i} d={d} style={{ '--i': i } as CSSProperties} />)}</g></svg>
       {up()}
       {!trace && priority()}
       {removeChoice ? <div className="dock-remove-choice" style={onOrbit(45)}>{removeChoice}</div> : remove()}

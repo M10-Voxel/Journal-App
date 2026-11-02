@@ -6,7 +6,7 @@ import { journal } from '../journal';
 import type { Entry, EntryKind, Repeat } from '../journal';
 import { formatMonth, formatShortDate, localDate, shiftMonth } from '../dates';
 import { formatDuration, slotMinutes, snapMinutes } from '../calendar';
-import { formatEnd, canBeNote, formatSpan, linkedScopes, repeatChange, timeOfMinutes } from '../planning';
+import { formatEnd, canBeNote, editScopes, formatSpan, linkedScopes, repeatChange, timeOfMinutes } from '../planning';
 import { defaultRule, describe, withStart } from '../repeat';
 import type { RepeatRule } from '../repeat';
 import { RepeatPanel } from './RepeatPanel';
@@ -40,7 +40,7 @@ const kindKey: Record<ComposerKind, string> = { event: 'E', task: 'A', note: 'N'
  */
 export function CalendarComposer({ date, draft, entry, tag: initialTag = null, anchor, onChange, onCancel, onCreate, onSave, onRemove }: {
   date: string; draft: Draft | null; entry?: Entry; tag?: string | null; anchor: () => DOMRect | null; onChange?: (draft: Draft) => void; onCancel: (byKey: boolean) => void;
-  onCreate?: (entry: NewEntry) => Promise<void>; onSave?: (change: EntryEdit) => Promise<void>; onRemove?: (others: ScopeOption['others']) => Promise<void>;
+  onCreate?: (entry: NewEntry) => Promise<void>; onSave?: (change: EntryEdit, scope?: ScopeOption) => Promise<void>; onRemove?: (others: ScopeOption['others']) => Promise<void>;
 }) {
   useLanguage();
   const editing = Boolean(entry);
@@ -63,6 +63,8 @@ export function CalendarComposer({ date, draft, entry, tag: initialTag = null, a
   const [error, setError] = useState('');
   const [shaking, setShaking] = useState(false);
   const [removing, setRemoving] = useState<ScopeOption[] | null>(null);
+  // An edit of an entry with linked ones (a series, several days) asks before it is applied how far it reaches.
+  const [applying, setApplying] = useState<{ change: EntryEdit; options: ScopeOption[] } | null>(null);
   // Repeating (↻ or Alt W): the planner's repeat view opens under the card's lines; its end date is picked in a small month.
   const [rule, setRule] = useState<RepeatRule | null>(entry?.repeat?.rule ?? null);
   const [repeatView, setRepeatView] = useState<'rule' | 'end' | null>(null);
@@ -117,15 +119,27 @@ export function CalendarComposer({ date, draft, entry, tag: initialTag = null, a
   }, []);
 
   const length = draft ? draft.end - draft.start : 0;
+  // Steps follow the range as last set, not as last drawn: keys repeating faster than the card redraws would else
+  // all start from the same range and get lost.
+  const latestDraft = useRef(draft);
+  latestDraft.current = draft;
+  const changeDraft = (next: Draft) => { latestDraft.current = next; onChange?.(next); };
   const shift = (amount: number) => {
-    if (!draft || !onChange) return;
+    const current = latestDraft.current;
+    if (!current || !onChange) return;
     // It may run past midnight; its start stays on its day.
-    const start = Math.min(24 * 60 - snapMinutes, Math.max(0, draft.start + amount));
-    onChange({ ...draft, start, end: start + length });
+    const start = Math.min(24 * 60 - snapMinutes, Math.max(0, current.start + amount));
+    changeDraft({ ...current, start, end: start + current.end - current.start });
   };
-  const setEdge = (edge: 'start' | 'end', value: number) => draft && onChange?.(edge === 'start'
-    ? { ...draft, start: Math.min(draft.end - snapMinutes, Math.max(0, draft.end - 24 * 60, value)) }
-    : { ...draft, end: Math.max(draft.start + snapMinutes, Math.min(draft.start + 24 * 60, 48 * 60 - snapMinutes, value)) });
+  // `by` steps from the edge as last set; `to` sets it.
+  const setEdge = (edge: 'start' | 'end', change: { to: number } | { by: number }) => {
+    const current = latestDraft.current;
+    if (!current || !onChange) return;
+    const value = 'to' in change ? change.to : (edge === 'start' ? current.start : current.end) + change.by;
+    changeDraft(edge === 'start'
+      ? { ...current, start: Math.min(current.end - snapMinutes, Math.max(0, current.end - 24 * 60, value)) }
+      : { ...current, end: Math.max(current.start + snapMinutes, Math.min(current.start + 24 * 60, 48 * 60 - snapMinutes, value)) });
+  };
   const chooseKind = (next: ComposerKind) => {
     if (!kinds.includes(next)) return;
     setKind(next === 'calendar' ? 'event' : next);
@@ -146,7 +160,11 @@ export function CalendarComposer({ date, draft, entry, tag: initialTag = null, a
         // An entry without an end keeps having none, unless its length changed.
         const times = draft ? { time: timeOfMinutes(draft.start), end: entry.end || length !== slotMinutes ? timeOfMinutes(draft.end) : null } : {};
         const repeat = repeatOf(entry);
-        await onSave?.({ kind, text: text.trim(), description: description.trim(), tag: tag?.id ?? null, priority, showInJournal, reminder: kind === 'note' ? false : reminder, ...times, ...kind === 'task' ? {} : { done: false, cancelled: false }, ...repeat ? { repeat } : {} });
+        const change: EntryEdit = { kind, text: text.trim(), description: description.trim(), tag: tag?.id ?? null, priority, showInJournal, reminder: kind === 'note' ? false : reminder, ...times, ...kind === 'task' ? {} : { done: false, cancelled: false }, ...repeat ? { repeat } : {} };
+        // A changed rule makes a new series anyway; otherwise the group decides whether there is anything to ask.
+        const options = repeat ? [] : editScopes(await journal.linked(entry.id).catch(() => []), entry.id, date);
+        if (options.length > 1) { setApplying({ change, options }); setBusy(false); return; }
+        await onSave?.(change);
       }
     }
     catch (reason) { setError(String(reason)); setBusy(false); }
@@ -169,7 +187,7 @@ export function CalendarComposer({ date, draft, entry, tag: initialTag = null, a
   }
   function onKeyDown(event: KeyboardEvent) {
     const key = event.key;
-    if (removing) return;
+    if (removing || applying) return;
     if (key === 'Escape' && repeatView) { setRepeatView(repeatView === 'end' ? 'rule' : null); if (repeatView === 'rule') inputRef.current?.focus(); }
     else if (key === 'Escape') onCancel(true);
     else if (event.altKey && !event.ctrlKey && event.code === 'KeyW' && kind !== 'note') toggleRepeat();
@@ -180,7 +198,7 @@ export function CalendarComposer({ date, draft, entry, tag: initialTag = null, a
     else if (event.altKey && !event.ctrlKey && key === 'Delete' && editing) void remove();
     else if ((key === 'ArrowUp' || key === 'ArrowDown') && draft && event.target === inputRef.current && !event.altKey && !event.ctrlKey) {
       const step = key === 'ArrowUp' ? -snapMinutes : snapMinutes;
-      if (event.shiftKey) setEdge('end', draft.end + step); else shift(step);
+      if (event.shiftKey) setEdge('end', { by: step }); else shift(step);
     }
     else return;
     // The journal's own shortcuts (Alt+E, Alt+A, Alt+P …) must not act behind the card.
@@ -189,7 +207,7 @@ export function CalendarComposer({ date, draft, entry, tag: initialTag = null, a
   }
   const timeChip = (edge: 'start' | 'end') => {
     const value = edge === 'start' ? draft!.start : draft!.end;
-    const step = (amount: number) => setEdge(edge, value + amount);
+    const step = (amount: number) => setEdge(edge, { by: amount });
     return <button type="button" className="cal-composer-time" aria-label={t("{0} {1}, mit Pfeiltasten oder Mausrad ändern", edge === 'start' ? t("Beginn") : t("Ende"), formatEnd(timeOfMinutes(value)).replace('⁺¹', t(" am nächsten Tag")))}
       data-tip={t("{0} · ↑ ↓ oder Mausrad", edge === 'start' ? t("Beginn") : t("Ende"))}
       onWheel={(event: WheelEvent) => step(event.deltaY > 0 ? snapMinutes : -snapMinutes)}
@@ -244,6 +262,8 @@ export function CalendarComposer({ date, draft, entry, tag: initialTag = null, a
         </div>}
     </div>}
     {tagging && <TagPicker anchor={tagButton.current} value={tag?.id ?? null} onPick={setTagId} onClose={() => { setTagging(false); requestAnimationFrame(() => inputRef.current?.focus({ preventScroll: true })); }} />}
+    {applying && <ScopeChoice className="in-composer" action="edit" options={applying.options} onCancel={() => { setApplying(null); inputRef.current?.focus(); }}
+      onChoose={option => { const { change } = applying; setApplying(null); setBusy(true); void onSave?.(change, option).catch(reason => { setError(String(reason)); setBusy(false); }); }} />}
     {removing && <ScopeChoice className="in-composer" action="remove" options={removing} onChoose={option => void remove(option)} onCancel={() => { setRemoving(null); inputRef.current?.focus(); }} />}
     {error && <div className="cal-composer-error" role="alert">{error}</div>}
   </div>, document.body);

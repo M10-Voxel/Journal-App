@@ -44,7 +44,9 @@ const easterWords: [RegExp, number][] = [
 ];
 // Words that only join the others.
 const fillers = new Set(['am', 'an', 'den', 'dem', 'der', 'die', 'das', 'des', 'im', 'in', 'um', 'und', 'sowie', 'oder', 'immer', 'jeweils', 'je', 'jeden', 'jede', 'jedes', 'jeder',
-  'alle', 'allen', 'wiederholen', 'wiederholt', 'wiederholung', 'on', 'the', 'of', 'every', 'each', 'and', 'or', 'at', 'repeat', 'repeats', 'repeating', 'monats', 'month', 'monat', 'mal', 'x', 'times', 'zum', 'zur', 'to', 'einmal', 'once', 'a', 'nur', 'only', 'von', 'vom', 'from', 'during', 'zwischen', 'between', 'jeweils', 'immer']);
+  'alle', 'allen', 'wiederholen', 'wiederholt', 'wiederholung', 'on', 'the', 'of', 'every', 'each', 'and', 'or', 'at', 'repeat', 'repeats', 'repeating', 'monats', 'month', 'monat', 'mal', 'x', 'times', 'zum', 'zur', 'to', 'einmal', 'once', 'a', 'nur', 'only', 'von', 'vom', 'from', 'during', 'zwischen', 'between', 'jeweils', 'immer',
+  // "Pause" only introduces "3 an, 1 aus" ("pause 3 on 1 off"); the numbers carry the meaning.
+  'pause', 'pausen', 'pausiere', 'pausieren']);
 
 const find = <T,>(table: [RegExp, T][], word: string) => table.find(([pattern]) => pattern.test(word))?.[1];
 const amount = (word: string | undefined) => word === undefined ? undefined : /^\d+$/.test(word) ? Number(word) : numbers[word];
@@ -276,12 +278,12 @@ export const movedBy = (rule: RepeatRule, from: string) => daysBetween(from, rul
 const german = ['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag', 'Sonntag', 'montags', 'dienstags', 'mittwochs', 'donnerstags', 'freitags', 'samstags', 'sonntags',
   'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember',
   'täglich', 'wöchentlich', 'monatlich', 'jährlich', 'werktags', 'Wochenende', 'zweiwöchentlich', 'alle', 'jeden', 'jede', 'jedes', 'Tage', 'Tag', 'Wochen', 'Woche', 'Monate', 'Monat', 'Jahre', 'Jahr',
-  'ersten', 'zweiten', 'dritten', 'vierten', 'letzten', 'Monatsende', 'mal', 'bis', 'für', 'nur', 'von', 'Pause', 'aus', 'Geburtstag',
+  'ersten', 'zweiten', 'dritten', 'vierten', 'letzten', 'Monatsende', 'mal', 'bis', 'für', 'nur', 'von', 'Pause', 'an', 'aus', 'Geburtstag',
   'Karfreitag', 'Ostersonntag', 'Ostermontag', 'Pfingstsonntag', 'Pfingstmontag', 'Christi Himmelfahrt', 'Fronleichnam', 'Rosenmontag', 'Aschermittwoch', 'Gründonnerstag'];
 const english = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday', 'mondays', 'tuesdays', 'wednesdays', 'thursdays', 'fridays', 'saturdays', 'sundays',
   'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December',
   'daily', 'weekly', 'monthly', 'yearly', 'weekdays', 'weekends', 'biweekly', 'every', 'other', 'days', 'day', 'weeks', 'week', 'months', 'month', 'years', 'year',
-  'first', 'second', 'third', 'fourth', 'last', 'times', 'until', 'for', 'only', 'from', 'off', 'birthday', 'Good Friday', 'Easter Monday', 'Easter Sunday', 'Pentecost', 'Whit Monday', 'Ascension Day'];
+  'first', 'second', 'third', 'fourth', 'last', 'times', 'until', 'for', 'only', 'from', 'pause', 'on', 'off', 'birthday', 'Good Friday', 'Easter Monday', 'Easter Sunday', 'Pentecost', 'Whit Monday', 'Ascension Day'];
 
 /** The rest of the word at the end of `text` that would complete it ("jeden Mit" → "twoch"), or "" when none fits. */
 export function completion(text: string, preferred: Language = getLanguage()): string {
@@ -315,7 +317,7 @@ const roles: [RegExp, string][] = [
   [/^(alle|every)$/i, 'alle n Tage/Wochen …'], [/^(jeden|jede|jedes)$/i, 'jede(n) …'], [/^other$/i, 'jede zweite'],
   [/^(ersten|zweiten|dritten|vierten|first|second|third|fourth)$/i, 'Position im Monat'], [/^(letzten|last)$/i, 'letzter … im Monat'],
   [/^monatsende$/i, 'letzter Tag im Monat'], [/^(mal|times)$/i, 'Ende nach n-mal'], [/^(bis|until)$/i, 'Ende an einem Datum'], [/^(für|for)$/i, 'Dauer: für n Wochen …'],
-  [/^(nur|only|von|from)$/i, 'nur in Monaten'], [/^(pause|aus|off)$/i, 'Pause: n an, n aus'], [/^(geburtstag|birthday)$/i, 'jedes Jahr am Datum'],
+  [/^(nur|only|von|from)$/i, 'nur in Monaten'], [/^(pause|an|aus|on|off)$/i, 'Pause: n an, n aus'], [/^(geburtstag|birthday)$/i, 'jedes Jahr am Datum'],
 ];
 const holidayRole = (word: string) => { const offset = find(easterWords, word.toLowerCase()); return offset === undefined ? undefined : `${getLanguage() === 'en' ? 'Holiday · Easter' : 'Feiertag · Ostern'} ${offset === 0 ? '' : offset > 0 ? `+${offset}` : `−${-offset}`}`.trim(); };
 const roleOf = (word: string) => roles.find(([pattern]) => pattern.test(word))?.[1] ?? holidayRole(word) ?? '';
@@ -338,6 +340,12 @@ export function suggestions(text: string, limit = 6, preferred: Language = getLa
   // The other language's words come after the text's own.
   const foreign = new Set(english_ ? german : english);
   const count = /(\d+)\s+$/.exec(before)?.[1];
+  // In a pause ("3 an, 1 aus"): after the first number "an"/"on" comes first, after "n an m" then "aus"/"off".
+  const pauseOff = /(?:^|\s)(?:an|on)\s+\d+\s+(?:(?:tage?|wochen?|days?|weeks?)\s+)?$/i.test(before);
+  const pauseOn = !pauseOff && /\d+\s+(?:(?:tage?|wochen?|days?|weeks?),?\s+)?$/i.test(before);
+  // Elsewhere these short words would otherwise lead the list for a single letter.
+  const pauseBoost = (lower: string) => (pauseOn && (lower === 'an' || lower === 'on')) || (pauseOff && (lower === 'aus' || lower === 'off')) ? -60
+    : ['an', 'on', 'aus', 'off'].includes(lower) && !pauseOn && !pauseOff ? 40 : 0;
   const scored: (Suggestion & { score: number })[] = [];
   for (const [order, word] of words.entries()) {
     const lower = word.toLowerCase();
@@ -345,7 +353,7 @@ export function suggestions(text: string, limit = 6, preferred: Language = getLa
     if (lower.startsWith(typed)) {
       // A plural is the singular with one more letter (Tag/Tage, Woche/Wochen, day/days).
       const plural = count && Number(count) > 1 && words.some(other => other.toLowerCase() === lower.slice(0, -1)) ? -50 : 0;
-      scored.push({ word, description: roleOf(word), matches: [...typed].map((_, index) => index), prefix: true, score: lower.length * 10 + order / 100 + plural + (foreign.has(word) ? 60 : 0) });
+      scored.push({ word, description: roleOf(word), matches: [...typed].map((_, index) => index), prefix: true, score: lower.length * 10 + order / 100 + plural + pauseBoost(lower) + (foreign.has(word) ? 60 : 0) });
       continue;
     }
     if (typed.length < 2) continue;

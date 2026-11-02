@@ -55,6 +55,9 @@ pub struct Day {
     pub date: String, pub title: String, pub body: String, pub revision: i64, pub entries: Vec<Entry>,
     /// Other days changed by a save (planned copies created, edits passed on to linked entries). Empty when loading.
     #[serde(default, skip_serializing_if = "Vec::is_empty")] pub touched: Vec<String>,
+    /// Entries whose edits stay with them in this save instead of reaching their linked entries (an edit made for
+    /// "only this one", see `edit_linked`). Only read when saving.
+    #[serde(default, rename = "keepAlone", skip_serializing)] pub keep_alone: Vec<String>,
 }
 /// A day as the calendar shows it: its title and the entries that live there (traces are left out, their copies count).
 #[derive(Clone, Debug, Serialize)]
@@ -62,6 +65,15 @@ pub struct CalendarDay { pub date: String, pub title: String, pub entries: Vec<E
 /// One entry of a linked group (a trace, its copies, copies planned on again), for choosing which of them an action reaches.
 #[derive(Clone, Debug, Serialize)]
 pub struct LinkedEntry { pub id: String, pub date: String, pub kind: String, pub done: bool, pub cancelled: bool, pub trace: bool, pub series: Option<String> }
+/// An edit made in the calendar, passed on to chosen entries of the same group ("every Tuesday", "all"); see `edit_linked`.
+/// `times` is given when the edit set the time (moved or resized the entry).
+#[derive(Clone, Debug, Deserialize)]
+pub struct LinkedEdit {
+    pub kind: String, pub text: String, #[serde(default)] pub description: String, #[serde(default)] pub tag: Option<String>, pub priority: bool, pub reminder: bool,
+    #[serde(default = "default_true", rename = "showInJournal")] pub show_in_journal: bool, #[serde(default)] pub times: Option<LinkedTimes>,
+}
+#[derive(Clone, Debug, Deserialize)]
+pub struct LinkedTimes { pub time: Option<String>, #[serde(default)] pub end: Option<String> }
 /// `action` is `remove`, `done`, `cancelled` or `open`.
 #[derive(Clone, Debug, Deserialize)]
 pub struct LinkedChange { pub id: String, pub action: String }
@@ -92,6 +104,13 @@ pub struct Store { conn: Connection }
 
 impl Store {
     pub fn interface_language(&self) -> Result<String> { Ok(self.conn.query_row("SELECT value FROM settings WHERE key='ui-language'", [], |row|row.get(0)).optional()?.unwrap_or_else(||"de".into())) }
+    pub fn period_data(&self) -> Result<String> { Ok(self.conn.query_row("SELECT value FROM settings WHERE key='period-data'", [], |row| row.get(0)).optional()?.unwrap_or_else(|| "{}".into())) }
+    pub fn save_period_data(&self, data: &str) -> Result<()> {
+        if data.len() > 10_000_000 { return Err("Periodendaten sind zu groß".into()); }
+        let _: serde_json::Value = serde_json::from_str(data)?;
+        self.conn.execute("INSERT INTO settings(key,value) VALUES('period-data',?1) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [data])?;
+        Ok(())
+    }
     pub fn set_interface_language(&self, language: &str) -> Result<()> { self.conn.execute("INSERT INTO settings(key,value) VALUES('ui-language',?1) ON CONFLICT(key) DO UPDATE SET value=excluded.value",[language])?; Ok(()) }
     /// Export every task and event, including calendar-only entries, without the UI's range limit.
     pub fn export_calendar(&self) -> Result<Vec<CalendarDay>> {
@@ -126,10 +145,10 @@ impl Store {
             } else { e.id.clone() };
             tx.execute("INSERT INTO days(date,title,body,revision) VALUES(?1,'','',1) ON CONFLICT(date) DO NOTHING", [&item.date])?;
             let position: i64 = tx.query_row("SELECT COALESCE(MAX(position)+1,0) FROM entries WHERE day_date=?1", [&item.date], |r| r.get(0))?;
-            tx.execute("INSERT INTO entries(id,day_date,kind,text,done,position,cancelled,priority,time,reminder,plan,end_time,show_in_journal,calendar_uid,description)
-                VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,NULL,?11,?12,?13,?14)
+            tx.execute("INSERT INTO entries(id,day_date,kind,text,done,position,cancelled,priority,time,reminder,plan,end_time,show_in_journal,calendar_uid,description,tag)
+                VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,NULL,?11,?12,?13,?14,(SELECT id FROM tags WHERE id=?15))
                 ON CONFLICT(id) DO UPDATE SET day_date=excluded.day_date,kind=excluded.kind,text=excluded.text,description=excluded.description,done=excluded.done,cancelled=excluded.cancelled,priority=excluded.priority,time=excluded.time,reminder=excluded.reminder,end_time=excluded.end_time,show_in_journal=excluded.show_in_journal,calendar_uid=excluded.calendar_uid,position=CASE WHEN entries.day_date=excluded.day_date THEN entries.position ELSE excluded.position END",
-                params![id,item.date,e.kind,e.text,e.done,position,e.cancelled,e.priority,e.time,e.reminder,e.end,e.show_in_journal,e.calendar_uid,e.description])?;
+                params![id,item.date,e.kind,e.text,e.done,position,e.cancelled,e.priority,e.time,e.reminder,e.end,e.show_in_journal,e.calendar_uid,e.description,e.tag])?;
             // A calendar file knows no tags: the entry keeps its own and passes it on unchanged.
             let mut updated = e; updated.tag = tx.query_row("SELECT tag FROM entries WHERE id=?1", [&id], |r| r.get(0))?; updated.id = id;
             sync_linked(&tx, &updated, &mut touched)?;
@@ -277,7 +296,7 @@ impl Store {
     }
     pub fn load(&self, date: &str) -> Result<Day> {
         validate_date(date)?;
-        let mut day = self.conn.query_row("SELECT title, body, revision FROM days WHERE date = ?1", [date], |r| Ok(Day { date: date.into(), title: r.get(0)?, body: r.get(1)?, revision: r.get(2)?, entries: vec![], touched: vec![] })).optional()?.unwrap_or(Day { date: date.into(), title: String::new(), body: String::new(), revision: 0, entries: vec![], touched: vec![] });
+        let mut day = self.conn.query_row("SELECT title, body, revision FROM days WHERE date = ?1", [date], |r| Ok(Day { date: date.into(), title: r.get(0)?, body: r.get(1)?, revision: r.get(2)?, entries: vec![], touched: vec![], keep_alone: vec![] })).optional()?.unwrap_or(Day { date: date.into(), title: String::new(), body: String::new(), revision: 0, entries: vec![], touched: vec![], keep_alone: vec![] });
         let mut stmt = self.conn.prepare_cached("SELECT e.id, e.kind, e.text, e.done, e.cancelled, e.priority, e.time, e.reminder, e.plan, e.end_time, e.show_in_journal, e.calendar_uid, e.series, s.rule, s.horizon, e.description, e.tag
             FROM entries e LEFT JOIN series s ON s.id = e.series WHERE e.day_date = ?1 ORDER BY e.position")?;
         let rows = stmt.query_map([date], |r| Ok((Entry { id:r.get(0)?, kind:r.get(1)?, text:r.get(2)?, done:r.get(3)?, cancelled:r.get(4)?, priority:r.get(5)?, time:r.get(6)?, end:r.get(9)?, reminder:r.get(7)?, plan:None, origin:None, show_in_journal:r.get(10)?, calendar_uid:r.get(11)?, description:r.get(15)?, tag:r.get(16)?, repeat:None }, r.get::<_, Option<String>>(8)?, (r.get(12)?, r.get(13)?, r.get(14)?))))?;
@@ -423,7 +442,7 @@ impl Store {
                 for date in &dates { add_copy(&tx, date, &Uuid::new_v4().to_string(), &copy, repeating)?; touched.insert(date.clone()); }
             }
         }
-        for id in &edited {
+        for id in edited.iter().filter(|id| !day.keep_alone.contains(id)) {
             let entry = day.entries.iter().find(|entry| &entry.id == id).expect("edited entries come from this day");
             sync_linked(&tx, entry, &mut changed)?;
         }
@@ -453,6 +472,31 @@ impl Store {
     /// Removes entries or sets the status of tasks on other days in one go (an action reaching linked entries).
     /// Traces keep no status. Returns the days that changed. A series whose occurrences from some day on were all removed
     /// (the following ones of an occurrence) ends the day before, so that no new ones follow when its horizon moves on.
+    /// Gives the chosen entries (of one group, on other days) the same kind, text, details and – when moved – times as an
+    /// entry edited in the calendar. Traces stay as they are; a task becoming an event or note loses its state.
+    pub fn edit_linked(&mut self, ids: &[String], edit: &LinkedEdit) -> Result<Vec<String>> {
+        let times = edit.times.as_ref();
+        if !matches!(edit.kind.as_str(), "task" | "event" | "note") || edit.text.len() > 20_000
+            || times.is_some_and(|times| !valid_time(&times.time) || !valid_span(&times.time, &times.end) || (edit.kind == "note" && times.time.is_some())) {
+            return Err("Ungültige Änderung".into());
+        }
+        let tx = self.conn.transaction()?;
+        let mut touched = BTreeSet::new();
+        {
+            let mut update = tx.prepare_cached("UPDATE entries SET kind=?2, text=?3, description=?4, tag=(SELECT id FROM tags WHERE id=?5), priority=?6, reminder=?7, show_in_journal=?8,
+                done=CASE WHEN ?2='task' THEN done ELSE 0 END, cancelled=CASE WHEN ?2='task' THEN cancelled ELSE 0 END,
+                time=CASE WHEN ?9 THEN ?10 ELSE time END, end_time=CASE WHEN ?9 THEN ?11 ELSE end_time END WHERE id=?1 AND plan IS NULL RETURNING day_date")?;
+            for id in ids {
+                let reminder = edit.reminder && edit.kind != "note";
+                let date: Option<String> = update.query_row(params![id, edit.kind, edit.text, edit.description, edit.tag, edit.priority, reminder, edit.show_in_journal,
+                    times.is_some(), times.and_then(|times| times.time.clone()), times.and_then(|times| times.end.clone())], |r| r.get(0)).optional()?;
+                touched.extend(date);
+            }
+            for date in &touched { tx.execute("UPDATE days SET revision=revision+1 WHERE date=?1", [date])?; }
+        }
+        tx.commit()?;
+        Ok(touched.into_iter().collect())
+    }
     pub fn change_linked(&mut self, changes: &[LinkedChange]) -> Result<Vec<String>> {
         let tx = self.conn.transaction()?;
         let mut touched = BTreeSet::new();
@@ -1012,6 +1056,30 @@ mod tests {
         }
         assert_eq!(db.linked(&db.load("2026-10-30").unwrap().entries[1].id).unwrap().len(), 1, "An unrelated entry is alone.");
     }
+    #[test] fn calendar_edits_reach_only_the_chosen_linked_entries() {
+        let mut db = store();
+        let (trace, targets) = planned(&mut db, "2026-10-28", "task", &["2026-10-29", "2026-11-05", "2026-11-12"]);
+        // "Only this one": the edit stays with the entry instead of reaching the others.
+        let mut first = db.load("2026-10-29").unwrap();
+        first.entries[0].text = "Nur hier".into(); first.entries[0].time = Some("10:00".into()); first.keep_alone = vec![first.entries[0].id.clone()];
+        assert!(db.save(first).unwrap().touched.is_empty());
+        assert_eq!(db.load("2026-11-05").unwrap().entries[0].text, "Beispiel");
+        // "Every Thursday" (or all): the chosen ones get kind, text, details and times; the trace stays as it is.
+        let edit = LinkedEdit { kind: "event".into(), text: "Donnerstags".into(), description: "Raum 2".into(), tag: Some("unbekannt".into()), priority: true, reminder: true, show_in_journal: true,
+            times: Some(LinkedTimes { time: Some("09:15".into()), end: Some("10:30".into()) }) };
+        let changed = db.edit_linked(&[targets[1].clone(), targets[2].clone(), trace.clone()], &edit).unwrap();
+        assert_eq!(changed, vec!["2026-11-05".to_string(), "2026-11-12".to_string()]);
+        let moved = &db.load("2026-11-12").unwrap().entries[0];
+        assert_eq!((moved.kind.as_str(), moved.text.as_str(), moved.description.as_str(), moved.tag.as_deref(), moved.time.as_deref(), moved.end.as_deref()), ("event", "Donnerstags", "Raum 2", None, Some("09:15"), Some("10:30")));
+        assert!(moved.priority && moved.reminder);
+        assert_eq!(db.load("2026-10-29").unwrap().entries[0].text, "Nur hier");
+        assert_eq!(db.load("2026-10-28").unwrap().entries[0].kind, "task", "Traces are left alone.");
+        // Without times the time stays; a note cannot take one.
+        db.edit_linked(&[targets[1].clone()], &LinkedEdit { times: None, text: "Ohne Zeit".into(), ..edit.clone() }).unwrap();
+        assert_eq!(db.load("2026-11-05").unwrap().entries[0].time.as_deref(), Some("09:15"));
+        assert!(db.edit_linked(&[targets[1].clone()], &LinkedEdit { kind: "note".into(), ..edit.clone() }).is_err());
+        assert!(db.edit_linked(&[targets[1].clone()], &LinkedEdit { times: Some(LinkedTimes { time: Some("10:00".into()), end: Some("09:00".into()) }), ..edit }).is_err());
+    }
     #[test] fn changes_reach_chosen_linked_entries_and_mark_their_days() {
         let mut db = store();
         let (trace, targets) = planned(&mut db, "2026-10-28", "task", &["2026-10-29", "2026-10-30", "2026-10-31"]);
@@ -1134,6 +1202,12 @@ mod tests {
         db.import_calendar(vec![CalendarImport { date: "2026-11-02".into(), entry: item }]).unwrap();
         let loaded = &db.load("2026-11-02").unwrap().entries[0];
         assert_eq!((loaded.text.as_str(), loaded.tag.as_deref()), ("Neu", Some(work.id.as_str())));
+    }
+    #[test] fn calendar_import_stores_the_tag_of_a_new_entry() {
+        let mut db = store(); let payment = tag("Bezahlung", "#76d982"); db.save_tags(&[payment.clone()]).unwrap();
+        let mut item = entry("event"); item.calendar_uid = Some("mail:payment".into()); item.tag = Some(payment.id.clone());
+        db.import_calendar(vec![CalendarImport { date: "2026-11-02".into(), entry: item }]).unwrap();
+        assert_eq!(db.load("2026-11-02").unwrap().entries[0].tag.as_deref(), Some(payment.id.as_str()));
     }
     #[test] fn time_and_reminder_on_the_same_day_round_trip() {
         let mut db = store(); let mut day = db.load("2026-10-28").unwrap();

@@ -1,0 +1,187 @@
+/* Period notes use the same tab strip, separators and quiet controls as the journal. */
+.journal-tabs { display:flex; align-items:stretch; min-width:0; overflow-x:auto; scrollbar-width:none; }
+.journal-tabs::-webkit-scrollbar { display:none; }
+.journal-tab { position:relative; display:flex; flex:none; align-items:center; gap:7px; padding:0 16px; border:0; border-right:1px solid var(--divider); background:transparent; color:var(--muted); font:12px var(--sans); cursor:pointer; }
+.journal-tab .icon { width:14px; height:14px; }
+.journal-tab:hover { color:var(--text); background:var(--hover); }
+.journal-tab[aria-current=page] { background:var(--background); color:var(--strong); }
+.journal-tab[aria-current=page]::after { content:''; position:absolute; bottom:0; left:14px; right:14px; height:2px; background:var(--accent); }
+.period-section { --activity-color:var(--accent); padding: 28px 0 48px; }
+.period-section > .document-header { margin-bottom:32px; }
+.period-section > .document-header h1 { font-size:clamp(22px, 4vw, 32px); }
+.period-section > .section-heading { margin-bottom:20px; padding-bottom:16px; }
+.period-section h3 { margin:32px 0 12px; padding-bottom:12px; color:var(--strong); border-bottom:1px solid var(--surface); font-size:14px; font-weight:600; }
+.period-section p { color:var(--muted); font-size:13px; line-height:1.6; }
+.period-section textarea { min-width:0; color:var(--text); background:transparent; border:1px solid var(--divider); border-radius:4px; padding:8px 10px; font:12px var(--sans); }
+.period-section :is(input, textarea):focus-visible { outline:1px solid var(--accent); outline-offset:1px; }
+.period-section :is(input, textarea)::placeholder { color:var(--placeholder); }
+.period-range { display:none; }
+.period-note { display:grid; gap:10px; color:var(--muted); font-size:12px; font-weight:600; }
+.period-section .period-note textarea { width:100%; min-height:120px; resize:vertical; font:14px/1.6 var(--write); }
+.journal-tab { gap:7px; }
+@container journal (max-width:600px) { .journal-tab { padding:0 8px; gap:5px; } }
+
+/* Daily rating */
+.period-rating { display:block; padding:8px 0 28px; color:var(--text); font-size:13px; }
+.rating-heading { display:flex; align-items:center; justify-content:space-between; margin-bottom:18px; }
+.rating-heading label { font:13px var(--write); }
+.rating-heading output { color:var(--accent); font:24px var(--write); font-variant-numeric:tabular-nums; }
+.rating-heading output small { color:var(--muted); font:12px var(--mono); }
+.period-section input[type=range] { appearance:none; -webkit-appearance:none; width:100%; height:20px; padding:0; border:0; cursor:pointer; background:transparent; }
+.period-section input[type=range]::-webkit-slider-runnable-track { height:4px; border-radius:4px; background:var(--focus); }
+.period-section input[type=range]::-webkit-slider-thumb { appearance:none; width:16px; height:16px; margin-top:-6px; border-radius:50%; border:3px solid var(--background); background:var(--accent); box-shadow:0 0 0 1px var(--accent); transition:box-shadow 150ms; }
+.period-section input[type=range]:hover::-webkit-slider-thumb { box-shadow:0 0 0 1px var(--accent),0 0 0 6px color-mix(in srgb,var(--accent) 12%,transparent); }
+.rating-scale { display:flex; justify-content:space-between; gap:8px; margin-top:8px; color:var(--muted); font:11px var(--sans); }
+.rating-scale button { background:transparent; border:0; padding:0; color:var(--muted); font:inherit; cursor:pointer; } .rating-scale button:hover:not(:disabled) { color:var(--text); } .rating-scale button:disabled { opacity:.35; cursor:default; }
+@container journal (max-width:600px) { .rating-scale { font-size:10px; } }
+
+/* Section headings between rating, checklist and analytics. */
+.checklist-section-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; margin:28px 0 12px; padding:20px 0 14px; border-top:1px solid var(--divider); }
+.checklist-section-heading h3 { margin:0; padding:0; border:0; font:600 14px var(--sans); color:var(--strong); }
+.checklist-section-heading p { margin:5px 0 0; font-size:12px; }
+.checklist-manage { display:flex; align-items:center; gap:6px; flex:none; padding:6px 8px; border:0; border-radius:5px; background:transparent; color:var(--muted); font:12px var(--sans); cursor:pointer; }
+.checklist-manage .icon { width:14px; height:14px; } .checklist-manage:hover { color:var(--text); background:var(--surface); }
+.period-section .checklist-empty { margin:0; padding:18px; border:1px dashed var(--divider); border-radius:6px; }
+@container journal (max-width:600px) { .checklist-section-heading { align-items:flex-start; } }
+
+/* Checklist rows read like journal entries: a 30px symbol slot, the name in the writing font, quiet chips at the end.
+   Every row has the same height whichever fields an activity shows; the order is set in the settings. */
+.period-list { display:grid; margin-top:4px; }
+.period-item { position:relative; display:flex; flex-wrap:wrap; align-items:center; column-gap:10px; min-height:36px; padding:3px 0; border-radius:6px; }
+.activity-label { display:flex; flex:0 1 auto; align-items:center; gap:10px; min-width:0; max-width:45%; color:var(--text); cursor:pointer; }
+.activity-name { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:14px/24px var(--write); transition:color var(--normal) ease; }
+.period-item[data-done] .activity-name { color:var(--muted); }
+.activity-checkbox { position:relative; display:grid; place-items:center; flex:none; width:30px; height:30px; border-radius:6px; transition:background-color var(--fast) ease; }
+.activity-label:hover .activity-checkbox { background:var(--surface); }
+.activity-checkbox input[type=checkbox] { appearance:none; -webkit-appearance:none; display:block; width:16px; height:16px; margin:0; border-radius:4px; background:transparent; box-shadow:inset 0 0 0 1.5px color-mix(in srgb,var(--activity-color) 70%,transparent); cursor:pointer; transition:background-color var(--fast) ease, box-shadow var(--fast) ease; }
+.activity-checkbox input[type=checkbox]:hover { box-shadow:inset 0 0 0 1.5px var(--activity-color); }
+.activity-checkbox input[type=checkbox]:checked { background:var(--activity-color); box-shadow:inset 0 0 0 1.5px var(--activity-color); animation:icon-pop 380ms var(--spring); }
+.activity-checkbox input[type=checkbox]:focus-visible { outline:2px solid var(--activity-color); outline-offset:2px; }
+.activity-check-mark.icon { position:absolute; left:50%; top:50%; width:12px; height:12px; margin:-6px 0 0 -6px; color:var(--background); stroke-width:2.2; pointer-events:none; opacity:0; transform:scale(.4); transition:opacity var(--fast) ease, transform 240ms var(--spring); }
+.activity-checkbox input:checked + .activity-check-mark { opacity:1; transform:none; }
+.activity-entry-fields { display:flex; flex:1 1 0; align-items:center; justify-content:flex-end; gap:8px; min-width:0; }
+.period-item .activity-note-input { flex:1; min-width:60px; height:28px; padding:0 8px; border:0; border-radius:6px; background:transparent; color:var(--muted); font:13px var(--write); transition:background-color var(--fast) ease, color var(--fast) ease; }
+.period-item .activity-note-input:hover { background:color-mix(in srgb,var(--surface) 55%,transparent); }
+.period-item .activity-note-input:focus { outline:none; background:var(--surface); color:var(--text); }
+/* Minutes and the running clock use the entry time chip. */
+.activity-time, .activity-timer output { flex:none; display:flex; align-items:center; gap:5px; height:24px; padding:0 8px; border-radius:999px; color:var(--activity-color); box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--activity-color) 25%,transparent); font:12px var(--mono); font-variant-numeric:tabular-nums; }
+.activity-time { cursor:text; }
+.activity-time:hover, .activity-time:focus-within { background:var(--surface); }
+.activity-time .icon { width:12px; height:12px; }
+.activity-time > span { color:var(--muted); }
+.period-item .activity-time input[type=number] { width:4ch; padding:0; border:0; background:transparent; color:var(--text); font:inherit; text-align:right; appearance:textfield; }
+.activity-time input:focus-visible { outline:none; }
+.activity-time input::-webkit-inner-spin-button, .activity-time input::-webkit-outer-spin-button { -webkit-appearance:none; margin:0; }
+.activity-time input:disabled { color:var(--muted); }
+.activity-time:has(input:disabled) { cursor:default; opacity:.6; }
+.activity-timer { display:contents; }
+.activity-timer output { animation:chip-in 360ms var(--spring) backwards; }
+.activity-timer[data-running] output { background:color-mix(in srgb,var(--activity-color) 12%,transparent); }
+.activity-timer-actions { display:flex; flex:none; gap:2px; }
+.activity-timer-actions button, .activity-settings-order button { display:grid; place-items:center; width:26px; height:26px; padding:0; border:0; border-radius:6px; background:transparent; color:var(--muted); cursor:pointer; transition:background-color var(--fast) ease, color var(--fast) ease, opacity var(--fast) ease; }
+.activity-timer-actions .icon { width:13px; height:13px; }
+.activity-timer-actions button:hover:not(:disabled) { color:var(--activity-color); background:var(--surface); }
+.activity-timer-actions button:disabled { opacity:.3; cursor:default; }
+.activity-timer .error { flex-basis:100%; margin:4px 0 6px 40px; }
+.activity-settings-order .icon { width:13px; height:13px; }
+.activity-settings-order button:hover:not(:disabled) { background:var(--surface); color:var(--text); }
+.activity-settings-order button:disabled { opacity:.25; cursor:default; }
+/* Checked by calendar time: it stays checked while that time exists. */
+.activity-checkbox input[aria-disabled=true] { cursor:default; }
+@container journal (max-width:600px) {
+ .activity-label { flex:1 1 auto; max-width:none; }
+ .activity-entry-fields { order:1; flex-basis:100%; justify-content:flex-start; padding:0 0 4px 40px; }
+ .activity-entry-fields:empty { display:none; }
+}
+
+/* Ratings chart */
+.rating-chart { padding:14px 14px 6px 8px; background:color-mix(in srgb,var(--surface) 35%,var(--background)); border:1px solid var(--divider); border-radius:8px; }
+.rating-chart svg { display:block; width:100%; overflow:visible; }
+.rating-chart-detail { padding:0 8px 10px; color:var(--muted); font:11px var(--mono); min-height:24px; }
+.chart-grid { stroke:var(--divider); stroke-width:1; stroke-dasharray:3 5; }
+.chart-label { fill:var(--muted); font:10px var(--sans); }
+.chart-column { fill:var(--accent); opacity:.65; transition:opacity 150ms; } .chart-column.is-active { opacity:1; } .chart-column[data-empty] { fill:var(--focus); }
+.chart-hit { fill:transparent; cursor:pointer; } .chart-hit:focus-visible { outline:1px solid var(--accent); outline-offset:-1px; }
+.rating-summary { font-variant-numeric:tabular-nums; }
+
+/* Activity summaries */
+.activity-summary-grid { display:grid; gap:18px; }
+.activity-summary-card { min-width:0; padding:18px 20px 12px; border:1px solid var(--divider); border-radius:8px; background:color-mix(in srgb,var(--surface) 25%,var(--background)); }
+.activity-summary-card header { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+.activity-summary-card h4 { display:flex; align-items:center; gap:8px; margin:0; color:var(--strong); font:500 14px var(--write); }
+.activity-summary-card h4 i { height:8px; width:8px; border-radius:50%; background:var(--activity-color); }
+.activity-metrics { display:flex; flex-direction:column; gap:5px; text-align:right; }
+.activity-metrics strong { display:flex; align-items:center; justify-content:flex-end; gap:6px; color:var(--activity-color); font:500 17px var(--write); }
+.activity-metrics .icon { width:14px; height:14px; }
+.activity-metrics > span { color:var(--muted); font:11px var(--mono); }
+.activity-timeline { display:grid; grid-auto-flow:column; grid-auto-columns:minmax(24px,1fr); gap:6px; overflow-x:auto; padding-top:20px; }
+.activity-timeline.is-week { grid-template-columns:repeat(7,minmax(0,1fr)); }
+.activity-timeline-day { min-width:0; display:grid; justify-items:center; gap:6px; border-radius:4px; }
+.activity-timeline-day:focus-visible { outline:1px solid var(--activity-color); outline-offset:-1px; }
+.activity-day-value { color:var(--muted); font:10px var(--mono); min-height:13px; }
+.activity-day-track { position:relative; display:flex; align-items:flex-end; height:56px; width:100%; max-width:38px; background:transparent; border-bottom:1px solid var(--divider); border-radius:0; overflow:hidden; }
+.activity-day-track > span { width:100%; background:var(--activity-color); opacity:.65; border-radius:3px 3px 0 0; min-height:0; }
+.activity-timeline-day:hover .activity-day-track > span { opacity:1; }
+.activity-day-label { color:var(--muted); font:11px var(--sans); }
+.period-section .activity-unit { font:10px var(--sans); color:var(--muted); margin:10px 0 0; text-align:right; }
+@container journal (max-width:600px) { .activity-summary-card { padding:14px; } }
+
+/* Activity settings */
+.activity-settings-list { display:grid; gap:12px; margin:20px 0; }
+.activity-settings-row { position:relative; padding:14px; border:1px solid var(--divider); border-radius:7px; }
+.activity-settings-row.is-inactive { opacity:.65; }
+.activity-settings-name { display:flex; align-items:center; gap:10px; padding-right:50px; }
+.activity-settings-name input, .activity-settings-add input { width:100%; min-width:0; border:0; border-bottom:1px solid var(--divider); background:transparent; padding:7px 0; color:var(--text); font:13px var(--write); }
+.activity-settings-order { position:absolute; right:12px; top:20px; display:flex; gap:2px; }
+.activity-settings-order button { width:23px; height:25px; border-radius:4px; }
+.activity-options { display:flex; gap:15px; flex-wrap:wrap; margin-top:12px; }
+.activity-options label { display:flex; align-items:center; gap:5px; color:var(--muted); font:12px var(--sans); }
+.activity-settings-row { --activity-color:var(--accent); }
+.activity-options label { cursor:pointer; }
+.activity-options .activity-checkbox { width:20px; height:20px; border-radius:4px; }
+.activity-options > label > .icon { width:13px; height:13px; }
+.activity-settings-add { display:flex; gap:10px; }
+.activity-settings-add button { border:1px solid var(--divider); border-radius:4px; padding:7px 10px; background:var(--surface); color:var(--text); font:12px var(--sans); cursor:pointer; }
+.activity-settings-add button:disabled { opacity:.4; cursor:default; }
+
+/* Obsidian-style contribution graphs: calendar month, Monday-first week columns thereafter. */
+.activity-summary-grid.is-month, .activity-summary-grid.is-quarter { grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr)); align-items:start; }
+.activity-heatmap { margin-top:20px; min-width:0; }
+.heatmap-scroll { overflow-x:auto; overscroll-behavior-x:contain; padding:3px 2px 6px; }
+.heatmap-grid { display:grid; gap:4px; align-items:center; }
+.is-calendar .heatmap-grid { grid-template-columns:repeat(7,minmax(0,1fr)); grid-auto-rows:26px; }
+.is-contributions .heatmap-grid { grid-template-columns:26px repeat(var(--heatmap-columns),minmax(8px,1fr)); grid-template-rows:18px repeat(7,11px); min-width:calc(26px + var(--heatmap-columns) * 11px); gap:3px; }
+.heatmap-weekday, .heatmap-month { color:var(--muted); font:10px var(--sans); user-select:none; }
+.is-calendar .heatmap-weekday { text-align:center; }
+.heatmap-month { white-space:nowrap; align-self:start; }
+.heatmap-cell { display:grid; place-items:center; width:100%; height:100%; padding:0; border:1px solid var(--divider); border-radius:3px; background:var(--surface); color:var(--muted); cursor:pointer; font:10px var(--mono); transition:box-shadow 120ms; }
+.heatmap-cell[data-level]:not([data-level='0']) { border-color:transparent; }
+.heatmap-cell:hover { box-shadow:0 0 0 1px var(--text); }
+.heatmap-cell:focus-visible { outline:2px solid var(--accent); outline-offset:1px; z-index:1; }
+.period-section .heatmap-detail { min-height:32px; margin:8px 0; font:11px/1.5 var(--sans); overflow-wrap:anywhere; }
+.activity-palette { display:flex; align-items:center; justify-content:flex-end; gap:7px; color:var(--muted); font:10px var(--sans); flex-wrap:wrap; }
+.activity-palette-swatches { display:flex; gap:3px; }
+.activity-palette-swatches > span { display:block; width:12px; height:12px; border-radius:2px; }
+.activity-palette.is-preview { justify-content:flex-start; margin:15px 0; gap:10px; }
+.activity-palette.is-preview .activity-palette-swatches { gap:4px; }
+.activity-palette.is-preview .activity-palette-swatches > span { width:22px; height:20px; border-radius:3px; }
+.activity-palette.is-preview > small { flex-basis:100%; font:11px/1.5 var(--sans); }
+.period-section .heatmap-binary-legend { display:flex; align-items:center; justify-content:flex-end; gap:6px; margin:0; font:10px var(--sans); }
+.heatmap-binary-legend i { width:12px; height:12px; border-radius:2px; }
+@container journal (max-width:600px) { .activity-summary-grid.is-month, .activity-summary-grid.is-quarter { grid-template-columns:1fr; } }
+
+/* Pixel theme: square boxes with a hard offset shadow, the terminal face at the entries' sizes, crisp marks. */
+:root[data-theme='pixel'] .activity-name { font-size:16px; }
+:root[data-theme='pixel'] .period-item .activity-note-input { font-size:16px; }
+:root[data-theme='pixel'] :is(.activity-time, .activity-timer output) { font-size:14px; }
+:root[data-theme='pixel'] .rating-heading label { font-size:16px; }
+:root[data-theme='pixel'] .rating-heading output { font-size:30px; }
+:root[data-theme='pixel'] .activity-checkbox input[type=checkbox] { width:16px; height:16px; box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--activity-color) 70%,transparent), 2px 2px 0 var(--border); }
+:root[data-theme='pixel'] .activity-checkbox input[type=checkbox]:hover { box-shadow:inset 0 0 0 2px var(--activity-color), 2px 2px 0 var(--border); }
+:root[data-theme='pixel'] .activity-checkbox input[type=checkbox]:checked { box-shadow:inset 0 0 0 2px var(--activity-color), 2px 2px 0 color-mix(in srgb,var(--activity-color) 35%,var(--background)); }
+:root[data-theme='pixel'] .activity-check-mark.icon { width:12px; height:12px; }
+:root[data-theme='pixel'] .activity-checkbox input:checked + .activity-check-mark { transform:none; }
+:root[data-theme='pixel'] :is(.activity-time, .activity-timer output) { box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--activity-color) 45%,transparent); }
+:root[data-theme='pixel'] .period-item .activity-note-input:focus { box-shadow:inset 0 0 0 1px var(--edge); }
+:root[data-theme='pixel'] .period-section input[type=range]::-webkit-slider-thumb { border-radius:0; border-width:2px;box-shadow:0 0 0 2px var(--accent), 2px 2px 0 2px var(--border); }
+:root[data-theme='pixel'] .period-section input[type=range]::-webkit-slider-runnable-track { height:4px; background:repeating-linear-gradient(90deg,var(--focus) 0 6px,transparent 6px 8px); }

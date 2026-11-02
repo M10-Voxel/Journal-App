@@ -47,3 +47,51 @@
 :root[data-theme='pixel'] .cal-now-row span { font-size: 13px; }
 :root[data-theme='pixel'] .toolbar .date-picker-button { font-size: 15px; }
 :root[data-theme='pixel'] .entry-symbol .icon { image-rendering: pixelated; }
+/* Pixel scrollbars: a wide square thumb in the accent tone on a dark track, stepped arrows at the ends. The standard
+   scrollbar-width/-color would win over these in Chromium, so they are reset first. */
+:root[data-theme='pixel'], :root[data-theme='pixel'] * { scrollbar-width: auto; scrollbar-color: auto; }
+:root[data-theme='pixel'] ::-webkit-scrollbar { width: 14px; height: 14px; background: var(--background); }
+:root[data-theme='pixel'] ::-webkit-scrollbar-track { background: var(--background); box-shadow: inset 2px 0 0 var(--border); }
+:root[data-theme='pixel'] ::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--accent) 45%, var(--surface)); border: 2px solid var(--background); }
+:root[data-theme='pixel'] ::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--accent) 65%, var(--surface)); }
+:root[data-theme='pixel'] ::-webkit-scrollbar-thumb:active { background: var(--accent); }
+:root[data-theme='pixel'] ::-webkit-scrollbar-corner { background: var(--background); }
+:root[data-theme='pixel'] ::-webkit-scrollbar-button { display: none; }
+:root[data-theme='pixel'] ::-webkit-scrollbar-button:vertical:start:decrement, :root[data-theme='pixel'] ::-webkit-scrollbar-button:vertical:end:increment, :root[data-theme='pixel'] ::-webkit-scrollbar-button:horizontal:start:decrement, :root[data-theme='pixel'] ::-webkit-scrollbar-button:horizontal:end:increment {
+  display: block; width: 14px; height: 14px; background-color: var(--background); background-repeat: no-repeat; background-image: linear-gradient(var(--muted), var(--muted)), linear-gradient(var(--muted), var(--muted)), linear-gradient(var(--muted), var(--muted)); }
+:root[data-theme='pixel'] ::-webkit-scrollbar-button:vertical:start:decrement { background-size: 2px 2px, 6px 2px, 10px 2px; background-position: 6px 4px, 4px 6px, 2px 8px; }
+:root[data-theme='pixel'] ::-webkit-scrollbar-button:vertical:end:increment { background-size: 10px 2px, 6px 2px, 2px 2px; background-position: 2px 4px, 4px 6px, 6px 8px; }
+:root[data-theme='pixel'] ::-webkit-scrollbar-button:horizontal:start:decrement { background-size: 2px 2px, 2px 6px, 2px 10px; background-position: 4px 6px, 6px 4px, 8px 2px; }
+:root[data-theme='pixel'] ::-webkit-scrollbar-button:horizontal:end:increment { background-size: 2px 10px, 2px 6px, 2px 2px; background-position: 4px 2px, 6px 4px, 8px 6px; }
+/* Motion in square steps, like an old screen: every animation and transition jumps in a few frames instead of gliding,
+   and animations a little faster than in the standard theme (one duration for all; staggering delays stay). The long,
+   repeating ones keep their own pace below, only in steps. */
+:root[data-theme='pixel'] *, :root[data-theme='pixel'] *::before, :root[data-theme='pixel'] *::after {
+  animation-duration: 160ms !important; animation-timing-function: steps(8, end) !important;
+  /* Transitions only change how they move: a global duration would give every element transitions on all properties. */
+  transition-timing-function: steps(6, end) !important;
+}
+:root[data-theme='pixel'] .cal-item-time.is-scrolling span { animation-duration: var(--duration) !important; animation-timing-function: steps(48, end) !important; }
+:root[data-theme='pixel'] .planner-day.is-pending { animation-duration: 1.2s !important; }
+:root[data-theme='pixel'] .status-dot.just-saved { animation-duration: 900ms !important; }
+:root[data-theme='pixel'] .reminder-icon > .icon { animation-duration: 500ms !important; animation-timing-function: steps(12, end) !important; }
+/* Removing from the orbit: the question unrolls out of the trash square in square steps (the standard rounded clip
+   would snap to square only at its end). */
+:root[data-theme='pixel'] .scope-choice.is-satellite { animation: scope-extend-pixel 180ms steps(8, end); animation-duration: 180ms !important; animation-timing-function: steps(8, end) !important; }
+@keyframes scope-extend-pixel { from { clip-path: inset(0 calc(100% - 30px) 0 0); } to { clip-path: inset(0); } }
+/* Orbit: the smooth stroke becomes a ring of square pixels whose arcs appear clockwise in quick steps. The satellites
+   and clusters keep their path but move in a fraction of the standard time (the springs would crawl in steps). */
+.dock-orbit-pixel { display: none; }
+:root[data-theme='pixel'] .actions-orbit .dock-orbit circle { display: none; }
+:root[data-theme='pixel'] .actions-orbit .dock-orbit-pixel { display: initial; fill: var(--hover); shape-rendering: crispEdges; }
+:root[data-theme='pixel'] .actions-orbit .dock-orbit-pixel path { opacity: 0; transition: opacity 0s; }
+:root[data-theme='pixel'] .actions-orbit .is-open .dock-orbit-pixel path { opacity: 1; transition-delay: calc(var(--i) * 10ms); }
+:root[data-theme='pixel'] .actions-orbit .dock-satellite { transition-duration: 90ms, 60ms, 0s, 0s, 0s; }
+:root[data-theme='pixel'] .actions-orbit .is-open .dock-satellite {
+  transition-duration: 120ms, 40ms, 0s, 0s, 0s;
+  transition-delay: calc(var(--i, 0) * 15ms), calc(var(--i, 0) * 15ms), 0s, 0s, 0s; }
+:root[data-theme='pixel'] .actions-orbit :is(.dock-planning, .dock-kind) { transition-duration: 90ms, 60ms; }
+:root[data-theme='pixel'] .actions-orbit .is-open :is(.dock-planning, .dock-kind) { transition-duration: 120ms, 40ms; transition-delay: 60ms; }
+:root[data-theme='pixel'] .actions-orbit .is-open .dock-kind { transition-delay: 30ms; }
+:root[data-theme='pixel'] .actions-orbit .entry-dock-shell { transition-delay: 100ms; }
+:root[data-theme='pixel'] .actions-orbit .entry-dock-shell.is-open { transition-delay: 0s; }

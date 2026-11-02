@@ -56,7 +56,7 @@ test('real ML outputs retain both ends of written clock ranges, including bare h
 test('clock range completion requires ML context and never joins alternative times', () => {
   const sample = structuredClone(samples.find(item=>item.id==='range-mixed'));
   sample.mentions = sample.mentions.filter(item=>item.field==='date');
-  assert.equal(extractModelEvents(sample,'',reference,'2026-10-31').events.length,0, 'A date alone is not an event/time anchor.');
+  assert.equal(extractModelEvents(sample,'',reference,'2026-10-31').events[0].time,null, 'A date alone creates an all-day entry without interpreting the numeric range as a clock.');
   sample.text = 'Treffen morgen, die Kosten betragen 20 bis 21 Euro.';
   sample.mentions = [['event','Treffen'],['date','morgen']].map(([field,text])=>({field,text,start:sample.text.indexOf(text),end:sample.text.indexOf(text)+text.length,score:.99}));
   assert.equal(extractModelEvents(sample,'',reference,'2026-10-31').events[0].time,null, 'Unrelated numeric ranges do not become clocks.');

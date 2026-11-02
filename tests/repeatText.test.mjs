@@ -81,9 +81,9 @@ test('only in some months', () => {
 });
 
 test('pauses and ends', () => {
-  assert.equal(says('montags, 3 Wochen an, 1 Woche aus'), 'Wöchentlich am Mo · 3 an, 1 Woche aus');
-  assert.equal(says('mondays 3 weeks on 1 week off'), 'Wöchentlich am Mo · 3 an, 1 Woche aus');
-  assert.equal(says('täglich 5 an 2 aus'), 'Täglich · 5 an, 2 Tage aus');
+  assert.equal(says('montags, 3 Wochen an, 1 Woche aus'), 'Wöchentlich am Mo · 3 Wochen an, 1 Woche aus');
+  assert.equal(says('mondays 3 weeks on 1 week off'), 'Wöchentlich am Mo · 3 Wochen an, 1 Woche aus');
+  assert.equal(says('täglich 5 an 2 aus'), 'Täglich · 5 Tage an, 2 Tage aus');
   assert.equal(says('täglich, 10 mal'), 'Täglich · 10×');
   assert.equal(says('daily 7 times'), 'Täglich · 7×');
   assert.equal(says('täglich 10x'), 'Täglich · 10×');
@@ -134,4 +134,18 @@ test('suggestions like an editor: beginnings first, then letters in order, with 
   assert.deepEqual(suggestions('jeden mtw').find(item => item.word === 'Mittwoch').matches, [0, 2, 4]);
   assert.equal(suggestions('Karf')[0].description, 'Feiertag · Ostern −2');
   assert.deepEqual(suggestions('alle 3 '), []);
+});
+
+test('pauses are written "3 an, 1 aus" (optionally after "Pause"), and completed in that order', () => {
+  const current = { start: '2026-11-02', unit: 'week', every: 1 };
+  for (const text of ['jeden Montag 3 an 1 aus', 'jeden Montag Pause 3 an 1 aus', 'every monday pause 3 on 1 off']) {
+    const parsed = parseRepeat(text, current);
+    assert.deepEqual(parsed.rule.pause, { on: 3, off: 1, unit: 'week' }, text);
+    assert.deepEqual(parsed.unknown, [], `${text}: "Pause" only introduces the pattern`);
+  }
+  assert.equal(suggestions('jeden Montag 3 a', 6, 'de')[0].word, 'an');
+  assert.equal(suggestions('jeden Montag 3 Wochen an 1 a', 6, 'de')[0].word, 'aus');
+  assert.equal(suggestions('every monday 3 o', 6, 'en')[0].word, 'on');
+  assert.equal(suggestions('every monday 3 on 1 o', 6, 'en')[0].word, 'off');
+  assert.notEqual(suggestions('jeden a', 6, 'de')[0].word, 'an', 'Outside a pause the short words come later.');
 });

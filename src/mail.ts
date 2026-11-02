@@ -46,6 +46,17 @@ export function mailText(html: string): string {
       return n > 0 && n <= 0x10ffff ? String.fromCodePoint(n) : '';
     }).replace(/[\t ]+/g, ' ').replace(/\n\s*\n/g, '\n').trim();
 }
+/** Keep the original wording: the local classifier does not generate summaries. */
+export function mailDescription(content: string): string {
+  const lines: string[] = [];
+  for (const line of content.split(/\r?\n/)) {
+    if (/^\s*(?:Am .+schrieb .+:|On .+wrote:|[- ]*(?:Original Message|Ursprüngliche Nachricht|Weitergeleitete Nachricht)[- ]*)\s*$/i.test(line)) break;
+    if (/^\s*>/.test(line)) continue;
+    lines.push(line.trim());
+  }
+  const text = lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  return text.length > 2000 ? `${text.slice(0, 1999).trimEnd()}…` : text;
+}
 function validDate(year: number, month: number, day: number): string | null {
   const value = new Date(year, month - 1, day, 12);
   return value.getFullYear() === year && value.getMonth() === month - 1 && value.getDate() === day ? `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}` : null;
@@ -61,12 +72,13 @@ function isoParts(value: string): { date: string; time: string | null } | null {
 export async function recognizeMail({ account, message }: MailPending, today = localDate(), analyzer?: MailAnalyzer): Promise<{ candidates: MailCandidate[]; notice: string }> {
   if (message.notice) return { candidates: [], notice: message.notice };
   const candidates: MailCandidate[] = [], notices: string[] = [];
+  const description = mailDescription(message.text || mailText(message.html));
   const base = { accountId: account.id, messageKey: message.key, subject: message.subject, sender: message.sender, sentAt: message.sentAt };
   async function add(item: CalendarImport, identity: string, evidence: string, automatic: boolean) {
     if (item.date < today || candidates.length >= 200) return;
     const calendarUid = `mail:${account.id}:${await hash(identity)}`;
     if (candidates.some(candidate => candidate.entry.calendarUid === calendarUid)) return;
-    const entry: Entry = { ...item.entry, id: await uuid(calendarUid), calendarUid, text: item.entry.text.slice(0, 2000), showInJournal: false, reminder: false };
+    const entry: Entry = { ...item.entry, description: [item.entry.description?.trim(), description].filter(Boolean).filter((value, index, all) => all.indexOf(value) === index).join('\n\n'), id: await uuid(calendarUid), calendarUid, text: item.entry.text.slice(0, 2000), showInJournal: false, reminder: false };
     candidates.push({ ...base, date: item.date, entry, id: await uuid(`${message.key}:${calendarUid}`), evidence: evidence.slice(0, 4000), automatic });
   }
   const event = (text: string, time: string | null, end: string | null): Entry => ({ id: '', kind: 'event', text, time, end: time && end && end > time ? end : null, done: false, cancelled: false, priority: false, reminder: false, plan: null });

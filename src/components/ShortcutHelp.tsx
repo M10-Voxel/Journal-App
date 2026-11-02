@@ -12,7 +12,7 @@ import type { IconName } from './Icon';
 export const shortcutGroups = (): { id: string; title: string; icon: IconName; items: [keys: string, label: string][] }[] => ([
   { id: 'days', title: t("Tage"), icon: 'journal', items: [
     ['Alt+←', t("Vorheriger Tag")], ['Alt+→', t("Nächster Tag")], ['Alt+H', t("Heute")], ['Strg+G', t("Gehe zu Datum (Mini-Kalender)")],
-    [t("~Wischen / ⇧+~Mausrad"), t("Tag zurück / weiter")], ['Strg+S', t("Sofort speichern (sonst von selbst)")], ['Strg+,', t("Einstellungen")], ['F1 / ?', t("Diese Übersicht")],
+    [t("~Wischen / ⇧+~Mausrad"), t("Tag zurück / weiter")], ['Strg+,', t("Einstellungen")], ['F1 / ?', t("Diese Übersicht")],
   ] },
   { id: 'entries', title: t("Einträge"), icon: 'task', items: [
     ['Alt+A', t("Neue Aufgabe")], ['Alt+E', t("Neues Ereignis")], ['Alt+N', t("Neue Notiz")],

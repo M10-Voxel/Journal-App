@@ -5,7 +5,8 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { invoke } from '@tauri-apps/api/core';
 import { emit, listen } from '@tauri-apps/api/event';
 import { Day, Entry, EntryKind, formatDate, journal, localDate, shiftDate, weekDates } from './journal';
-import type { CalendarImport, LinkedAction, Reminder } from './journal';
+import type { CalendarImport, LinkedAction, LinkedEdit, Reminder } from './journal';
+import type { ScopeOption } from './planning';
 import { ReminderPopup, ReminderToasts, chime } from './components/ReminderToasts';
 import { Icon } from './components/Icon';
 import { EntryChange, JournalEntry, entryLabels } from './components/JournalEntry';
@@ -15,10 +16,13 @@ import { ShortcutHelp } from './components/ShortcutHelp';
 import { SettingsDialog } from './components/SettingsDialog';
 import type { SettingsTab } from './components/SettingsDialog';
 import { TagFilter } from './components/TagFilter';
-import { manageTags, useHiddenTags, useTags } from './tagStore';
+import { manageTags, saveTags, useHiddenTags, useTags } from './tagStore';
+import { ensureMailTags } from './mailTags';
 import { filterKey, isShown, tagOf, tagRank } from './tags';
 import { useMailImport } from './components/useMailImport';
 import { MailImportToast } from './components/MailImportToast';
+import { PeriodNotes } from './components/PeriodNotes';
+import type { Mode } from './components/PeriodNotes';
 import { Settings, applyTheme, loadSettings, saveSettings } from './settings';
 import { ThemeSync } from './components/ThemeSync';
 import { adjacentText, focusText, titleInput } from './components/focus';
@@ -56,7 +60,14 @@ applyColors(loadSettings());
 setLanguage(loadSettings().language);
 
 // Bold and italic would otherwise load on first use, briefly rendering a fallback of a different width under the caret.
-for (const face of ['400 13px Lilex', 'italic 400 13px Lilex', '700 13px Lilex', 'italic 700 13px Lilex']) void document.fonts.load(face);
+// A single document.fonts.load is not enough: the built page links the stylesheet after this script, and the browser
+// rebuilds its font faces when styles are added later (CodeMirror), loading again only faces in use. A hidden line in
+// each face keeps all four in use.
+const fontWarmup = document.createElement('div');
+fontWarmup.className = 'font-warmup';
+fontWarmup.setAttribute('aria-hidden', 'true');
+fontWarmup.innerHTML = '<span>a</span><i>a</i><b>a</b><b><i>a</i></b>';
+document.body.append(fontWarmup);
 
 // Tests stretch the wait (window.__journalAutosaveDelay) to count saves themselves.
 const autosaveDelay = () => (window as { __journalAutosaveDelay?: number }).__journalAutosaveDelay ?? 700;
@@ -70,7 +81,10 @@ function useStableCallback<A extends unknown[], R>(callback: (...args: A) => R):
 }
 
 function App() {
-  useLanguage();
+  const language = useLanguage();
+  const [periodMode, setPeriodMode] = useState<Mode>('day');
+  // Mail tags follow the language; they are created by the first mail import that needs them.
+  useEffect(() => { void saveTags(current => ensureMailTags(current, language, false)).catch(() => {}); }, [language]);
   const [date, setDate] = useState(localDate);
   const [day, setDay] = useState<Day | null>(null);
   const [dirty, setDirty] = useState(false);
@@ -214,13 +228,26 @@ function App() {
   });
   // Stepping a day back or forth (buttons, Alt ←/→, swiping) slides the new day in from that side.
   const stepDay = useStableCallback((amount: 1 | -1) => { if (navigate(shiftDate(date, amount))) setSlide(amount > 0 ? 'next' : 'prev'); });
-  const swipeDays = useWheelSwipe(stepDay);
+  const stepPeriod = (amount: 1 | -1) => {
+    if (periodMode === 'day') { stepDay(amount); return; }
+    if (periodMode === 'week') { navigate(shiftDate(date, amount * 7)); return; }
+    const [year, month, day] = date.split('-').map(Number);
+    const count = periodMode === 'month' ? 1 : periodMode === 'quarter' ? 3 : 12;
+    const first = new Date(year, month - 1 + amount * count, 1, 12);
+    const last = new Date(first.getFullYear(), first.getMonth() + 1, 0, 12).getDate();
+    navigate(localDate(new Date(first.getFullYear(), first.getMonth(), Math.min(day, last), 12)));
+  };
+  const mainRef = useRef<HTMLElement>(null);
+  useWheelSwipe(stepPeriod, { root:mainRef, ignore:'.entry-dock-shell, .planner' });
   // Saving does not lock the editor: edits made while the request is running stay in place and remain unsaved.
   // The journal saves by itself shortly after the last change (like the calendar does at once); Ctrl+S saves right away.
   const save = useStableCallback(async () => {
     if (!day || !ready || busyRef.current) return false;
     if (!dirty) return true;
-    const snapshot = day;
+    // Edits chosen for "only this one" in the calendar stay with their entries in this save.
+    const alone = [...keepAlone.current];
+    keepAlone.current.clear();
+    const snapshot = alone.length ? { ...day, keepAlone: alone } : day;
     const editsAtStart = editCount.current;
     busyRef.current = true;
     setBusy(true);
@@ -238,6 +265,12 @@ function App() {
     catch (reason) { setError(t("Speichern fehlgeschlagen: {0}", String(reason))); pendingNavigation.current = null; return false; }
     finally { busyRef.current = false; setBusy(false); }
   });
+  // Saving is automatic; the UI checks ask for an immediate save (to count saves) with this event.
+  useEffect(() => {
+    const now = () => { void save(); };
+    window.addEventListener('journal:save-now', now);
+    return () => window.removeEventListener('journal:save-now', now);
+  }, []);
   const pendingNavigation = useRef<string | null>(null);
   const closing = useRef<(() => Promise<void>) | null>(null);
   const errorRef = useRef(error);
@@ -257,6 +290,7 @@ function App() {
   // Entries made in the calendar are saved at once. On the day shown here they join the editor (with any unsaved edits
   // of that day, which are saved along); other days are changed directly in the store.
   const pendingSave = useRef(false);
+  const keepAlone = useRef(new Set<string>());
   useEffect(() => { if (pendingSave.current && !busy && ready) { pendingSave.current = false; void save(); } }, [day, busy]);
   const createFromCalendar = useStableCallback(async (target: string, made: NewEntry) => {
     const entry: Entry = { id: crypto.randomUUID(), kind: made.kind, text: made.text, description: made.description, tag: made.tag ?? null, done: false, cancelled: false, priority: made.priority, time: made.time, end: made.end, reminder: made.reminder, showInJournal: made.showInJournal, plan: null, repeat: made.repeat ?? null };
@@ -295,10 +329,25 @@ function App() {
   const mailStatus = useMailImport(importFromCalendar);
 
   // Editing or removing an entry from the calendar works the same way: on the day shown here through the editor, elsewhere in the store.
-  const editFromCalendar = useStableCallback(async (target: string, id: string, change: EntryEdit) => {
-    if (target === date && ready) { changeEntry(id, change); pendingSave.current = true; return; }
-    const stored = await journal.load(target);
-    await journal.save({ ...stored, entries: stored.entries.map(entry => entry.id === id ? { ...entry, ...change } : entry) });
+  // With a scope (ScopeChoice "only this / every Tuesday / all"), the edit stays with this entry when saved and reaches
+  // exactly the chosen others; without one (an entry with no linked ones), saving passes text and kind on as usual.
+  const editFromCalendar = useStableCallback(async (target: string, id: string, change: EntryEdit, scope?: ScopeOption) => {
+    const alone = scope ? [id] : [];
+    if (target === date && ready) { changeEntry(id, change); for (const one of alone) keepAlone.current.add(one); pendingSave.current = true; }
+    else {
+      const stored = await journal.load(target);
+      await journal.save({ ...stored, entries: stored.entries.map(entry => entry.id === id ? { ...entry, ...change } : entry), keepAlone: alone });
+    }
+    if (!scope?.others.length || !change.kind) return;
+    const edit: LinkedEdit = { kind: change.kind, text: change.text ?? '', description: change.description ?? '', tag: change.tag ?? null, priority: Boolean(change.priority),
+      reminder: Boolean(change.reminder), showInJournal: change.showInJournal !== false, ...'time' in change ? { times: { time: change.time ?? null, end: change.end ?? null } } : {} };
+    const here = scope.others.filter(other => other.date === date && ready);
+    const same: EntryEdit = { kind: edit.kind, text: edit.text, description: edit.description, tag: edit.tag, priority: edit.priority, reminder: edit.reminder, showInJournal: edit.showInJournal,
+      ...edit.times ? { time: edit.times.time, end: edit.times.end } : {}, ...edit.kind === 'task' ? {} : { done: false, cancelled: false } };
+    for (const other of here) changeEntry(other.id, same);
+    if (here.length) { for (const other of here) keepAlone.current.add(other.id); pendingSave.current = true; }
+    const elsewhere = scope.others.filter(other => !here.includes(other)).map(other => other.id);
+    if (elsewhere.length) await journal.editLinked(elsewhere, edit);
   });
   const removeFromCalendar = useStableCallback(async (target: string, id: string, others: { id: string; date: string }[] = []) => {
     if (target === date && ready) { removeEntry(id); pendingSave.current = true; }
@@ -348,8 +397,7 @@ function App() {
     const alt = event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey;
     const ctrl = event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey;
     const kinds: Record<string, EntryKind> = { KeyA: 'task', KeyE: 'event', KeyN: 'note' };
-    if (ctrl && event.code === 'KeyS') save();
-    else if (event.key === 'F1' || (event.key === '?' && !typing && !event.ctrlKey && !event.altKey)) setHelp(open => !open);
+    if (event.key === 'F1' || (event.key === '?' && !typing && !event.ctrlKey && !event.altKey)) setHelp(open => !open);
     else if (ctrl && event.key === ',') { setSettingsTab('appearance'); setSettingsOpen(open => !open); }
     else if (ctrl && event.code === 'KeyG') setDatePickerOpen(open => !open);
     else if (help || settingsOpen || datePickerOpen) return;
@@ -413,14 +461,14 @@ function App() {
     </aside>
 
     {/* Swiping sideways on a trackpad, or Shift + wheel, turns the day; entries that are swiped themselves keep the gesture. */}
-    <main className="main" onWheel={event => { if (!(event.target as Element).closest('.entry-dock-shell, .planner')) swipeDays(event); }}>
+    <main className="main" ref={mainRef}>
       <header className="topbar" onMouseDown={event => {
         if (event.button !== 0 || (event.target as Element).closest('button, input, [role="dialog"]')) return;
         event.preventDefault();
         const window = getCurrentWindow();
         void (event.detail === 2 ? window.toggleMaximize() : window.startDragging()).catch(reason => setError(t("Fensteraktion fehlgeschlagen: {0}", String(reason))));
       }}>
-        <div className="document-tab"><Icon name="journal" /><span>{t("Tagesjournal")}</span>{dirty && <span className="unsaved-dot" aria-label={t("Ungespeicherte Änderungen")} />}</div>
+        <nav className="journal-tabs" aria-label={language === 'en' ? 'Journal views' : 'Journalansichten'}>{(['day', 'week', 'month', 'quarter', 'year'] as Mode[]).map((mode, index) => <button type="button" key={mode} className="journal-tab" aria-current={periodMode === mode ? 'page' : undefined} onClick={() => setPeriodMode(mode)}><Icon name={({ day: 'journal', week: 'week', month: 'month', quarter: 'quarter', year: 'year' } as const)[mode]} /><span>{(language === 'en' ? ['Day', 'Week', 'Month', 'Quarter', 'Year'] : ['Tag', 'Woche', 'Monat', 'Quartal', 'Jahr'])[index]}</span>{index === 0 && dirty && <span className="unsaved-dot" aria-label={t("Ungespeicherte Änderungen")} />}</button>)}</nav>
         <div className="titlebar-space" />
         {/* Settings sit with the window's own controls, where Zed and most apps keep them. */}
         <button type="button" className="titlebar-button settings-button" data-mail-count={mailStatus.count || undefined} aria-label={t("Einstellungen")} aria-keyshortcuts="Control+," title={t("Einstellungen · Strg ,")} onClick={() => openSettings()}><Icon name="settings" /></button>
@@ -428,21 +476,21 @@ function App() {
       </header>
       {/* Like the calendar's toolbar (and Zed's under its tabs): turning the days first, then what is shown. */}
       <div className="toolbar">
-        <NavCluster label={t("Tagesnavigation")} prev={{ label: t("Vorheriger Tag"), tip: t("Vorheriger Tag · Alt ←") }} next={{ label: t("Nächster Tag"), tip: t("Nächster Tag · Alt →") }}
-          today={{ tip: t("Heute · Alt H"), disabled: date === today }} atToday={date === today} onPrev={() => stepDay(-1)} onToday={() => navigate(today)} onNext={() => stepDay(1)} />
+        <NavCluster label={periodMode === 'day' ? t("Tagesnavigation") : language === 'en' ? 'Period navigation' : 'Zeitraumnavigation'} prev={{ label: periodMode === 'day' ? t("Vorheriger Tag") : language === 'en' ? 'Previous period' : 'Vorheriger Zeitraum', tip: periodMode === 'day' ? t("Vorheriger Tag · Alt ←") : language === 'en' ? 'Previous period' : 'Vorheriger Zeitraum' }} next={{ label: periodMode === 'day' ? t("Nächster Tag") : language === 'en' ? 'Next period' : 'Nächster Zeitraum', tip: periodMode === 'day' ? t("Nächster Tag · Alt →") : language === 'en' ? 'Next period' : 'Nächster Zeitraum' }}
+          today={{ tip: t("Heute · Alt H"), disabled: date === today }} atToday={date === today} onPrev={() => stepPeriod(-1)} onToday={() => navigate(today)} onNext={() => stepPeriod(1)} />
         <MiniCalendarPicker date={date} open={datePickerOpen} onOpenChange={setDatePickerOpen} onPick={navigate} buttonRef={datePickerButtonRef} />
-        <div className="toolbar-end"><TagFilter label={t("Tags im Journal")} hidden={hiddenTags} onChange={next => { setNewEntryId(null); setHiddenTags(next); }} /></div>
+        <div className="toolbar-end">{periodMode === 'day' && <TagFilter label={t("Tags im Journal")} hidden={hiddenTags} onChange={next => { setNewEntryId(null); setHiddenTags(next); }} />}</div>
       </div>
 
       <div className="scroll" ref={scrollRef}>
         <div className="content">
-          <div className={`document-header${slide ? ` slide-${slide}` : ''}`} key={`header-${date}`}>
+          {periodMode === 'day' && <><div className={`document-header${slide ? ` slide-${slide}` : ''}`}>
             <div className="eyebrow">{t("Tagesnotiz")}{date === today && <span className="today-label">{t("Heute")}</span>}</div>
             <h1>{formatDate(date)}</h1>
           </div>
           {error && <div className="error" role="alert">{error}</div>}
           {!ready && !error && <p className="loading" role="status">{t("Tagesnotiz wird geöffnet …")}</p>}
-          {ready && <div className={`editor${slide ? ` slide-${slide}` : ''}`} key={day.date}>
+          {ready && <div className={`editor${slide ? ` slide-${slide}` : ''}`}>
             <label className="visually-hidden" htmlFor="title">{t("Titel des Tages")}</label>
             <input id="title" className="title-input" placeholder={t("Gib deinem Tag einen Namen …")} value={day.title}
               onKeyDown={event => { if ((event.key === 'Enter' || event.key === 'ArrowDown') && !event.altKey && !event.shiftKey && focusText(adjacentText(null, 1), 'end')) event.preventDefault(); }} onChange={event => { const title = event.target.value; update(current => ({ ...current, title })); }} />
@@ -469,13 +517,14 @@ function App() {
                 />)}
               </div>
             </section>
-          </div>}
+          </div>}</>}
+          <PeriodNotes date={date} mode={periodMode} onManage={() => openSettings('activities')} onImport={importFromCalendar} />
         </div>
       </div>
 
       <footer className="statusbar">
         <div className={`save-status${dirty ? ' is-dirty' : ''}`} role="status"><span key={savedCount} className={`status-dot${savedCount && !dirty ? ' just-saved' : ''}`} />{busy ? t("Wird gespeichert …") : dirty ? (error ? t("Nicht gespeichert") : t("Wird gleich gespeichert …")) : ready ? t("Gespeichert") : t("Wird geöffnet …")}</div>
-        <div className="statusbar-actions"><button type="button" className="help-button" aria-label={t("Tastenkürzel")} aria-keyshortcuts="F1" onClick={() => setHelp(true)}><span>?</span><kbd>F1</kbd></button><span className="toolbar-separator" /><span className="status-count">{entryCount} {entryCount === 1 ? t("Eintrag") : t("Einträge")}</span><span className="toolbar-separator" /><button type="button" className="save" disabled={!ready || !dirty || busy} onClick={() => { void save(); }}><Icon name="save" /><span>{t("Speichern")}</span><kbd>{t("Strg S")}</kbd></button></div>
+        <div className="statusbar-actions"><button type="button" className="help-button" aria-label={t("Tastenkürzel")} aria-keyshortcuts="F1" onClick={() => setHelp(true)}><span>?</span><kbd>F1</kbd></button><span className="toolbar-separator" /><span className="status-count">{entryCount} {entryCount === 1 ? t("Eintrag") : t("Einträge")}</span></div>
       </footer>
     </main>
     <ReminderToasts reminders={reminders} today={today} snoozeMinutes={10}

@@ -16,6 +16,15 @@ pub const BROWSER_ARGS: &str = "--disable-features=msWebOOUI,msPdfOOUI,msSmartSc
 pub fn browser_args() -> String { std::env::var("JOURNAL_BROWSER_ARGS").map_or_else(|_| BROWSER_ARGS.to_string(), |extra| format!("{BROWSER_ARGS} {extra}")) }
 static QUITTING: AtomicBool = AtomicBool::new(false);
 
+#[tauri::command]
+fn load_period_data(store: tauri::State<'_, Mutex<Store>>) -> Result<String, String> {
+    store.lock().map_err(|e| e.to_string())?.period_data().map_err(|e| e.to_string())
+}
+#[tauri::command]
+fn save_period_data(data: String, store: tauri::State<'_, Mutex<Store>>) -> Result<(), String> {
+    store.lock().map_err(|e| e.to_string())?.save_period_data(&data).map_err(|e| e.to_string())
+}
+
 /// Brings the journal window back (from the background, minimised or behind others).
 fn show_main(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") { let _ = window.unminimize(); let _ = window.show(); let _ = window.set_focus(); }
@@ -83,6 +92,14 @@ async fn load_linked(id: String, store: tauri::State<'_, Mutex<Store>>) -> Resul
 #[tauri::command]
 async fn change_linked(app: tauri::AppHandle, changes: Vec<LinkedChange>, store: tauri::State<'_, Mutex<Store>>) -> Result<Vec<String>, String> {
     let touched = store.lock().map_err(|_| "Speicher ist gesperrt".to_string())?.change_linked(&changes).map_err(|e| e.to_string())?;
+    let _ = app.emit("journal:changed", &touched);
+    Ok(touched)
+}
+
+/// Passing an edit made in the calendar on to chosen entries of its group; the calendars hear which days changed.
+#[tauri::command]
+async fn edit_linked(app: tauri::AppHandle, ids: Vec<String>, edit: storage::LinkedEdit, store: tauri::State<'_, Mutex<Store>>) -> Result<Vec<String>, String> {
+    let touched = store.lock().map_err(|_| "Speicher ist gesperrt".to_string())?.edit_linked(&ids, &edit).map_err(|e| e.to_string())?;
     let _ = app.emit("journal:changed", &touched);
     Ok(touched)
 }
@@ -207,6 +224,6 @@ fn main() {
         .on_window_event(|window, event| {
             if window.label() == "main" && matches!(event, tauri::WindowEvent::Destroyed) { window.app_handle().exit(0); }
         })
-        .invoke_handler(tauri::generate_handler![ui_language::set_ui_language, load_day, load_range, save_day, load_linked, change_linked, load_series, extend_series, load_tags, save_tags, snooze_reminder, quit_app, popup_reminders, fit_popup, reminder_action, background_hint, open_window, show_day, export_calendar, import_calendar, read_calendar_file, write_calendar_file, mail::mail_accounts, mail::mail_save, mail::mail_cancel, mail::mail_sync, mail::mail_remove, mail::mail_pending, mail::mail_stage, mail::mail_candidates, mail::mail_resolve, mail::mail_enabled, mail::mail_notices, mail::mail_help, mail::ml::mail_ml_status, mail::ml::mail_ml_enabled, mail::ml::mail_ml_install, mail::ml::mail_ml_analyze])
+        .invoke_handler(tauri::generate_handler![load_period_data, save_period_data, ui_language::set_ui_language, load_day, load_range, save_day, load_linked, change_linked, edit_linked, load_series, extend_series, load_tags, save_tags, snooze_reminder, quit_app, popup_reminders, fit_popup, reminder_action, background_hint, open_window, show_day, export_calendar, import_calendar, read_calendar_file, write_calendar_file, mail::mail_accounts, mail::mail_save, mail::mail_cancel, mail::mail_sync, mail::mail_remove, mail::mail_pending, mail::mail_stage, mail::mail_candidates, mail::mail_resolve, mail::mail_enabled, mail::mail_notices, mail::mail_help, mail::ml::mail_ml_status, mail::ml::mail_ml_enabled, mail::ml::mail_ml_install, mail::ml::mail_ml_analyze])
         .run(tauri::generate_context!()).expect("Journal konnte nicht gestartet werden");
 }

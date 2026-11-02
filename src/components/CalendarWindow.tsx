@@ -6,6 +6,7 @@ import { monthGrid, shiftDate } from '../dates';
 import { plainText } from '../markdown';
 import { shortTitle, CalendarView, calendarViews, durationOf, formatDuration, formatMonthName, isoWeek, layoutTimed, minutesOf, orderForCalendar, shiftView, slotMinutes, snapMinutes, snapRange, viewDates, viewRange, viewTitle } from '../calendar';
 import { formatEnd, timeOfMinutes } from '../planning';
+import type { ScopeOption } from '../planning';
 import { CalendarComposer } from './CalendarComposer';
 import type { Draft, EntryEdit, NewEntry } from './CalendarComposer';
 import { CalendarItem, CompactMonth, EditInCalendar, OpenInJournal, dayLabel, entrySymbol, openInJournal, useCalendarData, useJournalDate, useNow } from './calendarShared';
@@ -51,7 +52,7 @@ type Editing = { entry: Entry; date: string; element: HTMLElement };
 export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, onEdit, onRemove, onExport, onImport, embedded = false, autoFocus = false }: {
   onExport?: () => Promise<CalendarDay[]>; onImport?: (entries: CalendarImport[]) => Promise<void>;
   journalDate: string | null; onOpen: (date: string, entry?: string) => void; embedded?: boolean; autoFocus?: boolean;
-  onCreate?: (date: string, entry: NewEntry) => Promise<void>; onEdit?: (date: string, id: string, change: EntryEdit) => Promise<void>; onRemove?: (date: string, id: string, others: { id: string; date: string }[]) => Promise<void>;
+  onCreate?: (date: string, entry: NewEntry) => Promise<void>; onEdit?: (date: string, id: string, change: EntryEdit, scope?: ScopeOption) => Promise<void>; onRemove?: (date: string, id: string, others: { id: string; date: string }[]) => Promise<void>;
 }) {
   useLanguage();
   const [prefs, setPrefs] = useState(loadPrefs);
@@ -84,7 +85,7 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
   // Timed entries in a time grid are edited there, as a range that can be moved and resized; all others in place.
   const gridDates = view === 'week' || view === 'workweek' || view === 'day' ? viewDates(view, date) : [];
   const inGrid = editing?.entry.time && gridDates.includes(editing.date) ? editing : null;
-  const save = async (change: EntryEdit) => { if (editing) { await onEdit!(editing.date, editing.entry.id, change); setEditing(null); refocus(); } };
+  const save = async (change: EntryEdit, scope?: ScopeOption) => { if (editing) { await onEdit!(editing.date, editing.entry.id, change, scope); setEditing(null); refocus(); } };
   const remove = async (others: { id: string; date: string }[]) => { if (editing) { await onRemove!(editing.date, editing.entry.id, others); setEditing(null); refocus(); } };
   const editContext = { edit: onEdit ? (entry: Entry, value: string, element: HTMLElement) => setEditing({ entry, date: value, element }) : null, editingId: editing?.entry.id ?? null };
 
@@ -95,7 +96,7 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
   // A day clicked in any view opens its note in the journal; the calendar goes there too.
   const openDay = (value: string) => { go(value); onOpen(value); };
   const step = (amount: 1 | -1) => { setSlide(amount > 0 ? 'next' : 'prev'); setDate(shiftView(view, date, amount)); };
-  const swipe = useWheelSwipe(step);
+  useWheelSwipe(step, { root:rootRef, ignore:'.cal-viewbar, .cal-toolbar, .cal-composer' });
   function onKeyDown(event: KeyboardEvent) {
     if ((event.target as Element).closest('input, .cal-composer')) return;
     if (event.defaultPrevented || event.ctrlKey || event.altKey || event.metaKey) return;
@@ -134,8 +135,8 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
         </div>
       </header>
       {error && <div className="cal-error" role="alert">{error}</div>}
-      <div className="cal-body" key={view} onWheel={swipe}>
-        <div className={`cal-page${slide ? ` slide-${slide}` : ''}`} key={pageKey}>
+      <div className="cal-body">
+        <div className={`cal-page${slide ? ` slide-${slide}` : ''}`}>
           {view === 'year' && <YearView date={date} today={today} journalDate={journalDate} days={visibleDays} entriesOn={entriesOn} onDay={openDay} onMonth={value => show('month', value)} />}
           {view === 'month' && <MonthView date={date} today={today} journalDate={journalDate} days={visibleDays} entriesOn={entriesOn} onDay={openDay} onMore={value => show('day', value)} onWeek={value => show('week', value)} />}
           {(view === 'week' || view === 'workweek' || view === 'day') && <div className="cal-split">
@@ -187,13 +188,14 @@ function MonthView({ date, today, journalDate, days, entriesOn, onDay, onMore, o
   const grid = monthGrid(month);
   const gridRef = useRef<HTMLDivElement>(null);
   const [lines, setLines] = useState(3);
+  // The grid is a new element for every month (its key); the old one, once removed, would measure 0 and hide all entries.
   useLayoutEffect(() => {
     const element = gridRef.current;
     if (!element) return;
-    const observer = new ResizeObserver(([entry]) => setLines(Math.max(0, Math.floor((entry.contentRect.height / 6 - 30) / 20))));
+    const observer = new ResizeObserver(([entry]) => { if (entry.contentRect.height) setLines(Math.max(0, Math.floor((entry.contentRect.height / 6 - 30) / 20))); });
     observer.observe(element);
     return () => observer.disconnect();
-  }, []);
+  }, [month]);
   return <div className="cal-month">
     <div className="cal-month-head" aria-hidden="true"><span>{t("KW")}</span>{weekdayNames().map((name, index) => <span key={name} className={weekendClass('', index)}>{name}</span>)}</div>
     <div className="cal-month-grid" ref={gridRef} key={month}>
@@ -235,7 +237,7 @@ type Gesture = { mode: 'new' | 'start' | 'end' | 'move'; column: HTMLElement; da
 function TimeGrid({ dates, today, now, journalDate, entriesOn, onDay, onCreate, newTag, editing, onEditEnd, onSave, onRemove }: {
   newTag?: string | null; dates: string[]; today: string; now: Date; journalDate: string | null; entriesOn: (date: string) => Entry[]; onDay: (date: string) => void;
   onCreate?: (date: string, entry: NewEntry) => Promise<void>;
-  editing: Editing | null; onEditEnd: (byKey: boolean) => void; onSave: (change: EntryEdit) => Promise<void>; onRemove: (others: { id: string; date: string }[]) => Promise<void>;
+  editing: Editing | null; onEditEnd: (byKey: boolean) => void; onSave: (change: EntryEdit, scope?: ScopeOption) => Promise<void>; onRemove: (others: { id: string; date: string }[]) => Promise<void>;
 }) {
   useLanguage();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -302,6 +304,9 @@ function TimeGrid({ dates, today, now, journalDate, entriesOn, onDay, onCreate, 
     scrollAnchor.current = 4;
     if (scrollRef.current) restoreStart(scrollRef.current, hourHeight);
     setDraft(null);
+    setMarking(false);
+    gesture.current = null;
+    cancelAnimationFrame(frame.current);
   }, [dates[0], dates.length]);
   useEffect(() => () => cancelAnimationFrame(frame.current), []);
   // Editing a timed entry shows it as a marked range over its block: moved, resized and saved like a new one.
@@ -450,7 +455,7 @@ function TimeGrid({ dates, today, now, journalDate, entriesOn, onDay, onCreate, 
     </div>
     {draft && !marking && onCreate && (editing && draft.date === editing.date
       ? <CalendarComposer key={editing.entry.id} date={draft.date} draft={draft} entry={editing.entry} anchor={() => selectionRef.current?.getBoundingClientRect() ?? null} onChange={setDraft}
-        onCancel={byKey => { setDraft(null); onEditEnd(byKey); }} onSave={async change => { await onSave(change); setDraft(null); }} onRemove={async others => { await onRemove(others); setDraft(null); }} />
+        onCancel={byKey => { setDraft(null); onEditEnd(byKey); }} onSave={async (change, scope) => { await onSave(change, scope); setDraft(null); }} onRemove={async others => { await onRemove(others); setDraft(null); }} />
       : <CalendarComposer key={`new-${draft.date}`} date={draft.date} draft={draft} tag={newTag} anchor={() => selectionRef.current?.getBoundingClientRect() ?? null} onChange={setDraft}
         onCancel={byKey => { setDraft(null); if (byKey) refocus(); }} onCreate={async entry => { await onCreate(draft.date, entry); setDraft(null); refocus(); }} />)}
   </div>;

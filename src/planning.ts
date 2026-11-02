@@ -135,8 +135,26 @@ export function pickedDays(range: { from: string; to: string } | null, toggled: 
 
 /** Removing, finishing or cancelling an entry that belongs to a linked group may reach more of it. */
 export type ScopeAction = 'remove' | 'done' | 'cancelled';
-export type Scope = 'this' | 'following' | 'all';
-export interface ScopeOption { scope: Scope; others: Pick<LinkedEntry, 'id' | 'date'>[] }
+/** What ScopeChoice asks about: one of those actions, or applying an edit made in the calendar. */
+export type ChoiceAction = ScopeAction | 'edit';
+export type Scope = 'this' | 'following' | 'weekday' | 'all';
+export interface ScopeOption { scope: Scope; others: Pick<LinkedEntry, 'id' | 'date'>[]; weekday?: number }
+
+/**
+ * The choices for applying an edit made in the calendar (moved, text, kind …) within the entry's group: only this one,
+ * every one on the same weekday (e.g. every Tuesday), or all. Traces are left out; a choice reaching nothing more than
+ * the one before is not offered, so a single choice means there is nothing to ask.
+ */
+export function editScopes(group: readonly LinkedEntry[], id: string, date: string): ScopeOption[] {
+  const weekdayOf = (value: string) => (new Date(`${value}T12:00`).getDay() + 6) % 7;
+  const others = group.filter(item => item.id !== id && !item.trace).map(({ id, date }) => ({ id, date }));
+  const weekday = weekdayOf(date);
+  const same = others.filter(item => weekdayOf(item.date) === weekday);
+  const options: ScopeOption[] = [{ scope: 'this', others: [] }];
+  if (same.length && same.length < others.length) options.push({ scope: 'weekday', others: same, weekday });
+  if (others.length) options.push({ scope: 'all', others });
+  return options;
+}
 /**
  * The choices an action on `id` offers within its linked group (in date order): only this entry, also the following
  * ones, and – when removing or cancelling – all of them, the earlier ones included. Only choices that reach more than
@@ -152,6 +170,13 @@ export function linkedScopes(group: readonly LinkedEntry[], id: string, action: 
   const following = pick(group.slice(index + 1)), earlier = pick(group.slice(0, index));
   const options: ScopeOption[] = [{ scope: 'this', others: [] }];
   if (following.length) options.push({ scope: 'following', others: following });
+  // Removing may also reach every one on the same weekday (e.g. every Tuesday), as editing in the calendar does.
+  if (action === 'remove') {
+    const weekdayOf = (value: string) => (new Date(`${value}T12:00`).getDay() + 6) % 7, weekday = weekdayOf(group[index].date);
+    const occurrences = group.filter(item => item.id !== id && !item.trace);
+    const same = occurrences.filter(item => weekdayOf(item.date) === weekday).map(({ id, date }) => ({ id, date }));
+    if (same.length && same.length < occurrences.length) options.push({ scope: 'weekday', others: same, weekday });
+  }
   if (action !== 'done' && earlier.length) options.push({ scope: 'all', others: [...earlier, ...following] });
   return options;
 }

@@ -1,17 +1,20 @@
 import { t, useLanguage } from '../i18n';
 import { useEffect, useRef } from 'react';
 import type { CSSProperties, KeyboardEvent } from 'react';
-import type { ScopeAction, ScopeOption } from '../planning';
+import type { ChoiceAction, ScopeOption } from '../planning';
 import { formatShortDate } from '../dates';
+import { formatWeekdayLong } from '../calendar';
 import { Icon, IconName } from './Icon';
 
-const actionLabels = (): Record<ScopeAction, { label: string; icon: IconName }> => ({
-  remove: { label: t("Löschen"), icon: 'trash' }, done: { label: t("Erledigt"), icon: 'check' }, cancelled: { label: t("Abbrechen"), icon: 'cancel' },
+const actionLabels = (): Record<ChoiceAction, { label: string; icon: IconName }> => ({
+  remove: { label: t("Löschen"), icon: 'trash' }, done: { label: t("Erledigt"), icon: 'check' }, cancelled: { label: t("Abbrechen"), icon: 'cancel' }, edit: { label: t("Anwenden"), icon: 'check' },
 });
 export function scopeLabel(option: ScopeOption): string {
   const count = option.others.length;
   if (option.scope === 'this') return t("Nur diesen");
   if (option.scope === 'following') return count === 1 ? t("Auch den folgenden") : t("Auch die {0} folgenden", count);
+  // 2026-11-02 is a Monday: the weekday's name in the display language.
+  if (option.scope === 'weekday') return t("Jeden {0}", formatWeekdayLong(`2026-11-0${2 + (option.weekday ?? 0)}`));
   return t("Alle {0}", count + 1);
 }
 const scopeTip = (option: ScopeOption) => option.others.length ? option.others.map(other => formatShortDate(other.date)).join(', ') : t("Die anderen bleiben, wie sie sind");
@@ -24,7 +27,7 @@ const scopeTip = (option: ScopeOption) => option.others.length ? option.others.m
  * grows out of it to the right.
  */
 export function ScopeChoice({ action, options, onChoose, onCancel, variant = 'pill', className = '' }: {
-  action: ScopeAction; options: ScopeOption[]; onChoose: (option: ScopeOption) => void; onCancel: () => void; variant?: 'pill' | 'satellite'; className?: string;
+  action: ChoiceAction; options: ScopeOption[]; onChoose: (option: ScopeOption) => void; onCancel: () => void; variant?: 'pill' | 'satellite'; className?: string;
 }) {
   useLanguage();
   const rootRef = useRef<HTMLDivElement>(null);

@@ -86,7 +86,6 @@ export function extractModelEvents(analysis: ModelAnalysis, subject: string, sen
     const after = times.filter(time => time.start >= date.end && time.start < (dates[index + 1]?.start ?? analysis.text.length) && time.start - date.end < 400);
     const before = times.filter(time => time.end <= date.start && time.start > (dates[index - 1]?.end ?? -1) && date.start - time.end < 200);
     const time = after[0] ?? before.at(-1);
-    if (!time && !names.length) { unclear = true; continue; }
     let normalized = parseSpan(date.text, time?.text ?? null, sentAt);
     if (!normalized && time && names.some(name => Math.abs(name.start - date.start) < 200)) {
       // Keep a concrete event date reviewable even when no usable clock was extracted.

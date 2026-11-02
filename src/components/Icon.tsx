@@ -1,7 +1,7 @@
 import type { Entry, EntryKind } from '../journal';
 import { PixelIcon } from './PixelIcon';
 
-export type IconName = 'journal' | 'calendar' | 'plan-tomorrow' | 'plan-days' | 'date-range' | 'left' | 'right' | 'up' | 'down' | 'grip' | 'offline' | 'save' | 'task' | 'note' | 'event' | 'done' | 'cancel' | 'trash' | 'tomorrow' | 'priority' | 'priority-event' | 'priority-note'
+export type IconName = 'play' | 'pause' | 'stop' | 'week' | 'quarter' | 'year' | 'journal' | 'calendar' | 'plan-tomorrow' | 'plan-days' | 'date-range' | 'left' | 'right' | 'up' | 'down' | 'grip' | 'offline' | 'save' | 'task' | 'note' | 'event' | 'done' | 'cancel' | 'trash' | 'tomorrow' | 'priority' | 'priority-event' | 'priority-note'
   | 'migrated' | 'migrated-event' | 'scheduled' | 'scheduled-event' | 'scheduled-multi' | 'scheduled-multi-event' | 'clock' | 'bell' | 'check' | 'undo' | 'jump' | 'settings' | 'search' | 'pin' | 'month' | 'transfer' | 'repeat' | 'mail' | 'layout' | 'pencil' | 'tag' | 'pipette';
 
 export const priorityIcon = (kind: EntryKind): IconName => kind === 'event' ? 'priority-event' : kind === 'note' ? 'priority-note' : 'priority';
@@ -18,6 +18,13 @@ export function traceIcon(entry: Pick<Entry, 'kind' | 'plan'>): IconName {
 export function Icon({ name, className = '' }: { name: IconName; className?: string }) {
   return <svg className={`icon ${className}`} data-icon={name} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <g className="icon-standard">
+    {name === 'play' && <path d="M5 3.5 12 8l-7 4.5Z" />}
+    {name === 'pause' && <path d="M5.5 3.5v9M10.5 3.5v9" strokeWidth="2.5" />}
+    {name === 'stop' && <rect x="4" y="4" width="8" height="8" rx="1" />}
+
+    {name === 'week' && <><rect x="2.5" y="3.5" width="11" height="10" rx="1.5" /><path d="M5 2v3M11 2v3M2.5 7h11M5 10h6" strokeWidth="1.6" /></>}
+    {name === 'quarter' && <><rect x="2.5" y="2.5" width="11" height="11" rx="1.5" /><path d="M8 2.5v11M2.5 8h11" /><path d="M4.5 4.5h1.5v1.5H4.5z" fill="currentColor" stroke="none" /></>}
+    {name === 'year' && <><circle cx="8" cy="8" r="5.5" /><path d="M8 2.5V5M13.5 8H11M8 13.5V11M2.5 8H5M8 8l2-2" /></>}
     {name === 'transfer' && <><path d="M5 2v10m-3-3 3 3 3-3M11 14V4m-3 3 3-3 3 3" /></>}
     {name === 'journal' && <><path d="M4 2.5h8.5v11H4a1.5 1.5 0 0 1-1.5-1.5V4A1.5 1.5 0 0 1 4 2.5Z" /><path d="M5.5 2.5v11M8 6h2M8 8.5h2" /></>}
     {name === 'calendar' && <><rect x="2.5" y="3.5" width="11" height="10" rx="1.5" /><path d="M5 2v3M11 2v3M2.5 7h11M5.5 10h2" /></>}

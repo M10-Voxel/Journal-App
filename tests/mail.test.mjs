@@ -22,9 +22,15 @@ test('delivery text yields a reviewable, calendar-only time window and stable re
   const { candidates } = await recognize();
   assert.equal(candidates.length, 1);
   const entry = candidates[0];
+  assert.equal(entry.entry.description, sample.text);
   assert.deepEqual([entry.date,entry.entry.time,entry.entry.end,entry.entry.showInJournal,entry.automatic], ['2026-11-12','10:00','12:00',false,false]);
   assert.equal((await recognize()).candidates[0].entry.id, entry.entry.id);
   assert.equal((await recognize()).candidates[0].id, entry.id);
+});
+test('mail descriptions preserve calendar details and omit quoted replies', async () => {
+  const calendar = ['BEGIN:VCALENDAR','VERSION:2.0','BEGIN:VEVENT','UID:details@example.org','DTSTART:20261031T110000','SUMMARY:Abholung','DESCRIPTION:Am Eingang','END:VEVENT','END:VCALENDAR'].join('\r\n');
+  const { candidates } = await recognize({ calendars:[calendar], text:'Das Paket enthält Schuhe.\n\nAm Montag schrieb jemand:\n> Alte Nachricht' });
+  assert.equal(candidates[0].entry.description, 'Am Eingang\n\nDas Paket enthält Schuhe.');
 });
 test('free-text recognition never silently falls back to keyword rules without the model', async () => {
   await assert.rejects(recognize({ text:'Treffen morgen 17 Uhr' }),/ML-Modell/);

@@ -215,14 +215,14 @@ export function describeMonths(months: readonly number[]): string {
   }
   return parts.join(', ');
 }
-/** The whole rule: "Alle 4 Wochen am Mo, Do, Fr · nur im Mär · 3 an, 1 aus · 10×". */
+/** The whole rule: "Alle 4 Wochen am Mo, Do, Fr · nur im Mär · 3 Wochen an, 1 Woche aus · 10×". */
 export function describe(rule: RepeatRule): string {
   if (getLanguage() === 'en') {
     let text = describePattern(rule);
     const months = monthsOf(rule);
     if (months) text += ` · only in ${describeMonths(months)}`;
     const pause = rule.unit === 'day' || rule.unit === 'week' ? rule.pause : null;
-    if (pause && pause.on>0 && pause.off>0) text += ` · ${pause.on} on, ${pause.off} ${unitNames()[pause.unit][pause.off === 1 ? 0 : 1]} off`;
+    if (pause && pause.on>0 && pause.off>0) text += ` · ${pause.on} ${unitNames()[pause.unit][pause.on === 1 ? 0 : 1]} on, ${pause.off} ${unitNames()[pause.unit][pause.off === 1 ? 0 : 1]} off`;
     if (rule.end?.count) text += ` · ${rule.end.count} times`;
     else if (rule.end?.until) text += ` · until ${formatOccurrence(rule.end.until)}`;
     return text;
@@ -231,7 +231,9 @@ export function describe(rule: RepeatRule): string {
   const months = monthsOf(rule);
   if (months) text += ` · nur ${months.length === 1 ? 'im ' : ''}${describeMonths(months)}`;
   const pause = rule.unit === 'day' || rule.unit === 'week' ? rule.pause : null;
-  if (pause && pause.on > 0 && pause.off > 0) text += ` · ${pause.on} an, ${pause.off} ${pause.unit === 'week' ? pause.off === 1 ? 'Woche' : 'Wochen' : pause.off === 1 ? 'Tag' : 'Tage'} aus`;
+  // Both counts with their unit: "3 Wochen an, 1 Woche aus".
+  const periods = (count: number) => `${count} ${pause!.unit === 'week' ? count === 1 ? 'Woche' : 'Wochen' : count === 1 ? 'Tag' : 'Tage'}`;
+  if (pause && pause.on > 0 && pause.off > 0) text += ` · ${periods(pause.on)} an, ${periods(pause.off)} aus`;
   if (rule.end?.count) text += ` · ${rule.end.count}×`;
   else if (rule.end?.until) text += ` · bis ${formatOccurrence(rule.end.until)}`;
   return text;

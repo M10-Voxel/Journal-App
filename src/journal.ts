@@ -41,6 +41,8 @@ export interface Day {
   date: string; title: string; body: string; revision: number; entries: Entry[];
   /** Other days a save changed: planned entries created there, edits passed on to linked entries. */
   touched?: string[];
+  /** Entries whose edits in this save stay with them instead of reaching their linked entries ("only this one"). */
+  keepAlone?: string[];
 }
 
 /** A day as the calendar windows show it: only days with a title or entries, traces left out. */
@@ -83,6 +85,12 @@ export const journal = {
     for (const date of touched) { cache.delete(date); settled.delete(date); }
     return touched;
   },
+  /** Gives chosen entries of a group on other days the kind, text, details and (when moved) times of an edited one. */
+  async editLinked(ids: string[], edit: LinkedEdit): Promise<string[]> {
+    const touched = await invoke<string[]>('edit_linked', { ids, edit });
+    for (const date of touched) { cache.delete(date); settled.delete(date); }
+    return touched;
+  },
   async save(day: Day): Promise<Day> {
     const saved = await invoke<Day>('save_day', { day });
     cache.set(saved.date, Promise.resolve(saved));
@@ -95,6 +103,10 @@ export const journal = {
 
 /** An entry of a linked group (trace, copies, chains, occurrences of a series), in date order; see `journal.linked`. */
 export interface LinkedEntry { id: string; date: string; kind: EntryKind; done: boolean; cancelled: boolean; trace: boolean; series?: string | null }
+export interface LinkedEdit {
+  kind: EntryKind; text: string; description: string; tag: string | null; priority: boolean; reminder: boolean; showInJournal: boolean;
+  times?: { time: string | null; end: string | null };
+}
 export type LinkedAction = 'remove' | 'done' | 'cancelled' | 'open';
 
 /** The calendar windows only read; they hear about saves through the `journal:changed` event. */

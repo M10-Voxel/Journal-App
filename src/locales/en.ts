@@ -666,6 +666,8 @@ const english: Record<string, string> = {
   "Kein Tag / Einträge ohne Tag": "No tag / untagged entries",
   "Filter: alle Tags zeigen": "Filter: show all tags",
   "Filter: nur diesen Tag zeigen": "Filter: show only this tag",
-  "Tippen und Enter: neuen Tag anlegen": "Type and Enter: create a new tag"
+  "Tippen und Enter: neuen Tag anlegen": "Type and Enter: create a new tag",
+  "Anwenden": "Apply",
+  "Jeden {0}": "Every {0}"
 };
 export default english;

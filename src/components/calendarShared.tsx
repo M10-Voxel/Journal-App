@@ -18,14 +18,19 @@ import '../calendar.css';
 // Shared by the calendar (in the journal's sidebar or its own window) and the compact month window. They only read the
 // journal: a click shows the day (or the entry) in the journal, which stays the only place where entries are edited.
 
-/** Days with content between `from` and `to`, reloaded whenever the journal saves one of them. */
+/** Days with content between `from` and `to`, reloaded whenever the journal saves one of them. Days loaded before stay
+ *  (and are replaced as their range loads again), so stepping back to a page shows its entries at once. */
 export function useCalendarData(from: string, to: string) {
   const [days, setDays] = useState<Map<string, CalendarDay>>(() => new Map());
   const [error, setError] = useState('');
   useEffect(() => {
     let active = true;
     const fetch = () => loadRange(from, to)
-      .then(list => { if (active) { setDays(new Map(list.map(day => [day.date, day]))); setError(''); } })
+      .then(list => { if (active) { setDays(previous => {
+        const next = new Map([...previous].filter(([date]) => date < from || date > to));
+        for (const day of list) next.set(day.date, day);
+        return next;
+      }); setError(''); } })
       .catch(reason => { if (active) setError(String(reason)); });
     void fetch();
     const stop = listen<string[]>('journal:changed', event => { if (event.payload.some(date => date >= from && date <= to)) void fetch(); });

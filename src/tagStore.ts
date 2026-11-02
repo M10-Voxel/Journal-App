@@ -35,6 +35,8 @@ export function useTags(): Tag[] {
   return useSyncExternalStore(subscribe, () => tags);
 }
 export const currentTags = () => tags;
+/** Resolves once the tags are loaded. */
+export const loadTags = () => ensure();
 export function saveTags(next: Tag[] | ((current: Tag[]) => Tag[])): Promise<Tag[]> {
   // Evaluate edits against the result of the preceding write. A slow colour write must not
   // overwrite a name change or a tag created while that write was still in flight.

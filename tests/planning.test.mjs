@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { formatSpan, keepDuration, linkedScopes, canPlan, clockAngle, clockValue, isValidTime, nextFullHour, planChange, stepTime, tomorrowChange, typeDigit } from '../src/planning.ts';
+import { editScopes, formatSpan, keepDuration, linkedScopes, canPlan, clockAngle, clockValue, isValidTime, nextFullHour, planChange, stepTime, tomorrowChange, typeDigit } from '../src/planning.ts';
 import { monthGrid, shiftMonth, shiftDate } from '../src/dates.ts';
 
 const entry = (kind, extra = {}) => ({ id:'e', kind, text:'Beispiel', done:false, cancelled:false, priority:false, time:null, reminder:false, plan:null, ...extra });
@@ -108,4 +108,26 @@ test('appointments past midnight end on the next day', () => {
   assert.equal(formatSpan('23:00', '24:00'), '23:00–24:00', 'Midnight itself stays 24:00.');
   assert.equal(keepDuration({ time: '20:00', end: '23:00' }, '23:30'), '26:30', 'Moving it later keeps the length past midnight.');
   assert.equal(keepDuration({ time: '00:00', end: '23:00' }, '23:30'), '46:30');
+});
+
+test('an edit in the calendar offers this one, every one on the same weekday, or all (traces left out)', () => {
+  const item = (id, date, extra = {}) => ({ id, date, kind:'event', done:false, cancelled:false, trace:false, ...extra });
+  // Tuesdays and Thursdays of a series, and the trace it was planned from.
+  const group = [item('trace', '2026-10-30', { trace:true }), item('tu1', '2026-11-03'), item('th1', '2026-11-05'), item('tu2', '2026-11-10'), item('th2', '2026-11-12')];
+  const shape = options => options.map(option => `${option.scope}:${option.others.map(other => other.id).join(',')}`);
+  assert.deepEqual(shape(editScopes(group, 'tu1', '2026-11-03')), ['this:', 'weekday:tu2', 'all:tu1,th1,tu2,th2'.replace('tu1,', '')]);
+  assert.equal(editScopes(group, 'tu1', '2026-11-03')[1].weekday, 1, 'Tuesday');
+  const tuesdays = group.filter(entry => entry.id.startsWith('tu'));
+  assert.deepEqual(shape(editScopes(tuesdays, 'tu1', '2026-11-03')), ['this:', 'all:tu2'], 'All on the same weekday: no separate choice.');
+  assert.deepEqual(shape(editScopes([item('alone', '2026-11-03')], 'alone', '2026-11-03')), ['this:'], 'Nothing to ask.');
+});
+
+test('removing also offers every one on the same weekday', () => {
+  const item = (id, date, extra = {}) => ({ id, date, kind:'event', done:false, cancelled:false, trace:false, ...extra });
+  const group = [item('trace', '2026-10-30', { trace:true }), item('tu1', '2026-11-03'), item('th1', '2026-11-05'), item('tu2', '2026-11-10'), item('th2', '2026-11-12')];
+  const options = linkedScopes(group, 'tu1', 'remove');
+  assert.deepEqual(options.map(option => option.scope), ['this', 'following', 'weekday', 'all']);
+  assert.deepEqual(options[2].others.map(other => other.id), ['tu2']);
+  assert.equal(options[2].weekday, 1);
+  assert.deepEqual(linkedScopes(group.map(entry => ({ ...entry, kind:'task' })), 'tu1', 'done').map(option => option.scope), ['this', 'following'], 'Only removing asks for the weekday.');
 });
