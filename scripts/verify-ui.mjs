@@ -2004,15 +2004,30 @@ try {
     await command('Page.navigate',{url:`http://127.0.0.1:${server.address().port}/`});
     await until("Boolean(document.querySelector('.calendar-drawer.is-overlay.is-open'))");await pause(500);
     assert.equal(await evaluate("document.querySelector('.statusbar')"),null);
+    assert.equal(await evaluate("document.querySelector('.book-head-tools .tag-filter-button')"),null,'Book tags leave the title bar.');
+    assert(await evaluate("Boolean(document.querySelector('.book-tag-register .tag-filter-button'))"));
+    const ribbon=await evaluate("(() => {const r=document.querySelector('.calendar-ribbon').getBoundingClientRect(),b=document.querySelector('.book').getBoundingClientRect();return {top:r.top-b.top,left:r.left-(b.left+b.width/2)};})()");
+    assert(Math.abs(ribbon.top)<1 && Math.abs(ribbon.left)<1,'Ribbon is tucked into the book edge with its left side on the fold.');
+    await evaluate("document.querySelector('.book-tag-register .tag-filter-button').click()");
+    await until("Boolean(document.querySelector('.tag-filter-list'))");
+    await evaluate("document.querySelector('.tag-filter-row').click()");
+    await until("document.querySelector('.book-tag-register .tag-filter-button').classList.contains('is-filtering')");
+    await key('Escape');await until("!document.querySelector('.tag-filter-list')");
+
     assert(await evaluate("document.querySelector('.settings-button').previousElementSibling.classList.contains('titlebar-help')"));
     assert(await evaluate("(() => {const s=document.querySelector('.calendar-drawer-sheet').getBoundingClientRect(),b=document.querySelector('.book-spread').getBoundingClientRect(),stage=document.querySelector('.book-stage').getBoundingClientRect();return s.top<b.top-10 && s.top>=stage.top;})()"),'Overlay extends above the page without clipping.');
     for(const width of [1380,900,720,540,360]){
       await command('Emulation.setDeviceMetricsOverride',{width,height:780,deviceScaleFactor:1,mobile:false});await pause(350);
       const geometry=await evaluate("(() => {const root=document.querySelector('.topbar'),buttons=[...root.querySelectorAll('button')].filter(e=>e.getBoundingClientRect().width>0).map(e=>{const r=e.getBoundingClientRect();return {name:e.getAttribute('aria-label')||e.title||e.textContent,left:r.left,right:r.right,top:r.top,bottom:r.bottom};});return {width:innerWidth,buttons};})()");
+      assert(await evaluate("[...document.querySelectorAll('.book-register button')].every(e=>{const r=e.getBoundingClientRect();return r.left>=-1 && r.right<=innerWidth+1;})"),'Book register fits at '+width);
       for(const b of geometry.buttons)assert(b.left>=-1 && b.right<=width+1,'Titlebar control stays in the window at '+width+': '+JSON.stringify(b));
       for(let i=0;i<geometry.buttons.length;i++)for(let j=i+1;j<geometry.buttons.length;j++){const a=geometry.buttons[i],b=geometry.buttons[j];assert(a.right<=b.left+1||b.right<=a.left+1||a.bottom<=b.top+1||b.bottom<=a.top+1,'Controls overlap at '+width+': '+JSON.stringify([a,b]));}
       if(width===720)await screenshot('journal-toolbar-responsive.png');
     }
+    assert(await evaluate("[...document.querySelectorAll('.book-corner')].every(e=>e.querySelector('svg path') && getComputedStyle(e,'::before').content==='none')"),'Corners use thin arrow paths rather than folded paper.');
+    const page=await evaluate("document.querySelector('.book-page:not(.is-outgoing)').dataset.page");
+    await evaluate("document.querySelector('.book-page:not(.is-outgoing) .book-corner.is-next').click()");
+    await until("document.querySelector('.book-page:not(.is-outgoing)').dataset.page!=="+JSON.stringify(page));
     await evaluate("document.querySelector('.titlebar-help').click()");await until("Boolean(document.querySelector('.shortcuts'))");
     console.log('Journal layout passed: no footer, F1 beside settings, overlay above page, titlebar controls fit from 360 to 1380px.');
   } else if (process.env.JOURNAL_UI_SCOPE === 'journal-grid') {
@@ -2033,7 +2048,16 @@ try {
     await command('Input.dispatchMouseEvent',{type:'mouseWheel',...point,deltaX:0,deltaY:240,modifiers:2});
     await pause(300);await aligned();
     for(const title of ['Arbeitswoche','Tag']){await evaluate("[...document.querySelectorAll('.cal-viewbar button')].find(e=>e.title.startsWith("+JSON.stringify(title)+")).click()");await pause(300);await aligned();}
-    console.log('Journal grid passed: paper lines align with hour labels through zoom, resize, week, workweek and day.');
+    for(const [title,selector] of [['Monat','.cal-month-day'],['Jahr','.cal-year-grid > *']]){
+      await evaluate("[...document.querySelectorAll('.cal-viewbar button')].find(e=>e.title.startsWith("+JSON.stringify(title)+")).click()");
+      for(const width of [1180,760]){
+        await command('Emulation.setDeviceMetricsOverride',{width,height:850,deviceScaleFactor:1,mobile:false});await pause(300);
+        const cells=await evaluate("[...document.querySelectorAll("+JSON.stringify(selector)+")].map(e=>{const s=getComputedStyle(e);return {columns:Number(s.getPropertyValue('--paper-columns')),rows:Number(s.getPropertyValue('--paper-rows')),tile:s.backgroundSize,origin:s.backgroundOrigin};})");
+        assert(cells.length>0);for(const c of cells){const [x,y]=c.tile.split(',')[0].trim().split(' ').map(parseFloat);assert(Number.isInteger(c.columns)&&Number.isInteger(c.rows)&&c.columns>=1&&c.rows>=1);assert(Math.abs(x*c.columns-100)<.01 && Math.abs(y*c.rows-100)<.01,'Paper cells align at '+title+' '+width);assert(c.origin.includes('border-box'));}
+      }
+      await screenshot('journal-grid-'+title+'.png');
+    }
+    console.log('Journal grid passed: hour alignment plus month/year cell boundaries adapt to resizing.');
   } else if (process.env.JOURNAL_UI_SCOPE === 'mail-view-zoom') {
     await evaluate("document.querySelector('.cal-viewbar button[title*=Woche]').click()");
     await until("Boolean(document.querySelector('.cal-time'))");

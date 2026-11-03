@@ -68,6 +68,15 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
   const [editing, setEditing] = useState<Editing | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const range = viewRange(view, date);
+  useLayoutEffect(()=>{
+    const root=rootRef.current;if(!root || (view!=='month' && view!=='year'))return;
+    const align=()=>root.querySelectorAll<HTMLElement>('.cal-month-day,.cal-month-kw,.cal-year-grid > *').forEach(cell=>{
+      const columns=Math.max(1,Math.round(cell.offsetWidth/14)),rows=Math.max(1,Math.round(cell.offsetHeight/14));
+      cell.style.setProperty('--paper-columns',String(columns));cell.style.setProperty('--paper-rows',String(rows));
+    });
+    align();const observer=new ResizeObserver(align);observer.observe(root);root.querySelectorAll('.cal-month-grid,.cal-year-grid').forEach(grid=>observer.observe(grid));return()=>observer.disconnect();
+  },[view,date]);
+
   // One day more before: an appointment from the evening before may reach into the first shown day.
   const { days, error } = useCalendarData(shiftDate(range.from, -366), range.to);
   const title = viewTitle(view, date);

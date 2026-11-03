@@ -70,11 +70,14 @@
 :root[data-theme='journal'] .activity-name { font-family: var(--serif); font-size: 14px; }
 
 /* ── The calendar on squared paper ────────────────────────────────────────────────────────────────────────────── */
-:root[data-theme='journal'] .cal.is-embedded, :root[data-theme='journal'] body > #root > .cal { background-color: var(--surface);
+:root[data-theme='journal'] .cal.is-embedded, :root[data-theme='journal'] body > #root > .cal { background-color: var(--surface); background-image: none; }
+:root[data-theme='journal'] :is(.cal-month-day,.cal-month-kw,.cal-year-grid > *) {
   background-image: linear-gradient(color-mix(in srgb, var(--accent) 8%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--accent) 8%, transparent) 1px, transparent 1px);
-  background-size: 14px 14px; }
+  background-size: calc(100% / var(--paper-columns, 1)) calc(100% / var(--paper-rows, 1));
+  background-origin: border-box; background-position: 0 0;
+}
 /* Hour views share the midnight origin and quarter-hour spacing of the time grid.
-   Keep the decorative fixed paper only for the month/year views. */
+   Month/year paper uses the bounds of its date cells instead. */
 :root[data-theme='journal'] .cal.is-embedded:is([data-view='week'], [data-view='workweek'], [data-view='day']),
 :root[data-theme='journal'] body > #root > .cal:is([data-view='week'], [data-view='workweek'], [data-view='day']) { background-image: none; }
 :root[data-theme='journal'] .cal-time-body {
@@ -145,11 +148,14 @@
 .book-corner { position: absolute; bottom: 0; z-index: 7; width: 46px; height: 46px; padding: 0; border: 0; background: transparent; cursor: pointer; }
 .book-corner.is-next { right: 0; }
 .book-corner.is-prev { left: 0; }
-.book-corner::before { content: ''; position: absolute; bottom: 0; width: 20px; height: 20px; transition: width 160ms var(--ease), height 160ms var(--ease); }
-.book-corner.is-next::before { right: 0; border-top-left-radius: 5px; background: linear-gradient(315deg, var(--leather) 0 49%, color-mix(in srgb, #3b2a1a 8%, var(--book-paper)) 51%); box-shadow: -2px -2px 5px -1px var(--ink-shadow); }
-.book-corner.is-prev::before { left: 0; border-top-right-radius: 5px; background: linear-gradient(45deg, var(--leather) 0 49%, color-mix(in srgb, #3b2a1a 8%, var(--book-paper)) 51%); box-shadow: 2px -2px 5px -1px var(--ink-shadow); }
-.book-corner:hover::before, .book-corner:focus-visible::before { width: 32px; height: 32px; }
-.book-corner:focus-visible { outline: none; }
+.book-corner { color: #929292; }
+.book-corner svg { position: absolute; bottom: 7px; width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.2; stroke-linecap: round; stroke-linejoin: round; transition: color 160ms ease, transform 160ms ease; pointer-events: none; }
+.book-corner.is-next svg { right: 7px; }
+.book-corner.is-prev svg { left: 7px; }
+.book-corner:is(:hover,:focus-visible) { color: #666; }
+.book-corner.is-next:hover svg { transform: translate(2px,2px); }
+.book-corner.is-prev:hover svg { transform: translate(-2px,2px); }
+.book-corner:focus-visible { outline: 1px solid var(--focus); outline-offset: -5px; border-radius: 3px; }
 
 /* Bookmarks: ribbons on the right edge of the book; the one of the page shown sticks out further. */
 .book-marks { position: absolute; top: 44px; right: -38px; z-index: 9; display: flex; flex-direction: column; gap: 10px; }
@@ -166,7 +172,7 @@
 .book-mark.is-notes { --mark: #2f5d9e; }
 
 /* The calendar's ribbon hangs from the top of the book, in the middle. */
-.calendar-ribbon { position: absolute; top: 0; left: 50%; z-index: 12; display: flex; flex-direction: column; align-items: center; gap: 6px; width: 32px; height: 58px; margin-left: -16px; padding: 9px 0 0; border: 0;
+.calendar-ribbon { position: absolute; top: 0; left: 50%; z-index: 12; display: flex; flex-direction: column; align-items: center; gap: 6px; width: 32px; height: 58px; margin-left: 0; padding: 9px 0 0; border: 0;
   background: linear-gradient(90deg, #7d2323, #a63434 30%, #9a2d2d 70%, #7d2323); color: #fbeee0; clip-path: polygon(0 0, 100% 0, 100% 100%, 50% calc(100% - 10px), 0 100%);
   filter: drop-shadow(0 2px 2px #1d0f0688); cursor: pointer; transition: height 200ms var(--ease); }
 .calendar-ribbon .icon { flex: none; width: 15px; height: 15px; }
@@ -392,4 +398,20 @@
   .book-head-tools .toolbar-end { margin-left: 0; }
   .topbar.is-book-head > .titlebar-button, .topbar.is-book-head .window-controls { align-self: flex-start; height: 46px; }
   .topbar.is-book-head > .titlebar-button, .topbar.is-book-head .window-controls button { width: 28px; }
+}
+
+/* The ribbon is tucked into the page edge, rather than hanging from the app's title bar. */
+.book > .calendar-ribbon { top: 0; }
+.book > .calendar-ribbon::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 5px; background: linear-gradient(#0004,transparent); pointer-events: none; }
+.book-register { left: 42px; right: 18px; justify-content: flex-end; min-width: 0; }
+.book-register-tab { flex: 0 1 auto; min-width: 0; white-space: nowrap; padding-inline: clamp(5px,1.2cqw,15px); }
+.book-tag-register { flex: none; display: flex; align-items: flex-end; }
+.book-tag-register .tag-filter-button { height: 26px; border-radius: 6px 6px 0 0; padding: 0 8px; background: color-mix(in srgb,var(--book-paper) 80%,var(--leather)); box-shadow: 0 -1px 2px #1d0f0633,inset 0 -4px 4px -3px #1d0f0630; }
+.book-tag-register .tag-filter-button:is(:hover,[aria-expanded='true']) { height: 29px; background: var(--book-paper); color: var(--strong); }
+@container book (max-width: 430px) {
+  .book-register { left: 8px; right: 8px; gap: 1px; }
+  .book-register-tab { font-size: 10px; padding-inline: 4px; }
+  .book-register-tab[aria-current='page'] { font-size: 11px; }
+  .book-tag-register .tag-filter-button { padding-inline: 5px; gap: 3px; }
+  .book-tag-register .tag-filter-dots { max-width: 28px; overflow: hidden; }
 }

@@ -130,8 +130,8 @@ export function JournalBook({ mode, date, view, paging = 'page', beside = false,
   const marks = pagesOf(mode);
 
   return <div className={`book-stage${double ? ' is-double' : ' is-single'}${spreads ? ' is-spreads' : ''}${beside ? ' is-beside' : ''}`} ref={stageRef}>
-    {ribbon}
     <div className="book" style={sheetWidth ? { '--drawer-width': `${sheetWidth}px` } as CSSProperties : undefined}>
+      {ribbon}
       <div className="book-spread">
         {leaves.map(({ page, slot, motion, outgoing }) => <article key={pageKey(page)} className={`book-page is-${slot} is-${page.page}${motion ? ` is-${motion}` : ''}${outgoing ? ' is-outgoing' : ''}`}
           inert={outgoing} aria-hidden={outgoing || undefined} data-page={page.page} data-date={page.date} aria-label={`${pageTitle(page.page)} · ${formatDate(page.date)}`}>
@@ -142,8 +142,8 @@ export function JournalBook({ mode, date, view, paging = 'page', beside = false,
             </div>
           </div>
           <footer className="book-page-foot" aria-hidden="true"><span>{pageTitle(page.page)}</span><span className="book-page-number">{pageNumber(page, mode)}</span><span>{mode === 'day' ? formatShortDate(page.date) : periodTitle(page.date, mode)}</span></footer>
-          {slot !== 'right' && <button type="button" className="book-corner is-prev" tabIndex={-1} aria-label={t('Zurückblättern')} title={t('Zurückblättern · Strg Bild↑')} onClick={() => step(-1)} />}
-          {slot !== 'left' && <button type="button" className="book-corner is-next" tabIndex={-1} aria-label={t('Umblättern')} title={t('Umblättern · Strg Bild↓')} onClick={() => step(1)} />}
+          {slot !== 'right' && <button type="button" className="book-corner is-prev" tabIndex={-1} aria-label={t('Zurückblättern')} title={t('Zurückblättern · Strg Bild↑')} onClick={() => step(-1)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 20H4V7" /></svg></button>}
+          {slot !== 'left' && <button type="button" className="book-corner is-next" tabIndex={-1} aria-label={t('Umblättern')} title={t('Umblättern · Strg Bild↓')} onClick={() => step(1)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 20h13V7" /></svg></button>}
         </article>)}
         {/* The back of a turning leaf where its page cannot be drawn twice (the board over both pages). */}
         {ghosts.map(ghost => <div key={`${turn?.id}-${ghost}`} className={`book-ghost is-${ghost}`} aria-hidden="true" />)}

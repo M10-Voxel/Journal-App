@@ -562,11 +562,13 @@ function App() {
     <NavCluster label={periodMode === 'day' ? t("Tagesnavigation") : language === 'en' ? 'Period navigation' : 'Zeitraumnavigation'} prev={{ label: periodMode === 'day' ? t("Vorheriger Tag") : language === 'en' ? 'Previous period' : 'Vorheriger Zeitraum', tip: periodMode === 'day' ? t("Vorheriger Tag · Alt ←") : language === 'en' ? 'Previous period' : 'Vorheriger Zeitraum' }} next={{ label: periodMode === 'day' ? t("Nächster Tag") : language === 'en' ? 'Next period' : 'Nächster Zeitraum', tip: periodMode === 'day' ? t("Nächster Tag · Alt →") : language === 'en' ? 'Next period' : 'Nächster Zeitraum' }}
       today={{ tip: t("Heute · Alt H"), disabled: date === today }} atToday={date === today} onPrev={() => stepPeriod(-1)} onToday={() => navigate(today)} onNext={() => stepPeriod(1)} />
     <MiniCalendarPicker date={date} open={datePickerOpen} onOpenChange={setDatePickerOpen} onPick={navigate} buttonRef={datePickerButtonRef} />
-    <div className="toolbar-end">{bookMode && <BookViewSwitch view={bookView} narrow={!bookWide} onChange={setBookView} />}{periodMode === 'day' && <TagFilter label={t("Tags im Journal")} hidden={hiddenTags} onChange={next => { setNewEntryId(null); setHiddenTags(next); }} />}</div>
+    <div className="toolbar-end">{bookMode && <BookViewSwitch view={bookView} narrow={!bookWide} onChange={setBookView} />}{!bookMode && periodMode === 'day' && <TagFilter label={t("Tags im Journal")} hidden={hiddenTags} onChange={next => { setNewEntryId(null); setHiddenTags(next); }} />}</div>
   </>;
   const periodLabels = language === 'en' ? ['Day', 'Week', 'Month', 'Quarter', 'Year'] : ['Tag', 'Woche', 'Monat', 'Quartal', 'Jahr'];
   // The book's views as register tabs on its top edge (Ctrl+1–5).
   const register = <nav className="book-register" aria-label={language === 'en' ? 'Journal views' : 'Journalansichten'}>
+    {periodMode === 'day' && <div className="book-tag-register"><TagFilter label={t("Tags im Journal")} hidden={hiddenTags} onChange={next=>{setNewEntryId(null);setHiddenTags(next);}}/></div>}
+
     {periodModes.map((mode, index) => <button type="button" key={mode} className="book-register-tab" data-period-mode={mode} aria-current={periodMode === mode ? 'page' : undefined}
       title={`${periodLabels[index]} · ${t('Strg')} ${index + 1}`} onClick={() => setPeriodMode(mode)}>{periodLabels[index]}{index === 0 && dirty && <span className="unsaved-dot" aria-label={t("Ungespeicherte Änderungen")} />}</button>)}
   </nav>;
