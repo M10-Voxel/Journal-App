@@ -1,0 +1,231 @@
+/* The pinboard (BulletinBoard.tsx): a cork surface with paper notes, polaroid images and link index cards on pins.
+   Paper colours stay muted so they sit well on every colour theme. Pixel variant at the end. */
+.bulletin-board { --cork: color-mix(in srgb, color-mix(in srgb, var(--priority) 14%, var(--surface)) 62%, var(--background)); --cork-fleck: color-mix(in srgb, var(--strong) 9%, transparent); --cork-hole: color-mix(in srgb, var(--background) 55%, transparent); --cork-frame: color-mix(in srgb, var(--priority) 18%, var(--selected)); margin-top: 30px; padding-bottom: 28px; }
+.board-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; }
+.board-head h3 { margin: 0; color: var(--strong); font: 600 15px var(--sans); }
+.board-head p { margin: 3px 0 0; color: var(--muted); font: 12px var(--sans); }
+.board-actions { display: flex; gap: 4px; padding: 3px; border-radius: 999px; background: var(--surface); box-shadow: 0 0 0 1px var(--edge); }
+.board-actions button { display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 11px 0 9px; border: 0; border-radius: 999px; background: transparent; color: var(--muted); font: 500 12px var(--sans); cursor: pointer; transition: background-color var(--fast) ease, color var(--fast) ease, transform 200ms var(--spring); }
+.board-actions button .icon { width: 13px; height: 13px; color: var(--accent); }
+.board-actions button:hover:not(:disabled), .board-actions button[aria-expanded='true'] { background: var(--hover); color: var(--text); }
+.board-actions button:active:not(:disabled) { transform: scale(.94); }
+.board-actions button:disabled { opacity: .4; cursor: default; }
+.board-status { margin: 0 0 10px; color: var(--accent); font: 12px var(--sans); }
+
+.board-link-form, .board-library { margin: 0 0 12px; padding: 8px; border-radius: 10px; background: var(--surface); box-shadow: 0 0 0 1px var(--edge), 0 10px 26px -12px #000c; animation: popover-in 150ms var(--spring) both; }
+.board-link-form { display: flex; align-items: center; gap: 6px; }
+.board-link-form > .icon { width: 14px; height: 14px; margin-left: 4px; color: var(--muted); flex: none; }
+.board-link-form input, .board-library > input { flex: 1; min-width: 0; height: 30px; padding: 0 9px; border: 0; border-radius: 6px; background: var(--inset); box-shadow: inset 0 0 0 1px var(--edge); color: var(--strong); font: 12px var(--mono); outline: 0; }
+.board-link-form input:focus, .board-library > input:focus { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 65%, transparent); }
+.board-link-form button { height: 30px; padding: 0 12px; border: 0; border-radius: 6px; background: var(--hover); color: var(--text); font: 500 12px var(--sans); cursor: pointer; }
+.board-link-form button:first-of-type { background: var(--accent); color: var(--on-accent); }
+.board-library { max-height: 300px; overflow: auto; }
+.board-library > input { width: 100%; box-sizing: border-box; margin-bottom: 8px; }
+.board-library > button { display: flex; flex-direction: column; gap: 2px; width: 100%; margin-bottom: 5px; padding: 7px 10px; border: 0; border-radius: 4px; background: var(--paper); color: var(--paper-ink); text-align: left; font: 12px var(--sans); cursor: pointer; box-shadow: 0 1px 2px #0006; }
+.board-library > button:hover { filter: brightness(1.08); }
+.board-library small { opacity: .7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.board-library p { margin: 4px 2px 0; color: var(--muted); font: 11px var(--sans); }
+
+/* The cork: a warm dark surface with fine fibres, framed like a real board. */
+.board-surface { position: relative; min-height: 380px; border-radius: 12px; overflow: hidden;
+  background-color: var(--cork);
+  background-image: radial-gradient(var(--cork-fleck) .7px, transparent 1.1px), radial-gradient(var(--cork-hole) .9px, transparent 1.4px), linear-gradient(160deg, color-mix(in srgb, var(--strong) 4%, transparent), transparent 55%);
+  background-size: 9px 9px, 13px 13px, 100% 100%; background-position: 0 0, 4px 6px, 0 0;
+  box-shadow: inset 0 0 0 1px var(--edge), inset 0 0 0 7px var(--cork-frame), inset 0 0 0 8px var(--border), inset 0 14px 30px -14px #000a; transition: height 200ms var(--ease); }
+.board-empty { position: absolute; inset: 50% 0 auto; transform: translateY(-50%); margin: 0; text-align: center; color: var(--muted); font: 13px var(--sans); }
+
+/* Cards */
+.board-card { --paper: var(--surface); --paper-ink: var(--text); position: absolute; display: flex; flex-direction: column; box-sizing: border-box; padding: 16px 12px 12px; border-radius: 3px;
+  background: var(--paper); color: var(--paper-ink); transform: rotate(var(--tilt, 0deg));
+  box-shadow: 0 1px 1px #0005, 0 8px 18px -6px #000b; outline: 0; touch-action: none; cursor: grab;
+  transition: transform 260ms var(--spring), box-shadow 200ms ease; animation: board-pin-in 340ms var(--spring) backwards; }
+@keyframes board-pin-in { from { opacity: 0; transform: translateY(-12px) rotate(var(--tilt, 0deg)) scale(.96); } }
+.board-card:hover { box-shadow: 0 1px 1px #0005, 0 14px 28px -8px #000c; }
+.board-card:focus-visible { box-shadow: 0 0 0 2px var(--accent), 0 14px 28px -8px #000c; }
+.board-card.is-moving { cursor: grabbing; transform: rotate(0deg) scale(1.03); box-shadow: 0 22px 40px -10px #000e; transition: box-shadow 200ms ease; }
+/* The pin: a round head with a highlight, its shadow on the paper. */
+.board-pin { position: absolute; top: -7px; left: 50%; width: 15px; height: 15px; margin-left: -7.5px; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(circle at 35% 32%, #fff9 0 2px, transparent 3px), var(--pin, #d9534f); box-shadow: 0 2px 0 -1px #0007, 2px 5px 4px -2px #0008; }
+.board-card.is-image { --pin: #4f8fd9; } .board-card.is-link { --pin: #59a86b; }
+/* Note papers, muted so they sit on the dark themes. */
+.paper-yellow { --paper: #e9d98c; --paper-ink: #2c2714; --pin: #d9534f; }
+.paper-blue { --paper: #a9c8e6; --paper-ink: #142231; --pin: #e6a85c; }
+.paper-green { --paper: #b7d6a4; --paper-ink: #17281a; --pin: #c46ac6; }
+.paper-pink { --paper: #e5b3c2; --paper-ink: #321620; --pin: #4f8fd9; }
+
+.board-card header { display: flex; align-items: center; gap: 2px; margin: -4px -4px 6px; }
+.board-card header input { flex: 1; min-width: 0; height: 24px; padding: 0 4px; border: 0; border-radius: 3px; background: transparent; color: inherit; font: 600 13px var(--sans); outline: 0; cursor: text; }
+.board-card header input::placeholder { color: color-mix(in srgb, currentColor 45%, transparent); }
+.board-card header input:focus { background: color-mix(in srgb, var(--paper-ink) 8%, transparent); }
+.board-tools { display: flex; gap: 1px; opacity: 0; transition: opacity var(--fast) ease; }
+.board-card:is(:hover, :focus-within) .board-tools { opacity: 1; }
+.board-tools button { display: grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: color-mix(in srgb, currentColor 65%, transparent); cursor: pointer; }
+.board-tools button:hover { background: color-mix(in srgb, var(--paper-ink) 12%, transparent); color: inherit; }
+.board-tools button[aria-pressed='true'] { background: color-mix(in srgb, var(--paper-ink) 18%, transparent); color: inherit; }
+.board-tools .icon { width: 12px; height: 12px; }
+.board-paper i { width: 11px; height: 11px; border-radius: 50%; background: conic-gradient(#e9d98c 0 25%, #a9c8e6 0 50%, #b7d6a4 0 75%, #e5b3c2 0); box-shadow: 0 0 0 1px #0004; }
+.board-remove:hover { color: #c0392b !important; }
+
+/* Note text: the journal's editor on paper */
+.board-note { min-height: 110px; overflow-wrap: anywhere; cursor: text; }
+.board-note :is(.entry-text, .cm-editor, .cm-content) { color: var(--paper-ink) !important; caret-color: var(--paper-ink); }
+.board-note .entry-edit, .board-note .cm-content { font: 14px/26px var(--write, var(--mono)); min-height: 100px; }
+.board-note .cm-editor { background: transparent !important; }
+
+/* Images as polaroids: a light frame, the caption below; a click opens them large. */
+.board-card.is-image { --paper: #ece8e0; --paper-ink: #2b2925; padding: 12px 12px 10px; }
+.board-image { display: block; width: 100%; padding: 0; border: 0; overflow: hidden; background: #1b1b1b; cursor: zoom-in; box-shadow: inset 0 0 0 1px #0003; }
+.board-image img, .board-image canvas { display: block; width: 100%; height: auto; }
+.board-image canvas, .board-lightbox canvas { image-rendering: pixelated; }
+.board-image.is-loading { height: 140px; animation: board-shimmer 1.2s ease-in-out infinite alternate; }
+@keyframes board-shimmer { to { opacity: .55; } }
+.board-image-missing { margin: 0; padding: 30px 8px; text-align: center; font: 12px var(--sans); opacity: .7; }
+.board-caption { display: flex; justify-content: flex-end; margin-top: 6px; color: color-mix(in srgb, var(--paper-ink) 55%, transparent); font: 10px var(--mono); }
+
+/* Links as index cards: preview image, title, description, host. */
+.board-card.is-link { --paper: #f1efe9; --paper-ink: #24262b; background: linear-gradient(#c94a4a55, #c94a4a55) 0 34px / 100% 1px no-repeat, var(--paper); }
+.board-link { display: flex; flex-direction: column; gap: 6px; width: 100%; padding: 0; border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+.board-link img { width: 100%; max-height: 130px; object-fit: cover; border-radius: 2px; box-shadow: inset 0 0 0 1px #0002; }
+.board-link strong { font: 600 13px/1.35 var(--sans); color: #1f5fae; overflow-wrap: anywhere; }
+.board-link:hover strong { text-decoration: underline; }
+.board-link span { font: 12px/1.5 var(--sans); opacity: .8; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.board-link small { display: flex; align-items: center; gap: 4px; font: 10.5px var(--mono); opacity: .6; }
+.board-link small .icon { width: 10px; height: 10px; }
+
+/* Large view */
+.board-lightbox { position: fixed; inset: 0; z-index: 2000; display: grid; place-items: center; padding: 28px; background: #000c; backdrop-filter: blur(4px); animation: popover-in 160ms ease both; cursor: zoom-out; }
+.board-lightbox figure { display: flex; flex-direction: column; max-width: min(1200px, 100%); max-height: 100%; margin: 0; padding: 14px 14px 10px; background: #ece8e0; border-radius: 3px; box-shadow: 0 30px 80px #000; cursor: default; }
+.board-lightbox img, .board-lightbox canvas { display: block; max-width: 100%; max-height: calc(100vh - 140px); object-fit: contain; }
+.board-lightbox canvas { width: min(1100px, calc(100vw - 90px)); height: auto; }
+.board-lightbox figcaption { display: flex; align-items: center; gap: 10px; margin-top: 8px; color: #2b2925; font: 13px var(--sans); }
+.board-lightbox figcaption span { flex: 1; }
+.board-lightbox figcaption small { font: 10px var(--mono); opacity: .6; }
+.board-lightbox figcaption button { display: grid; place-items: center; width: 26px; height: 26px; border: 0; border-radius: 50%; background: #0001; color: #2b2925; cursor: pointer; }
+.board-lightbox figcaption button:hover { background: #0002; }
+.board-lightbox .icon { width: 12px; height: 12px; }
+
+/* The floating note window: the same paper, with its pin. */
+.floating-note { position: relative; box-sizing: border-box; display: flex; flex-direction: column; gap: 8px; height: 100vh; padding: 16px 14px 10px; background: var(--paper); color: var(--paper-ink); }
+.floating-note > header { display: flex; align-items: center; gap: 3px; cursor: move; flex: none; }
+
+.floating-note > header input { flex: 1; min-width: 0; height: 26px; padding: 0 5px; border: 0; border-radius: 3px; background: transparent; color: inherit; font: 600 14px var(--sans); outline: 0; }
+.floating-note > header input:focus { background: color-mix(in srgb, var(--paper-ink) 8%, transparent); }
+.floating-note > header button { display: grid; place-items: center; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: inherit; opacity: .6; cursor: pointer; }
+.floating-note > header button:hover, .floating-note > header button[aria-pressed='true'] { opacity: 1; background: color-mix(in srgb, var(--paper-ink) 12%, transparent); }
+.floating-note .icon { width: 13px; height: 13px; }
+.floating-note .board-note { flex: 1; overflow: auto; }
+.floating-note > p { margin: 0; font: 11px var(--sans); opacity: .7; }
+
+/* Pixel: a dithered cork in two tones, square paper with hard offset shadows, square pins, no tilt, stepped motion. */
+:root[data-theme='pixel'] .board-surface { border-radius: 0; background-image: conic-gradient(var(--cork-fleck) 25%, transparent 0 50%, var(--cork-fleck) 0 75%, transparent 0), radial-gradient(var(--cork-hole) 1px, transparent 1px);
+  background-size: 4px 4px, 12px 12px; background-position: 0 0, 4px 4px;
+  box-shadow: inset 0 0 0 2px var(--border), inset 0 0 0 6px var(--cork-frame), inset 0 0 0 8px var(--border); image-rendering: pixelated; }
+:root[data-theme='pixel'] .board-card { border-radius: 0; box-shadow: 4px 4px 0 #000a; transition: none; animation-timing-function: steps(4); }
+:root[data-theme='pixel'] .board-card.is-moving { transform: translate(-2px, -2px); box-shadow: 8px 8px 0 #000a; }
+:root[data-theme='pixel'] .board-card:focus-visible { box-shadow: 0 0 0 2px var(--accent), 4px 4px 0 #000a; }
+:root[data-theme='pixel'] .board-pin { width: 12px; height: 12px; margin-left: -6px; top: -6px; border-radius: 0; background: linear-gradient(#fff8, #fff8) 2px 2px / 4px 4px no-repeat, var(--pin, #d9534f); box-shadow: 2px 2px 0 #0009; }
+:root[data-theme='pixel'] :is(.board-actions, .board-actions button, .board-link-form, .board-library, .board-library > button, .board-tools button, .board-lightbox figure, .board-lightbox figcaption button, .board-image) { border-radius: 0; }
+:root[data-theme='pixel'] :is(.board-link-form, .board-library) { outline: 1px solid var(--edge); outline-offset: 1px; box-shadow: 3px 3px 0 var(--border), 5px 5px 0 #0008; }
+:root[data-theme='pixel'] .board-actions { box-shadow: 0 0 0 1px var(--edge), 3px 3px 0 #0008; }
+:root[data-theme='pixel'] .board-paper i { border-radius: 0; }
+:root[data-theme='pixel'] .board-card header input, :root[data-theme='pixel'] .floating-note > header input { font-size: 14px; }
+:root[data-theme='pixel'] .board-note .entry-edit, :root[data-theme='pixel'] .board-note .cm-content { font-size: 18px; line-height: 24px; }
+:root[data-theme='pixel'] .board-caption, :root[data-theme='pixel'] .board-link small, :root[data-theme='pixel'] .board-lightbox figcaption small { font-size: 13px; }
+:root[data-theme='pixel'] .board-lightbox { backdrop-filter: none; background: repeating-conic-gradient(#000d 0 25%, #000a 0 50%) 0 0 / 4px 4px; }
+:root[data-theme='pixel'] .board-lightbox figure { box-shadow: 8px 8px 0 #000; }
+:root[data-theme='pixel'] .board-link img { border-radius: 0; image-rendering: pixelated; }
+:root[data-theme='pixel'] .floating-note { box-shadow: inset 0 0 0 2px #0003; }
+@media (max-width: 600px) { .board-actions button span { display: none; } }
+/* On paper, the editor's text colours follow the ink. */
+:is(.board-card, .floating-note) { --text: var(--paper-ink); --strong: var(--paper-ink); --muted: color-mix(in srgb, var(--paper-ink) 65%, transparent); --placeholder: color-mix(in srgb, var(--paper-ink) 45%, transparent); --selection: color-mix(in srgb, var(--paper-ink) 18%, transparent); }
+:is(.board-card, .floating-note) .board-note * { color: inherit; }
+:is(.board-card, .floating-note) .board-note { color: var(--paper-ink); }
+
+/* Tilted like the classic board, the pixel way: paper stays crisp-edged. */
+:root[data-theme='pixel'] .board-card { transform: rotate(var(--tilt, 0deg)); }
+:root[data-theme='pixel'] .board-card.is-moving { transform: rotate(0deg) translate(-2px, -2px); }
+/* The floating note's handle: a strip at the pin to move the window by. */
+.floating-note-handle { position: absolute; inset: 0 0 auto; height: 14px; cursor: move; }
+.floating-note-handle .board-pin { top: 2px; }
+.floating-note { padding-top: 20px; cursor: move; }
+.floating-note .board-note { cursor: text; }
+
+/* Block Markdown on notes (noteBlocks.ts): headings, lists, checkboxes, code blocks with copy, tables. Ink colours
+   come from the paper, so it reads on every note colour. */
+.cm-line.md-h { font-family: var(--sans); font-weight: 700; color: var(--paper-ink, var(--strong)); }
+.cm-line.md-h1 { font-size: 1.45em; line-height: 1.35; padding-top: 4px !important; }
+.cm-line.md-h2 { font-size: 1.22em; line-height: 1.4; }
+.cm-line.md-h3 { font-size: 1.06em; text-transform: none; opacity: .9; }
+.cm-line.md-li { padding-left: calc(var(--indent, 0) * 18px + 2px) !important; }
+.md-bullet { display: inline-block; width: 18px; vertical-align: middle; }
+.md-bullet::before { content: ''; display: block; width: 5px; height: 5px; margin: 0 auto 2px 4px; border-radius: 50%; background: currentColor; opacity: .75; }
+.md-ol-mark { font-variant-numeric: tabular-nums; opacity: .7; }
+.md-checkbox { display: inline-block; box-sizing: border-box; width: 14px; height: 14px; margin: 0 6px 2px 1px; vertical-align: middle; border-radius: 3px; box-shadow: inset 0 0 0 1.5px currentColor; opacity: .75; cursor: pointer; transition: background-color 120ms ease, transform 200ms var(--spring); }
+.md-checkbox:hover { opacity: 1; transform: scale(1.08); }
+.md-checkbox.is-checked { background: currentColor; opacity: .85; }
+.md-checkbox.is-checked::after { content: ''; display: block; width: 4px; height: 8px; margin: 1px 0 0 4.5px; border: solid var(--paper, var(--background)); border-width: 0 2px 2px 0; transform: rotate(42deg); }
+.cm-line.md-task.is-done { text-decoration: line-through; text-decoration-color: color-mix(in srgb, currentColor 50%, transparent); opacity: .6; }
+.cm-line.md-code-line { padding: 0 10px !important; background: color-mix(in srgb, var(--paper-ink, #000) 86%, transparent); color: #e6e2d6; font: 12.5px/20px var(--mono) !important; }
+.cm-line.md-code-top { border-radius: 6px 6px 0 0; padding-top: 4px !important; }
+.cm-line.md-code-bottom { border-radius: 0 0 6px 6px; padding-bottom: 4px !important; min-height: 6px; }
+.cm-line.md-code-line.is-editing { color: #f3efe3; }
+.md-code-head { display: inline-flex; align-items: center; justify-content: space-between; width: 100%; gap: 8px; }
+.md-code-head.is-compact { width: auto; float: right; }
+.md-code-lang { color: #a9a598; font: 10.5px var(--mono); text-transform: lowercase; }
+.md-code-copy { height: 20px; padding: 0 8px; border: 0; border-radius: 4px; background: #ffffff1a; color: #e6e2d6; font: 500 10.5px var(--sans); cursor: pointer; }
+.md-code-copy:hover { background: #ffffff2e; }
+.md-code-copy.is-done { background: color-mix(in srgb, var(--success) 40%, transparent); }
+.cm-line.md-table-source { font-family: var(--mono); font-size: 12.5px; white-space: pre; }
+.cm-line.md-table-source.is-rule { opacity: .5; }
+.md-table-wrap { position: relative; margin: 4px 22px 18px 0; }
+.md-table { width: 100%; border-collapse: collapse; font: 12.5px/1.45 var(--sans); }
+.md-table :is(th, td) { padding: 4px 8px; border: 1px solid color-mix(in srgb, var(--paper-ink, var(--text)) 26%, transparent); text-align: left; vertical-align: top; cursor: text; overflow-wrap: anywhere; }
+.md-table th { font-weight: 700; background: color-mix(in srgb, var(--paper-ink, var(--text)) 9%, transparent); }
+.md-table td:empty::after { content: '\200b'; }
+.md-table tr:hover td { background: color-mix(in srgb, var(--paper-ink, var(--text)) 5%, transparent); }
+.md-table-add { position: absolute; display: grid; place-items: center; padding: 0; border: 0; border-radius: 4px; background: color-mix(in srgb, var(--paper-ink, var(--text)) 12%, transparent); color: inherit; font: 600 13px var(--sans); opacity: 0; cursor: pointer; transition: opacity 120ms ease, background-color 120ms ease; }
+.md-table-add-col { top: 0; right: -20px; width: 16px; bottom: 0; }
+.md-table-add-row { left: 0; right: 0; bottom: -16px; height: 14px; }
+.md-table-wrap:hover .md-table-add { opacity: .75; }
+.md-table-add:hover { opacity: 1 !important; background: color-mix(in srgb, var(--paper-ink, var(--text)) 22%, transparent); }
+/* The format menu's block and table rows */
+.format-blocks, .format-table { border-top: 1px solid var(--divider); padding-top: 4px; }
+.format-block { min-width: 28px; height: 26px; padding: 0 6px; border: 0; border-radius: 5px; background: transparent; color: var(--text); font: 600 11.5px var(--mono); cursor: pointer; }
+.format-block:hover, .format-table-action:hover { background: var(--hover); color: var(--strong); }
+.format-table-action { height: 24px; padding: 0 8px; border: 0; border-radius: 5px; background: transparent; color: var(--accent); font: 500 11.5px var(--sans); cursor: pointer; }
+/* Pixel: square boxes and cells, a terminal-black code block, the pixel faces. */
+:root[data-theme='pixel'] .md-checkbox { border-radius: 0; box-shadow: inset 0 0 0 2px currentColor; }
+:root[data-theme='pixel'] .md-checkbox.is-checked::after { border-width: 0 3px 3px 0; margin-left: 4px; }
+:root[data-theme='pixel'] .md-bullet::before { border-radius: 0; width: 6px; height: 6px; }
+:root[data-theme='pixel'] .cm-line.md-code-line { font-size: 17px !important; line-height: 22px !important; background: #111; color: #b8f28c; }
+:root[data-theme='pixel'] :is(.cm-line.md-code-top, .cm-line.md-code-bottom, .md-code-copy, .md-table-add) { border-radius: 0; }
+:root[data-theme='pixel'] .md-code-lang, :root[data-theme='pixel'] .md-code-copy { font-size: 14px; }
+:root[data-theme='pixel'] .md-table { font-size: 14px; }
+:root[data-theme='pixel'] .md-table :is(th, td) { border-width: 2px; }
+:root[data-theme='pixel'] .cm-line.md-table-source { font-size: 16px; }
+:root[data-theme='pixel'] .format-block { font-size: 15px; }
+
+/* Cards on their own layer, so menus and popovers of the app stay in front of them. */
+.board-surface { isolation: isolate; }
+/* Resizing at the lower right corner: a small grip of three lines, shown on hover. */
+.board-resize { position: absolute; right: 1px; bottom: 1px; z-index: 2; width: 16px; height: 16px; cursor: nwse-resize; opacity: 0; transition: opacity var(--fast) ease;
+  background: linear-gradient(135deg, transparent 0 50%, color-mix(in srgb, var(--paper-ink) 45%, transparent) 50% 56%, transparent 56% 66%, color-mix(in srgb, var(--paper-ink) 45%, transparent) 66% 72%, transparent 72% 82%, color-mix(in srgb, var(--paper-ink) 45%, transparent) 82% 88%, transparent 88%); }
+.board-card:is(:hover, :focus-within) .board-resize, .board-card.is-sizing .board-resize { opacity: 1; }
+.board-card.is-sizing { transition: none; transform: rotate(0deg); box-shadow: 0 0 0 1.5px var(--accent), 0 14px 28px -8px #000c; }
+.board-card.is-note.has-height .board-note { flex: 1; min-height: 0; overflow: auto; }
+.board-card.is-note.has-height { overflow: visible; }
+:root[data-theme='pixel'] .board-resize { background: linear-gradient(var(--paper-ink), var(--paper-ink)) 12px 4px / 2px 2px no-repeat, linear-gradient(var(--paper-ink), var(--paper-ink)) 8px 8px / 2px 2px no-repeat, linear-gradient(var(--paper-ink), var(--paper-ink)) 12px 8px / 2px 2px no-repeat, linear-gradient(var(--paper-ink), var(--paper-ink)) 4px 12px / 2px 2px no-repeat, linear-gradient(var(--paper-ink), var(--paper-ink)) 8px 12px / 2px 2px no-repeat, linear-gradient(var(--paper-ink), var(--paper-ink)) 12px 12px / 2px 2px no-repeat; opacity: 0; }
+:root[data-theme='pixel'] .board-card:is(:hover, :focus-within) .board-resize { opacity: .6; }
+:root[data-theme='pixel'] .board-card.is-sizing { box-shadow: 0 0 0 2px var(--accent), 4px 4px 0 #000a; }
+/* The cursor in code blocks: light on the dark block (the paper's dark ink would vanish there). */
+.board-note .cm-line.md-code-line, .floating-note .cm-line.md-code-line { caret-color: #fff8e0; }
+.board-note .cm-line.md-code-line ::selection, .floating-note .cm-line.md-code-line ::selection { background: #ffffff40; }
+:root[data-theme='pixel'] .board-note .cm-line.md-code-line, :root[data-theme='pixel'] .floating-note .cm-line.md-code-line { caret-color: #b8f28c; }
+
+/* Leave the pin outside the paper; only the text area scrolls. */
+.board-note .cm-content { padding-bottom: 24px !important; }
+.board-note .cm-scroller { min-height: 0; }
+.board-note { touch-action: auto; }
+
+/* CodeMirror's caret hit testing needs an axis-aligned writing surface. */
+.board-card.is-note { --tilt: 0deg !important; }

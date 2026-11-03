@@ -5,6 +5,7 @@ import type { DecorationSet, ViewUpdate } from '@codemirror/view';
 import { history, historyKeymap } from '@codemirror/commands';
 import { isRevealed, markdownSpans, textColors } from '../markdown';
 import type { TextColor } from '../markdown';
+import { noteBlocks } from './noteBlocks';
 
 // The editor of an entry: CodeMirror with Obsidian-like live preview. Formatting is always rendered; its markers
 // (`**`, `]{rot}` …) are only shown while the cursor or selection touches that part, and hidden everywhere else.
@@ -67,8 +68,9 @@ export interface EntryEditor {
   configure(options: { readOnly: boolean; label: string }): void;
 }
 
-export function createEntryEditor({ parent, text, readOnly, label, onChange, onUpdate }: {
-  parent: HTMLElement; text: string; readOnly: boolean; label: string;
+export function createEntryEditor({ parent, text, readOnly, label, rich = false, onChange, onUpdate }: {
+  /** Board notes: headings, lists, checkboxes, code blocks and tables as well (noteBlocks.ts). */
+  rich?: boolean; parent: HTMLElement; text: string; readOnly: boolean; label: string;
   onChange: (text: string) => void; onUpdate: (update: ViewUpdate) => void;
 }): EntryEditor {
   const settings = new Compartment();
@@ -81,7 +83,7 @@ export function createEntryEditor({ parent, text, readOnly, label, onChange, onU
     state: EditorState.create({
       doc: text,
       extensions: [
-        history(), keymap.of(historyKeymap), EditorView.lineWrapping, livePreview, theme, settings.of(configuration(readOnly, label)),
+        rich ? noteBlocks() : [], history(), keymap.of(historyKeymap), EditorView.lineWrapping, livePreview, theme, settings.of(configuration(readOnly, label)),
         cspNonce ? EditorView.cspNonce.of(cspNonce) : [],
         EditorView.updateListener.of(update => {
           if (update.docChanged && !update.transactions.every(tr => tr.annotation(external))) onChange(update.state.doc.toString());

@@ -12,12 +12,12 @@ pub fn open_browser(url: &str) -> Result<()> {
     #[cfg(not(windows))] { let _ = url; Err("Browseranmeldung ist derzeit nur unter Windows verfügbar".into()) }
 }
 fn token_endpoint(account: &Account) -> String {
-    if account.protocol == "gmail" { "https://oauth2.googleapis.com/token".into() }
+    if matches!(account.protocol.as_str(), "gmail" | "drive") { "https://oauth2.googleapis.com/token".into() }
     else { format!("https://login.microsoftonline.com/{}/oauth2/v2.0/token", account.tenant) }
 }
 fn exchange(account: &Account, secret: &mut Secret, mut fields: Vec<(&str, String)>) -> Result<()> {
     fields.push(("client_id", account.client_id.clone()));
-    if account.protocol == "gmail" && !secret.client_secret.is_empty() { fields.push(("client_secret", secret.client_secret.clone())); }
+    if matches!(account.protocol.as_str(), "gmail" | "drive") && !secret.client_secret.is_empty() { fields.push(("client_secret", secret.client_secret.clone())); }
     let response = super::transport::http()?.post(token_endpoint(account)).form(&fields).send().map_err(|_| "Anmeldedienst nicht erreichbar")?;
     let result = super::transport::json(response).map_err(|_| "Anmeldung konnte nicht erneuert oder abgeschlossen werden. Client-ID, App-Registrierung und Berechtigungen prüfen; gegebenenfalls erneut anmelden.")?;
     secret.access_token = result["access_token"].as_str().ok_or("Anmeldedienst lieferte keinen Zugriffstoken")?.to_string();
@@ -37,13 +37,13 @@ pub fn authorize(account: &Account, secret: &mut Secret, cancel: &AtomicBool) ->
     let verifier = format!("{}{}", uuid::Uuid::new_v4().simple(), uuid::Uuid::new_v4().simple());
     let challenge = URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()));
     let state = uuid::Uuid::new_v4().to_string();
-    let endpoint = if account.protocol == "gmail" { "https://accounts.google.com/o/oauth2/v2/auth".into() }
+    let endpoint = if matches!(account.protocol.as_str(), "gmail" | "drive") { "https://accounts.google.com/o/oauth2/v2/auth".into() }
         else { format!("https://login.microsoftonline.com/{}/oauth2/v2.0/authorize", account.tenant) };
     let mut url = url::Url::parse(&endpoint).map_err(|_| "Ungültiger Anmeldedienst")?;
     url.query_pairs_mut().append_pair("client_id", &account.client_id).append_pair("response_type", "code").append_pair("redirect_uri", REDIRECT)
         .append_pair("state", &state).append_pair("code_challenge", &challenge).append_pair("code_challenge_method", "S256").append_pair("login_hint", &account.email)
-        .append_pair("scope", if account.protocol == "gmail" { "https://www.googleapis.com/auth/gmail.readonly" } else { "offline_access User.Read Mail.Read" });
-    if account.protocol == "gmail" { url.query_pairs_mut().append_pair("access_type", "offline").append_pair("prompt", "consent"); }
+        .append_pair("scope", if matches!(account.protocol.as_str(), "gmail" | "drive") { if account.protocol == "drive" { "https://www.googleapis.com/auth/drive.appdata" } else { "https://www.googleapis.com/auth/gmail.readonly" } } else { "offline_access User.Read Mail.Read" });
+    if matches!(account.protocol.as_str(), "gmail" | "drive") { url.query_pairs_mut().append_pair("access_type", "offline").append_pair("prompt", "consent"); }
     open_browser(url.as_str())?;
     let started = Instant::now();
     while started.elapsed() < Duration::from_secs(180) {

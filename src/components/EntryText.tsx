@@ -6,13 +6,18 @@ import { Edit, Style, TextColor, colorAt, hasStyle, setColor, textColors, toggle
 import { createEntryEditor } from './entryEditor';
 import type { EntryEditor } from './entryEditor';
 import { FormatMenu } from './FormatMenu';
+import { insertBlock, tableAt, tableEdit } from './noteBlocks';
+import type { BlockKind } from './noteBlocks';
 
 interface StrikeLine { x1: number; x2: number; y: number }
 const styleKeys: Record<string, Style> = { KeyB: 'bold', KeyI: 'italic' };
 const shiftStyleKeys: Record<string, Style> = { KeyX: 'strike', KeyH: 'highlight' };
+// Board notes: Ctrl+Shift+7 / 8 / 9 numbered, bullets, checklist; Ctrl+Alt+1–3 headings, Ctrl+Alt+C code, Ctrl+Alt+T table.
+const noteKeys: Record<string, BlockKind> = { Digit7: 'numbers', Digit8: 'bullets', Digit9: 'tasks' };
+const noteAltKeys: Record<string, BlockKind> = { Digit1: 'h1', Digit2: 'h2', Digit3: 'h3', KeyC: 'code', KeyT: 'table' };
 
 // `strike` is 'ghost' while a cancel action is only being previewed.
-export function EntryText({ entry, label, strike, readOnly = false, onChange, focusEntryId }: { entry: Entry; label: string; strike: 'solid' | 'ghost' | null; readOnly?: boolean; onChange: (text: string) => void; focusEntryId: { current: string | null } }) {
+export function EntryText({ entry, label, strike, readOnly = false, rich = false, onChange, focusEntryId }: { rich?: boolean; entry: Entry; label: string; strike: 'solid' | 'ghost' | null; readOnly?: boolean; onChange: (text: string) => void; focusEntryId: { current: string | null } }) {
   useLanguage();
   const containerRef = useRef<HTMLDivElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
@@ -21,12 +26,12 @@ export function EntryText({ entry, label, strike, readOnly = false, onChange, fo
   onChangeRef.current = onChange;
   const measureRef = useRef<() => void>(() => {});
   const [lines, setLines] = useState<StrikeLine[]>([]);
-  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; byKey?: boolean } | null>(null);
   const ariaLabel = readOnly ? t("{0} (geplant, Spur)", label) : t("{0} bearbeiten", label);
 
   useLayoutEffect(() => {
     const instance = createEntryEditor({
-      parent: hostRef.current!, text: entry.text, readOnly, label: ariaLabel,
+      parent: hostRef.current!, text: entry.text, readOnly, label: ariaLabel, rich,
       onChange: text => onChangeRef.current(text),
       // Hidden or revealed markers change the text's geometry, so a strike-through is re-measured after such updates.
       onUpdate: update => { if (update.geometryChanged || update.focusChanged || update.selectionSet) requestAnimationFrame(() => measureRef.current()); },
@@ -93,25 +98,34 @@ export function EntryText({ entry, label, strike, readOnly = false, onChange, fo
     else if (event.altKey && !event.ctrlKey && !event.shiftKey && /^Digit[0-8]$/.test(event.code)) {
       const index = Number(event.code.slice(5));
       color(index === 0 ? null : textColors[index - 1].name);
-    } else return;
+    } else if (event.key === 'ContextMenu' || (event.shiftKey && !event.ctrlKey && !event.altKey && event.key === 'F10') || (ctrl && event.key === '.')) {
+      // The format menu from the keyboard (Shift+F10, the menu key, Ctrl+.): at the cursor, its buttons reachable by arrows.
+      const view = editor.current.view, at = view.coordsAtPos(view.state.selection.main.head);
+      if (!rich && view.state.selection.main.empty) return;
+      setMenu({ x: at?.left ?? 0, y: at?.bottom ?? 0, byKey: true });
+    } else if (rich && ctrl && event.shiftKey && noteKeys[event.code]) insertBlock(editor.current.view, noteKeys[event.code]);
+    else if (rich && event.ctrlKey && event.altKey && !event.shiftKey && noteAltKeys[event.code]) insertBlock(editor.current.view, noteAltKeys[event.code]);
+    else return;
     event.preventDefault();
     event.stopPropagation();
   }
 
   const [text, start, end] = menu && editor.current ? selection() : ['', 0, 0];
-  return <div className="entry-edit" ref={containerRef} onKeyDown={onKeyDown} onBlur={closeMenu}
+  return <div className="entry-edit" ref={containerRef} onKeyDown={onKeyDown} onBlur={event => { if (!(event.relatedTarget as Element | null)?.closest('.format-menu')) closeMenu(); }}
     aria-keyshortcuts="Control+B Control+I Control+Shift+X Control+Shift+H Alt+1 Alt+2 Alt+3 Alt+4 Alt+5 Alt+6 Alt+7 Alt+8 Alt+0"
     onContextMenu={event => {
       // Only selected text gets the format menu; otherwise the system menu (copy, paste, spelling) stays.
       const state = editor.current?.view.state;
-      if (readOnly || !state || state.selection.main.empty) return;
+      if (readOnly || !state || (state.selection.main.empty && !rich)) return;
       event.preventDefault();
       setMenu({ x: event.clientX, y: event.clientY });
     }}>
     <div className="entry-host" ref={hostRef} />
     {strike && <svg className={`strike-overlay${strike === 'ghost' ? ' is-ghost' : ''}`} aria-hidden="true">{lines.map((line, index) => <line key={index} pathLength={1} x1={line.x1} x2={line.x2} y1={line.y} y2={line.y} />)}</svg>}
-    {menu && <FormatMenu x={menu.x} y={menu.y} color={colorAt(text, start, end)}
+    {menu && <FormatMenu x={menu.x} y={menu.y} byKey={menu.byKey} onReturn={() => editor.current?.view.focus()} color={colorAt(text, start, end)}
       active={{ bold: hasStyle(text, start, end, 'bold'), italic: hasStyle(text, start, end, 'italic'), strike: hasStyle(text, start, end, 'strike'), highlight: hasStyle(text, start, end, 'highlight') }}
-      onStyle={style} onColor={color} onClose={closeMenu} />}
+      onStyle={style} onColor={color} onClose={closeMenu}
+      blocks={rich && editor.current ? { table: tableAt(editor.current.view.state) !== null, onBlock: (kind: BlockKind) => { insertBlock(editor.current!.view, kind); closeMenu(); },
+        onTable: action => { const view = editor.current!.view, at = tableAt(view.state); if (at) tableEdit(view, at.block.from, action, at.column, action === 'add-row' ? at.line + 1 : at.line); closeMenu(); } } : undefined} />}
   </div>;
 }

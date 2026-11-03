@@ -46,8 +46,8 @@ export interface Day {
 }
 
 /** A day as the calendar windows show it: only days with a title or entries, traces left out. */
-export interface CalendarDay { date: string; title: string; entries: Entry[] }
-export interface CalendarImport { date: string; entry: Entry }
+export interface CalendarDay { date: string; title: string; hasJournal?: boolean; entries: Entry[] }
+export interface CalendarImport { date: string; entry: Entry; tag?: {id:string;name:string;color:string} }
 /** A due reminder (see reminders.rs): an open task or event with the bell, at its time (without one at 9:00). */
 export interface Reminder { id: string; date: string; kind: 'task' | 'event' | 'info'; text: string; time: string | null; end: string | null; due: string; late: boolean; snoozed: boolean }
 
@@ -73,6 +73,7 @@ export const journal = {
     return touched;
   },
   load: fetchDay,
+  invalidate() { cache.clear(); settled.clear(); },
   cached: (date: string): Day | undefined => settled.get(date),
   prefetch(dates: readonly string[]) { for (const date of dates) fetchDay(date).catch(() => {}); },
   /** Shows a reminder again ten minutes from now. */

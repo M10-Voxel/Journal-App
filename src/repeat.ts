@@ -1,3 +1,4 @@
+import ICAL from 'ical.js';
 // Repeating entries. A rule describes which days an entry recurs on, starting with its first day (`start`, which is
 // always an occurrence, like DTSTART in iCalendar). Occurrences are real entries; see `Repeat` in journal.ts.
 import { shiftDate } from './dates.ts';
@@ -12,6 +13,9 @@ export type RepeatUnit = 'day' | 'week' | 'month' | 'year';
  */
 export type RepeatOn = 'date' | 'weekday' | 'last-weekday' | 'last-day' | 'easter';
 export interface RepeatRule {
+  /** Original imported rule, including dates excluded from the series. */
+  ics?: string;
+  icsUid?: string;
   start: string;
   unit: RepeatUnit;
   /** Every n days, weeks, months or years. */
@@ -113,6 +117,12 @@ function inActivePeriod(rule: RepeatRule, date: string): boolean {
 /** The occurrences from `from` to `to` (inclusive), at most `limit` of them. */
 export function occurrences(rule: RepeatRule, from: string, to: string, limit = 5000): string[] {
   const result: string[] = [];
+  if(rule.ics){
+    const component=new ICAL.Component(ICAL.parse(rule.ics));
+    const event=new ICAL.Event(component),iterator=event.iterator();let next=iterator.next(),steps=0;
+    while(next){if(++steps>200000)throw new Error('Wiederholung zu gro?');const date=next.toString().slice(0,10);if(date>to || (rule.end?.until && date>rule.end.until))break;if(date>=from && !result.includes(date))result.push(date);if(result.length>=limit)break;next=iterator.next();}
+    return result;
+  }
   const until = rule.end?.until, count = rule.end?.count;
   let counted = 0;
   for (const date of candidates(rule)) {
@@ -217,6 +227,7 @@ export function describeMonths(months: readonly number[]): string {
 }
 /** The whole rule: "Alle 4 Wochen am Mo, Do, Fr · nur im Mär · 3 Wochen an, 1 Woche aus · 10×". */
 export function describe(rule: RepeatRule): string {
+  if(rule.ics)return getLanguage()==='en' ? 'Imported recurrence' : 'Importierte Wiederholung';
   if (getLanguage() === 'en') {
     let text = describePattern(rule);
     const months = monthsOf(rule);
@@ -260,6 +271,7 @@ export function onChoices(start: string, unit: RepeatUnit): RepeatOn[] {
  */
 export function withStart(rule: RepeatRule, start: string, followWeekday = true): RepeatRule {
   const next: RepeatRule = { ...rule, start };
+  if(rule.ics && start!==rule.start){const component=new ICAL.Component(ICAL.parse(rule.ics));const date=component.getFirstPropertyValue('dtstart') as InstanceType<typeof ICAL.Time>;const [y,m,d]=start.split('-').map(Number);date.year=y;date.month=m;date.day=d;component.updatePropertyWithValue('dtstart',date);next.ics=component.toString();delete next.icsUid;}
   if (followWeekday && rule.weekdays?.length === 1 && rule.weekdays[0] === weekdayOf(rule.start)) next.weekdays = [weekdayOf(start)];
   const offered = onChoices(start, next.unit);
   if (next.on && !offered.includes(next.on)) next.on = next.on !== 'last-weekday' && offered.includes('last-weekday') ? 'last-weekday' : 'date';
@@ -277,7 +289,7 @@ export function continued(rule: RepeatRule, day: string): RepeatRule {
 function normalize(rule: RepeatRule | null | undefined) {
   if (!rule) return null;
   const pause = (rule.unit === 'day' || rule.unit === 'week') && rule.pause && rule.pause.on > 0 && rule.pause.off > 0 ? rule.pause : null;
-  return { start: rule.start, unit: rule.unit, every: Math.max(1, rule.every), weekdays: rule.unit === 'week' ? weekdaysOf(rule) : null,
+  return { ics:rule.ics,icsUid:rule.icsUid,start: rule.start, unit: rule.unit, every: Math.max(1, rule.every), weekdays: rule.unit === 'week' ? weekdaysOf(rule) : null,
     on: rule.unit === 'month' || rule.unit === 'year' ? rule.on ?? 'date' : null, pause: pause && { on: pause.on, off: pause.off, unit: pause.unit },
     end: rule.end?.count ? { count: rule.end.count } : rule.end?.until ? { until: rule.end.until } : null, months: monthsOf(rule) };
 }
@@ -286,7 +298,7 @@ export const sameRule = (a: RepeatRule | null | undefined, b: RepeatRule | null 
 /** A rule as it is stored: only what applies to its unit. */
 export function cleanRule(rule: RepeatRule): RepeatRule {
   const value = normalize(rule)!;
-  return { start: value.start, unit: value.unit, every: value.every, ...value.weekdays ? { weekdays: value.weekdays } : {}, ...value.on ? { on: value.on } : {}, ...value.pause ? { pause: value.pause } : {}, ...value.end ? { end: value.end } : {}, ...value.months ? { months: value.months } : {} };
+  return { ...value.ics ? {ics:value.ics,icsUid:value.icsUid} : {},start: value.start, unit: value.unit, every: value.every, ...value.weekdays ? { weekdays: value.weekdays } : {}, ...value.on ? { on: value.on } : {}, ...value.pause ? { pause: value.pause } : {}, ...value.end ? { end: value.end } : {}, ...value.months ? { months: value.months } : {} };
 }
 
 /**

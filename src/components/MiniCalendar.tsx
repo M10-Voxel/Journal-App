@@ -2,7 +2,7 @@ import { t, useLanguage } from '../i18n';
 import { useEffect, useState } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { localDate } from '../journal';
-import { monthGrid, shiftMonth } from '../dates';
+import { monthGrid, shiftMonth, shiftDate } from '../dates';
 import { formatMonthName } from '../calendar';
 import { CompactMonth, openInJournal, useCalendarData, useJournalDate, useNow } from './calendarShared';
 import { Icon } from './Icon';
@@ -19,7 +19,7 @@ export function MiniCalendar() {
   const [month, setMonth] = useState(today.slice(0, 7));
   const [pinned, setPinned] = useState(false);
   const grid = monthGrid(month);
-  const { days, error } = useCalendarData(grid[0], grid[grid.length - 1]);
+  const { days, error } = useCalendarData(shiftDate(grid[0],-366), grid[grid.length - 1]);
   const tags = useTags();
   const [hiddenTags, setHiddenTags] = useHiddenTags('calendar');
   useEffect(() => { if (journalDate) setMonth(journalDate.slice(0, 7)); }, [journalDate]);

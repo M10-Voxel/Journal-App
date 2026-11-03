@@ -11,8 +11,13 @@ import type { IconName } from './Icon';
 // Keys are written as `Alt+⇧+T` (pressed together) and `← / →` (either); `~Klick` marks a mouse or touch gesture.
 export const shortcutGroups = (): { id: string; title: string; icon: IconName; items: [keys: string, label: string][] }[] => ([
   { id: 'days', title: t("Tage"), icon: 'journal', items: [
-    ['Alt+←', t("Vorheriger Tag")], ['Alt+→', t("Nächster Tag")], ['Alt+H', t("Heute")], ['Strg+G', t("Gehe zu Datum (Mini-Kalender)")],
-    [t("~Wischen / ⇧+~Mausrad"), t("Tag zurück / weiter")], ['Strg+,', t("Einstellungen")], ['F1 / ?', t("Diese Übersicht")],
+    ['Alt+←', t("Vorheriger Tag")], ['Alt+→', t("Nächster Tag")], ['Alt+H', t("Heute")], ['Strg+G', t("Gehe zu Datum (Mini-Kalender)")], ['Strg+1–5', t("Tag · Woche · Monat · Quartal · Jahr")],
+    [t("~Wischen / ⇧+~Mausrad"), t("Tag zurück / weiter")], ['Strg+Z', t("Rückgängig")], ['Strg+Y / Strg+⇧+Z', t("Wiederherstellen")], ['Strg+,', t("Einstellungen")], ['F1 / ?', t("Diese Übersicht")],
+  ] },
+  { id: 'book', title: t("Buch"), icon: 'journal', items: [
+    ['Strg+Bild↓ / Strg+Bild↑', t("Umblättern / zurückblättern")], [t("~Eselsohr / ~Wischen / ⇧+~Mausrad"), t("Eine Seite weiter / zurück")],
+    ['Alt+← / Alt+→', t("Ganzen Tag zurück / weiter (Einträge-Seite)")], [t("~Lesezeichen"), t("Zu Einträgen, Daten oder Pinnwand springen")],
+    [t("~Doppelseite / ~Einzelseite"), t("Zwei Seiten oder eine (schmale Fenster: eine)")], ['Strg+K', t("Kalender herunterklappen / zuklappen")], ['Esc', t("Kalender zuklappen")],
   ] },
   { id: 'entries', title: t("Einträge"), icon: 'task', items: [
     ['Alt+A', t("Neue Aufgabe")], ['Alt+E', t("Neues Ereignis")], ['Alt+N', t("Neue Notiz")],
@@ -34,9 +39,16 @@ export const shortcutGroups = (): { id: string; title: string; icon: IconName; i
     ['Alt+G', t("Tag zuweisen")], ['1–9', t("Tag nehmen oder ein-/ausblenden (in der Liste)")], ['0', t("Kein Tag / Einträge ohne Tag")],
     ['A', t("Filter: alle Tags zeigen")], ['Alt+~Klick / ⇧+Enter', t("Filter: nur diesen Tag zeigen")], ['Enter', t("Tippen und Enter: neuen Tag anlegen")],
   ] },
+  { id: 'board', title: t("Pinnwand"), icon: 'pin', items: [
+    ['Strg+. / ⇧+F10', t("Format-Menü an der Schreibmarke (Pfeile, Enter, Esc)")],
+    ['Strg+Alt+1 / Strg+Alt+2 / Strg+Alt+3', t("Überschrift 1 · 2 · 3")], ['Strg+⇧+8', t("Stichpunkte")], ['Strg+⇧+9', t("Checkliste")], ['Strg+⇧+7', t("Nummeriert")],
+    ['Strg+Alt+C', t("Codeblock")], ['Strg+Alt+T', t("Tabelle")], ['Tab / ⇧+Tab', t("Tabelle: nächste / vorige Zelle · Liste: ein- / ausrücken")],
+    ['Enter', t("Liste fortsetzen · Tabelle: neue Zeile")], ['← / → / ↑ / ↓', t("Karte verschieben (⇧: weiter)")], ['Alt+⇧+← / Alt+⇧+→', t("Karte schmaler / breiter")], ['Alt+⇧+↑ / Alt+⇧+↓', t("Zettel kürzer / länger")],
+    [t("~Ecke ziehen"), t("Größe ändern (Doppelklick: zurücksetzen)")], [t("~Klick aufs Bild"), t("Groß öffnen")],
+  ] },
   { id: 'text', title: t("Text"), icon: 'pencil', items: [
     ['Strg+B', '**Fett**'], ['Strg+I', '*Kursiv*'], ['Strg+⇧+X', '~~Durchgestrichen~~'], ['Strg+⇧+H', '==Markiert=='],
-    ['Alt+1–8', 'Farbe: [Text]{rot} …'], ['Alt+0', t("Farbe entfernen")], ['~Rechtsklick', t("Format-Menü (mit Auswahl)")], ['Strg+Z', t("Rückgängig")],
+    ['Alt+1–8', 'Farbe: [Text]{rot} …'], ['Alt+0', t("Farbe entfernen")], ['~Rechtsklick / ⇧+F10', t("Format-Menü (mit Auswahl)")], ['Strg+Z', t("Rückgängig")],
   ] },
   { id: 'planner', title: t("Planen & Uhr"), icon: 'calendar', items: [
     ['← / → / ↑ / ↓', t("Tag wählen")], ['Bild↑ / Bild↓', t("Monat")], ['H', t("Heute")], ['U', t("Kalender ⇄ Uhr")], ['W', t("Wiederholen")], ['E', t("Erinnern")],
@@ -50,9 +62,10 @@ export const shortcutGroups = (): { id: string; title: string; icon: IconName; i
     [t("Entf"), t("Nicht wiederholen")], ['Enter', t("Übernehmen")], ['Esc', t("Zurück")],
   ] },
   { id: 'calendar', title: t("Kalender"), icon: 'month', items: [
+    ['Strg+~Mausrad', t("Stundenraster vergrößern / verkleinern")],
     ['J / M / W / A / T', t("Jahr · Monat · Woche · Mo–Fr · Tag")], ['1–5', 'Ansicht'], [t("← / → / ~Wischen"), t("Zurück / weiter")], ['H', t("Heute")],
-    ['~Klick', t("Tag oder Eintrag im Journal zeigen")], [t("~Rand ziehen"), t("Breite (Doppelklick: zurücksetzen)")],
-    [t("~Ziehen im Raster"), t("Termin eintragen – auch über Mitternacht in den nächsten Tag")], ['~Rechtsklick', t("Eintrag bearbeiten")], ['Alt+Entf', t("Eintrag löschen")],
+    ['~Klick', t("Tag im Journal zeigen / Eintragsdetails öffnen")], [t("~Rand ziehen"), t("Breite (Doppelklick: zurücksetzen)")],
+    [t("~Ziehen im Raster"), t("Termin eintragen – auch über Mitternacht in den nächsten Tag")], ['~Rechtsklick', t("Eintrag bearbeiten")], ['Alt+Entf', t("Eintrag löschen")], ['Entf', t("Eintrag unter der Maus löschen")], ['Strg+C', t("Kalendereintrag kopieren")], ['Strg+V', t("Kalendereintrag am Tag unter der Maus einfügen")],
     ['↑ / ↓', t("Termin verschieben")], ['⇧+↑ / ⇧+↓', t("Ende verschieben")],
     ['Alt+K', t("Als Kalendereintrag")], ['Alt+E', t("Als Ereignis")], ['Alt+A', t("Als Aufgabe")], ['Alt+P', t("Priorität")], ['Alt+G', t("Tag zuweisen")],
   ] },

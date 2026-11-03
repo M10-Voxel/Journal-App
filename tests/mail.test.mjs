@@ -1,3 +1,4 @@
+import { decodeMailContent } from '../src/mailContent.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -22,7 +23,7 @@ test('delivery text yields a reviewable, calendar-only time window and stable re
   const { candidates } = await recognize();
   assert.equal(candidates.length, 1);
   const entry = candidates[0];
-  assert.equal(entry.entry.description, sample.text);
+  assert.equal(decodeMailContent(entry.entry.description).text, sample.text);
   assert.deepEqual([entry.date,entry.entry.time,entry.entry.end,entry.entry.showInJournal,entry.automatic], ['2026-11-12','10:00','12:00',false,false]);
   assert.equal((await recognize()).candidates[0].entry.id, entry.entry.id);
   assert.equal((await recognize()).candidates[0].id, entry.id);
@@ -30,7 +31,7 @@ test('delivery text yields a reviewable, calendar-only time window and stable re
 test('mail descriptions preserve calendar details and omit quoted replies', async () => {
   const calendar = ['BEGIN:VCALENDAR','VERSION:2.0','BEGIN:VEVENT','UID:details@example.org','DTSTART:20261031T110000','SUMMARY:Abholung','DESCRIPTION:Am Eingang','END:VEVENT','END:VCALENDAR'].join('\r\n');
   const { candidates } = await recognize({ calendars:[calendar], text:'Das Paket enthält Schuhe.\n\nAm Montag schrieb jemand:\n> Alte Nachricht' });
-  assert.equal(candidates[0].entry.description, 'Am Eingang\n\nDas Paket enthält Schuhe.');
+  assert.equal(decodeMailContent(candidates[0].entry.description).text, 'Am Eingang\n\nDas Paket enthält Schuhe.');
 });
 test('free-text recognition never silently falls back to keyword rules without the model', async () => {
   await assert.rejects(recognize({ text:'Treffen morgen 17 Uhr' }),/ML-Modell/);
@@ -57,4 +58,19 @@ test('cancellations become a notice rather than a new appointment', async () => 
 });
 test('HTML stays plain text and does not treat scripts as instructions or mail contents', () => {
   assert.equal(mailText('<script>alert(1)</script><style>x{}</style><p>A &amp; B</p><img src="https://tracker.example"><p>&#x1F4E6;</p>'), 'A & B\n📦');
+});
+
+test('delivery workday ranges use sending date and skip weekends',async()=>{
+ const {deliveryWorkdayWindow}=await import('../src/mail.ts');
+ const sent=new Date('2026-11-06T12:00:00').getTime()/1000;
+ assert.deepEqual(deliveryWorkdayWindow('Lieferung','Lieferzeit: 1 bis 2 Werktage',sent).date,'2026-11-09');
+ assert.equal(deliveryWorkdayWindow('Lieferung','Lieferzeit: 1 bis 2 Werktage',sent).end,'47:59');
+ assert.equal(deliveryWorkdayWindow('Lieferung','Lieferzeit: 1-2 Werktagen',sent,true).date,'2026-11-07');
+ assert.equal(deliveryWorkdayWindow('Lieferung','Retoure innerhalb von 14 Werktagen',sent),null);
+ const recognized=await recognizeMail({account,message:message({subject:'Lieferung',text:'Lieferung in 1 bis 2 Werktagen',sentAt:sent})},'2026-11-06');
+ assert.equal(recognized.candidates.length,1);assert.equal(recognized.candidates[0].date,'2026-11-09');assert.equal(recognized.candidates[0].entry.end,'47:59');
+});
+test('HTML mail survives storage with Unicode and retains its plain text alternative',async()=>{
+ const pending={account,message:message({subject:'Lieferung',text:'Lieferung in 1 bis 2 Werktagen',html:'<h1 style="color:red">Hallo 👋</h1>',sentAt:new Date('2026-11-06T12:00:00').getTime()/1000})};
+ const result=await recognizeMail(pending,'2026-11-06');const body=decodeMailContent(result.candidates[0].entry.description);assert.equal(body.html,pending.message.html);assert(body.text.includes('Werktagen'));
 });

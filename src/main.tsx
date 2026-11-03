@@ -1,3 +1,4 @@
+import { UndoShortcuts, flushHistoryWindows } from './components/UndoShortcuts';
 import { t, useLanguage, setLanguage } from './i18n.ts';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -19,9 +20,11 @@ import { TagFilter } from './components/TagFilter';
 import { manageTags, saveTags, useHiddenTags, useTags } from './tagStore';
 import { ensureMailTags } from './mailTags';
 import { filterKey, isShown, tagOf, tagRank } from './tags';
+
 import { useMailImport } from './components/useMailImport';
 import { MailImportToast } from './components/MailImportToast';
 import { PeriodNotes } from './components/PeriodNotes';
+import { BulletinBoard, FloatingNote } from './components/BulletinBoard';
 import type { Mode } from './components/PeriodNotes';
 import { Settings, applyTheme, loadSettings, saveSettings } from './settings';
 import { ThemeSync } from './components/ThemeSync';
@@ -36,6 +39,10 @@ import { MiniCalendar } from './components/MiniCalendar';
 import { MiniCalendarPicker } from './components/MiniCalendarPicker';
 import { WindowControls } from './components/WindowControls';
 import { NavCluster } from './components/NavCluster';
+import { BookViewSwitch, JournalBook, useBookView } from './components/JournalBook';
+import type { BookControl } from './components/JournalBook';
+import { CalendarDrawer, CalendarRibbon, useCalendarDrawer } from './components/CalendarDrawer';
+import type { BookPage } from './book';
 import '@fontsource/ibm-plex-sans/400.css';
 import '@fontsource/ibm-plex-sans/500.css';
 import '@fontsource/ibm-plex-sans/600.css';
@@ -50,9 +57,19 @@ import '@fontsource/pixelify-sans/500.css';
 import '@fontsource/pixelify-sans/600.css';
 import '@fontsource/pixelify-sans/700.css';
 import '@fontsource/vt323/400.css';
+import '@fontsource/source-serif-4/400.css';
+import '@fontsource/source-serif-4/400-italic.css';
+import '@fontsource/source-serif-4/600.css';
+import '@fontsource/source-serif-4/700.css';
+import '@fontsource/source-serif-4/700-italic.css';
+import '@fontsource/fraunces/500.css';
+import '@fontsource/fraunces/600.css';
+import '@fontsource/fraunces/400-italic.css';
+import './pixel-sizes.css';
 import './pixel.css';
 import './colors.css';
 import './tags.css';
+import './journal-theme.css';
 import { applyColors } from './colors';
 
 applyTheme(loadSettings().theme);
@@ -69,6 +86,7 @@ fontWarmup.setAttribute('aria-hidden', 'true');
 fontWarmup.innerHTML = '<span>a</span><i>a</i><b>a</b><b><i>a</i></b>';
 document.body.append(fontWarmup);
 
+const periodModes: Mode[] = ['day', 'week', 'month', 'quarter', 'year'];
 // Tests stretch the wait (window.__journalAutosaveDelay) to count saves themselves.
 const autosaveDelay = () => (window as { __journalAutosaveDelay?: number }).__journalAutosaveDelay ?? 700;
 const prepareDay = (day: Day): Day => ({ ...day, entries: orderEntries(day.entries) });
@@ -96,6 +114,8 @@ function App() {
   const [moveAnnouncement, setMoveAnnouncement] = useState('');
   const [help, setHelp] = useState(false);
   const [settings, setSettings] = useState<Settings>(loadSettings);
+  const driveWorking = useRef(false);
+  const [driveBusy, setDriveBusy] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<SettingsTab>('appearance');
   const openSettings = (tab: SettingsTab = 'appearance') => { setSettingsTab(tab); setSettingsOpen(true); };
@@ -105,6 +125,17 @@ function App() {
   const [slide, setSlide] = useState<'next' | 'prev' | null>(null);
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const sidebar = useSidebarWidth();
+  // The journal style shows the app as a book; its calendar comes down from a ribbon instead of the sidebar.
+  const bookMode = settings.theme === 'journal';
+  const [bookView, setBookView] = useBookView();
+  const [bookWide, setBookWide] = useState(true);
+  const bookRef = useRef<BookControl>(null);
+  const drawer = useCalendarDrawer();
+  const toggleDrawer = (focus = false) => {
+    const opening = !drawer.open;
+    drawer.setOpen(opening);
+    if (focus) requestAnimationFrame(() => document.querySelector<HTMLElement>(opening ? '.calendar-drawer .cal' : '.calendar-ribbon')?.focus({ preventScroll: true }));
+  };
   const datePickerButtonRef = useRef<HTMLButtonElement>(null);
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const focusEntryId = useRef<string | null>(null);
@@ -171,6 +202,17 @@ function App() {
   dateRef.current = date;
   useEffect(() => { void emit('journal:date', date); }, [date]);
   useEffect(() => {
+    const stop = listen('history:restored', async () => {
+      journal.invalidate();
+      const target = dateRef.current;
+      try {
+        const value = await journal.load(target);
+        if (dateRef.current === target) { setDay(prepareDay(value)); setDirty(false); setOpenEntryId(null); setNewEntryId(null); }
+      } catch (reason) { setError(String(reason)); }
+    });
+    return () => { void stop.then(fn => fn()); };
+  }, []);
+  useEffect(() => {
     const stops = [
       listen('journal:hello', () => { void emit('journal:date', dateRef.current); }),
       listen<{ date: string; entry: string | null }>('journal:navigate', event => showFromCalendar(event.payload.date, event.payload.entry)),
@@ -187,7 +229,11 @@ function App() {
     ];
     return () => { for (const stop of stops) void stop.then(unlisten => unlisten()); };
   }, []);
-  const openFromCalendar = useStableCallback((target: string, entryId?: string) => showFromCalendar(target, entryId ?? null));
+  // The calendar sheet over the book covers the left page; opening a day there folds it away so the day can be seen.
+  const openFromCalendar = useStableCallback((target: string, entryId?: string) => {
+    if (bookMode && settings.calendarDock === 'overlay' && drawer.open && settings.bookPaging !== 'spread') drawer.setOpen(false);
+    showFromCalendar(target, entryId ?? null);
+  });
   const showFromCalendar = useStableCallback((target: string, entryId: string | null) => {
     if (target !== date) {
       navigate(target);
@@ -238,7 +284,8 @@ function App() {
     navigate(localDate(new Date(first.getFullYear(), first.getMonth(), Math.min(day, last), 12)));
   };
   const mainRef = useRef<HTMLElement>(null);
-  useWheelSwipe(stepPeriod, { root:mainRef, ignore:'.entry-dock-shell, .planner' });
+  // In the book, swiping turns pages (JournalBook) instead of whole days.
+  useWheelSwipe(stepPeriod, { root: bookMode ? undefined : mainRef, ignore:'.entry-dock-shell, .planner' });
   // Saving does not lock the editor: edits made while the request is running stay in place and remain unsaved.
   // The journal saves by itself shortly after the last change (like the calendar does at once); Ctrl+S saves right away.
   const save = useStableCallback(async () => {
@@ -390,8 +437,12 @@ function App() {
   });
 
   // Window-wide shortcuts; entry shortcuts are handled (and marked handled) by the focused entry first. See ShortcutHelp.
+  useEffect(()=>{let working=false;const stop=listen<{redo:boolean;emptyEntry?:string}>('history:request',async e=>{
+    if(working || driveWorking.current)return;working=true;
+    try {if(!await save())return;await flushHistoryWindows();await invoke('history_step',{redo:e.payload.redo,emptyEntry:e.payload.emptyEntry ?? null});}catch(reason){setError(String(reason));}finally{working=false;}
+  });return()=>{void stop.then(fn=>fn());};},[]);
   const onGlobalKey = useStableCallback((event: KeyboardEvent) => {
-    if (event.defaultPrevented) return;
+    if (event.defaultPrevented || driveWorking.current) return;
     const target = event.target as HTMLElement;
     const typing = target.matches('input, textarea, [contenteditable="true"]');
     const alt = event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey;
@@ -400,11 +451,25 @@ function App() {
     if (event.key === 'F1' || (event.key === '?' && !typing && !event.ctrlKey && !event.altKey)) setHelp(open => !open);
     else if (ctrl && event.key === ',') { setSettingsTab('appearance'); setSettingsOpen(open => !open); }
     else if (ctrl && event.code === 'KeyG') setDatePickerOpen(open => !open);
+    // Ctrl+1–5: day, week, month, quarter, year (the tabs in the title bar, or the book's register tabs).
+    else if (ctrl && /^Digit[1-5]$/.test(event.code)) setPeriodMode(periodModes[Number(event.code.slice(5)) - 1]);
+    // Ctrl + / − / 0: the interface larger, smaller, or by the screen again (see Settings → Größe).
+    else if (event.ctrlKey && !event.altKey && (event.key === '+' || event.key === '=' || event.key === '-' || event.code === 'Digit0' || event.code === 'NumpadAdd' || event.code === 'NumpadSubtract' || event.code === 'Numpad0')) {
+      const larger = event.key === '+' || event.key === '=' || event.code === 'NumpadAdd';
+      const current = settings.uiScale === 'auto' ? Math.round(Number(document.documentElement.dataset.scale || 1) * 100) : Number(settings.uiScale);
+      const uiScale: Settings['uiScale'] = event.code === 'Digit0' || event.code === 'Numpad0' ? 'auto' : `${Math.max(75, Math.min(200, current + (larger ? 5 : -5)))}`;
+      const next = { ...settings, uiScale };
+      setSettings(next); saveSettings(next);
+    }
     else if (help || settingsOpen || datePickerOpen) return;
     else if (alt && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) stepDay(event.key === 'ArrowLeft' ? -1 : 1);
     else if (alt && event.code === 'KeyH') navigate(today);
     else if (alt && event.code in kinds) addEntry(kinds[event.code], target.closest<HTMLElement>('[data-entry-id]')?.dataset.entryId);
     else if (ctrl && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) focusText(event.key === 'ArrowDown' ? adjacentText(null, 1) : titleInput());
+    // The book: Ctrl+PageDown/PageUp turn a page, Ctrl+K brings the calendar down (Esc on the page takes it back up).
+    else if (bookMode && ctrl && (event.key === 'PageDown' || event.key === 'PageUp')) bookRef.current?.turn(event.key === 'PageDown' ? 1 : -1);
+    else if (bookMode && ctrl && event.code === 'KeyK') toggleDrawer(true);
+    else if (bookMode && drawer.open && event.key === 'Escape' && target === document.body) toggleDrawer(true);
     else return;
     event.preventDefault();
   });
@@ -450,93 +515,119 @@ function App() {
   const hiddenByTag = ready ? day.entries.filter(entry => entry.showInJournal !== false && !shownHere(entry)).length : 0;
   // A trace whose plan is already stored has created its target entries; only unsaved plans can be taken back.
   const savedTraces = new Set(ready ? journal.cached(day.date)?.entries.filter(entry => entry.plan).map(entry => entry.id) : []);
-  return <div className={`app actions-${settings.actionLayout}${sidebar.dragging ? ' is-resizing' : ''}`} onFocusCapture={event => {
+  // The day's entries: the date, the title and the list. The classic view shows it above the checklist; the book on
+  // its entries page (only for the day the app has loaded, `date`).
+  const entriesPage = (pageDate = date) => {
+    const here = ready && pageDate === date;
+    const slideClass = slide && !bookMode ? ` slide-${slide}` : '';
+    return <><div className={`document-header${slideClass}`}>
+        <div className="eyebrow">{t("Tagesnotiz")}{pageDate === today && <span className="today-label">{t("Heute")}</span>}</div>
+        <h1>{formatDate(pageDate)}</h1>
+      </div>
+      {error && <div className="error" role="alert">{error}</div>}
+      {!here && !error && <p className="loading" role="status">{t("Tagesnotiz wird geöffnet …")}</p>}
+      {here && <div className={`editor${slideClass}`}>
+        <label className="visually-hidden" htmlFor="title">{t("Titel des Tages")}</label>
+        <input id="title" className="title-input" placeholder={t("Gib deinem Tag einen Namen …")} value={day.title}
+          onKeyDown={event => { if ((event.key === 'Enter' || event.key === 'ArrowDown') && !event.altKey && !event.shiftKey && focusText(adjacentText(null, 1), 'end')) event.preventDefault(); }} onChange={event => { const title = event.target.value; update(current => ({ ...current, title })); }} />
+        <section className="journal-section" aria-labelledby="entries-heading">
+          <div className="section-heading">
+            <div className="section-title"><h2 id="entries-heading">{t("Einträge")}</h2><span className="entry-count">{entryCount}</span>
+              {hiddenByTag > 0 && <button type="button" className="entry-hidden-count" data-tip={t("Alle Tags zeigen")} onClick={() => setHiddenTags(new Set())}><Icon name="tag" />{t("{0} ausgeblendet", hiddenByTag)}</button>}</div>
+            <div className="kind-picker" role="group" aria-label={t("Eintrag hinzufügen")}>
+              {entryKindOrder.map(kind => <button type="button" key={kind} title={t("Neu · Alt {0}", { task: 'A', event: 'E', note: 'N' }[kind])} onClick={() => addEntry(kind)}><Icon name={kind} />{entryLabels()[kind]}</button>)}
+            </div>
+          </div>
+          <div className="entries" ref={entriesRef}>
+            <span className="visually-hidden" id="entry-reorder-help">{t("Innerhalb desselben Typs und derselben Priorität ziehen oder mit Alt und den Pfeiltasten nach oben und unten verschieben. Das funktioniert auch direkt im Text.")}</span>
+            <span className="visually-hidden" role="status">{moveAnnouncement}</span>
+            {visibleEntries.length === 0 && <div className="empty"><Icon name="journal" /><p>{t("Ein neuer Tag. Platz für deine Gedanken.")}</p><span>{t("Füge oben eine Aufgabe, Notiz oder ein Ereignis hinzu.")}</span></div>}
+            {visibleEntries.map((entry, index) => <JournalEntry key={entry.id} layout={settings.actionLayout} entry={entry} day={day.date} tag={tagOf(tags, entry.tag)}
+              tagFirst={index === 0 || visibleEntries[index - 1].kind !== entry.kind || filterKey(visibleEntries[index - 1].tag) !== filterKey(entry.tag)}
+              tagLast={index === visibleEntries.length - 1 || visibleEntries[index + 1].kind !== entry.kind || filterKey(visibleEntries[index + 1].tag) !== filterKey(entry.tag)} onCreate={addEntry} traceSaved={savedTraces.has(entry.id)} onNavigate={navigate} isNew={entry.id === newEntryId} isOpen={entry.id === openEntryId} focusEntryId={focusEntryId} focusMoveEntryId={focusMoveEntryId}
+              isGroupStart={index > 0 && visibleEntries[index - 1].kind !== entry.kind}
+              canMoveUp={index > 0 && sameGroup(visibleEntries[index - 1], entry)}
+              canMoveDown={index < visibleEntries.length - 1 && sameGroup(visibleEntries[index + 1], entry)}
+              dragState={drag.view?.sourceId === entry.id ? 'source' : drag.view?.targetId === entry.id ? `drop-${drag.view.placement}` : null}
+              drag={drag.handlers} onMoveOffset={moveByOffset} onOpenChange={changeOpen} onChange={changeEntry} onRemove={removeEntry} onLinkedChange={changeLinked}
+            />)}
+          </div>
+        </section>
+      </div>}</>;
+  };
+  const bookPage = (page: BookPage) => page.page === 'entries' ? entriesPage(page.date)
+    : page.page === 'board' ? <BulletinBoard date={page.date} />
+    : <PeriodNotes date={page.date} mode={page.page === 'data' ? 'day' : periodMode} part={page.page === 'data' ? undefined : page.page} onManage={() => openSettings('activities')} onImport={importFromCalendar} />;
+  const toolbarItems = <>
+    <NavCluster label={periodMode === 'day' ? t("Tagesnavigation") : language === 'en' ? 'Period navigation' : 'Zeitraumnavigation'} prev={{ label: periodMode === 'day' ? t("Vorheriger Tag") : language === 'en' ? 'Previous period' : 'Vorheriger Zeitraum', tip: periodMode === 'day' ? t("Vorheriger Tag · Alt ←") : language === 'en' ? 'Previous period' : 'Vorheriger Zeitraum' }} next={{ label: periodMode === 'day' ? t("Nächster Tag") : language === 'en' ? 'Next period' : 'Nächster Zeitraum', tip: periodMode === 'day' ? t("Nächster Tag · Alt →") : language === 'en' ? 'Next period' : 'Nächster Zeitraum' }}
+      today={{ tip: t("Heute · Alt H"), disabled: date === today }} atToday={date === today} onPrev={() => stepPeriod(-1)} onToday={() => navigate(today)} onNext={() => stepPeriod(1)} />
+    <MiniCalendarPicker date={date} open={datePickerOpen} onOpenChange={setDatePickerOpen} onPick={navigate} buttonRef={datePickerButtonRef} />
+    <div className="toolbar-end">{bookMode && <BookViewSwitch view={bookView} narrow={!bookWide} onChange={setBookView} />}{periodMode === 'day' && <TagFilter label={t("Tags im Journal")} hidden={hiddenTags} onChange={next => { setNewEntryId(null); setHiddenTags(next); }} />}</div>
+  </>;
+  const periodLabels = language === 'en' ? ['Day', 'Week', 'Month', 'Quarter', 'Year'] : ['Tag', 'Woche', 'Monat', 'Quartal', 'Jahr'];
+  // The book's views as register tabs on its top edge (Ctrl+1–5).
+  const register = <nav className="book-register" aria-label={language === 'en' ? 'Journal views' : 'Journalansichten'}>
+    {periodModes.map((mode, index) => <button type="button" key={mode} className="book-register-tab" data-period-mode={mode} aria-current={periodMode === mode ? 'page' : undefined}
+      title={`${periodLabels[index]} · ${t('Strg')} ${index + 1}`} onClick={() => setPeriodMode(mode)}>{periodLabels[index]}{index === 0 && dirty && <span className="unsaved-dot" aria-label={t("Ungespeicherte Änderungen")} />}</button>)}
+  </nav>;
+  const overlayCalendar = bookMode && settings.calendarDock === 'overlay';
+  // Turning both pages at once, the sheet does not cover a page: the book shows one page beside it.
+  const besideCalendar = overlayCalendar && drawer.open && settings.bookPaging === 'spread';
+  const calendar = <Calendar embedded journalDate={date} onOpen={openFromCalendar} onCreate={createFromCalendar} onEdit={editFromCalendar} onRemove={removeFromCalendar} onExport={exportFromCalendar} onImport={importFromCalendar} />;
+  return <div className={`app actions-${settings.actionLayout}${sidebar.dragging ? ' is-resizing' : ''}${bookMode ? ' is-book' : ''}`} onFocusCapture={event => {
     const target = event.target as HTMLElement;
     if (newEntryId && !target.closest('.popover') && target.closest<HTMLElement>('[data-entry-id]')?.dataset.entryId !== newEntryId) setNewEntryId(null);
   }}>
-    {/* The sidebar is the calendar (its view switch in line with the toolbar next to it); dragging its edge sets the width. */}
-    <aside className="sidebar" aria-label={t("Kalender und Navigation")} style={{ width: sidebar.width }}>
-      <Calendar embedded journalDate={date} onOpen={openFromCalendar} onCreate={createFromCalendar} onEdit={editFromCalendar} onRemove={removeFromCalendar} onExport={exportFromCalendar} onImport={importFromCalendar} />
-      <div className="sidebar-resizer" {...sidebar.handle} />
-    </aside>
+    {/* The sidebar is the calendar (its view switch in line with the toolbar next to it); dragging its edge sets the width.
+        In the book it comes down from its ribbon instead and lies next to the book. */}
+    {bookMode ? overlayCalendar ? null : <CalendarDrawer open={drawer.open} animated={drawer.animated} width={sidebar.width} resizer={sidebar.handle} disabled={driveBusy} onClose={() => toggleDrawer(true)}>{calendar}</CalendarDrawer>
+      : <aside inert={driveBusy} className="sidebar" aria-label={t("Kalender und Navigation")} style={{ width: sidebar.width }}>
+        {calendar}
+        <div className="sidebar-resizer" {...sidebar.handle} />
+      </aside>}
 
     {/* Swiping sideways on a trackpad, or Shift + wheel, turns the day; entries that are swiped themselves keep the gesture. */}
-    <main className="main" ref={mainRef}>
-      <header className="topbar" onMouseDown={event => {
+    <main inert={driveBusy} className="main" ref={mainRef}>
+      <header className={`topbar${bookMode ? ' is-book-head' : ''}`} onMouseDown={event => {
         if (event.button !== 0 || (event.target as Element).closest('button, input, [role="dialog"]')) return;
         event.preventDefault();
         const window = getCurrentWindow();
         void (event.detail === 2 ? window.toggleMaximize() : window.startDragging()).catch(reason => setError(t("Fensteraktion fehlgeschlagen: {0}", String(reason))));
       }}>
-        <nav className="journal-tabs" aria-label={language === 'en' ? 'Journal views' : 'Journalansichten'}>{(['day', 'week', 'month', 'quarter', 'year'] as Mode[]).map((mode, index) => <button type="button" key={mode} className="journal-tab" aria-current={periodMode === mode ? 'page' : undefined} onClick={() => setPeriodMode(mode)}><Icon name={({ day: 'journal', week: 'week', month: 'month', quarter: 'quarter', year: 'year' } as const)[mode]} /><span>{(language === 'en' ? ['Day', 'Week', 'Month', 'Quarter', 'Year'] : ['Tag', 'Woche', 'Monat', 'Quartal', 'Jahr'])[index]}</span>{index === 0 && dirty && <span className="unsaved-dot" aria-label={t("Ungespeicherte Änderungen")} />}</button>)}</nav>
-        <div className="titlebar-space" />
+        {/* In the book the views are its register tabs; turning and the date join the title bar, so there is one bar. */}
+        {bookMode ? <div className="book-head-tools">{toolbarItems}</div> : <nav className="journal-tabs" aria-label={language === 'en' ? 'Journal views' : 'Journalansichten'}>{periodModes.map((mode, index) => <button type="button" key={mode} className="journal-tab" aria-current={periodMode === mode ? 'page' : undefined} onClick={() => setPeriodMode(mode)}><Icon name={({ day: 'journal', week: 'week', month: 'month', quarter: 'quarter', year: 'year' } as const)[mode]} /><span>{(language === 'en' ? ['Day', 'Week', 'Month', 'Quarter', 'Year'] : ['Tag', 'Woche', 'Monat', 'Quartal', 'Jahr'])[index]}</span>{index === 0 && dirty && <span className="unsaved-dot" aria-label={t("Ungespeicherte Änderungen")} />}</button>)}</nav>}
+        {!bookMode && <div className="titlebar-space" />}
         {/* Settings sit with the window's own controls, where Zed and most apps keep them. */}
+        <button type="button" className="titlebar-button titlebar-help" aria-label={t("Tastenkürzel")} aria-keyshortcuts="F1" title={t("Tastenkürzel") + ' · F1'} onClick={()=>setHelp(true)}>F1</button>
         <button type="button" className="titlebar-button settings-button" data-mail-count={mailStatus.count || undefined} aria-label={t("Einstellungen")} aria-keyshortcuts="Control+," title={t("Einstellungen · Strg ,")} onClick={() => openSettings()}><Icon name="settings" /></button>
         <WindowControls onError={setError} />
       </header>
       {/* Like the calendar's toolbar (and Zed's under its tabs): turning the days first, then what is shown. */}
-      <div className="toolbar">
-        <NavCluster label={periodMode === 'day' ? t("Tagesnavigation") : language === 'en' ? 'Period navigation' : 'Zeitraumnavigation'} prev={{ label: periodMode === 'day' ? t("Vorheriger Tag") : language === 'en' ? 'Previous period' : 'Vorheriger Zeitraum', tip: periodMode === 'day' ? t("Vorheriger Tag · Alt ←") : language === 'en' ? 'Previous period' : 'Vorheriger Zeitraum' }} next={{ label: periodMode === 'day' ? t("Nächster Tag") : language === 'en' ? 'Next period' : 'Nächster Zeitraum', tip: periodMode === 'day' ? t("Nächster Tag · Alt →") : language === 'en' ? 'Next period' : 'Nächster Zeitraum' }}
-          today={{ tip: t("Heute · Alt H"), disabled: date === today }} atToday={date === today} onPrev={() => stepPeriod(-1)} onToday={() => navigate(today)} onNext={() => stepPeriod(1)} />
-        <MiniCalendarPicker date={date} open={datePickerOpen} onOpenChange={setDatePickerOpen} onPick={navigate} buttonRef={datePickerButtonRef} />
-        <div className="toolbar-end">{periodMode === 'day' && <TagFilter label={t("Tags im Journal")} hidden={hiddenTags} onChange={next => { setNewEntryId(null); setHiddenTags(next); }} />}</div>
-      </div>
+      {!bookMode && <div className="toolbar">{toolbarItems}</div>}
 
-      <div className="scroll" ref={scrollRef}>
-        <div className="content">
-          {periodMode === 'day' && <><div className={`document-header${slide ? ` slide-${slide}` : ''}`}>
-            <div className="eyebrow">{t("Tagesnotiz")}{date === today && <span className="today-label">{t("Heute")}</span>}</div>
-            <h1>{formatDate(date)}</h1>
+      {bookMode ? <JournalBook mode={periodMode} date={date} view={bookView} paging={settings.bookPaging} beside={besideCalendar} sheetWidth={sidebar.width} onNavigate={navigate} renderPage={bookPage} entriesScrollRef={scrollRef} controlRef={bookRef} onWideChange={setBookWide}
+        ribbon={<CalendarRibbon open={drawer.open} onToggle={() => toggleDrawer()} />} register={register}
+        overlay={overlayCalendar && <CalendarDrawer overlay open={drawer.open} animated={drawer.animated} width={sidebar.width} resizer={sidebar.handle} resizable={besideCalendar || !(bookView === 'double' && bookWide)} disabled={driveBusy} onClose={() => toggleDrawer(true)}>{calendar}</CalendarDrawer>} />
+        : <div className="scroll" ref={scrollRef}>
+          <div className="content">
+            {periodMode === 'day' && entriesPage()}
+            <PeriodNotes date={date} mode={periodMode} onManage={() => openSettings('activities')} onImport={importFromCalendar} />
+            {periodMode === 'day' && <BulletinBoard key={date} date={date} />}
           </div>
-          {error && <div className="error" role="alert">{error}</div>}
-          {!ready && !error && <p className="loading" role="status">{t("Tagesnotiz wird geöffnet …")}</p>}
-          {ready && <div className={`editor${slide ? ` slide-${slide}` : ''}`}>
-            <label className="visually-hidden" htmlFor="title">{t("Titel des Tages")}</label>
-            <input id="title" className="title-input" placeholder={t("Gib deinem Tag einen Namen …")} value={day.title}
-              onKeyDown={event => { if ((event.key === 'Enter' || event.key === 'ArrowDown') && !event.altKey && !event.shiftKey && focusText(adjacentText(null, 1), 'end')) event.preventDefault(); }} onChange={event => { const title = event.target.value; update(current => ({ ...current, title })); }} />
-            <section className="journal-section" aria-labelledby="entries-heading">
-              <div className="section-heading">
-                <div className="section-title"><h2 id="entries-heading">{t("Einträge")}</h2><span className="entry-count">{entryCount}</span>
-                  {hiddenByTag > 0 && <button type="button" className="entry-hidden-count" data-tip={t("Alle Tags zeigen")} onClick={() => setHiddenTags(new Set())}><Icon name="tag" />{t("{0} ausgeblendet", hiddenByTag)}</button>}</div>
-                <div className="kind-picker" role="group" aria-label={t("Eintrag hinzufügen")}>
-                  {entryKindOrder.map(kind => <button type="button" key={kind} title={t("Neu · Alt {0}", { task: 'A', event: 'E', note: 'N' }[kind])} onClick={() => addEntry(kind)}><Icon name={kind} />{entryLabels()[kind]}</button>)}
-                </div>
-              </div>
-              <div className="entries" ref={entriesRef}>
-                <span className="visually-hidden" id="entry-reorder-help">{t("Innerhalb desselben Typs und derselben Priorität ziehen oder mit Alt und den Pfeiltasten nach oben und unten verschieben. Das funktioniert auch direkt im Text.")}</span>
-                <span className="visually-hidden" role="status">{moveAnnouncement}</span>
-                {visibleEntries.length === 0 && <div className="empty"><Icon name="journal" /><p>{t("Ein neuer Tag. Platz für deine Gedanken.")}</p><span>{t("Füge oben eine Aufgabe, Notiz oder ein Ereignis hinzu.")}</span></div>}
-                {visibleEntries.map((entry, index) => <JournalEntry key={entry.id} layout={settings.actionLayout} entry={entry} day={day.date} tag={tagOf(tags, entry.tag)}
-                  tagFirst={index === 0 || visibleEntries[index - 1].kind !== entry.kind || filterKey(visibleEntries[index - 1].tag) !== filterKey(entry.tag)}
-                  tagLast={index === visibleEntries.length - 1 || visibleEntries[index + 1].kind !== entry.kind || filterKey(visibleEntries[index + 1].tag) !== filterKey(entry.tag)} onCreate={addEntry} traceSaved={savedTraces.has(entry.id)} onNavigate={navigate} isNew={entry.id === newEntryId} isOpen={entry.id === openEntryId} focusEntryId={focusEntryId} focusMoveEntryId={focusMoveEntryId}
-                  isGroupStart={index > 0 && visibleEntries[index - 1].kind !== entry.kind}
-                  canMoveUp={index > 0 && sameGroup(visibleEntries[index - 1], entry)}
-                  canMoveDown={index < visibleEntries.length - 1 && sameGroup(visibleEntries[index + 1], entry)}
-                  dragState={drag.view?.sourceId === entry.id ? 'source' : drag.view?.targetId === entry.id ? `drop-${drag.view.placement}` : null}
-                  drag={drag.handlers} onMoveOffset={moveByOffset} onOpenChange={changeOpen} onChange={changeEntry} onRemove={removeEntry} onLinkedChange={changeLinked}
-                />)}
-              </div>
-            </section>
-          </div>}</>}
-          <PeriodNotes date={date} mode={periodMode} onManage={() => openSettings('activities')} onImport={importFromCalendar} />
-        </div>
-      </div>
+        </div>}
 
-      <footer className="statusbar">
-        <div className={`save-status${dirty ? ' is-dirty' : ''}`} role="status"><span key={savedCount} className={`status-dot${savedCount && !dirty ? ' just-saved' : ''}`} />{busy ? t("Wird gespeichert …") : dirty ? (error ? t("Nicht gespeichert") : t("Wird gleich gespeichert …")) : ready ? t("Gespeichert") : t("Wird geöffnet …")}</div>
-        <div className="statusbar-actions"><button type="button" className="help-button" aria-label={t("Tastenkürzel")} aria-keyshortcuts="F1" onClick={() => setHelp(true)}><span>?</span><kbd>F1</kbd></button><span className="toolbar-separator" /><span className="status-count">{entryCount} {entryCount === 1 ? t("Eintrag") : t("Einträge")}</span></div>
-      </footer>
+      <span className="visually-hidden save-status" role="status" key={savedCount}>{busy ? t("Wird gespeichert …") : dirty ? (error ? t("Nicht gespeichert") : t("Wird gleich gespeichert …")) : ready ? t("Gespeichert") : t("Wird geöffnet …")}</span>
     </main>
     <ReminderToasts reminders={reminders} today={today} snoozeMinutes={10}
       onStatus={(reminder, status) => { dismissReminder(reminder); void changeLinked([reminder], status); }}
       onSnooze={reminder => { dismissReminder(reminder); journal.snoozeReminder(reminder).catch(reason => setError(t("Erinnerung: {0}", String(reason)))); }}
       onOpen={reminder => { dismissReminder(reminder); showFromCalendar(reminder.date, reminder.id); }} onDismiss={dismissReminder} />
     {help && <ShortcutHelp onClose={() => setHelp(false)} />}
-    {settingsOpen && <SettingsDialog key={settingsTab} initialTab={settingsTab} settings={settings} mailStatus={mailStatus} onImport={importFromCalendar} onClose={() => setSettingsOpen(false)} onChange={next => { setOpenEntryId(null); setSettings(next); saveSettings(next); }} />}
+    {settingsOpen && <SettingsDialog key={settingsTab} initialTab={settingsTab} beforeSync={async () => { if (!await save()) throw new Error("Lokale ?nderungen konnten nicht gespeichert werden."); }} onDriveBusy={value => { driveWorking.current = value; setDriveBusy(value); }} settings={settings} mailStatus={mailStatus} onImport={importFromCalendar} onClose={() => { if (!driveWorking.current) setSettingsOpen(false); }} onChange={next => { setOpenEntryId(null); setSettings(next); saveSettings(next); }} />}
   </div>;
 }
 
 // One bundle for all windows; the window's label decides what it shows.
 const windowLabel = getCurrentWindow().label;
 if (windowLabel === 'reminder') document.documentElement.classList.add('is-popup');
-createRoot(document.getElementById('root')!).render(<><ThemeSync />{windowLabel === 'calendar' ? <CalendarWindow /> : windowLabel === 'mini' ? <MiniCalendar /> : windowLabel === 'reminder' ? <ReminderPopup /> : <App />}{!['mini', 'reminder'].includes(windowLabel) && <MailImportToast />}</>);
+createRoot(document.getElementById('root')!).render(<><ThemeSync /><UndoShortcuts />{windowLabel.startsWith('board-') ? <FloatingNote /> : windowLabel === 'calendar' ? <CalendarWindow /> : windowLabel === 'mini' ? <MiniCalendar /> : windowLabel === 'reminder' ? <ReminderPopup /> : <App />}{!windowLabel.startsWith('board-') && !['mini', 'reminder'].includes(windowLabel) && <MailImportToast />}</>);

@@ -185,3 +185,16 @@
 :root[data-theme='pixel'] .period-item .activity-note-input:focus { box-shadow:inset 0 0 0 1px var(--edge); }
 :root[data-theme='pixel'] .period-section input[type=range]::-webkit-slider-thumb { border-radius:0; border-width:2px;box-shadow:0 0 0 2px var(--accent), 2px 2px 0 2px var(--border); }
 :root[data-theme='pixel'] .period-section input[type=range]::-webkit-slider-runnable-track { height:4px; background:repeating-linear-gradient(90deg,var(--focus) 0 6px,transparent 6px 8px); }
+
+/* Ratings chart in the pixel style: square bars on a pixel grid, crisp edges, the terminal face, a hard frame. */
+:root[data-theme='pixel'] .rating-chart { border-radius:0; outline:1px solid var(--edge); outline-offset:1px; box-shadow:3px 3px 0 var(--border), 5px 5px 0 #0008; }
+:root[data-theme='pixel'] .rating-chart svg { shape-rendering:crispEdges; }
+:root[data-theme='pixel'] .rating-chart-detail { font-size:15px; }
+:root[data-theme='pixel'] .chart-label { font:15px var(--mono); }
+:root[data-theme='pixel'] .chart-grid { stroke-width:2; stroke-dasharray:2 6; }
+:root[data-theme='pixel'] .chart-column { rx:0; opacity:1; fill:color-mix(in srgb,var(--accent) 55%,var(--background)); stroke:var(--accent); stroke-width:2; paint-order:stroke; transition:none; }
+:root[data-theme='pixel'] .chart-column.is-active { fill:var(--accent); stroke:var(--strong); }
+:root[data-theme='pixel'] .chart-column[data-empty] { fill:var(--focus); stroke:none; }
+:root[data-theme='pixel'] .chart-hit:focus-visible { outline-width:2px; }
+:root[data-theme='pixel'] .rating-summary { font-size:15px; }
+:root[data-theme='pixel'] .rating-scale { font-size:13px; }

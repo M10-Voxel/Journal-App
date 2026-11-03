@@ -421,3 +421,72 @@ button.cal-time-day:hover { background: color-mix(in srgb, var(--strong) 3.137%,
 .cal-item.is-block.is-night-start, .cal-selection.is-night-start { border-bottom-left-radius: 0 !important; border-bottom-right-radius: 0 !important; }
 .cal-item.is-block.is-night-rest, .cal-selection.is-night-rest { border-top-left-radius: 0 !important; border-top-right-radius: 0 !important; }
 .cal-item.is-block.is-night-rest { opacity: .85; background-image: repeating-linear-gradient(-45deg, transparent 0 6px, color-mix(in srgb, var(--strong) 2.353%, transparent) 6px 12px) !important; }
+
+/* The band on top makes entries for the whole day: a click into an empty part opens the card there. */
+.cal-time.can-create .cal-time-allday-cell { cursor: cell; transition: background-color var(--fast) ease; }
+.cal-time.can-create .cal-time-allday-cell:hover { background-color: color-mix(in srgb, var(--accent) 6%, transparent); }
+.cal-time.can-create .cal-time-allday-cell.is-composing { background-color: color-mix(in srgb, var(--accent) 12%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent); }
+.cal-time.can-create .cal-time-allday-cell .cal-item { cursor: pointer; }
+.cal-time.can-create .cal-time-allday.is-empty .cal-time-allday-cell { min-height: 26px; }
+
+/* Daily-note content: a quiet outline, confined to the date header in hour views. */
+:is(.cal-year-day, .cal-month-day, .cal-compact-day, .cal-time-day).has-journal-content {
+  outline: 1px solid color-mix(in srgb, var(--strong) 28%, transparent);
+  outline-offset: -2px;
+}
+
+.cal-action-notice { position: fixed; bottom: 20px; left: 50%; z-index: 2500; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px; background: var(--surface); color: var(--strong); box-shadow: 0 0 0 1px var(--edge), 0 12px 30px -8px #000c; font: 12px var(--mono); font-variant-numeric: tabular-nums; pointer-events: none; animation: popover-in 160ms var(--spring) both; }
+.cal-paste-choice { display: flex; flex-direction: column; gap: 2px; min-width: 210px; }
+.cal-paste-choice p { margin: 2px 8px 6px; color: var(--muted); font: 11px var(--sans); }
+.cal-paste-choice button { display: flex; align-items: center; min-height: 28px; padding: 0 9px; border-radius: 6px; color: var(--text); text-align: left; font: 12px var(--sans); }
+.cal-paste-choice button:is(:hover, :focus-visible) { background: var(--hover); color: var(--strong); outline: 0; }
+
+/* Copying from the card or the details: a quiet chip with its key. */
+.cal-composer-copy { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; height: 24px; margin: -2px 0 0 2px; padding: 0 8px 0 7px; border: 0; border-radius: 999px; background: transparent; color: var(--muted); box-shadow: inset 0 0 0 1px var(--edge); font: 11.5px var(--sans); cursor: pointer; transition: background-color var(--fast) ease, color var(--fast) ease; }
+.cal-composer-copy:hover { background: var(--hover); color: var(--text); }
+:is(.cal-composer-copy, .cal-details .tag-picker-foot button) .icon { width: 12px; height: 12px; }
+:is(.cal-composer-copy, .cal-details .tag-picker-foot button) kbd { margin-left: 3px; padding: 0 4px; border-radius: 3px; background: var(--border); box-shadow: 0 0 0 1px var(--edge); color: var(--placeholder); font: 9.5px var(--mono); }
+
+/* Details: as wide as their content needs (within the window); the actions wrap. */
+.popover.cal-details { width: max-content; min-width: 300px; max-width: min(720px, calc(100vw - 24px)); box-sizing: border-box; }
+.cal-details .tag-picker-foot { flex-wrap: wrap; gap: 6px; }
+.cal-details-text:empty { display: none; }
+
+/* The band without time: room for entries, multi-day ones on top as continuous bars in the normal calendar look. */
+.cal-time-allday-cell, .cal-time.can-create .cal-time-allday.is-empty .cal-time-allday-cell { min-height: 54px; }
+.cal-time-allday-cell { grid-row: 1; }
+.cal-multiday-bar { position: relative; z-index: 1; min-width: 0; padding: 2px 3px; }
+.cal-multiday-bar .cal-item { width: 100%; }
+.cal-multiday-bar .cal-item-time { display: none; }
+
+/* The span of a multi-day entry in the card: the composer's own chips. */
+.cal-multi-form { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border-radius: 10px; background: var(--inset); box-shadow: inset 0 0 0 1px var(--edge); }
+.cal-multi-row { display: flex; align-items: center; gap: 6px; }
+.cal-multi-label { width: 46px; color: var(--muted); font: 11px var(--sans); }
+.cal-multi-row .cal-composer-day { min-width: 92px; }
+.cal-multi-input { height: 26px; padding: 0 8px; border: 0; border-radius: 999px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--edge); color: var(--accent); font: 12px var(--mono); font-variant-numeric: tabular-nums; color-scheme: dark; cursor: pointer; }
+.cal-multi-input.is-date { min-width: 92px; color: var(--text); }
+.cal-multi-input:hover { background: var(--hover); }
+.cal-multi-input:focus { outline: 0; box-shadow: inset 0 0 0 1.5px var(--accent); }
+.cal-multi-input::-webkit-calendar-picker-indicator { opacity: .55; filter: invert(1); cursor: pointer; }
+.cal-multi-input::-webkit-datetime-edit-fields-wrapper { padding: 0; }
+
+/* Drawing a span over days (top band, month, year): the days light up like a marked range in the hours. */
+[data-range-date] { user-select: none; }
+[data-range-selected] { background-color: color-mix(in srgb, var(--accent) 16%, transparent) !important; box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 70%, transparent); }
+
+:root[data-theme='pixel'] .cal-action-notice { border-radius: 0; outline: 1px solid var(--edge); outline-offset: 1px; box-shadow: 3px 3px 0 var(--border), 5px 5px 0 #0008; font-size: 15px; animation-timing-function: steps(3); }
+:root[data-theme='pixel'] :is(.cal-paste-choice button, .cal-composer-copy, .cal-multi-form, .cal-multi-input, .cal-composer-copy kbd, .cal-details .tag-picker-foot kbd) { border-radius: 0; }
+:root[data-theme='pixel'] :is(.cal-multi-input, .cal-composer-copy kbd, .cal-details .tag-picker-foot kbd) { font-size: 15px; }
+:root[data-theme='pixel'] .cal-multi-label { font-size: 13px; }
+:root[data-theme='pixel'] [data-range-selected] { box-shadow: inset 0 0 0 2px var(--accent); background-image: repeating-conic-gradient(color-mix(in srgb, var(--accent) 22%, transparent) 0 25%, transparent 0 50%) !important; background-size: 4px 4px !important; }
+
+.popover.cal-details.has-mail { width: min(760px, calc(100vw - 24px)); }
+.mail-content { min-width: 0; color: var(--text); }
+.mail-content header { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+.mail-content small { overflow-wrap: anywhere; }
+.mail-content button { border: 1px solid var(--edge); padding: 4px 8px; color: var(--accent); background: var(--surface); }
+.mail-content iframe { display: block; width: 100%; height: min(440px, 52vh); border: 1px solid var(--edge); background: white; }
+.mail-content pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 45vh; overflow: auto; font: inherit; }
+
+.cal-month-day .cal-item.is-multiday { background: var(--selection); border-inline-start: 2px solid var(--accent); border-radius: 3px; }

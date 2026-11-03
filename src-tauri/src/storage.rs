@@ -61,7 +61,7 @@ pub struct Day {
 }
 /// A day as the calendar shows it: its title and the entries that live there (traces are left out, their copies count).
 #[derive(Clone, Debug, Serialize)]
-pub struct CalendarDay { pub date: String, pub title: String, pub entries: Vec<Entry> }
+pub struct CalendarDay { pub date: String, pub title: String, #[serde(rename="hasJournal")] pub has_journal: bool, pub entries: Vec<Entry> }
 /// One entry of a linked group (a trace, its copies, copies planned on again), for choosing which of them an action reaches.
 #[derive(Clone, Debug, Serialize)]
 pub struct LinkedEntry { pub id: String, pub date: String, pub kind: String, pub done: bool, pub cancelled: bool, pub trace: bool, pub series: Option<String> }
@@ -84,7 +84,7 @@ pub struct SeriesInfo { pub series: String, pub rule: serde_json::Value, pub hor
 #[derive(Clone, Debug, Deserialize)]
 pub struct SeriesExtension { pub series: String, pub from: String, pub to: String, pub dates: Vec<String> }
 #[derive(Clone, Debug, Deserialize)]
-pub struct CalendarImport { pub date: String, pub entry: Entry }
+pub struct CalendarImport { pub date: String, pub entry: Entry, #[serde(default)] pub tag: Option<Tag> }
 /// A tag like "Arbeit" or "Uni" with its colour (`#rrggbb`); entries are grouped and coloured by it. The list is ordered.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Tag { pub id: String, pub name: String, pub color: String }
@@ -100,7 +100,7 @@ pub struct Reminder {
 }
 /// When entries without a time remind.
 pub const REMINDER_DEFAULT: &str = "09:00";
-pub struct Store { conn: Connection }
+pub struct Store { pub(crate) conn: Connection }
 
 impl Store {
     pub fn interface_language(&self) -> Result<String> { Ok(self.conn.query_row("SELECT value FROM settings WHERE key='ui-language'", [], |row|row.get(0)).optional()?.unwrap_or_else(||"de".into())) }
@@ -108,7 +108,9 @@ impl Store {
     pub fn save_period_data(&self, data: &str) -> Result<()> {
         if data.len() > 10_000_000 { return Err("Periodendaten sind zu groß".into()); }
         let _: serde_json::Value = serde_json::from_str(data)?;
-        self.conn.execute("INSERT INTO settings(key,value) VALUES('period-data',?1) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [data])?;
+        let tx=self.conn.unchecked_transaction()?; crate::history::begin(&tx)?;
+        tx.execute("INSERT INTO settings(key,value) VALUES('period-data',?1) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [data])?;
+        tx.commit()?;
         Ok(())
     }
     pub fn set_interface_language(&self, language: &str) -> Result<()> { self.conn.execute("INSERT INTO settings(key,value) VALUES('ui-language',?1) ON CONFLICT(key) DO UPDATE SET value=excluded.value",[language])?; Ok(()) }
@@ -118,7 +120,7 @@ impl Store {
         let dates = stmt.query_map([], |r| r.get::<_, String>(0))?.collect::<rusqlite::Result<Vec<_>>>()?;
         dates.into_iter().map(|date| {
             let day = self.load(&date)?;
-            Ok(CalendarDay { date, title: day.title, entries: day.entries.into_iter().filter(|e| e.plan.is_none() && e.kind != "note").collect() })
+            Ok(CalendarDay { date, has_journal: !day.title.trim().is_empty() || !day.body.trim().is_empty() || day.entries.iter().any(|e|e.show_in_journal), title: day.title, entries: day.entries.into_iter().filter(|e| e.plan.is_none() && e.kind != "note").collect() })
         }).collect()
     }
     /// An import is atomic. Matching UIDs update the occurrence, even when it moved to another day.
@@ -135,9 +137,25 @@ impl Store {
             }
         }
         let tx = self.conn.transaction()?;
+        crate::history::begin(&tx)?;
         let mut touched = BTreeSet::new();
+        let mut series_map=std::collections::HashMap::<String,String>::new();
         for item in entries {
-            let e = item.entry;
+            let mut e = item.entry;
+            if let Some(tag)=item.tag {
+                if tag.name.trim().is_empty() || tag.name.chars().count()>40 || tag.color.len()!=7 || !tag.color.starts_with('#') || !tag.color[1..].chars().all(|c|c.is_ascii_hexdigit()) {return Err("Ungültiger ICS-Tag".into());}
+                let existing=tx.prepare("SELECT id,name FROM tags")?.query_map([],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?)))?.collect::<rusqlite::Result<Vec<_>>>()?;
+                let id=if let Some((id,_))=existing.into_iter().find(|(_,name)|name.to_lowercase()==tag.name.to_lowercase()){id}else{let id=Uuid::new_v4().to_string();tx.execute("INSERT INTO tags(id,name,color,position) VALUES(?1,?2,?3,(SELECT COALESCE(MAX(position)+1,0) FROM tags))",params![id,tag.name,tag.color])?;id};e.tag=Some(id);
+            }
+            let series=if let Some(repeat)=e.repeat.as_ref(){
+                if let Some(id)=series_map.get(&repeat.series){Some(id.clone())}else{
+                    let existing:Option<String>=tx.query_row("SELECT series FROM entries WHERE calendar_uid=?1 AND series IS NOT NULL",[&e.calendar_uid],|r|r.get(0)).optional()?;
+                    let existing=if existing.is_some(){existing}else{let uid=repeat.rule.as_ref().and_then(|r|r.get("icsUid")).and_then(serde_json::Value::as_str).unwrap_or("");tx.query_row("SELECT id FROM series WHERE json_extract(rule,'$.icsUid')=?1",[uid],|r|r.get(0)).optional()?};
+                    let mut imported=repeat.clone();imported.series=existing.unwrap_or_else(||Uuid::new_v4().to_string());imported.dates.clear();
+                    if !series_exists(&tx,&imported.series)?{start_series(&tx,&imported,&item.date)?;}else{tx.execute("UPDATE series SET rule=?2,horizon=?3 WHERE id=?1",params![imported.series,serde_json::to_string(&imported.rule)?,imported.horizon])?;}
+                    series_map.insert(repeat.series.clone(),imported.series.clone());Some(imported.series)
+                }
+            }else{None};
             let found: Option<(String, String, Option<String>)> = tx.query_row("SELECT id, day_date, plan FROM entries WHERE calendar_uid=?1 OR id=?2", params![e.calendar_uid, e.id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?))).optional()?;
             let id = if let Some((id, old_date, plan)) = found {
                 if plan.is_some() || (old_date != item.date && linked_ids(&tx, &id)?.len() > 1) { return Err("Ein bereits weitergeplanter Eintrag kann nicht durch einen ICS-Import verschoben werden".into()); }
@@ -145,11 +163,11 @@ impl Store {
             } else { e.id.clone() };
             tx.execute("INSERT INTO days(date,title,body,revision) VALUES(?1,'','',1) ON CONFLICT(date) DO NOTHING", [&item.date])?;
             let position: i64 = tx.query_row("SELECT COALESCE(MAX(position)+1,0) FROM entries WHERE day_date=?1", [&item.date], |r| r.get(0))?;
-            tx.execute("INSERT INTO entries(id,day_date,kind,text,done,position,cancelled,priority,time,reminder,plan,end_time,show_in_journal,calendar_uid,description,tag)
-                VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,NULL,?11,?12,?13,?14,(SELECT id FROM tags WHERE id=?15))
-                ON CONFLICT(id) DO UPDATE SET day_date=excluded.day_date,kind=excluded.kind,text=excluded.text,description=excluded.description,done=excluded.done,cancelled=excluded.cancelled,priority=excluded.priority,time=excluded.time,reminder=excluded.reminder,end_time=excluded.end_time,show_in_journal=excluded.show_in_journal,calendar_uid=excluded.calendar_uid,position=CASE WHEN entries.day_date=excluded.day_date THEN entries.position ELSE excluded.position END",
-                params![id,item.date,e.kind,e.text,e.done,position,e.cancelled,e.priority,e.time,e.reminder,e.end,e.show_in_journal,e.calendar_uid,e.description,e.tag])?;
-            // A calendar file knows no tags: the entry keeps its own and passes it on unchanged.
+            tx.execute("INSERT INTO entries(id,day_date,kind,text,done,position,cancelled,priority,time,reminder,plan,end_time,show_in_journal,calendar_uid,description,series,tag)
+                VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,NULL,?11,?12,?13,?14,?16,(SELECT id FROM tags WHERE id=?15))
+                ON CONFLICT(id) DO UPDATE SET day_date=excluded.day_date,kind=excluded.kind,text=excluded.text,description=excluded.description,done=excluded.done,cancelled=excluded.cancelled,priority=excluded.priority,time=excluded.time,reminder=excluded.reminder,end_time=excluded.end_time,show_in_journal=excluded.show_in_journal,calendar_uid=excluded.calendar_uid,series=excluded.series,tag=COALESCE(excluded.tag,entries.tag),position=CASE WHEN entries.day_date=excluded.day_date THEN entries.position ELSE excluded.position END",
+                params![id,item.date,e.kind,e.text,e.done,position,e.cancelled,e.priority,e.time,e.reminder,e.end,e.show_in_journal,e.calendar_uid,e.description,e.tag,series])?;
+            // Keep a local tag when the source supplies none; otherwise use the imported category.
             let mut updated = e; updated.tag = tx.query_row("SELECT tag FROM entries WHERE id=?1", [&id], |r| r.get(0))?; updated.id = id;
             sync_linked(&tx, &updated, &mut touched)?;
             touched.insert(item.date);
@@ -164,7 +182,7 @@ impl Store {
         // WAL needs fewer syncs per save than the rollback journal and keeps reads independent of writes.
         conn.pragma_update_and_check(None, "journal_mode", "WAL", |r| r.get::<_, String>(0))?;
         let version: i64 = conn.pragma_query_value(None, "user_version", |r| r.get(0))?;
-        if version > 11 { return Err("Die Datenbank wurde mit einer neueren Version erstellt".into()); }
+        if version > 12 { return Err("Die Datenbank wurde mit einer neueren Version erstellt".into()); }
         if version == 0 {
             let tx = conn.transaction()?;
             tx.execute_batch("CREATE TABLE days (date TEXT PRIMARY KEY, title TEXT NOT NULL, body TEXT NOT NULL, revision INTEGER NOT NULL CHECK(revision > 0));
@@ -231,12 +249,12 @@ impl Store {
             // copied under its own definition with just that rule replaced – whatever columns it has by now.
             let old: String = conn.query_row("SELECT sql FROM sqlite_master WHERE type='table' AND name='entries'", [], |r| r.get(0))?;
             let (rule, relaxed) = ("end_time GLOB '[0-2][0-9]:[0-5][0-9]' AND end_time > time", "end_time GLOB '[0-4][0-9]:[0-5][0-9]' AND end_time > time AND end_time < '48:00'");
-            if !old.contains(rule) && !old.contains(relaxed) { return Err("Unerwartetes Datenbankschema (entries)".into()); }
+            if !old.contains(rule) && !old.contains(relaxed) && !old.contains("length(end_time) BETWEEN 5 AND 7") { return Err("Unerwartetes Datenbankschema (entries)".into()); }
             let next = old.replacen("CREATE TABLE entries", "CREATE TABLE entries_next", 1).replace(rule, relaxed);
             let indexes: Vec<String> = conn.prepare("SELECT sql FROM sqlite_master WHERE type='index' AND tbl_name='entries' AND sql IS NOT NULL")?
                 .query_map([], |r| r.get(0))?.collect::<rusqlite::Result<_>>()?;
             // A table that already has the rule (made new) only needs the version.
-            if old.contains(relaxed) { conn.execute_batch("PRAGMA user_version = 10;")?; } else {
+            if old.contains(relaxed) || old.contains("length(end_time) BETWEEN 5 AND 7") { conn.execute_batch("PRAGMA user_version = 10;")?; } else {
             conn.execute_batch("PRAGMA foreign_keys = OFF;")?;
             let rebuilt = (|| -> Result<()> {
                 let tx = conn.transaction()?;
@@ -261,6 +279,20 @@ impl Store {
             tx.execute_batch("CREATE INDEX IF NOT EXISTS entries_tag ON entries(tag); PRAGMA user_version = 11;")?;
             tx.commit()?;
         }
+        // Longer appointments encode their end as hours since the start day's midnight.
+        if version < 12 {
+            let old:String=conn.query_row("SELECT sql FROM sqlite_master WHERE name='entries'",[],|r|r.get(0))?;
+            let relaxed="end_time GLOB '[0-4][0-9]:[0-5][0-9]' AND end_time > time AND end_time < '48:00'";
+            if old.contains(relaxed) {
+                let next=old.replacen("CREATE TABLE entries","CREATE TABLE entries_next",1).replacen("CREATE TABLE \"entries\"","CREATE TABLE entries_next",1).replace(relaxed,"length(end_time) BETWEEN 5 AND 7 AND end_time GLOB '[0-9]*:[0-5][0-9]' AND CAST(substr(end_time,1,instr(end_time,':')-1) AS INTEGER)<=8784 AND (CAST(substr(end_time,1,instr(end_time,':')-1) AS INTEGER)*60+CAST(substr(end_time,-2) AS INTEGER))>(CAST(substr(time,1,2) AS INTEGER)*60+CAST(substr(time,-2) AS INTEGER))");
+                let indexes:Vec<String>=conn.prepare("SELECT sql FROM sqlite_master WHERE type='index' AND tbl_name='entries' AND sql IS NOT NULL")?.query_map([],|r|r.get(0))?.collect::<rusqlite::Result<_>>()?;
+                conn.execute_batch("PRAGMA foreign_keys=OFF;")?;
+                let result=(||->Result<()> {let tx=conn.transaction()?;tx.execute_batch(&next)?;tx.execute_batch("INSERT INTO entries_next SELECT * FROM entries; DROP TABLE entries; ALTER TABLE entries_next RENAME TO entries;")?;for index in indexes{tx.execute_batch(&index)?;}tx.commit()?;Ok(())})();
+                conn.execute_batch("PRAGMA foreign_keys=ON;")?;result?;
+            }
+            conn.execute_batch("PRAGMA user_version=12;")?;
+        }
+        crate::history::install(&conn)?;
         Ok(Self { conn })
     }
     pub fn tags(&self) -> Result<Vec<Tag>> {
@@ -279,6 +311,7 @@ impl Store {
             if Uuid::parse_str(&tag.id).is_err() || !ids.insert(tag.id.as_str()) || name.is_empty() || name.chars().count() > 40 || name != tag.name || !names.insert(name.to_lowercase()) || !hex { return Err("Ungültiger Tag".into()); }
         }
         let tx = self.conn.transaction()?;
+        crate::history::begin(&tx)?;
         let removed: Vec<String> = tx.prepare("SELECT id FROM tags")?.query_map([], |r| r.get(0))?.collect::<rusqlite::Result<Vec<String>>>()?
             .into_iter().filter(|id| !ids.contains(id.as_str())).collect();
         let mut touched = BTreeSet::new();
@@ -316,8 +349,8 @@ impl Store {
         validate_date(from)?; validate_date(to)?;
         if from > to || NaiveDate::parse_from_str(to, "%Y-%m-%d")?.signed_duration_since(NaiveDate::parse_from_str(from, "%Y-%m-%d")?).num_days() > 400 { return Err("Ungültiger Zeitraum".into()); }
         let mut days: Vec<CalendarDay> = Vec::new();
-        let mut titles = self.conn.prepare_cached("SELECT date, title FROM days WHERE date BETWEEN ?1 AND ?2 AND (title <> '' OR EXISTS (SELECT 1 FROM entries WHERE day_date = date AND plan IS NULL)) ORDER BY date")?;
-        for row in titles.query_map([from, to], |r| Ok(CalendarDay { date: r.get(0)?, title: r.get(1)?, entries: vec![] }))? { days.push(row?); }
+        let mut titles = self.conn.prepare_cached("SELECT date, title, (trim(title)<>'' OR trim(body)<>'' OR EXISTS(SELECT 1 FROM entries WHERE day_date=date AND show_in_journal=1)) FROM days WHERE date BETWEEN ?1 AND ?2 AND (title <> '' OR trim(body)<>'' OR EXISTS (SELECT 1 FROM entries WHERE day_date = date)) ORDER BY date")?;
+        for row in titles.query_map([from, to], |r| Ok(CalendarDay { date: r.get(0)?, title: r.get(1)?, has_journal: r.get(2)?, entries: vec![] }))? { days.push(row?); }
         let mut stmt = self.conn.prepare_cached("SELECT e.day_date, e.id, e.kind, e.text, e.done, e.cancelled, e.priority, e.time, e.reminder, e.end_time, e.show_in_journal, e.calendar_uid, e.series, s.rule, s.horizon, e.description, e.tag
             FROM entries e LEFT JOIN series s ON s.id = e.series WHERE e.day_date BETWEEN ?1 AND ?2 AND e.plan IS NULL ORDER BY e.day_date, e.position")?;
         let rows = stmt.query_map([from, to], |r| Ok((r.get::<_, String>(0)?, Entry { id:r.get(1)?, kind:r.get(2)?, text:r.get(3)?, done:r.get(4)?, cancelled:r.get(5)?, priority:r.get(6)?, time:r.get(7)?, end:r.get(9)?, reminder:r.get(8)?, plan:None, origin:None, show_in_journal:r.get(10)?, calendar_uid:r.get(11)?, description:r.get(15)?, tag:r.get(16)?, repeat:None }, (r.get(12)?, r.get(13)?, r.get(14)?))))?;
@@ -349,6 +382,7 @@ impl Store {
             }
         }
         let tx = self.conn.transaction()?;
+        crate::history::begin(&tx)?;
         // A tag removed meanwhile (in another window) is simply gone from the entry.
         {
             let mut known = tx.prepare_cached("SELECT 1 FROM tags WHERE id=?1")?;
@@ -481,6 +515,7 @@ impl Store {
             return Err("Ungültige Änderung".into());
         }
         let tx = self.conn.transaction()?;
+        crate::history::begin(&tx)?;
         let mut touched = BTreeSet::new();
         {
             let mut update = tx.prepare_cached("UPDATE entries SET kind=?2, text=?3, description=?4, tag=(SELECT id FROM tags WHERE id=?5), priority=?6, reminder=?7, show_in_journal=?8,
@@ -499,6 +534,7 @@ impl Store {
     }
     pub fn change_linked(&mut self, changes: &[LinkedChange]) -> Result<Vec<String>> {
         let tx = self.conn.transaction()?;
+        crate::history::begin(&tx)?;
         let mut touched = BTreeSet::new();
         {
             let mut remove = tx.prepare_cached("DELETE FROM entries WHERE id=?1 RETURNING day_date, series")?;
@@ -532,6 +568,7 @@ impl Store {
     pub fn due_reminders(&mut self, now: NaiveDateTime) -> Result<Vec<Reminder>> {
         let format = |moment: NaiveDateTime| moment.format("%Y-%m-%dT%H:%M").to_string();
         let tx = self.conn.transaction()?;
+        crate::history::begin(&tx)?;
         let checked: Option<String> = tx.query_row("SELECT value FROM settings WHERE key='reminders.checked'", [], |r| r.get(0)).optional()?;
         let floor = now - Duration::days(14);
         let from = checked.and_then(|value| NaiveDateTime::parse_from_str(&value, "%Y-%m-%dT%H:%M:%S").ok()).map_or(now - Duration::minutes(1), |last| last.max(floor));
@@ -575,6 +612,7 @@ impl Store {
     pub fn extend_series(&mut self, extensions: &[SeriesExtension]) -> Result<Vec<String>> {
         if extensions.iter().map(|extension| extension.dates.len()).sum::<usize>() > 20_000 { return Err("Zu viele Wiederholungen auf einmal".into()); }
         let tx = self.conn.transaction()?;
+        crate::history::begin(&tx)?;
         let mut touched = BTreeSet::new();
         for extension in extensions {
             validate_date(&extension.from)?; validate_date(&extension.to)?;
@@ -699,8 +737,9 @@ fn valid_time(time: &Option<String>) -> bool {
 }
 /// An end needs a start and lies after it – on the same day, or on the next as 24:00–47:59 ("26:00" is 02:00 the next morning).
 fn valid_span(time: &Option<String>, end: &Option<String>) -> bool {
-    let valid_end = |end: &str| end.len() == 5 && end.as_bytes()[2] == b':' && end[..2].parse::<u32>().is_ok_and(|hours| hours < 48) && end[3..].parse::<u32>().is_ok_and(|minutes| minutes < 60);
-    match (time, end) { (_, None) => true, (Some(time), Some(end)) => valid_end(end) && end > time, (None, Some(_)) => false }
+    let minutes=|value:&str| -> Option<u32> {let (h,m)=value.split_once(':')?;if h.len()<2 || h.len()>4 || m.len()!=2{return None;}let h=h.parse::<u32>().ok()?;let m=m.parse::<u32>().ok()?;if h>8784 || m>59{return None;}Some(h*60+m)};
+    match (time,end){(_,None)=>true,(Some(time),Some(end))=>minutes(end).zip(minutes(time)).is_some_and(|(end,start)|end>start && end-start<=366*1440),_=>false}
+
 }
 fn validate_date(date: &str) -> Result<()> {
     let parsed = NaiveDate::parse_from_str(date, "%Y-%m-%d")?;
@@ -742,9 +781,9 @@ mod tests {
     }
     #[test] fn imported_descriptions_update_and_remain_in_calendar_exports() {
         let mut db=store(); let mut item=entry("event"); item.calendar_uid=Some("details@example.org".into()); item.description="Erste Beschreibung".into();
-        db.import_calendar(vec![CalendarImport { date:"2026-11-01".into(),entry:item.clone() }]).unwrap();
+        db.import_calendar(vec![CalendarImport { tag:None, date:"2026-11-01".into(),entry:item.clone() }]).unwrap();
         item.description="Neue Beschreibung\nMit Details".into();
-        db.import_calendar(vec![CalendarImport { date:"2026-11-02".into(),entry:item.clone() }]).unwrap();
+        db.import_calendar(vec![CalendarImport { tag:None, date:"2026-11-02".into(),entry:item.clone() }]).unwrap();
         let exported=db.export_calendar().unwrap(); assert_eq!(exported.len(),1);
         assert_eq!(exported[0].entries[0].description,item.description);
         assert!(db.load("2026-11-01").unwrap().entries.is_empty());
@@ -753,7 +792,7 @@ mod tests {
         let mut db=store(); let mut day=db.load("2026-11-01").unwrap();
         let mut item=entry("event"); item.time=Some("04:00".into()); day.entries.push(item.clone()); db.save(day).unwrap();
         let conn=db.conn;
-        conn.execute_batch("ALTER TABLE entries DROP COLUMN description; PRAGMA user_version=8;").unwrap();
+        conn.execute_batch("DROP TRIGGER IF EXISTS temp.undo_entries_INSERT; DROP TRIGGER IF EXISTS temp.undo_entries_UPDATE; DROP TRIGGER IF EXISTS temp.undo_entries_DELETE; ALTER TABLE entries DROP COLUMN description; PRAGMA user_version=8;").unwrap();
         let mut migrated=Store::from_connection(conn).unwrap(); let mut loaded=migrated.load("2026-11-01").unwrap();
         assert_eq!(loaded.entries[0].id,item.id); assert_eq!(loaded.entries[0].time,item.time); assert!(loaded.entries[0].description.is_empty());
         loaded.entries[0].description="Nach der Migration".into(); migrated.save(loaded).unwrap();
@@ -957,26 +996,26 @@ mod tests {
         let mut day = db.load("2026-10-30").unwrap(); day.body = "Keep body".into(); day.entries.push(entry("note")); db.save(day).unwrap();
         let mut event = entry("event"); event.calendar_uid = Some("external-event".into()); event.show_in_journal = false;
         let first_id = event.id.clone();
-        db.import_calendar(vec![CalendarImport { date:"2026-10-30".into(), entry:event.clone() }]).unwrap();
+        db.import_calendar(vec![CalendarImport { tag:None, date:"2026-10-30".into(), entry:event.clone() }]).unwrap();
         event.id = Uuid::new_v4().to_string(); event.text = "Changed".into(); event.show_in_journal = true;
-        let touched = db.import_calendar(vec![CalendarImport { date:"2026-11-01".into(), entry:event.clone() }]).unwrap();
+        let touched = db.import_calendar(vec![CalendarImport { tag:None, date:"2026-11-01".into(), entry:event.clone() }]).unwrap();
         assert_eq!(touched, vec!["2026-10-30", "2026-11-01"]);
         let original = db.load("2026-10-30").unwrap(); assert_eq!(original.body, "Keep body"); assert_eq!(original.entries.len(), 1);
         let imported = &db.load("2026-11-01").unwrap().entries[0]; assert_eq!(imported.id, first_id); assert!(imported.show_in_journal); assert_eq!(imported.text, "Changed");
-        db.import_calendar(vec![CalendarImport { date:"2026-11-01".into(), entry:event }]).unwrap();
+        db.import_calendar(vec![CalendarImport { tag:None, date:"2026-11-01".into(), entry:event }]).unwrap();
         assert_eq!(db.load("2026-11-01").unwrap().entries.len(), 1);
     }
     #[test] fn invalid_calendar_import_rolls_back_and_old_json_defaults_to_visible() {
         let mut db = store();
         let mut valid = entry("event"); valid.calendar_uid = Some("valid".into());
         let mut invalid = entry("event"); invalid.calendar_uid = Some("invalid".into()); invalid.time = Some("25:00".into());
-        assert!(db.import_calendar(vec![CalendarImport { date:"2026-10-30".into(), entry:valid.clone() }, CalendarImport { date:"2026-10-31".into(), entry:invalid }]).is_err());
+        assert!(db.import_calendar(vec![CalendarImport { tag:None, date:"2026-10-30".into(), entry:valid.clone() }, CalendarImport { tag:None, date:"2026-10-31".into(), entry:invalid }]).is_err());
         assert!(db.export_calendar().unwrap().is_empty());
         let mut old = serde_json::to_value(&valid).unwrap(); old.as_object_mut().unwrap().remove("showInJournal");
         assert!(serde_json::from_value::<Entry>(old).unwrap().show_in_journal);
         let mut day = db.load("2026-10-30").unwrap(); valid.plan = Some(plan("tomorrow", &["2026-10-31"], None, false)); day.entries.push(valid.clone()); db.save(day).unwrap();
         valid.plan = None;
-        assert!(db.import_calendar(vec![CalendarImport { date:"2026-10-30".into(), entry:valid }]).is_err());
+        assert!(db.import_calendar(vec![CalendarImport { tag:None, date:"2026-10-30".into(), entry:valid }]).is_err());
         assert!(db.load("2026-10-30").unwrap().entries[0].plan.is_some());
     }
     #[test] fn planning_moves_entry_once_and_leaves_a_trace() {
@@ -1132,12 +1171,27 @@ mod tests {
         assert_eq!(db.load_range("2026-10-28", "2026-10-28").unwrap()[0].entries[0].end.as_deref(), Some("10:45"));
         let copy = &db.load("2026-10-29").unwrap().entries[0];
         assert_eq!((copy.time.as_deref(), copy.end.as_deref()), (Some("14:00"), Some("14:30")));
-        for (time, end) in [(Some("10:00"), "10:00"), (Some("10:00"), "09:45"), (None, "10:00"), (Some("10:00"), "48:00"), (Some("10:00"), "26:60")] {
+        for (time, end) in [(Some("10:00"), "10:00"), (Some("10:00"), "09:45"), (None, "10:00"), (Some("10:00"), "8785:00"), (Some("10:00"), "26:60")] {
             let mut day = db.load("2026-10-30").unwrap();
             let mut item = entry("event"); item.time = time.map(Into::into); item.end = Some(end.into()); day.entries.push(item);
             assert!(db.save(day).is_err(), "{time:?}–{end} must be rejected");
         }
         assert!(db.conn.execute("UPDATE entries SET end_time = '08:00' WHERE day_date = '2026-10-28' AND end_time IS NOT NULL", []).is_err(), "The database itself refuses an end before the start.");
+    }
+    #[test] fn ics_import_links_series_and_reuses_category_tags() {
+        let mut db=store();let rule=serde_json::json!({"start":"2026-11-03","unit":"week","every":1,"icsUid":"work-series"});
+        let mut first=entry("event");first.calendar_uid=Some("work-series#first".into());first.repeat=Some(repeat(rule.clone(),&[],"2028-12-31"));
+        let mut second=first.clone();second.id=Uuid::new_v4().to_string();second.calendar_uid=Some("work-series#second".into());
+        let tag=Tag{id:Uuid::new_v4().to_string(),name:"Arbeit".into(),color:"#AEFF00".into()};
+        let batch=vec![CalendarImport{date:"2026-11-03".into(),entry:first.clone(),tag:Some(tag.clone())},CalendarImport{date:"2026-11-10".into(),entry:second.clone(),tag:Some(tag.clone())}];
+        db.import_calendar(batch.clone()).unwrap();assert_eq!(db.linked(&first.id).unwrap().len(),2);assert_eq!(db.tags().unwrap().len(),1);
+        let saved=db.load("2026-11-03").unwrap();let series=saved.entries[0].repeat.as_ref().unwrap().series.clone();assert_eq!(saved.entries[0].tag,Some(db.tags().unwrap()[0].id.clone()));
+        db.import_calendar(batch).unwrap();assert_eq!(db.tags().unwrap().len(),1);assert_eq!(db.series().unwrap().len(),1);assert_eq!(db.load("2026-11-10").unwrap().entries[0].repeat.as_ref().unwrap().series,series);
+    }
+    #[test] fn appointments_can_span_weeks_and_survive_reopening() {
+        let path=std::env::temp_dir().join(format!("span-{}.db",Uuid::new_v4()));
+        let mut db=Store::open(&path).unwrap();let mut day=db.load("2026-11-03").unwrap();let mut item=entry("event");item.time=Some("09:00".into());item.end=Some("513:30".into());day.entries.push(item);db.save(day).unwrap();drop(db);
+        let db=Store::open(&path).unwrap();assert_eq!(db.load("2026-11-03").unwrap().entries[0].end.as_deref(),Some("513:30"));drop(db);std::fs::remove_file(path).unwrap();
     }
     #[test] fn appointments_may_end_on_the_next_day() {
         let mut db = store(); let mut day = db.load("2026-10-31").unwrap();
@@ -1145,7 +1199,7 @@ mod tests {
         db.save(day).unwrap();
         let loaded = &db.load("2026-10-31").unwrap().entries[0];
         assert_eq!((loaded.time.as_deref(), loaded.end.as_deref()), (Some("22:00"), Some("30:30")), "Until 06:30 the next morning.");
-        assert!(db.conn.execute("UPDATE entries SET end_time = '48:00'", []).is_err(), "The database itself refuses more than a day after.");
+        assert!(db.conn.execute("UPDATE entries SET end_time = '8785:00'", []).is_err(), "The database itself refuses an end beyond the supported year.");
         assert!(db.conn.execute("UPDATE entries SET end_time = '21:00'", []).is_err(), "And an end before the start.");
         // Indexes and links survive the rebuild: a planned copy and a unique calendar UID still work.
         let mut day = db.load("2026-10-31").unwrap(); day.entries[0].plan = Some(plan("date", &["2026-11-01"], Some("23:00"), false)); db.save(day).unwrap();
@@ -1196,17 +1250,17 @@ mod tests {
     #[test] fn calendar_imports_keep_the_tag_of_an_updated_entry() {
         let mut db = store(); let work = tag("Arbeit", "#569eff"); db.save_tags(&[work.clone()]).unwrap();
         let mut item = entry("event"); item.calendar_uid = Some("tagged@example.org".into());
-        db.import_calendar(vec![CalendarImport { date: "2026-11-02".into(), entry: item.clone() }]).unwrap();
+        db.import_calendar(vec![CalendarImport { tag:None, date: "2026-11-02".into(), entry: item.clone() }]).unwrap();
         let mut day = db.load("2026-11-02").unwrap(); day.entries[0].tag = Some(work.id.clone()); db.save(day).unwrap();
         item.text = "Neu".into();
-        db.import_calendar(vec![CalendarImport { date: "2026-11-02".into(), entry: item }]).unwrap();
+        db.import_calendar(vec![CalendarImport { tag:None, date: "2026-11-02".into(), entry: item }]).unwrap();
         let loaded = &db.load("2026-11-02").unwrap().entries[0];
         assert_eq!((loaded.text.as_str(), loaded.tag.as_deref()), ("Neu", Some(work.id.as_str())));
     }
     #[test] fn calendar_import_stores_the_tag_of_a_new_entry() {
         let mut db = store(); let payment = tag("Bezahlung", "#76d982"); db.save_tags(&[payment.clone()]).unwrap();
         let mut item = entry("event"); item.calendar_uid = Some("mail:payment".into()); item.tag = Some(payment.id.clone());
-        db.import_calendar(vec![CalendarImport { date: "2026-11-02".into(), entry: item }]).unwrap();
+        db.import_calendar(vec![CalendarImport { tag:None, date: "2026-11-02".into(), entry: item }]).unwrap();
         assert_eq!(db.load("2026-11-02").unwrap().entries[0].tag.as_deref(), Some(payment.id.as_str()));
     }
     #[test] fn time_and_reminder_on_the_same_day_round_trip() {
@@ -1252,7 +1306,7 @@ mod tests {
         day.entries[0].plan = Some(plan("tomorrow", &["2026-10-29"], None, false));
         db.save(day).unwrap();
         assert_eq!(db.load("2026-10-29").unwrap().entries[0].text, "Bestehend");
-        assert_eq!(db.conn.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0)).unwrap(), 11);
+        assert_eq!(db.conn.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0)).unwrap(), 12);
     }
     #[test] fn save_reload_and_isolate_days() {
         let mut db = store(); let mut day = db.load("2024-02-29").unwrap(); day.title="Ein Tag".into(); day.entries=vec![entry("task"),entry("event"),entry("note")];

@@ -16,7 +16,8 @@ export function useCalendarMinutes(from: string, to: string, definitions: readon
     const fetch = () => loadRange(from, to).then(list => { if (active) setDays({ key, list }); }, () => {});
     void fetch();
     const stop = listen<string[]>('journal:changed', event => { if (event.payload.some(date => date >= from && date <= to)) void fetch(); });
-    return () => { active = false; void stop.then(unlisten => unlisten()); };
+    const restored = listen('history:restored', () => { void fetch(); });
+    return () => { active = false; void stop.then(unlisten => unlisten()); void restored.then(unlisten => unlisten()); };
   }, [from, to]);
   return days.key === key && definitions ? calendarMinutes(days.list, definitions) : {};
 }

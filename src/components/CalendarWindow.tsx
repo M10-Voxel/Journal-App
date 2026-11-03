@@ -1,15 +1,19 @@
+import { calendarDaysWithSpans } from '../calendarSpans';
+import { readCalendarEntry } from '../calendarClipboard';
+import { withStart, occurrences, seriesHorizon } from '../repeat';
+import { Popover } from './Popover';
 import { t, useLanguage } from '../i18n';
 import { memo, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, KeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { CalendarDay, Entry, EntryKind, formatDate, formatWeekday, localDate } from '../journal';
 import { monthGrid, shiftDate } from '../dates';
 import { plainText } from '../markdown';
-import { shortTitle, CalendarView, calendarViews, durationOf, formatDuration, formatMonthName, isoWeek, layoutTimed, minutesOf, orderForCalendar, shiftView, slotMinutes, snapMinutes, snapRange, viewDates, viewRange, viewTitle } from '../calendar';
+import { shortTitle, CalendarView, calendarViews, durationOf, formatDuration, formatMonthName, isoWeek, layoutTimed, minutesOf, orderForCalendar, shiftView, snapMinutes, snapRange, viewDates, viewRange, viewTitle } from '../calendar';
 import { formatEnd, timeOfMinutes } from '../planning';
 import type { ScopeOption } from '../planning';
 import { CalendarComposer } from './CalendarComposer';
 import type { Draft, EntryEdit, NewEntry } from './CalendarComposer';
-import { CalendarItem, CompactMonth, EditInCalendar, OpenInJournal, dayLabel, entrySymbol, openInJournal, useCalendarData, useJournalDate, useNow } from './calendarShared';
+import { CalendarItem, CompactMonth, EditInCalendar, OpenInJournal, dayLabel, hasJournalContent, entrySymbol, openInJournal, useCalendarData, useJournalDate, useNow } from './calendarShared';
 import { NavCluster } from './NavCluster';
 import { Icon } from './Icon';
 import { CalendarTransfer } from './CalendarTransfer';
@@ -65,12 +69,14 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
   const rootRef = useRef<HTMLDivElement>(null);
   const range = viewRange(view, date);
   // One day more before: an appointment from the evening before may reach into the first shown day.
-  const { days, error } = useCalendarData(shiftDate(range.from, -1), range.to);
+  const { days, error } = useCalendarData(shiftDate(range.from, -366), range.to);
   const title = viewTitle(view, date);
   const tags = useTags();
   const [hiddenTags, setHiddenTags] = useHiddenTags('calendar');
   const visibleDays = useMemo(() => filterTagDays(days, hiddenTags), [days, hiddenTags, tags]);
   const entriesOn = (value: string) => orderForCalendar((visibleDays.get(value)?.entries ?? []).filter(entry => kinds[entry.kind]));
+  const displayDays=useMemo(()=>calendarDaysWithSpans(visibleDays,range.from,range.to),[visibleDays,range.from,range.to]);
+  const displayEntriesOn=(value:string)=>orderForCalendar((displayDays.get(value)?.entries ?? []).filter(entry=>kinds[entry.kind])).sort((a,b)=>Number(Boolean(b.end && minutesOf(b.end)>1440))-Number(Boolean(a.end && minutesOf(a.end)>1440)));
   // A range drawn while entries without a tag are hidden takes the first tag shown, so it does not vanish at once.
   const newTag = isShown(hiddenTags, null) ? null : tags.find(tag => !hiddenTags.has(tag.id))?.id ?? null;
 
@@ -84,10 +90,10 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
   const refocus = () => rootRef.current?.focus({ preventScroll: true });
   // Timed entries in a time grid are edited there, as a range that can be moved and resized; all others in place.
   const gridDates = view === 'week' || view === 'workweek' || view === 'day' ? viewDates(view, date) : [];
-  const inGrid = editing?.entry.time && gridDates.includes(editing.date) ? editing : null;
+  const inGrid = editing?.entry.time && !(editing.entry.end && durationOf({time:editing.entry.time,end:editing.entry.end})>1440) && gridDates.includes(editing.date) ? editing : null;
   const save = async (change: EntryEdit, scope?: ScopeOption) => { if (editing) { await onEdit!(editing.date, editing.entry.id, change, scope); setEditing(null); refocus(); } };
   const remove = async (others: { id: string; date: string }[]) => { if (editing) { await onRemove!(editing.date, editing.entry.id, others); setEditing(null); refocus(); } };
-  const editContext = { edit: onEdit ? (entry: Entry, value: string, element: HTMLElement) => setEditing({ entry, date: value, element }) : null, editingId: editing?.entry.id ?? null };
+  const editContext = { remove: onRemove ? (entry:Entry, value:string, others:ScopeOption['others'])=>onRemove(value,entry.id,others) : undefined, edit: onEdit ? (entry: Entry, value: string, element: HTMLElement) => setEditing({ entry, date: value, element }) : null, editingId: editing?.entry.id ?? null };
 
   const setView = (next: CalendarView) => setPrefs(current => ({ ...current, view: next }));
   // Going somewhere directly shows it in place; stepping slides the next page in from that side.
@@ -108,9 +114,56 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
     event.preventDefault();
   }
 
+  const [multi,setMulti]=useState<{start:string;end:string}|null>(null);
+  const [rangeDraw,setRangeDraw]=useState<{start:string;end:string}|null>(null);
+  const suppressClick=useRef(false);
+  const rangePage=useRef(date);rangePage.current=date;
+  useEffect(()=>{rootRef.current?.querySelectorAll<HTMLElement>('[data-range-date]').forEach(cell=>{const date=cell.dataset.rangeDate!;cell.toggleAttribute('data-range-selected',Boolean(rangeDraw && date>=rangeDraw.start && date<=rangeDraw.end));});},[rangeDraw,date,view]);
+
+  const beginMulti=(event:ReactPointerEvent<HTMLDivElement>)=>{
+   if(!onCreate || event.button!==0 || (event.target as Element).closest('.cal-item,input,button:not(.cal-year-day)'))return;
+   const cell=(event.target as Element).closest<HTMLElement>('[data-range-date]');if(!cell)return;event.preventDefault();
+   const start=cell.dataset.rangeDate!;let end=start,moved=false,x=event.clientX,y=event.clientY,lastFlip=0;
+   const follow=(e:globalThis.PointerEvent)=>{x=e.clientX;y=e.clientY;moved ||= Math.hypot(x-event.clientX,y-event.clientY)>5;const target=document.elementFromPoint(x,y)?.closest<HTMLElement>('[data-range-date]')?.dataset.rangeDate;if(target)end=target;if(moved)setRangeDraw({start:start<end?start:end,end:start<end?end:start});};
+   const timer=setInterval(()=>{if(!moved || !rootRef.current)return;const r=rootRef.current.getBoundingClientRect();const direction=x>r.right-24 || y>Math.min(r.bottom,innerHeight)-24?1:x<r.left+24?-1:0;if(direction && Date.now()-lastFlip>900){lastFlip=Date.now();const next=shiftView(view,rangePage.current,direction as 1|-1);rangePage.current=next;setDate(next);const nextDays=viewDates(view,next);end=direction>0?nextDays[nextDays.length-1]:nextDays[0];setRangeDraw({start:start<end?start:end,end:start<end?end:start});}},150);
+   const finish=()=>{clearInterval(timer);window.removeEventListener('pointermove',follow);window.removeEventListener('pointerup',finish);window.removeEventListener('pointercancel',cancel);if(moved){suppressClick.current=true;setMulti({start:start<end?start:end,end:start<end?end:start});}setRangeDraw(null);};
+   const cancel=()=>{moved=false;finish();};window.addEventListener('pointermove',follow);window.addEventListener('pointerup',finish);window.addEventListener('pointercancel',cancel);
+  };
+  const pasteTarget = useRef<string | null>(null);
+  const [pasting, setPasting] = useState<{entry:Entry;date:string} | null>(null);
+  const [notice,setNotice] = useState('');
+  useEffect(()=>{const copied=()=>setNotice(t('Eintrag kopiert'));window.addEventListener('calendar:copied',copied);return()=>window.removeEventListener('calendar:copied',copied);},[]);
+  useEffect(()=>{if(!notice)return;const timer=setTimeout(()=>setNotice(''),2500);return()=>clearTimeout(timer);},[notice]);
+  const paste = async (entry:Entry,target:string,whole:boolean) => {
+    if(!onCreate) {setNotice(t('Dieser Eintrag kann hier nicht eingefügt werden.'));return;}
+    try {
+      const rule=whole && entry.repeat?.rule ? withStart(entry.repeat.rule,target) : null;
+      const horizon=seriesHorizon(localDate(),target);
+      const repeat=rule ? {series:crypto.randomUUID(),rule,horizon,dates:occurrences(rule,target,horizon).filter(value=>value>target)} : undefined;
+      await onCreate(target,{kind:entry.kind,text:entry.text,description:entry.description ?? '',tag:entry.tag ?? null,time:entry.time ?? null,end:entry.end ?? null,priority:entry.priority,reminder:Boolean(entry.reminder),showInJournal:entry.showInJournal!==false,repeat});
+      setPasting(null);setNotice(t('Eintrag eingefügt'));
+    }catch(reason){setNotice(String(reason));}
+  };
+  useEffect(()=>{
+    const key=(event:globalThis.KeyboardEvent)=>{
+      if(!event.ctrlKey || event.key.toLowerCase()!=='v' || !onCreate || !rootRef.current?.matches(':hover, :focus-within'))return;
+      if(event.target instanceof Element && event.target.closest('input,textarea,[contenteditable=true]'))return;
+      const entry=readCalendarEntry();if(!entry)return;
+      event.preventDefault();const target=pasteTarget.current ?? date;
+      if(entry.repeat?.rule)setPasting({entry,date:target});else void paste(entry,target,false);
+    };
+    window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key);
+  },[date,onCreate]);
   const selectedIndex = calendarViews().findIndex(item => item.view === view);
   return <OpenInJournal.Provider value={onOpen}><EditInCalendar.Provider value={editContext}>
-    <div ref={rootRef} className={`cal${embedded ? ' is-embedded' : ''}`} data-view={view} tabIndex={-1} aria-label={t("Kalender")} onKeyDown={onKeyDown}>
+    <div ref={rootRef} className={`cal${embedded ? ' is-embedded' : ''}`} data-view={view} tabIndex={-1} aria-label={t("Kalender")} onKeyDown={onKeyDown} onPointerDown={beginMulti} onClickCapture={event=>{if(suppressClick.current){event.preventDefault();event.stopPropagation();suppressClick.current=false;}}} onPointerMove={event=>{const day=(event.target as Element).closest<HTMLElement>('[data-date]')?.dataset.date;pasteTarget.current=day ?? date;}}>
+      {/* Drawn over several days: the normal card, with the span's start and end (and repeating, tags, priority …). */}
+      {multi && onCreate && <CalendarComposer key={`multi-${multi.start}-${multi.end}`} date={multi.start} draft={null} span={{ end: multi.end }} tag={newTag}
+        anchor={() => (rootRef.current?.querySelector(`[data-range-date="${multi.end}"]`) ?? rootRef.current?.querySelector(`[data-range-date="${multi.start}"]`) ?? rootRef.current)?.getBoundingClientRect() ?? null}
+        onCancel={byKey => { setMulti(null); if (byKey) refocus(); }} onCreate={async entry => { await onCreate(multi.start, entry); setMulti(null); refocus(); }} />}
+      {rangeDraw && <div className="cal-action-notice">{formatDate(rangeDraw.start)} – {formatDate(rangeDraw.end)}</div>}
+      {notice && <div className="cal-action-notice" role="status">{notice}</div>}
+      {pasting && <Popover anchor={rootRef.current} label={t('Einfügen')} onClose={()=>setPasting(null)}><div className="cal-paste-choice"><p>{t('Wiederholung einfügen')}</p><button type="button" onClick={()=>void paste(pasting.entry,pasting.date,false)}>{t('Nur diesen Tag')}</button><button type="button" onClick={()=>void paste(pasting.entry,pasting.date,true)}>{t('Mit Wiederholung')}</button></div></Popover>}
       <nav className="cal-viewbar" aria-label={t("Kalenderansicht")}>
         <div className="cal-views" role="tablist" aria-label={t("Ansicht")} style={{ '--index': selectedIndex, '--count': calendarViews().length } as CSSProperties}>
           <span className="cal-views-indicator" aria-hidden="true" />
@@ -137,12 +190,12 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
       {error && <div className="cal-error" role="alert">{error}</div>}
       <div className="cal-body">
         <div className={`cal-page${slide ? ` slide-${slide}` : ''}`}>
-          {view === 'year' && <YearView date={date} today={today} journalDate={journalDate} days={visibleDays} entriesOn={entriesOn} onDay={openDay} onMonth={value => show('month', value)} />}
-          {view === 'month' && <MonthView date={date} today={today} journalDate={journalDate} days={visibleDays} entriesOn={entriesOn} onDay={openDay} onMore={value => show('day', value)} onWeek={value => show('week', value)} />}
+          {view === 'year' && <YearView date={date} today={today} journalDate={journalDate} days={displayDays} entriesOn={displayEntriesOn} onDay={openDay} onMonth={value => show('month', value)} />}
+          {view === 'month' && <MonthView date={date} today={today} journalDate={journalDate} days={displayDays} entriesOn={displayEntriesOn} onDay={openDay} onMore={value => show('day', value)} onWeek={value => show('week', value)} />}
           {(view === 'week' || view === 'workweek' || view === 'day') && <div className="cal-split">
-            <TimeGrid dates={viewDates(view, date)} today={today} now={now} journalDate={journalDate} entriesOn={entriesOn} onDay={openDay} onCreate={onCreate} newTag={newTag}
+            <TimeGrid journalDays={days} dates={viewDates(view, date)} today={today} now={now} journalDate={journalDate} entriesOn={entriesOn} onDay={openDay} onCreate={onCreate} newTag={newTag}
               editing={inGrid} onEditEnd={byKey => { setEditing(null); if (byKey) refocus(); }} onSave={save} onRemove={remove} />
-            {view === 'day' && <DaySide date={date} today={today} journalDate={journalDate} days={visibleDays} hiddenTags={hiddenTags} onPick={openDay} />}
+            {view === 'day' && <DaySide date={date} today={today} journalDate={journalDate} days={displayDays} hiddenTags={hiddenTags} onPick={openDay} />}
           </div>}
         </div>
       </div>
@@ -169,7 +222,7 @@ function YearView({ date, today, journalDate, days, entriesOn, onDay, onMonth }:
           const entries = entriesOn(value);
           const task = entries.some(entry => entry.kind === 'task'), event = entries.some(entry => entry.kind === 'event');
           const mark = task || event ? `${task ? ' is-task' : ''}${event ? ' is-event' : ''}` : entries.length ? ' is-note' : '';
-          return <button key={value} type="button" className={`cal-year-day${weekendClass(value, index % 7)}${value === today ? ' is-today' : ''}${value === journalDate ? ' is-journal' : ''}${mark ? ' has-mark' : ''}`}
+          return <button key={value} type="button" data-range-date={value} data-date={value} className={`cal-year-day${hasJournalContent(days.get(value)) ? ' has-journal-content' : ''}${weekendClass(value, index % 7)}${value === today ? ' is-today' : ''}${value === journalDate ? ' is-journal' : ''}${mark ? ' has-mark' : ''}`}
             aria-current={value === today ? 'date' : undefined} title={dayLabel(value, days.get(value))} onClick={() => onDay(value)}>
             <span>{Number(value.slice(8))}</span>{mark && <i className={`cal-year-mark${mark}`} aria-hidden="true" />}
           </button>;
@@ -205,7 +258,7 @@ function MonthView({ date, today, journalDate, days, entriesOn, onDay, onMore, o
           const entries = entriesOn(value);
           const visible = entries.length > lines ? entries.slice(0, Math.max(0, lines - 1)) : entries;
           const title = days.get(value)?.title;
-          return <div key={value} className={`cal-month-day${weekendClass(value, index)}${value.startsWith(month) ? '' : ' is-outside'}${value === today ? ' is-today' : ''}${value === journalDate ? ' is-journal' : ''}`}
+          return <div key={value} data-range-date={value} data-date={value} className={`cal-month-day${hasJournalContent(days.get(value)) ? ' has-journal-content' : ''}${weekendClass(value, index)}${value.startsWith(month) ? '' : ' is-outside'}${value === today ? ' is-today' : ''}${value === journalDate ? ' is-journal' : ''}`}
             onClick={() => onDay(value)}>
             <div className="cal-month-day-head">
               <button type="button" className="cal-month-number" aria-label={t("{0} im Journal öffnen", formatDate(value))} aria-current={value === today ? 'date' : undefined} onClick={event => { event.stopPropagation(); onDay(value); }}>
@@ -227,15 +280,16 @@ const scrollZone = 40, scrollSpeed = 14;
 // `anchor` and every position are minutes from the start of the origin's day, so a range can run on into the next day.
 // `beyond` (px) grows while the pointer rests at the bottom or top with nothing left to scroll: the range runs on into the next
 // (or previous) day.
-type Gesture = { mode: 'new' | 'start' | 'end' | 'move'; column: HTMLElement; date: string; anchor: number; origin: Draft; x: number; y: number; beyond: number; moved: boolean };
+type Gesture = { mode: 'new' | 'start' | 'end' | 'move'; column: HTMLElement; date: string; anchor: number; origin: Draft; x: number; y: number; beyond: number; moved: boolean; pressX: number; pressY: number };
 /**
  * Days as columns over 24 hours. Entries without time sit in the band on top, timed ones in the grid (as long as they
  * last, an hour without an end; side by side where they overlap). Today's column shows the current time as a line, like
- * Apple's red one. With `onCreate`, dragging in a column marks a range in quarter hours (a click marks an hour; near the
- * edges the grid scrolls along) and the composer opens next to it; the marked range can still be moved and resized.
+ * Apple's red one. With `onCreate`, dragging in a column marks a range in quarter hours (a mere click marks nothing; near
+ * the edges the grid scrolls along) and the composer opens next to it; the marked range can still be moved and resized.
+ * A click into the band on top makes an entry for the whole day, without a time.
  */
-function TimeGrid({ dates, today, now, journalDate, entriesOn, onDay, onCreate, newTag, editing, onEditEnd, onSave, onRemove }: {
-  newTag?: string | null; dates: string[]; today: string; now: Date; journalDate: string | null; entriesOn: (date: string) => Entry[]; onDay: (date: string) => void;
+function TimeGrid({ journalDays, dates, today, now, journalDate, entriesOn, onDay, onCreate, newTag, editing, onEditEnd, onSave, onRemove }: {
+  journalDays: Map<string, CalendarDay>; newTag?: string | null; dates: string[]; today: string; now: Date; journalDate: string | null; entriesOn: (date: string) => Entry[]; onDay: (date: string) => void;
   onCreate?: (date: string, entry: NewEntry) => Promise<void>;
   editing: Editing | null; onEditEnd: (byKey: boolean) => void; onSave: (change: EntryEdit, scope?: ScopeOption) => Promise<void>; onRemove: (others: { id: string; date: string }[]) => Promise<void>;
 }) {
@@ -243,6 +297,29 @@ function TimeGrid({ dates, today, now, journalDate, entriesOn, onDay, onCreate, 
   const scrollRef = useRef<HTMLDivElement>(null);
   const [hourHeight, setHourHeight] = useState(48);
   const previousHourHeight = useRef(hourHeight);
+  const baseHourHeight=useRef(48);
+  const zoom=useRef((()=>{try{return Math.max(.5,Math.min(4,Number(localStorage.getItem('journal.calendarZoom'))||1));}catch{return 1;}})());
+  useEffect(()=>{
+    const wheel=(event:WheelEvent)=>{
+      const grid=scrollRef.current;if(!event.ctrlKey || !grid || !(event.target instanceof Node) || !grid.contains(event.target))return;
+      event.preventDefault();event.stopPropagation();
+      const nextZoom=Math.max(.5,Math.min(4,zoom.current*Math.exp(-event.deltaY*.002)));
+      const next=Math.max(24,Math.min(320,baseHourHeight.current*nextZoom));
+      const offset=Math.max(0,event.clientY-grid.getBoundingClientRect().top-(grid.querySelector('.cal-time-top')?.getBoundingClientRect().height ?? 0));
+      pendingStart.current=false;scrollAnchor.current=(grid.scrollTop+offset)/previousHourHeight.current-offset/next;
+      zoom.current=nextZoom;try{localStorage.setItem('journal.calendarZoom',String(nextZoom));}catch{/* Keep zoom for this session. */}setHourHeight(next);
+    };
+    document.addEventListener('wheel',wheel,{passive:false,capture:true});return()=>document.removeEventListener('wheel',wheel,true);
+  },[]);
+  // Fit a whole number of paper columns inside each day, keeping day boundaries on grid lines.
+  useLayoutEffect(()=>{
+    const grid=scrollRef.current;if(!grid)return;
+    const align=()=>grid.querySelectorAll<HTMLElement>('.cal-time-column').forEach(column=>{
+      const cells=Math.max(1,Math.round(column.getBoundingClientRect().width/(hourHeight/4)));
+      column.style.setProperty('--paper-columns',String(cells));
+    });
+    align();const observer=new ResizeObserver(align);observer.observe(grid);return()=>observer.disconnect();
+  },[hourHeight,dates[0],dates.length]);
   const scrollAnchor = useRef<number | null>(4);
   const pendingStart = useRef(true);
   const restoreStart = (scroller: HTMLElement, height: number) => {
@@ -264,7 +341,8 @@ function TimeGrid({ dates, today, now, journalDate, entriesOn, onDay, onCreate, 
     const measure = () => {
       const available = scroller.clientHeight - header.offsetHeight;
       if (available <= 0) return;
-      const next = Math.max(36, Math.ceil(available / 20 * 4) / 4);
+      baseHourHeight.current=Math.max(36,Math.ceil(available / 20 * 4)/4);
+      const next = Math.max(24,Math.min(320,baseHourHeight.current*zoom.current));
       if (next === previousHourHeight.current) {
         if (pendingStart.current) restoreStart(scroller, next);
         return;
@@ -286,18 +364,21 @@ function TimeGrid({ dates, today, now, journalDate, entriesOn, onDay, onCreate, 
   }, [hourHeight]);
   const selectionRef = useRef<HTMLDivElement>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
+  // A new entry for the whole day (a click into the band on top), and the cell its card sits at.
+  const [allDay, setAllDay] = useState<{ date: string; element: HTMLElement } | null>(null);
   const [marking, setMarking] = useState(false);
   const gesture = useRef<Gesture | null>(null);
   const frame = useRef(0);
   // Appointments past midnight: the block ends at 24:00 on its day and goes on from 00:00 on the next.
   const columns = dates.map(date => {
-    const entries = entriesOn(date), before = shiftDate(date, -1);
+    const entries = entriesOn(date).filter(entry=>!entry.time || !entry.end || durationOf({time:entry.time,end:entry.end})<=1440), before = shiftDate(date, -1);
     const own = entries.filter((entry): entry is Entry & { time: string } => Boolean(entry.time))
       .map(entry => ({ id: entry.id, time: entry.time, end: entry.end && entry.end > '24:00' ? '24:00' : entry.end, entry, from: date, night: entry.end && entry.end > '24:00' ? 'start' as const : undefined }));
-    const carried = entriesOn(before).filter((entry): entry is Entry & { time: string; end: string } => Boolean(entry.time && entry.end && entry.end > '24:00'))
+    const carried = entriesOn(before).filter((entry): entry is Entry & { time: string; end: string } => Boolean(entry.time && entry.end && minutesOf(entry.end)-minutesOf(entry.time)<=1440 && minutesOf(entry.end)>1440))
       .map(entry => ({ id: `${entry.id}:rest`, time: '00:00', end: timeOfMinutes(minutesOf(entry.end) - 24 * 60), entry, from: before, night: 'rest' as const }));
     return { date, untimed: entries.filter(entry => !entry.time), timed: layoutTimed([...carried, ...own]) };
   });
+  const spans=[...journalDays].flatMap(([date,day])=>day.entries.filter(entry=>entriesOn(date).some(shown=>shown.id===entry.id) && entry.time && entry.end && durationOf({time:entry.time,end:entry.end})>1440).map(entry=>({date,entry,end:shiftDate(date,Math.floor((minutesOf(entry.end!)-1)/1440))}))).filter(item=>item.date<=dates[dates.length-1] && item.end>=dates[0]);
   // Always open the shown days at 04:00, independently of their appointments.
   useLayoutEffect(() => {
     pendingStart.current = true;
@@ -351,8 +432,10 @@ function TimeGrid({ dates, today, now, journalDate, entriesOn, onDay, onCreate, 
     current.x = x; current.y = y;
     const { origin } = current;
     const at = minutesFrom(origin.date, x, y) + current.beyond / hourHeight * 60;
-    if (Math.abs(at - current.anchor) / 60 * hourHeight > 3 || columnAt(x) !== current.column) current.moved = true;
+    // Moved means the pointer itself went somewhere (a click that the grid scrolls under stays a click).
+    if (Math.hypot(x - current.pressX, y - current.pressY) > 3) current.moved = true;
     if (current.mode === 'new') {
+      if (!current.moved) return;
       // In whole quarters from the anchor's to the pointer's, either way, also into the next or previous day.
       const [from, to] = [Math.floor(current.anchor / snapMinutes) * snapMinutes, Math.floor(at / snapMinutes) * snapMinutes];
       const [start, end] = [Math.min(from, to), Math.max(from, to) + snapMinutes];
@@ -370,7 +453,9 @@ function TimeGrid({ dates, today, now, journalDate, entriesOn, onDay, onCreate, 
     const current = gesture.current, scroller = scrollRef.current;
     if (!current || !scroller) return;
     const top = scroller.querySelector('.cal-time-top')!.getBoundingClientRect().bottom, bottom = scroller.getBoundingClientRect().bottom;
-    const speed = current.y < top + scrollZone ? -(top + scrollZone - current.y) : current.y > bottom - scrollZone ? current.y - (bottom - scrollZone) : 0;
+    // Only a pointer that really moves scrolls along: a click near the edge stays a click.
+    const dragging = current.moved;
+    const speed = !dragging ? 0 : current.y < top + scrollZone ? -(top + scrollZone - current.y) : current.y > bottom - scrollZone ? current.y - (bottom - scrollZone) : 0;
     if (speed) {
       const before = scroller.scrollTop;
       scroller.scrollTop += Math.max(-scrollSpeed, Math.min(scrollSpeed, speed / 2));
@@ -389,9 +474,9 @@ function TimeGrid({ dates, today, now, journalDate, entriesOn, onDay, onCreate, 
     column.setPointerCapture(event.pointerId);
     const origin: Draft = mode === 'new' ? { date, ...snapRange(minutesAt(column, event.clientY), minutesAt(column, event.clientY)) } : draft!;
     const anchor = minutesFrom(origin.date, event.clientX, event.clientY);
-    gesture.current = { mode, column, date, anchor, origin, x: event.clientX, y: event.clientY, beyond: 0, moved: false };
+    gesture.current = { mode, column, date, anchor, origin, x: event.clientX, y: event.clientY, beyond: 0, moved: false, pressX: event.clientX, pressY: event.clientY };
     setMarking(true);
-    if (mode === 'new') setDraft(gesture.current.origin);
+    if (mode === 'new') setDraft(null);
     cancelAnimationFrame(frame.current);
     frame.current = requestAnimationFrame(autoScroll);
   }
@@ -401,11 +486,8 @@ function TimeGrid({ dates, today, now, journalDate, entriesOn, onDay, onCreate, 
     gesture.current = null;
     cancelAnimationFrame(frame.current);
     setMarking(false);
-    // A click without dragging marks an hour from the clicked quarter.
-    if (current.mode === 'new' && !current.moved) {
-      const start = Math.min(24 * 60 - snapMinutes, Math.floor(current.anchor / snapMinutes) * snapMinutes);
-      setDraft({ date: current.date, start, end: Math.min(24 * 60, start + slotMinutes) });
-    }
+    // Only dragging marks a range; a click without moving leaves the grid as it was.
+    if (current.mode === 'new' && !current.moved) setDraft(null);
   }
   const columnHandlers = (date: string) => onCreate ? {
     onPointerDown: (event: ReactPointerEvent<HTMLElement>) => { if (!(event.target as Element).closest('.cal-item, .cal-selection')) begin(event, 'new', date); },
@@ -420,13 +502,15 @@ function TimeGrid({ dates, today, now, journalDate, entriesOn, onDay, onCreate, 
         <span className="cal-time-corner">{t("KW ")}{isoWeek(dates[0])}</span>
         {dates.map(date => {
           const label = <><span className="cal-time-weekday">{formatWeekday(date)}</span><strong>{Number(date.slice(8))}</strong></>;
-          const classes = `cal-time-day${weekendClass(date)}${date === today ? ' is-today' : ''}${date === journalDate ? ' is-journal' : ''}`;
+          const classes = `cal-time-day${hasJournalContent(journalDays.get(date)) ? ' has-journal-content' : ''}${weekendClass(date)}${date === today ? ' is-today' : ''}${date === journalDate ? ' is-journal' : ''}`;
           return <button key={date} type="button" className={classes} title={t("{0} im Journal öffnen", formatDate(date))} onClick={() => onDay(date)}>{label}</button>;
         })}
       </div>
       <div className={`cal-time-allday${columns.some(column => column.untimed.length) ? '' : ' is-empty'}`}>
-        <span className="cal-time-corner">{t("ohne Zeit")}</span>
-        {columns.map(column => <div key={column.date} className={`cal-time-allday-cell${weekendClass(column.date)}`}>
+        <span className="cal-time-corner">{t("ohne Zeit")}</span>{spans.map((item,index)=><div key={item.entry.id} className="cal-multiday-bar" style={{gridColumn:`${Math.max(0,dates.indexOf(item.date))+2} / ${item.end>=dates[dates.length-1]?dates.length+2:dates.indexOf(item.end)+3}`,gridRow:index+2}}><CalendarItem entry={item.entry} date={item.date}/></div>)}
+        {columns.map(column => <div key={column.date} data-range-date={column.date} className={`cal-time-allday-cell${weekendClass(column.date)}${allDay?.date === column.date ? ' is-composing' : ''}`}
+          title={onCreate ? t("Klicken: Eintrag für den ganzen Tag") : undefined}
+          onClick={event => { if (!onCreate || event.button !== 0 || (event.target as Element).closest('.cal-item')) return; setDraft(null); if (editing) onEditEnd(false); setAllDay({ date: column.date, element: event.currentTarget }); }}>
           {column.untimed.map(entry => <CalendarItem key={entry.id} entry={entry} date={column.date} />)}
         </div>)}
       </div>
@@ -453,6 +537,8 @@ function TimeGrid({ dates, today, now, journalDate, entriesOn, onDay, onCreate, 
       </div>)}
       {dates.includes(today) && <div className="cal-now-row" style={{ top: nowMinutes / 60 * hourHeight }} aria-hidden="true"><span>{String(now.getHours()).padStart(2, '0')}:{String(now.getMinutes()).padStart(2, '0')}</span></div>}
     </div>
+    {allDay && onCreate && <CalendarComposer key={`day-${allDay.date}`} date={allDay.date} draft={null} tag={newTag} anchor={() => allDay.element.isConnected ? allDay.element.getBoundingClientRect() : null}
+      onCancel={byKey => { setAllDay(null); if (byKey) refocus(); }} onCreate={async entry => { await onCreate(allDay.date, entry); setAllDay(null); refocus(); }} />}
     {draft && !marking && onCreate && (editing && draft.date === editing.date
       ? <CalendarComposer key={editing.entry.id} date={draft.date} draft={draft} entry={editing.entry} anchor={() => selectionRef.current?.getBoundingClientRect() ?? null} onChange={setDraft}
         onCancel={byKey => { setDraft(null); onEditEnd(byKey); }} onSave={async (change, scope) => { await onSave(change, scope); setDraft(null); }} onRemove={async others => { await onRemove(others); setDraft(null); }} />
@@ -470,7 +556,7 @@ function DaySide({ date, today, journalDate, days, hiddenTags, onPick }: { date:
   useEffect(() => setMonth(date.slice(0, 7)), [date]);
   // Paging the small month on its own needs that month's days for the dots.
   const grid = monthGrid(month);
-  const shown = filterTagDays(useCalendarData(grid[0], grid[grid.length - 1]).days, hiddenTags);
+  const shown = filterTagDays(useCalendarData(shiftDate(grid[0],-366), grid[grid.length - 1]).days, hiddenTags);
   const day = days.get(date);
   const entries = day?.entries ?? [];
   const tasks = entries.filter(entry => entry.kind === 'task');

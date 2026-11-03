@@ -73,7 +73,7 @@ export const shortTitle = (main: string) => {
   return main.replace(new RegExp(`(${names.join('|')})`, 'g'), month => shortMonth().format(noon(`2000-${String(names.indexOf(month) + 1).padStart(2, '0')}-15`)));
 };
 
-export const minutesOf = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
+export const minutesOf = (time: string) => Number(time.split(':')[0]) * 60 + Number(time.split(':')[1]);
 /** Entries with a start but no end take an hour in the time grid. */
 export const slotMinutes = 60;
 /** Ranges marked in the time grid snap to quarter hours. */

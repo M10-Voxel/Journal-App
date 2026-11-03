@@ -24,11 +24,14 @@ export const colorGroups = [
     ['md-cyan', 'Cyan'], ['md-blue', 'Blau'], ['md-purple', 'Lila'], ['md-pink', 'Pink'],
     ['md-highlight-background', 'Markierung: Hintergrund'], ['md-highlight-text', 'Markierung: Text'],
   ] },
+  { id: 'book', label: 'Buch (Journal-Stil)', colors: [
+    ['cover', 'Einband und Hintergrund'],
+  ] },
 ] as const;
 export type ColorToken = typeof colorGroups[number]['colors'][number][0];
 export type Palette = Record<ColorToken, string>;
 export type ColorOverrides = Partial<Palette>;
-export const colorThemeIds = ['original', 'green', 'summer'] as const;
+export const colorThemeIds = ['original', 'green', 'summer', 'paper', 'candle'] as const;
 export type ColorTheme = typeof colorThemeIds[number];
 export type CustomColors = Partial<Record<ColorTheme, ColorOverrides>>;
 export interface ColorSettings { colorTheme: ColorTheme; customColors: CustomColors }
@@ -43,6 +46,7 @@ const original: Palette = {
   'md-red': '#df6262', 'md-orange': '#e6a85c', 'md-yellow': '#e2d7b7', 'md-green': '#76d982',
   'md-cyan': '#c2dce9', 'md-blue': '#569eff', 'md-purple': '#c69bff', 'md-pink': '#ad4075',
   'md-highlight-background': '#e6a85c2e', 'md-highlight-text': '#e2d7b7',
+  cover: '#2a2b30',
 };
 const green: Palette = {
   background: '#0a120c', surface: '#202e22', inset: '#141f16', hover: '#2c4028', selected: '#3c542d', focus: '#405431',
@@ -54,6 +58,7 @@ const green: Palette = {
   'md-red': '#eca390', 'md-orange': '#dbc18a', 'md-yellow': '#dce8a0', 'md-green': '#aeff00',
   'md-cyan': '#9bd4bc', 'md-blue': '#a1c8dc', 'md-purple': '#c2bbce', 'md-pink': '#d6aaba',
   'md-highlight-background': '#aeff002e', 'md-highlight-text': '#e3ffb0',
+  cover: '#2c4027',
 };
 // Summer sky, shaded stone, foliage and the warm red railings in the reference image.
 const summer: Palette = {
@@ -66,12 +71,45 @@ const summer: Palette = {
   'md-red': '#ff9f93', 'md-orange': '#f2bd80', 'md-yellow': '#f3de9d', 'md-green': '#b9df8a',
   'md-cyan': '#78e0de', 'md-blue': '#78cfff', 'md-purple': '#bdbdf2', 'md-pink': '#edb5c9',
   'md-highlight-background': '#f1ce8533', 'md-highlight-text': '#ffebba',
+  cover: '#1d3d50',
 };
+// Light paper and ink for the journal style: cream pages, dark brown ink and blue ink as the accent.
+const paper: Palette = {
+  background: '#f3ecdc', surface: '#f8f3e7', inset: '#ece3cf', hover: '#e9dfc8', selected: '#e0d3b6', focus: '#ddd0b2',
+  border: '#e6dcc6', divider: '#d9ccb0', edge: '#5a462a24', line: '#5a462a1f', scrollbar: '#c9b994',
+  text: '#2b2620', strong: '#1d1915', muted: '#6b5f4f', placeholder: '#8c806c', disabled: '#a89c86',
+  accent: '#2f5d9e', priority: '#a8641a', success: '#3f7a3a', error: '#b03a2e', cancelled: '#8a4a6a',
+  event: '#2f5d9e', 'event-background': '#dfe5ee', 'event-text': '#203f6b', 'task-background': '#e8dfcb',
+  now: '#b03a2e', saturday: '#3c6aa8', sunday: '#a8473b',
+  'md-red': '#b03a2e', 'md-orange': '#8f4c12', 'md-yellow': '#6e560a', 'md-green': '#33652f',
+  'md-cyan': '#225c5c', 'md-blue': '#2f5d9e', 'md-purple': '#6a4a9a', 'md-pink': '#a4426e',
+  'md-highlight-background': '#f2d36b66', 'md-highlight-text': '#2b2620',
+  cover: '#6a4129',
+};
+// The journal style at night: dark brown pages, warm cream ink and candle gold as the accent.
+const candle: Palette = {
+  background: '#1c1612', surface: '#28201a', inset: '#211a15', hover: '#352a21', selected: '#433528', focus: '#46382b',
+  border: '#17120e', divider: '#3e3127', edge: '#f3e2c21a', line: '#f3e2c21f', scrollbar: '#5c4836',
+  text: '#e6d8c0', strong: '#f7ecd8', muted: '#bba98f', placeholder: '#968569', disabled: '#6f604d',
+  accent: '#e3ab52', priority: '#e8935a', success: '#9fca7d', error: '#ec8d7d', cancelled: '#cba0b4',
+  event: '#d9a95a', 'event-background': '#3b2d1e', 'event-text': '#f3dcb3', 'task-background': '#30261b',
+  now: '#f0b85c', saturday: '#9fbfd6', sunday: '#e2a08a',
+  'md-red': '#f0958a', 'md-orange': '#eba86d', 'md-yellow': '#e9d08a', 'md-green': '#abd08b',
+  'md-cyan': '#93d0c5', 'md-blue': '#9db9e6', 'md-purple': '#c6abe1', 'md-pink': '#e9a6c1',
+  'md-highlight-background': '#e3ab5233', 'md-highlight-text': '#f8e2b0',
+  cover: '#5a3020',
+};
+/** The palettes made for the journal style. */
+export const journalColorThemes: readonly ColorTheme[] = ['paper', 'candle'];
 export const colorThemes: { id: ColorTheme; name: string; description: string; colors: Palette }[] = [
   { id: 'original', name: 'Original', description: 'Schwarz, Graphit und kühles Blau.', colors: original },
   { id: 'green', name: 'Graphit & Limette', description: 'Dunkles Waldgrün, sanfte Grautöne und frische Limette.', colors: green },
   { id: 'summer', name: 'Himmel & Sonne', description: 'Himmelblau, Türkis und Sonnenwärme auf dunklem Marineblau.', colors: summer },
+  { id: 'paper', name: 'Papier & Tinte', description: 'Helles Papier, dunkle Tinte und Blau-Tinte als Akzent.', colors: paper },
+  { id: 'candle', name: 'Leder & Kerzenlicht', description: 'Dunkle Buchseiten, warme Tinte und Kerzengold – das Journal am Abend.', colors: candle },
 ];
+/** Light palettes (paper) need light form controls and scrollbars. */
+export const isLightPalette = (palette: Palette) => contrastRatio(palette.background, '#000000') > contrastRatio(palette.background, '#ffffff');
 export const colorTokens = colorGroups.flatMap(group => group.colors.map(([token]) => token));
 export const defaultColorSettings: ColorSettings = { colorTheme: 'original', customColors: {} };
 export const isHexColor = (value: unknown): value is string => typeof value === 'string' && /^#[\da-f]{6}(?:[\da-f]{2})?$/i.test(value);
@@ -109,6 +147,7 @@ export function applyColors(settings: ColorSettings) {
   const clean = normalizeColorSettings(settings), palette = resolvePalette(clean);
   const root = document.documentElement;
   root.dataset.colorTheme = clean.colorTheme;
+  root.style.colorScheme = isLightPalette(palette) ? 'light' : 'dark';
   for (const token of colorTokens) root.style.setProperty(`--${token}`, palette[token]);
   root.style.setProperty('--selection', `color-mix(in srgb, ${palette.accent} 20%, transparent)`);
   for (const token of ['accent', 'success', 'now', 'error'] as const) root.style.setProperty(`--on-${token}`, onColor(palette[token]));

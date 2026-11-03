@@ -1,3 +1,5 @@
+import { encodeMailContent } from './mailContent.ts';
+import { shiftDate } from './dates.ts';
 import { t } from './i18n.ts';
 import type { CalendarImport, Entry } from './journal.ts';
 import { localDate } from './dates.ts';
@@ -68,17 +70,35 @@ function isoParts(value: string): { date: string; time: string | null } | null {
   return Number.isFinite(+date) ? { date: localDate(date), time: value.length === 10 ? null : `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}` } : null;
 }
 
+/** Delivery windows count from the sending date, never the date of the sync. */
+export function deliveryWorkdayWindow(subject:string,content:string,sentAt:number,includeSaturday=false):{date:string;time:string|null;end:string|null;evidence:string}|null {
+ const text=`${subject}\n${content}`;
+ const pattern=/\b(\d{1,2})(?:\s*(?:bis|to|[-\u2013\u2014])\s*(\d{1,2}))?\s*(?:werktag(?:e|en|es)?|business\s+days?|working\s+days?)\b/gi;
+ for(const match of text.matchAll(pattern)){
+  if(/(?:vor|seit|ago)\s*$/i.test(text.slice(Math.max(0,match.index!-15),match.index!)))continue;
+  const nearby=text.slice(Math.max(0,match.index!-90),match.index!+match[0].length+60);
+  if(!/(liefer|zustell|versand|paket|sendung|delivery|shipping|shipment|arriv|dispatch)/i.test(nearby) || /(retour|widerruf|rückgabe|rueckgabe|erstattung|refund|return policy)/i.test(nearby))continue;
+  const first=Number(match[1]),last=Number(match[2] ?? match[1]);if(first<1 || last<first || last>60)continue;
+  const base=new Date(sentAt*1000);if(!Number.isFinite(+base))return null;
+  const add=(count:number)=>{let date=localDate(base);while(count>0){date=shiftDate(date,1);const weekday=new Date(`${date}T12:00`).getDay();if(weekday!==0 && (includeSaturday || weekday!==6))count--;}return date;};
+  const date=add(first),endDate=add(last),days=Math.round((Date.parse(endDate)-Date.parse(date))/86400000);
+  return {date,time:days?'00:00':null,end:days?`${String(days*24+23).padStart(2,'0')}:59`:null,evidence:`${match[0]} · Maildatum ${localDate(base)} · ${includeSaturday?'Mo–Sa':'Mo–Fr'}, ohne Feiertagskalender`};
+ }
+ return null;
+}
+
 /** Structured data is parsed directly; free text uses the isolated local model. */
 export async function recognizeMail({ account, message }: MailPending, today = localDate(), analyzer?: MailAnalyzer): Promise<{ candidates: MailCandidate[]; notice: string }> {
   if (message.notice) return { candidates: [], notice: message.notice };
   const candidates: MailCandidate[] = [], notices: string[] = [];
-  const description = mailDescription(message.text || mailText(message.html));
   const base = { accountId: account.id, messageKey: message.key, subject: message.subject, sender: message.sender, sentAt: message.sentAt };
   async function add(item: CalendarImport, identity: string, evidence: string, automatic: boolean) {
-    if (item.date < today || candidates.length >= 200) return;
+    const endDate=item.entry.time && item.entry.end ? shiftDate(item.date,Math.floor(Number(item.entry.end.split(':')[0])/24)) : item.date;
+    if (endDate < today || candidates.length >= 200) return;
     const calendarUid = `mail:${account.id}:${await hash(identity)}`;
     if (candidates.some(candidate => candidate.entry.calendarUid === calendarUid)) return;
-    const entry: Entry = { ...item.entry, description: [item.entry.description?.trim(), description].filter(Boolean).filter((value, index, all) => all.indexOf(value) === index).join('\n\n'), id: await uuid(calendarUid), calendarUid, text: item.entry.text.slice(0, 2000), showInJournal: false, reminder: false };
+    const description=encodeMailContent({html:message.html,text:[item.entry.description?.trim(),mailDescription(message.text || mailText(message.html))].filter(Boolean).join('\n\n'),subject:message.subject,sender:message.sender,notes:item.entry.description});
+    const entry: Entry = { ...item.entry, description, id: await uuid(calendarUid), calendarUid, text: item.entry.text.slice(0, 2000), showInJournal: false, reminder: false };
     candidates.push({ ...base, date: item.date, entry, id: await uuid(`${message.key}:${calendarUid}`), evidence: evidence.slice(0, 4000), automatic });
   }
   const event = (text: string, time: string | null, end: string | null): Entry => ({ id: '', kind: 'event', text, time, end: time && end && end > time ? end : null, done: false, cancelled: false, priority: false, reminder: false, plan: null });
@@ -113,12 +133,14 @@ export async function recognizeMail({ account, message }: MailPending, today = l
         const to = typeof finish === 'string' ? isoParts(finish) : null;
         const track = typeof data.trackingNumber === 'string' ? data.trackingNumber.trim() : '';
         const name = typeof data.name === 'string' ? data.name : type === 'ParcelDelivery' ? `Lieferung${track ? ` · ${track}` : ''}` : message.subject;
-        await add({ date: from.date, entry: event(name, from.time, to?.date === from.date ? to.time : null) },
+        await add({ date: from.date, entry: event(name, to && to.date>from.date ? from.time ?? '00:00' : from.time, to && to.date>from.date ? `${String(Math.round((Date.parse(to.date)-Date.parse(from.date))/86400000)*24+Number((to.time ?? '23:59').split(':')[0])).padStart(2,'0')}:${(to.time ?? '23:59').split(':')[1]}` : to?.time ?? null) },
           track ? `parcel:${track}` : `structured:${message.key}:${start}`, `Strukturierte ${type === 'ParcelDelivery' ? 'Lieferankündigung' : 'Terminangabe'} · ${start}${finish ? ` – ${finish}` : ''}`, true);
       }
     } catch { notices.push('Strukturierte Maildaten konnten nicht vollständig gelesen werden.'); }
   }
   if (candidates.length) return { candidates, notice: [...new Set(notices)].join(' ').slice(0, 2000) };
+  const workdays=deliveryWorkdayWindow(message.subject,content,message.sentAt);
+  if(workdays){await add({date:workdays.date,entry:event(message.subject || 'Lieferung',workdays.time,workdays.end)},`delivery-window:${message.key}`,workdays.evidence,true);return {candidates,notice:'Lieferfenster in Werktagen erkannt; Feiertage sind nicht berücksichtigt.'};}
   if (analyzer) {
     const { extractModelEvents, prepareMailText } = await import('./mailMl.ts');
     const prepared = prepareMailText(message.subject, content);

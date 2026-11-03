@@ -1,0 +1,12 @@
+# Mail display and delivery windows
+
+New mail imports store a versioned JSON envelope in the existing description field. It carries the original HTML, a plain-text alternative, subject, sender and any calendar-attachment notes. Descriptions therefore sync and participate in undo through the existing data path, without a separate attachment store. Existing entries that only contain a plain description cannot reconstruct their original HTML; reimport is needed for those.
+
+The calendar detail popup and editing form display the envelope in an iframe sandbox with no scripting, forms, navigation links, popups or parent access. DOM cleanup removes active elements and event handlers. A restrictive document CSP blocks external resources by default. The user can enable external HTTPS images, stylesheets and fonts for the displayed message. Inline style attributes have an explicit CSP directive; embedded style elements carry the host nonce so the actual Tauri security policy permits the original formatting. CID attachments are not currently supplied by the mail transport. Inline HTML styling and embedded style elements are retained. Plain mails display as readable text. ICS export uses the plain-text alternative.
+
+Delivery expressions such as `1 bis 2 Werktage`, `1–2 Werktagen` and `1 to 2 business days` are deterministic date arithmetic alongside the local ML recognition. They require shipping context and reject return/refund contexts. Counting starts after the mail's sending date in the device's timezone. Default: Monday–Friday, without regional holidays. The earliest through latest arrival dates are stored as a continuous multi-day span; a single-date estimate remains untimed. Structured JSON-LD delivery ranges also preserve dates spanning several days.
+
+Ctrl+wheel above a calendar hour view changes only hour spacing. The hour under the pointer stays anchored; the preference persists locally. A plain wheel retains normal scrolling and horizontal paging. Grid height is bounded to keep quarter-hour cells usable.
+
+
+Calendar month/year and compact-month views project spanning entries onto each covered date, including spans starting before the shown month/year. Projections are read-only view data with an origin reference: opening, editing and deleting a continuation always targets the original entry. No duplicate database entries are created. Midnight ends are exclusive. The hour views keep their original single top-band span rendering.

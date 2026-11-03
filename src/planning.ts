@@ -49,18 +49,18 @@ export function repeatChange(entry: Entry, day: string, dates: readonly string[]
 export const tomorrowChange = (entry: Entry, day: string, newId?: () => string) =>
   planChange(day, [shiftDate(day, 1)], { time: entry.time ?? null, end: entry.end ?? null, reminder: entry.reminder ?? false }, 'tomorrow', newId);
 
-const minutes = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
+const minutes = (time: string) => Number(time.split(':')[0]) * 60 + Number(time.split(':')[1]);
 export const timeOfMinutes = (value: number) => formatTime(Math.floor(value / 60), value % 60);
 /** The end that keeps an entry's duration when it starts at `time` instead; none if it would pass midnight. */
 /** The end that keeps an entry's duration when it starts at `time` instead (also past midnight); none beyond the next day. */
 export function keepDuration(entry: Pick<Entry, 'time' | 'end'>, time: string | null): string | null {
   if (!time || !entry.time || !entry.end) return null;
   const end = minutes(time) + minutes(entry.end) - minutes(entry.time);
-  return end < 48 * 60 ? timeOfMinutes(end) : null;
+  return end <= 366 * 1440 ? timeOfMinutes(end) : null;
 }
 /** "09:00", or "09:00–10:30" for a span. */
 /** An end on the next day ("26:00") as that day's clock time with a raised +1: "02:00⁺¹". */
-export const formatEnd = (end: string) => end > '24:00' ? `${String(Number(end.slice(0, 2)) - 24).padStart(2, '0')}${end.slice(2)}⁺¹` : end;
+export const formatEnd = (end: string) => {const value=minutes(end),days=Math.floor(value/1440);return value>1440 ? `${timeOfMinutes(value%1440)}${days===1 ? "\u207a\u00b9" : ` (+${days})`}` : end;};
 /** "09:00", "09:00–10:30", or past midnight "22:00–02:00⁺¹". */
 export const formatSpan = (time: string | null | undefined, end?: string | null) => time ? end ? `${time}–${formatEnd(end)}` : time : '';
 

@@ -1,15 +1,19 @@
 import { t, useLanguage } from '../i18n';
 import { useEffect, useRef, useState } from 'react';
-import type { Settings } from '../settings';
+import { themes, withTheme } from '../settings';
+import type { Settings, Theme } from '../settings';
 import type { ActionLayout } from './EntryActionDock';
 import type { CalendarImport } from '../journal';
+import { DriveSettings } from './DriveSettings';
 import { MailSettings } from './MailSettings';
 import { Icon } from './Icon';
 import { ColorSettings } from './ColorSettings';
 import { TagSettings } from './TagSettings';
+import { factorOf, screenWidth } from '../uiScale';
+import type { UiScale } from '../uiScale';
 import { ActivitySettings } from './ActivitySettings';
 
-const tabs = ['appearance', 'colors', 'tags', 'activities', 'mail'] as const;
+const tabs = ['appearance', 'colors', 'tags', 'activities', 'drive', 'mail'] as const;
 export type SettingsTab = typeof tabs[number];
 
 const layouts = (): { value: ActionLayout; title: string; text: string }[] => ([
@@ -43,10 +47,13 @@ function Preview({ layout }: { layout: ActionLayout }) {
   </svg>;
 }
 
-export function SettingsDialog({ settings, onChange, onClose, onImport, mailStatus, initialTab = 'appearance' }: { initialTab?: SettingsTab; settings: Settings; onChange: (settings: Settings) => void; onClose: () => void; onImport: (entries: CalendarImport[]) => Promise<void>; mailStatus: { count: number; error: string } }) {
+export function SettingsDialog({ settings, onChange, onClose, onImport, mailStatus, beforeSync, onDriveBusy, initialTab = 'appearance' }: { beforeSync: () => Promise<void>; onDriveBusy: (busy: boolean) => void; initialTab?: SettingsTab; settings: Settings; onChange: (settings: Settings) => void; onClose: () => void; onImport: (entries: CalendarImport[]) => Promise<void>; mailStatus: { count: number; error: string } }) {
   const language = useLanguage();
+  const [driveBusy, setDriveBusy] = useState(false);
   const dialogRef = useRef<HTMLDivElement>(null);
   const [tab, setTab] = useState<string>(initialTab);
+  const [screenSize, setScreenSize] = useState(1920);
+  useEffect(() => { void screenWidth().then(setScreenSize); }, []);
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
     const selector = initialTab === 'tags' ? '#settings-tags .tag-name' : initialTab === 'activities' ? '#settings-activities input' : '.settings-option[aria-checked="true"]';
@@ -59,10 +66,10 @@ export function SettingsDialog({ settings, onChange, onClose, onImport, mailStat
       <div className="settings-head">
         <Icon name="settings" /><strong>{t("Einstellungen")}</strong>
         <span className="settings-keys"><kbd>{t("Strg")}</kbd> <kbd>,</kbd></span>
-        <button type="button" className="settings-close" aria-label={t("Einstellungen schließen")} title={t("Schließen · Esc")} onClick={onClose}><Icon name="done" /></button>
+        <button type="button" className="settings-close" disabled={driveBusy} aria-label={t("Einstellungen schließen")} title={t("Schließen · Esc")} onClick={onClose}><Icon name="done" /></button>
       </div>
       <div className="settings-body">
-      <div className="settings-tabs" role="tablist" aria-label={t("Einstellungsbereich")} aria-orientation="vertical" onKeyDown={event => {
+      <div className="settings-tabs" inert={driveBusy} role="tablist" aria-label={t("Einstellungsbereich")} aria-orientation="vertical" onKeyDown={event => {
         if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
         event.preventDefault();
         const step = event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 1;
@@ -73,6 +80,7 @@ export function SettingsDialog({ settings, onChange, onClose, onImport, mailStat
         <button id="settings-colors-tab" type="button" role="tab" tabIndex={tab === 'colors' ? 0 : -1} aria-selected={tab === 'colors'} aria-controls="settings-colors" onClick={event => { event.currentTarget.focus(); setTab('colors'); }}><Icon name="pencil" />{t('Farben')}</button>
         <button id="settings-tags-tab" type="button" role="tab" tabIndex={tab === 'tags' ? 0 : -1} aria-selected={tab === 'tags'} aria-controls="settings-tags" onClick={event => { event.currentTarget.focus(); setTab('tags'); }}><Icon name="tag" />{t('Tags')}</button>
         <button id="settings-activities-tab" type="button" role="tab" tabIndex={tab === 'activities' ? 0 : -1} aria-selected={tab === 'activities'} aria-controls="settings-activities" onClick={event => { event.currentTarget.focus(); setTab('activities'); }}><Icon name="check" />{language === 'en' ? 'Activities' : 'Aktivit\u00e4ten'}</button>
+        <button type="button" id="settings-drive-tab" role="tab" aria-selected={tab === 'drive'} tabIndex={tab === 'drive' ? 0 : -1} onClick={() => setTab('drive')}><Icon name="transfer" />Google Drive</button>
         <button id="settings-mail-tab" type="button" role="tab" tabIndex={tab === 'mail' ? 0 : -1} aria-selected={tab === 'mail'} aria-controls="settings-mail" onClick={event => { event.currentTarget.focus(); setTab('mail'); }}><Icon name="mail" />{t("E-Mail-Konten")}{mailStatus.count > 0 && <span className="mail-badge">{mailStatus.count}</span>}</button>
       </div>
       {tab === 'appearance' ? <div className="settings-panel" role="tabpanel" id="settings-appearance" aria-labelledby="settings-appearance-tab">
@@ -90,16 +98,48 @@ export function SettingsDialog({ settings, onChange, onClose, onImport, mailStat
       <div className="theme-options" role="radiogroup" aria-labelledby="settings-theme" onKeyDown={event => {
         if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
         event.preventDefault();
-        const theme = settings.theme === 'pixel' ? 'classic' : 'pixel';
-        onChange({ ...settings, theme });
+        const step = event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 1;
+        const theme: Theme = themes[(themes.indexOf(settings.theme) + step + themes.length) % themes.length];
+        onChange(withTheme(settings, theme));
         requestAnimationFrame(() => dialogRef.current?.querySelector<HTMLElement>(`[data-theme-choice="${theme}"]`)?.focus());
       }}>
-        {(['classic', 'pixel'] as const).map(theme => <button key={theme} type="button" role="radio" aria-checked={settings.theme === theme} tabIndex={settings.theme === theme ? 0 : -1} data-theme-choice={theme}
-          onClick={() => onChange({ ...settings, theme })}>
+        {themes.map(theme => <button key={theme} type="button" role="radio" aria-checked={settings.theme === theme} tabIndex={settings.theme === theme ? 0 : -1} data-theme-choice={theme}
+          onClick={() => onChange(withTheme(settings, theme))}>
           <span className={`theme-sample is-${theme}`} aria-hidden="true"><span>Aa</span><i /><i /><i /></span>
-          <strong>{theme === 'classic' ? t("Klassisch") : 'Pixel'}</strong>
-          <small>{theme === 'classic' ? 'IBM Plex Sans · Lilex' : 'Pixelify Sans · VT323'}</small>
+          <strong>{theme === 'classic' ? t("Klassisch") : theme === 'pixel' ? 'Pixel' : 'Journal'}</strong>
+          <small>{theme === 'classic' ? 'IBM Plex Sans · Lilex' : theme === 'pixel' ? 'Pixelify Sans · VT323' : t('Papier, Tinte, Seiten zum Umblättern')}</small>
         </button>)}
+      </div>
+      {settings.theme === 'journal' && <>
+        <h3 id="settings-calendar-dock">{t('Kalender im Buch')}</h3>
+        <p className="settings-hint">{t('Wo der Kalender liegt, wenn er herunterklappt (Band oben oder Strg K).')}</p>
+        <div className="language-options" role="radiogroup" aria-labelledby="settings-calendar-dock" onKeyDown={event => {
+          if (!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key)) return;
+          event.preventDefault(); const calendarDock = settings.calendarDock === 'overlay' ? 'side' : 'overlay';
+          onChange({ ...settings, calendarDock });
+          requestAnimationFrame(() => dialogRef.current?.querySelector<HTMLElement>(`[data-calendar-dock="${calendarDock}"]`)?.focus());
+        }}>
+          {(['overlay', 'side'] as const).map(dock => <button key={dock} type="button" role="radio" data-calendar-dock={dock} aria-checked={settings.calendarDock === dock} tabIndex={settings.calendarDock === dock ? 0 : -1}
+            onClick={() => onChange({ ...settings, calendarDock: dock })}>{dock === 'overlay' ? t('Als Blatt über der linken Seite') : t('Neben dem Buch angedockt')}</button>)}
+        </div>
+        <h3 id="settings-book-paging">{t('Blättern')}</h3>
+        <p className="settings-hint">{t('Beide Seiten auf einmal: Die Pinnwand liegt dann über zwei Seiten. Liegt der Kalender als Blatt auf dem Buch, zeigt es daneben eine Seite.')}</p>
+        <div className="language-options" role="radiogroup" aria-labelledby="settings-book-paging" onKeyDown={event => {
+          if (!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key)) return;
+          event.preventDefault(); const bookPaging = settings.bookPaging === 'page' ? 'spread' : 'page';
+          onChange({ ...settings, bookPaging });
+          requestAnimationFrame(() => dialogRef.current?.querySelector<HTMLElement>(`[data-book-paging="${bookPaging}"]`)?.focus());
+        }}>
+          {(['page', 'spread'] as const).map(paging => <button key={paging} type="button" role="radio" data-book-paging={paging} aria-checked={settings.bookPaging === paging} tabIndex={settings.bookPaging === paging ? 0 : -1}
+            onClick={() => onChange({ ...settings, bookPaging: paging })}>{paging === 'page' ? t('Seite für Seite') : t('Beide Seiten auf einmal')}</button>)}
+        </div>
+      </>}
+      <h3 id="settings-scale">{t('Größe')}</h3>
+      <p className="settings-hint">{t('Text und Bedienelemente größer, z. B. für 4K-Bildschirme. „Automatisch“ richtet sich nach dem Bildschirm, im Pixel-Stil etwas größer. ')}<kbd>{t('Strg')}</kbd> <kbd>+</kbd> / <kbd>−</kbd> / <kbd>0</kbd></p>
+      <div className="scale-options scale-slider">
+        <button type="button" aria-pressed={settings.uiScale === 'auto'} onClick={() => onChange({ ...settings, uiScale: 'auto' })}>{t('Automatisch')}</button>
+        <input type="range" min="75" max="200" step="1" aria-labelledby="settings-scale" value={Math.round(factorOf(settings.uiScale, screenSize, settings.theme === 'pixel') * 100)} onChange={event => onChange({ ...settings, uiScale: event.target.value as UiScale })} />
+        <output>{Math.round(factorOf(settings.uiScale, screenSize, settings.theme === 'pixel') * 100)} %</output>
       </div>
       <h3 id="settings-layout">{t("Aktionen am Eintrag")}</h3>
       <p className="settings-hint">{t("Wie sich die Aktionen eines Eintrags zeigen, wenn man auf seinen Punkt klickt. ")}<kbd>←</kbd> <kbd>→</kbd>{t(" wählt.")}</p>
@@ -119,7 +159,7 @@ export function SettingsDialog({ settings, onChange, onClose, onImport, mailStat
         </button>)}
       </div>
       </div> : tab === 'colors' ? <div className="settings-panel" role="tabpanel" id="settings-colors" aria-labelledby="settings-colors-tab"><ColorSettings settings={settings} onChange={onChange} /></div>
-        : tab === 'tags' ? <div className="settings-panel" role="tabpanel" id="settings-tags" aria-labelledby="settings-tags-tab"><TagSettings /></div> : tab === 'activities' ? <div className="settings-panel" role="tabpanel" id="settings-activities" aria-labelledby="settings-activities-tab"><ActivitySettings /></div> : <div className="settings-panel" role="tabpanel" id="settings-mail" aria-labelledby="settings-mail-tab"><MailSettings onImport={onImport} importError={mailStatus.error} /></div>}
+        : tab === 'tags' ? <div className="settings-panel" role="tabpanel" id="settings-tags" aria-labelledby="settings-tags-tab"><TagSettings /></div> : tab === 'activities' ? <div className="settings-panel" role="tabpanel" id="settings-activities" aria-labelledby="settings-activities-tab"><ActivitySettings /></div> : tab === 'drive' ? <div className="settings-panel" role="tabpanel" id="settings-drive"><DriveSettings beforeSync={beforeSync} onBusy={value => { setDriveBusy(value); onDriveBusy(value); }} /></div> : <div className="settings-panel" role="tabpanel" id="settings-mail" aria-labelledby="settings-mail-tab"><MailSettings onImport={onImport} importError={mailStatus.error} /></div>}
       </div>
     </div>
   </div>;

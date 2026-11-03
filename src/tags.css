@@ -187,8 +187,56 @@
 :root[data-theme='pixel'] .tag-filter-dots i + i { margin-left: 1px; }
 :root[data-theme='pixel'] .tag-filter-dots i { box-shadow: none; }
 :root[data-theme='pixel'] .entry.has-tag::after { width: 2px; opacity: 1; background: repeating-linear-gradient(var(--tag) 0 4px, transparent 4px 6px); }
-:root[data-theme='pixel'] .cal-item.has-tag { box-shadow: inset 3px 0 var(--tag); }
-:root[data-theme='pixel'] .cal-item.is-block.has-tag { box-shadow: inset 3px 0 var(--tag), 2px 2px 0 #0008; }
 :root[data-theme='pixel'] .tag-row { box-shadow: inset 4px 0 var(--tag), inset 0 0 0 1px var(--edge); }
 :root[data-theme='pixel'] .cal-composer.has-tag::before { left: 10px; right: 10px; height: 3px; }
 :root[data-theme='pixel'] .entry-tag, :root[data-theme='pixel'] .tag-row-sample { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tag) 45%, transparent); }
+
+/* Calendar entries as tinted cards: the colour (tag, else the kind's) fills them lightly and draws a thin outline.
+   A bar on the left only marks priority. */
+:root .cal-item { --tone: var(--tag, var(--muted)); }
+:root .cal-item.is-event { --tone: var(--tag, var(--event)); }
+:root .cal-item.is-block, :root .cal-item.is-event, :root .cal-item.has-tag {
+  background: color-mix(in srgb, var(--tone) 16%, var(--background)) !important;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 62%, transparent);
+  color: color-mix(in srgb, var(--tone) 14%, var(--strong)) !important; }
+:root .cal-item.is-block { border-radius: 6px; padding: 5px 7px !important; }
+:root .cal-item.is-block .cal-item-text { font-weight: 600; }
+:root .cal-item.is-block.is-task:not(.has-tag) { background: color-mix(in srgb, var(--tone) 9%, var(--task-background)) !important; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 35%, transparent); }
+:root .cal-item.is-line:not(.is-event):not(.has-tag) { background: transparent !important; box-shadow: none; color: var(--text) !important; }
+:root .cal-item:is(.is-block, .is-event, .has-tag):hover { background: color-mix(in srgb, var(--tone) 26%, var(--background)) !important; }
+:root .cal-item.is-line:not(.is-event):not(.has-tag):hover { background: var(--hover) !important; }
+:root .cal-item .icon { color: var(--tone); }
+:root .cal-item.is-priority .icon { color: var(--priority); }
+:root .cal-item.is-priority:is(.is-block, .is-event, .has-tag) { box-shadow: inset 2px 0 var(--priority), inset 0 0 0 1px color-mix(in srgb, var(--tone) 62%, transparent); }
+:root .cal-item.is-block.is-priority::before { display: none; }
+:root .cal-item:is(.is-done, .is-cancelled) { --tone: var(--disabled); }
+:root .cal-item:is(.is-done, .is-cancelled):is(.is-block, .is-event, .has-tag) { background: color-mix(in srgb, var(--tag, var(--muted)) 7%, var(--background)) !important; color: var(--disabled) !important; }
+:root .cal-item.is-night-start { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+:root .cal-item.is-night-rest { border-top-left-radius: 0; border-top-right-radius: 0; opacity: .85; }
+:root .cal-item.is-editing { box-shadow: inset 0 0 0 1.5px var(--accent) !important; }
+:root .cal-item .cal-item-time { background: color-mix(in srgb, var(--tone) 34%, var(--background)); color: var(--strong); }
+
+/* The field that opens the description */
+.cal-item-note { display: grid; flex: none; place-items: center; width: 16px; height: 14px; margin-left: auto; border-radius: 4px; color: color-mix(in srgb, var(--tone) 55%, var(--strong));
+  background: color-mix(in srgb, var(--tone) 22%, transparent); cursor: pointer; transition: background-color var(--fast) ease, transform 200ms var(--spring); }
+.cal-item-note .icon { width: 10px !important; height: 10px !important; color: inherit !important; position: static !important; }
+.cal-item-note:hover, .cal-item-note.is-open { background: color-mix(in srgb, var(--tone) 42%, transparent); color: var(--strong); }
+.cal-item-note:active { transform: scale(.88); }
+.cal-item-note:focus-visible { outline: 1.5px solid var(--accent); outline-offset: 1px; }
+.cal-item.is-block .cal-item-note { position: absolute; left: 6px; bottom: 5px; margin: 0; }
+.cal-item.is-block.is-short .cal-item-note { left: auto; bottom: auto; top: 2px; right: 22px; }
+.cal-details { width: 280px; padding: 10px 12px 6px; }
+.cal-details-head { display: flex; align-items: flex-start; gap: 8px; }
+.cal-details-head .icon { flex: none; width: 13px; height: 13px; margin-top: 2px; color: var(--tag, var(--accent)); }
+.cal-details-head strong { color: var(--strong); font: 600 13px/1.35 var(--sans); overflow-wrap: anywhere; }
+.cal-details-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 5px 0 0 21px; color: var(--muted); font: 11px var(--mono); }
+.cal-details-tag { display: flex; align-items: center; gap: 5px; padding: 1px 7px; border-radius: 999px; background: color-mix(in srgb, var(--tag) 14%, transparent); color: color-mix(in srgb, var(--tag) 60%, var(--strong)); font: 11px var(--sans); }
+.cal-details-text { max-height: 260px; margin: 10px 0 4px; padding: 8px 10px; overflow: auto; border-radius: 7px; background: var(--inset); box-shadow: inset 0 0 0 1px var(--edge); color: var(--text); font: 12.5px/1.5 var(--write, var(--sans)); white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
+
+/* Pixel: square cards with a hard outline, the description in the terminal face. */
+:root[data-theme='pixel'] .cal-item:is(.is-block, .is-event, .has-tag) { box-shadow: inset 0 0 0 1px var(--tone), 2px 2px 0 #0008; }
+:root[data-theme='pixel'] .cal-item.is-priority:is(.is-block, .is-event, .has-tag) { box-shadow: inset 3px 0 var(--priority), inset 0 0 0 1px var(--tone), 2px 2px 0 #0008; }
+:root[data-theme='pixel'] .cal-item-note { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 60%, transparent); }
+:root[data-theme='pixel'] .cal-details-text { font-size: 16px; line-height: 1.3; }
+:root[data-theme='pixel'] .cal-details-meta { font-size: 14px; }
+:root[data-theme='pixel'] .cal-details-head strong { font-size: 14px; }

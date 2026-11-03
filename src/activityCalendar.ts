@@ -6,7 +6,7 @@ import type { Tag } from './tags.ts';
 // entries carrying the activity's tag (the timer creates those, but any entry with the tag counts). The calendar part
 // is never stored in the period data, so moving or changing such an entry changes the time everywhere.
 
-const clockMinutes = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
+const clockMinutes = (time: string) => Number(time.split(':')[0]) * 60 + Number(time.split(':')[1]);
 /** Length of a timed range on its day; entries without an end or cancelled tasks take no time. */
 export function entryMinutes(entry: Pick<Entry, 'time' | 'end' | 'cancelled'>): number {
   if (!entry.time || !entry.end || entry.cancelled) return 0;

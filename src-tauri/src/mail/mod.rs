@@ -1,5 +1,5 @@
-mod oauth;
-mod secrets;
+pub(crate) mod oauth;
+pub(crate) mod secrets;
 mod transport;
 pub mod ml;
 

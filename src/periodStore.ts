@@ -1,3 +1,4 @@
+import { listen } from '@tauri-apps/api/event';
 import { useEffect, useSyncExternalStore } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { normalizePeriodData } from './periodData';
@@ -10,9 +11,22 @@ let snapshot: { data: PeriodData | null; error: string; saving: boolean } = { da
 let loading: Promise<void> | null = null;
 let writes = Promise.resolve();
 let revision = 0;
+let listening = false;
+function listenForHistory() {
+  if (listening) return;
+  listening = true;
+  void listen('history:restored', async () => {
+    const version = ++revision;
+    try {
+      const raw = await invoke<string>('load_period_data');
+      if (version === revision) publish({ data: normalizePeriodData(JSON.parse(raw)), error: '', saving: false });
+    } catch (reason) { publish({ ...snapshot, error: String(reason) }); }
+  });
+}
 const listeners = new Set<() => void>();
 function publish(next: typeof snapshot) { snapshot = next; listeners.forEach(listener => listener()); }
 function ensure() {
+  listenForHistory();
   return loading ??= invoke<string>('load_period_data').then(raw => {
     publish({ data: normalizePeriodData(JSON.parse(raw)), error: '', saving: false });
     void moveTimerTime().then(ensureActivityTags).catch(reason => publish({ ...snapshot, error: String(reason) }));

@@ -17,7 +17,24 @@ import './periodNotes.css';
 
 export type Mode = PeriodMode;
 // The checklist has its own controls; the journal's action layout (orbit, inline, swipe) does not change it.
-export function PeriodNotes({ date, mode, onManage, onImport }: { date: string; mode: Mode; onManage: () => void; onImport: (entries: CalendarImport[]) => Promise<void> }) {
+/** The heading of an overview: "Mai 2026", "Quartal 2 · 2026", "4. Mai – 10. Mai 2026". */
+export function periodTitle(date: string, mode: Mode): string {
+  const en = getLanguage() === 'en';
+  const tr = (de: string, english: string) => en ? english : de;
+  const [start, end] = periodBounds(date, mode);
+  const dateLabel = (value: string) => new Intl.DateTimeFormat(en ? 'en-GB' : 'de-DE', { day: 'numeric', month: 'short' }).format(new Date(`${value}T12:00:00`));
+  return mode === 'year' ? start.slice(0, 4) : mode === 'quarter' ? `${tr('Quartal','Quarter')} ${Math.floor((Number(start.slice(5,7))-1)/3)+1} · ${start.slice(0,4)}` : mode === 'month' ? new Intl.DateTimeFormat(en ? 'en-GB' : 'de-DE', { month: 'long', year: 'numeric' }).format(new Date(`${start}T12:00:00`)) : `${dateLabel(start)} – ${dateLabel(end)} ${end.slice(0,4)}`;
+}
+export const periodEyebrow = (mode: Exclude<Mode, 'day'>) => {
+  const en = getLanguage() === 'en';
+  return ({ week: en ? 'Weekly overview' : 'Wochenübersicht', month: en ? 'Monthly overview' : 'Monatsübersicht', quarter: en ? 'Quarterly overview' : 'Quartalsübersicht', year: en ? 'Yearly overview' : 'Jahresübersicht' })[mode];
+};
+
+/**
+ * `part` splits an overview over two book pages: the note with the ratings, then the activities. The page around it
+ * shows the heading then. Without `part` everything is shown together, as before.
+ */
+export function PeriodNotes({ date, mode, onManage, onImport, part }: { date: string; mode: Mode; onManage: () => void; onImport: (entries: CalendarImport[]) => Promise<void>; part?: 'notes' | 'activities' }) {
   const en = getLanguage() === 'en';
   const tr = (de: string, english: string) => en ? english : de;
   useActivityTimers();
@@ -29,8 +46,6 @@ export function PeriodNotes({ date, mode, onManage, onImport }: { date: string; 
   // Analytics count the calendar time too; the stored minutes are only what was typed in the checklist.
   const shown = withCalendarMinutes(data, calendar);
   const dates = periodDates(start, end);
-  const dateLabel = (value: string) => new Intl.DateTimeFormat(en ? 'en-GB' : 'de-DE', { day: 'numeric', month: 'short' }).format(new Date(`${value}T12:00:00`));
-  const periodTitle = mode === 'year' ? start.slice(0, 4) : mode === 'quarter' ? `${tr('Quartal','Quarter')} ${Math.floor((Number(start.slice(5,7))-1)/3)+1} · ${start.slice(0,4)}` : mode === 'month' ? new Intl.DateTimeFormat(en ? 'en-GB' : 'de-DE', { month: 'long', year: 'numeric' }).format(new Date(`${start}T12:00:00`)) : `${dateLabel(start)} – ${dateLabel(end)} ${end.slice(0,4)}`;
   const key = `${mode}:${start}`;
   const day = data.days[date] ?? { items: {} };
   const changeDay = (update: (value: PeriodDay) => PeriodDay) => change(current => ({ ...current, days: { ...current.days, [date]: update(current.days[date] ?? { items: {} }) } }));
@@ -38,8 +53,8 @@ export function PeriodNotes({ date, mode, onManage, onImport }: { date: string; 
   const records = Object.entries(data.days).filter(([d]) => d >= start && d <= end);
   const ratings = records.flatMap(([, value]) => value.rating == null ? [] : [value.rating]);
   return <section className="period-section" aria-label={tr('Checkliste und Auswertung', 'Checklist and analytics')}>
-    {mode !== 'day' && <div className="document-header"><div className="eyebrow">{({ week: tr('Wochenübersicht','Weekly overview'), month: tr('Monatsübersicht','Monthly overview'), quarter: tr('Quartalsübersicht','Quarterly overview'), year: tr('Jahresübersicht','Yearly overview') })[mode]}</div><h1>{periodTitle}</h1></div>}
-    <div className="section-heading"><div className="section-title"><h2>{mode === 'day' ? tr('Tagesbewertung', 'Daily rating') : tr('Notiz & Auswertung', 'Note & analytics')}</h2></div></div>
+    {mode !== 'day' && !part && <div className="document-header"><div className="eyebrow">{periodEyebrow(mode)}</div><h1>{periodTitle(date, mode)}</h1></div>}
+    {part !== 'activities' && <div className="section-heading"><div className="section-title"><h2>{mode === 'day' ? tr('Tagesbewertung', 'Daily rating') : tr('Notiz & Auswertung', 'Note & analytics')}</h2></div></div>}
     {error && <div className="error" role="alert">{tr('Speichern fehlgeschlagen: ', 'Save failed: ')}{error}</div>}
     {mode === 'day' ? <>
       <div className="period-rating">
@@ -62,13 +77,17 @@ export function PeriodNotes({ date, mode, onManage, onImport }: { date: string; 
         <ActivityTimer date={date} activity={item} text={record.text ?? ''} onImport={onImport} />
       </div>; })}</div>
     </> : <>
+      {part !== 'activities' && <>
       <p className="period-range">{start} – {end}</p>
       <label className="period-note">{tr('Notiz','Note')}<textarea value={data.notes[key] ?? ''} onChange={e => { const text = e.target.value; change(current => ({ ...current, notes: { ...current.notes, [key]: text } })); }} placeholder={tr('Gedanken zu diesem Zeitraum …','Thoughts about this period …')} /></label>
       <h3>{tr('Bewertungen','Ratings')}</h3><p className="rating-summary">{ratings.length ? `${tr('Durchschnitt','Average')}: ${(ratings.reduce((a,b) => a+b,0)/ratings.length).toFixed(1)} / 10 · ${ratings.length} ${tr('Tage','days')}` : tr('Noch keine Bewertungen in diesem Zeitraum.','No ratings in this period yet.')}</p>
       <RatingChart dates={dates} ratings={Object.fromEntries(records.map(([d, value]) => [d, value.rating]))} monthly={mode === 'quarter' || mode === 'year'} />
+      </>}
+      {part !== 'notes' && <>
       <div className="checklist-section-heading"><div><h3>{tr('Aktivitäten im Überblick','Activity overview')}</h3><p>{tr('Erfasste Zeit und Aktivitätstage im gewählten Zeitraum.','Recorded time and activity days in this period.')}</p></div><button type="button" className="checklist-manage" onClick={onManage}><Icon name="settings" />{tr('Aktivitäten','Activities')}</button></div>
       {!data.definitions.length && <p className="checklist-empty">{tr('Lege deine Aktivitäten in den Einstellungen fest.','Set up your activities in settings.')}</p>}
       <div className={`activity-summary-grid is-${mode}`}>{data.definitions.filter(item => item.active || dates.some(d => shown.days[d]?.items?.[item.id])).map(item => <ActivitySummary key={item.id} activity={item} dates={dates} data={shown} mode={mode} />)}</div>
+      </>}
     </>}
   </section>;
 }

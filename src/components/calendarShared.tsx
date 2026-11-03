@@ -1,3 +1,12 @@
+import { calendarDaysWithSpans } from '../calendarSpans';
+import type { SpanEntry } from '../calendarSpans';
+import { decodeMailContent } from '../mailContent';
+import { MailContent } from './MailContent';
+import { copyCalendarEntry } from '../calendarClipboard';
+import { journal } from '../journal';
+import { linkedScopes } from '../planning';
+import type { ScopeOption } from '../planning';
+import { ScopeChoice } from './ScopeChoice';
 import { t, useLanguage, getLanguage } from '../i18n';
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import type { CSSProperties, KeyboardEvent } from 'react';
@@ -13,6 +22,7 @@ import { Icon, IconName, priorityIcon } from './Icon';
 import { entryLabels } from './JournalEntry';
 import { tagOf } from '../tags';
 import { useTags } from '../tagStore';
+import { Popover } from './Popover';
 import '../calendar.css';
 
 // Shared by the calendar (in the journal's sidebar or its own window) and the compact month window. They only read the
@@ -25,7 +35,7 @@ export function useCalendarData(from: string, to: string) {
   const [error, setError] = useState('');
   useEffect(() => {
     let active = true;
-    const fetch = () => loadRange(from, to)
+    const fetch = () => Promise.all(Array.from({length:Math.ceil((Date.parse(to)-Date.parse(from))/86400000/390)+1},(_,i)=>{const start=shiftDate(from,i*390);return start>to ? Promise.resolve([]) : loadRange(start,shiftDate(start,389)<to?shiftDate(start,389):to);})).then(parts=>parts.flat())
       .then(list => { if (active) { setDays(previous => {
         const next = new Map([...previous].filter(([date]) => date < from || date > to));
         for (const day of list) next.set(day.date, day);
@@ -34,7 +44,8 @@ export function useCalendarData(from: string, to: string) {
       .catch(reason => { if (active) setError(String(reason)); });
     void fetch();
     const stop = listen<string[]>('journal:changed', event => { if (event.payload.some(date => date >= from && date <= to)) void fetch(); });
-    return () => { active = false; void stop.then(unlisten => unlisten()); };
+    const restored = listen('history:restored', () => { void fetch(); });
+    return () => { active = false; void stop.then(unlisten => unlisten()); void restored.then(unlisten => unlisten()); };
   }, [from, to]);
   return { days, error };
 }
@@ -64,7 +75,7 @@ export function useNow(): Date {
 export const openInJournal = (date: string, entry?: string) => { void invoke('show_day', { date, entry: entry ?? null }).catch(() => {}); };
 export const OpenInJournal = createContext<(date: string, entry?: string) => void>(openInJournal);
 /** Right-clicking an entry edits it in place (in the sidebar, where the calendar may change the journal). */
-export const EditInCalendar = createContext<{ edit: ((entry: Entry, date: string, element: HTMLElement) => void) | null; editingId: string | null }>({ edit: null, editingId: null });
+export const EditInCalendar = createContext<{ edit: ((entry: Entry, date: string, element: HTMLElement) => void) | null; editingId: string | null; remove?: (entry: Entry, date: string, others: ScopeOption['others']) => Promise<void> }>({ edit: null, editingId: null });
 
 export function entrySymbol(entry: Entry): IconName {
   if (entry.done) return 'done';
@@ -98,21 +109,58 @@ function measureTime(item: HTMLElement) {
 /** `night`: a block past midnight – `start` on its own day (cut at 24:00), `rest` its continuation on the next. */
 export function CalendarItem({ entry, date, variant = 'line', short = false, style, night }: { entry: Entry; date: string; variant?: 'line' | 'block'; short?: boolean; style?: CSSProperties; night?: 'start' | 'rest' }) {
   useLanguage();
+  date=(entry as SpanEntry).spanOrigin ?? date;
   const open = useContext(OpenInJournal);
-  const { edit, editingId } = useContext(EditInCalendar);
+  const { edit, editingId, remove } = useContext(EditInCalendar);
   // A tagged entry takes its tag's colour: the block (or bar) is tinted with it and edged in it.
   const tag = tagOf(useTags(), entry.tag);
+  // The small field at an entry with a description opens it in a card of its own.
+  const [details, setDetails] = useState(false);
+  const noteRef = useRef<HTMLButtonElement>(null);
+  const hovered = useRef(false);
+  const [options, setOptions] = useState<ScopeOption[] | null>(null);
+  const [error, setError] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  useEffect(() => {
+    const key = async (event: globalThis.KeyboardEvent) => {
+      if (!(hovered.current || details) || (event.target instanceof Element && event.target.closest('input,textarea,[contenteditable=true]'))) return;
+      if (event.ctrlKey && event.key.toLowerCase()==='c') { event.preventDefault(); copyCalendarEntry(entry); }
+      if (event.key!=='Delete' || !remove || deleting || options) return;
+      event.preventDefault(); setDeleting(true);
+      try { const choices=linkedScopes(await journal.linked(entry.id),entry.id,'remove'); if(choices.length>1)setOptions(choices);else await remove(entry,date,[]); }
+      catch(reason){setError(String(reason));}finally{setDeleting(false);}
+    };
+    window.addEventListener('keydown',key,true);return()=>window.removeEventListener('keydown',key,true);
+  },[details,entry,date,remove,deleting,options]);
+  const mail=decodeMailContent(entry.description);
+  const spanning=Boolean(entry.end && Number(entry.end.split(':')[0])>=24);
   const state = entry.done ? ' is-done' : entry.cancelled ? ' is-cancelled' : '';
-  return <button type="button" className={`cal-item is-${entry.kind} is-${variant}${short ? ' is-short' : ''}${state}${entry.priority ? ' is-priority' : ''}${tag ? ' has-tag' : ''}${editingId === entry.id ? ' is-editing' : ''}${night ? ` is-night-${night}` : ''}`}
-    style={tag ? { ...style, '--tag': tag.color } as CSSProperties : style} data-tag={tag?.name}
-    title={t("{0}{1} · Im Journal zeigen{2}", entryTitle(entry, tag?.name), entry.description ? `\n${entry.description}` : '', edit ? t(" · Rechtsklick: bearbeiten") : '')} aria-label={t("{0}. Im Journal zeigen", entryTitle(entry, tag?.name))}
+  return <button type="button" className={`cal-item is-${entry.kind} is-${variant}${short ? ' is-short' : ''}${spanning ? ' is-multiday' : ''}${state}${entry.priority ? ' is-priority' : ''}${tag ? ' has-tag' : ''}${editingId === entry.id ? ' is-editing' : ''}${night ? ` is-night-${night}` : ''}`}
+    ref={noteRef} style={tag ? { ...style, '--tag': tag.color } as CSSProperties : style} data-tag={tag?.name}
+    title={t("{0}{1} · Im Journal zeigen{2}", entryTitle(entry, tag?.name), !mail && entry.description ? `\n${entry.description}` : '', edit ? t(" · Rechtsklick: bearbeiten") : '')} aria-label={entryTitle(entry, tag?.name)}
     onContextMenu={event => { if (!edit) return; event.preventDefault(); event.stopPropagation(); edit(entry, date, event.currentTarget); }}
     onKeyDown={event => { if (edit && (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10'))) { event.preventDefault(); edit(entry, date, event.currentTarget); } }}
-    onPointerEnter={event => measureTime(event.currentTarget)} onFocus={event => measureTime(event.currentTarget)}
-    onClick={event => { event.stopPropagation(); open(date, entry.id); }} onDoubleClick={event => event.stopPropagation()}>
+    onPointerEnter={event => { hovered.current=true; measureTime(event.currentTarget); }} onPointerLeave={() => {hovered.current=false;}} onFocus={event => measureTime(event.currentTarget)}
+    onClick={event => { event.stopPropagation(); setDetails(value=>!value); }} onDoubleClick={event => event.stopPropagation()}>
     <Icon name={entrySymbol(entry)} />
     <span className="cal-item-text">{plainText(entry.text) || t("ohne Text")}</span>
     {entry.time && <time className="cal-item-time" aria-hidden="true"><span>{formatSpan(entry.time, entry.end)}</span></time>}
+    {options && <Popover anchor={noteRef.current} label={t("L?schen")} onClose={()=>setOptions(null)}><ScopeChoice action="remove" options={options} onCancel={()=>setOptions(null)} onChoose={option=>{setOptions(null);void remove?.(entry,date,option.others).catch(reason=>setError(String(reason)));}} /></Popover>}
+    {error && <Popover anchor={noteRef.current} label={t("Fehler")} onClose={()=>setError('')}><p role="alert">{error}</p></Popover>}
+    {details && <Popover anchor={noteRef.current} className={`cal-details${mail ? ' has-mail' : ''}`} label={t("Beschreibung")} onClose={() => setDetails(false)}>
+      {/* Clicks in here stay here: the entry around it would otherwise open the journal. */}
+      <div onClick={event => event.stopPropagation()} onDoubleClick={event => event.stopPropagation()} onContextMenu={event => event.stopPropagation()} style={tag ? { '--tag': tag.color } as CSSProperties : undefined}>
+        <div className="cal-details-head">
+          <Icon name={entrySymbol(entry)} /><strong>{plainText(entry.text) || t("ohne Text")}</strong>
+        </div>
+        <div className="cal-details-meta">
+          <span>{formatShortDate(date)}{entry.time ? ` · ${formatSpan(entry.time, entry.end)}` : ''}</span>
+          {tag && <span className="cal-details-tag"><span className="tag-dot" />{tag.name}</span>}
+        </div>
+        {mail ? <MailContent mail={mail}/> : <p className="cal-details-text">{entry.description}</p>}
+        <div className="tag-picker-foot"><button type="button" onClick={() => copyCalendarEntry(entry)}><Icon name="copy" />{t("Kopieren")}<kbd>{t("Strg")} C</kbd></button><button type="button" onClick={() => {setDetails(false);if(noteRef.current)edit?.(entry,date,noteRef.current);}}>{t("Bearbeiten")}</button><span>Esc</span><button type="button" onClick={() => { setDetails(false); open(date, entry.id); }}>{t("Im Journal zeigen")}</button></div>
+      </div>
+    </Popover>}
   </button>;
 }
 
@@ -138,6 +186,7 @@ export function CompactMonth({ month, days, today, selected, onPick, onMonth }: 
   month: string; days: Map<string, CalendarDay>; today: string; selected: string | null; onPick: (date: string) => void; onMonth: (month: string) => void;
 }) {
   useLanguage();
+  const shownDates=monthGrid(month);days=calendarDaysWithSpans(days,shownDates[0],shownDates[shownDates.length-1]);
   const [focus, setFocus] = useState<string | null>(null);
   const gridRef = useRef<HTMLDivElement>(null);
   const moved = useRef(false);
@@ -165,7 +214,7 @@ export function CompactMonth({ month, days, today, selected, onPick, onMonth }: 
     <div ref={gridRef} className="cal-compact-grid" role="grid" aria-label={t("Tage des Monats")} onKeyDown={onKeyDown} key={month}>
       {monthGrid(month).map((date, index) => {
         const outside = !date.startsWith(month);
-        const classes = `cal-compact-day${outside ? ' is-outside' : ''}${date === today ? ' is-today' : ''}${index % 7 === 5 ? ' is-saturday' : index % 7 === 6 ? ' is-sunday' : ''}`;
+        const classes = `cal-compact-day${hasJournalContent(days.get(date)) ? ' has-journal-content' : ''}${outside ? ' is-outside' : ''}${date === today ? ' is-today' : ''}${index % 7 === 5 ? ' is-saturday' : index % 7 === 6 ? ' is-sunday' : ''}`;
         return <button key={date} type="button" className={classes} aria-selected={date === selected} aria-current={date === today ? 'date' : undefined}
           tabIndex={date === current ? 0 : -1} title={dayLabel(date, days.get(date))} onClick={() => { setFocus(date); onPick(date); }}>
           <span>{Number(date.slice(8))}</span>
@@ -175,3 +224,6 @@ export function CompactMonth({ month, days, today, selected, onPick, onMonth }: 
     </div>
   </div>;
 }
+
+/** The backend flag also covers free text and planned traces, even when calendar filters hide them. */
+export const hasJournalContent = (day: CalendarDay | undefined) => day?.hasJournal ?? Boolean(day && (day.title.trim() || day.entries.some(entry => entry.showInJournal !== false)));

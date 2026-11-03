@@ -7,6 +7,8 @@ import { setLanguage, useLanguage } from '../i18n';
 import type { Language } from '../i18n';
 import { applyColors } from '../colors';
 import type { ColorSettings } from '../colors';
+import { applyScale, followScreen } from '../uiScale';
+import type { UiScale } from '../uiScale';
 
 /** Share the device's appearance across journal, calendar and reminder windows. */
 export function ThemeSync() {
@@ -16,9 +18,13 @@ export function ThemeSync() {
     const stop = listen<Theme>('journal:theme', event => applyTheme(event.payload));
     const languageStop = listen<Language>('journal:language', event => setLanguage(event.payload));
     const colorStop = listen<ColorSettings>('journal:colors', event => applyColors(event.payload));
-    const reload = (event: StorageEvent) => { if (event.key === 'journal.settings' || event.key === null) { const settings = loadSettings(); applyTheme(settings.theme); applyColors(settings); setLanguage(settings.language); } };
+    const scaleStop = listen<{ scale: UiScale; pixel: boolean }>('journal:scale', event => void applyScale(event.payload.scale, event.payload.pixel));
+    const initial = loadSettings();
+    void applyScale(initial.uiScale, initial.theme === 'pixel');
+    const unfollow = followScreen();
+    const reload = (event: StorageEvent) => { if (event.key === 'journal.settings' || event.key === null) { const settings = loadSettings(); applyTheme(settings.theme); void applyScale(settings.uiScale, settings.theme === 'pixel'); applyColors(settings); setLanguage(settings.language); } };
     window.addEventListener('storage', reload);
-    return () => { window.removeEventListener('storage', reload); void stop.then(unlisten => unlisten()); void languageStop.then(unlisten => unlisten()); void colorStop.then(unlisten => unlisten()); };
+    return () => { window.removeEventListener('storage', reload); void stop.then(unlisten => unlisten()); void languageStop.then(unlisten => unlisten()); void colorStop.then(unlisten => unlisten()); void scaleStop.then(unlisten => unlisten()); unfollow(); };
   }, []);
   return null;
 }

@@ -1,3 +1,7 @@
+import { decodeMailContent } from '../mailContent';
+import { MailContent } from './MailContent';
+import { shiftDate } from '../dates';
+import { copyCalendarEntry } from '../calendarClipboard';
 import { t, useLanguage } from '../i18n';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { CSSProperties, KeyboardEvent, WheelEvent } from 'react';
@@ -5,7 +9,7 @@ import { createPortal } from 'react-dom';
 import { journal } from '../journal';
 import type { Entry, EntryKind, Repeat } from '../journal';
 import { formatMonth, formatShortDate, localDate, shiftMonth } from '../dates';
-import { formatDuration, slotMinutes, snapMinutes } from '../calendar';
+import { minutesOf, formatDuration, slotMinutes, snapMinutes } from '../calendar';
 import { formatEnd, canBeNote, editScopes, formatSpan, linkedScopes, repeatChange, timeOfMinutes } from '../planning';
 import { defaultRule, describe, withStart } from '../repeat';
 import type { RepeatRule } from '../repeat';
@@ -21,7 +25,7 @@ import { useTags } from '../tagStore';
 /** A range marked in the time grid, in minutes of its day. */
 export interface Draft { date: string; start: number; end: number }
 /** What the composer creates: an event or a task (a time block) over the marked range. */
-export interface NewEntry { kind: 'event' | 'task'; text: string; description: string; tag: string | null; time: string; end: string; priority: boolean; reminder: boolean; showInJournal: boolean; repeat?: Repeat }
+export interface NewEntry { kind: EntryKind; text: string; description: string; tag: string | null; time: string | null; end: string | null; priority: boolean; reminder: boolean; showInJournal: boolean; repeat?: Repeat }
 /** What editing an entry in the calendar changes. */
 export type EntryEdit = Partial<Pick<Entry, 'kind' | 'text' | 'description' | 'tag' | 'priority' | 'reminder' | 'time' | 'end' | 'done' | 'cancelled' | 'showInJournal' | 'repeat'>>;
 
@@ -38,7 +42,9 @@ const kindKey: Record<ComposerKind, string> = { event: 'E', task: 'A', note: 'N'
  * range with ↑ ↓ in the text, its end with ⇧ ↑ ↓. Enter creates or saves, Escape (or a click elsewhere) discards.
  * Editing also offers the note (where it may be one: no time, reminder or planning) and removing.
  */
-export function CalendarComposer({ date, draft, entry, tag: initialTag = null, anchor, onChange, onCancel, onCreate, onSave, onRemove }: {
+export function CalendarComposer({ date, draft, entry, span, tag: initialTag = null, anchor, onChange, onCancel, onCreate, onSave, onRemove }: {
+  /** A new entry over several days (drawn over days): from `date` to `span.end`, all day unless times are chosen. */
+  span?: { end: string };
   date: string; draft: Draft | null; entry?: Entry; tag?: string | null; anchor: () => DOMRect | null; onChange?: (draft: Draft) => void; onCancel: (byKey: boolean) => void;
   onCreate?: (entry: NewEntry) => Promise<void>; onSave?: (change: EntryEdit, scope?: ScopeOption) => Promise<void>; onRemove?: (others: ScopeOption['others']) => Promise<void>;
 }) {
@@ -48,6 +54,10 @@ export function CalendarComposer({ date, draft, entry, tag: initialTag = null, a
   // A range marked in the calendar becomes a calendar entry unless chosen otherwise (it is the first choice, too).
   const [kind, setKind] = useState<EntryKind>(entry?.kind ?? 'event');
   const [text, setText] = useState(entry?.text ?? '');
+  const longSpan=Boolean(span) || Boolean(entry?.time && entry.end && minutesOf(entry.end)-minutesOf(entry.time)>1440);
+  const [longEndDate,setLongEndDate]=useState(span ? span.end : entry?.end ? shiftDate(date,Math.floor(minutesOf(entry.end)/1440)) : date);
+  const [longStartTime,setLongStartTime]=useState(entry?.time ?? '00:00');
+  const [longEndTime,setLongEndTime]=useState(entry?.end ? timeOfMinutes(minutesOf(entry.end)%1440) : '23:59');
   const [description, setDescription] = useState(entry?.description ?? '');
   const [priority, setPriority] = useState(entry?.priority ?? false);
   // The tag (Alt G): a new range takes the one the calendar suggests (see newTag), an entry keeps its own.
@@ -153,12 +163,16 @@ export function CalendarComposer({ date, draft, entry, tag: initialTag = null, a
     try {
       // The same change the planner makes: a new or changed rule starts a series here (see repeatChange).
       const repeatOf = (base: Entry) => kind === 'note' ? undefined : repeatChange(base, date, [date], { time: null, reminder }, shownRule, localDate()).repeat ?? undefined;
+      // Over several days: the end in minutes from the first day's start (as storage.rs keeps it).
+      const longEnd = (Date.parse(longEndDate) - Date.parse(date)) / 86400000 * 1440 + minutesOf(longEndTime);
+      if (longSpan && (longEnd <= minutesOf(longStartTime) || longEnd - minutesOf(longStartTime) > 366 * 1440)) { setError(t('Bitte den Zeitraum prüfen.')); setBusy(false); return; }
       if (!entry) {
-        const made = { kind: kind === 'note' ? 'event' as const : kind, text: text.trim(), description: description.trim(), tag: tag?.id ?? null, time: timeOfMinutes(draft!.start), end: timeOfMinutes(draft!.end), priority, reminder, showInJournal };
+        const times = longSpan ? { time: longStartTime, end: timeOfMinutes(longEnd) } : { time: draft ? timeOfMinutes(draft.start) : null, end: draft ? timeOfMinutes(draft.end) : null };
+        const made = { kind: kind === 'note' ? 'event' as const : kind, text: text.trim(), description: description.trim(), tag: tag?.id ?? null, ...times, priority, reminder, showInJournal };
         await onCreate?.({ ...made, repeat: repeatOf({ id: '', done: false, cancelled: false, plan: null, ...made }) });
       } else {
         // An entry without an end keeps having none, unless its length changed.
-        const times = draft ? { time: timeOfMinutes(draft.start), end: entry.end || length !== slotMinutes ? timeOfMinutes(draft.end) : null } : {};
+        const times = longSpan ? {time:longStartTime,end:timeOfMinutes((Date.parse(longEndDate)-Date.parse(date))/86400000*1440+minutesOf(longEndTime))} : draft ? { time: timeOfMinutes(draft.start), end: entry.end || length !== slotMinutes ? timeOfMinutes(draft.end) : null } : {};
         const repeat = repeatOf(entry);
         const change: EntryEdit = { kind, text: text.trim(), description: description.trim(), tag: tag?.id ?? null, priority, showInJournal, reminder: kind === 'note' ? false : reminder, ...times, ...kind === 'task' ? {} : { done: false, cancelled: false }, ...repeat ? { repeat } : {} };
         // A changed rule makes a new series anyway; otherwise the group decides whether there is anything to ask.
@@ -186,6 +200,9 @@ export function CalendarComposer({ date, draft, entry, tag: initialTag = null, a
     setRepeatView('rule');
   }
   function onKeyDown(event: KeyboardEvent) {
+    if(entry && event.ctrlKey && event.key.toLowerCase()==='c' && !window.getSelection()?.toString() && (!(event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) || event.target.selectionStart===event.target.selectionEnd)) {
+      event.preventDefault();copyCalendarEntry({...entry,text,description,priority,tag:tagId,reminder,showInJournal,kind,repeat:rule ? {...entry.repeat!,rule} : null});return;
+    }
     const key = event.key;
     if (removing || applying) return;
     if (key === 'Escape' && repeatView) { setRepeatView(repeatView === 'end' ? 'rule' : null); if (repeatView === 'rule') inputRef.current?.focus(); }
@@ -230,12 +247,17 @@ export function CalendarComposer({ date, draft, entry, tag: initialTag = null, a
       <input ref={inputRef} className={`cal-composer-text${shaking ? ' is-shaking' : ''}`} onAnimationEnd={() => setShaking(false)} value={text} placeholder={selectedKind === 'calendar' ? t("Neuer Kalendereintrag …") : kind === 'event' ? t("Neues Ereignis …") : kind === 'task' ? t("Neue Aufgabe …") : t("Notiz …")} aria-label={t("Text")} disabled={busy}
         onChange={event => setText(event.target.value)} />
     </div>
-    <textarea className="cal-composer-description" aria-label={t("Beschreibung")} placeholder={t("Beschreibung hinzufügen …")} value={description} onChange={event => setDescription(event.target.value)} disabled={busy} rows={2} maxLength={100000} />
+    {entry && <button type="button" className="cal-composer-copy" onClick={() => copyCalendarEntry({...entry,text,description,priority,tag:tagId,reminder,showInJournal,kind,repeat:rule ? {...entry.repeat!,rule} : null})}><Icon name="copy" />{t("Kopieren")}<kbd>{t("Strg")} C</kbd></button>}
+    {longSpan && <div className="cal-multi-form" role="group" aria-label={t('Zeitraum')}>
+      <div className="cal-multi-row"><span className="cal-multi-label">{t('Beginn')}</span><span className="cal-composer-day">{formatShortDate(date)}</span><input className="cal-multi-input is-time" type="time" aria-label={t('Beginn')} value={longStartTime} onChange={e=>setLongStartTime(e.target.value)}/></div>
+      <div className="cal-multi-row"><span className="cal-multi-label">{t('Ende')}</span><input className="cal-multi-input is-date" type="date" aria-label={t('Ende')} min={date} value={longEndDate} onChange={e=>setLongEndDate(e.target.value)}/><input className="cal-multi-input is-time" type="time" aria-label={t('Ende')} value={longEndTime} onChange={e=>setLongEndTime(e.target.value)}/></div>
+    </div>}
+    {decodeMailContent(description) ? <MailContent mail={decodeMailContent(description)!}/> : <textarea className="cal-composer-description" aria-label={t("Beschreibung")} placeholder={t("Beschreibung hinzufügen …")} value={description} onChange={event => setDescription(event.target.value)} disabled={busy} rows={2} maxLength={100000} />}
     <div className="cal-composer-foot">
       <div className={`cal-composer-when${draft ? '' : ' is-untimed'}`}>
         <span className="cal-composer-day">{formatShortDate(date)}</span>
         {draft ? <>{timeChip('start')}<span className="cal-composer-dash">–</span>{timeChip('end')}<span className="cal-composer-length" key={length}>{formatDuration(length)}</span></>
-          : <span className="cal-composer-untimed">{entry?.time ? formatSpan(entry.time, entry.end) : t("ohne Uhrzeit")}</span>}
+          : longSpan ? <span className="cal-composer-untimed">– {formatShortDate(longEndDate)}</span> : <span className="cal-composer-untimed">{entry?.time ? formatSpan(entry.time, entry.end) : t("ohne Uhrzeit")}</span>}
       </div>
       <button ref={tagButton} type="button" className={`cal-satellite cal-composer-tag${tag ? ' has-tag' : ''}`} style={satellite(tag ? { '--tag': tag.color } as CSSProperties : undefined)} aria-pressed={Boolean(tag)} aria-haspopup="dialog" aria-expanded={tagging}
         aria-label={tag ? t("Tag: {0}", tag.name) : t("Tag zuweisen")} data-tip={tag ? t("{0} · Alt G", tag.name) : t("Tag · Alt G")} onClick={() => setTagging(value => !value)}>{tag ? <span className="tag-dot" /> : <Icon name="tag" />}</button>

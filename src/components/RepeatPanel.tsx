@@ -27,9 +27,10 @@ function Stepper({ value, min, max, label, suffix = '', onChange }: { value: num
 // week on tue", "jährlich am 12. März", "Karfreitag", "10 mal", see repeatText.ts) sets everything below at once; the
 // foot then says what was understood. Enter keeps it, Esc goes back to what was there.
 // Keyboard: ←/→ unit, ↑/↓ every n, 1–7 weekdays, P pause, Entf off, / write, Enter confirms, Esc back.
-export function RepeatPanel({ rule, today, onChange, onBack, onOff, onPickEnd }: {
+export function RepeatPanel({ rule, today, onChange:changeRule, onBack, onOff, onPickEnd }: {
   rule: RepeatRule; today: string; onChange: (rule: RepeatRule) => void; onBack: () => void; onOff: () => void; onPickEnd: () => void;
 }) {
+  const onChange=(next:RepeatRule)=>{const {ics,icsUid,...native}=next;changeRule(native);};
   useLanguage();
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);

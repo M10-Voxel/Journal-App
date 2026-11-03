@@ -49,7 +49,7 @@ export function ColorSettings({ settings, onChange }: { settings: Settings; onCh
   };
   return <div className="color-settings">
     <h3 id="settings-colors-title">{t('Basis-Farbtheme')}</h3>
-    <p className="settings-hint">{t('Wähle eine Basis und passe einzelne Farben an. Funktioniert mit Klassisch und Pixel.')}</p>
+    <p className="settings-hint">{t('Wähle eine Basis und passe einzelne Farben an. Funktioniert mit Klassisch, Pixel und Journal.')}</p>
     <div className="color-theme-options" role="radiogroup" aria-labelledby="settings-colors-title" onKeyDown={event => {
       if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
       event.preventDefault();

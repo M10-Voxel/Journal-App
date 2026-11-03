@@ -30,14 +30,14 @@ test('all-day exports have an exclusive next-day end, and point events keep no e
   }
 });
 
-test('multi-day all-day and midnight-spanning UTC events split into the correct days', () => {
+test('multi-day and overnight events stay single entries with their original end', () => {
   const allDay = importCalendar(wrap(event('holiday', 'DTSTART;VALUE=DATE:20261030', 'DTEND;VALUE=DATE:20261102', 'SUMMARY:Urlaub')));
-  assert.deepEqual(allDay.entries.map(e => e.date), ['2026-10-30','2026-10-31','2026-11-01']);
-  assert.equal(new Set(allDay.entries.map(e => e.entry.calendarUid)).size, 3);
-  assert(allDay.entries.every(e => e.entry.time === null));
-  assert.equal(allDay.notices.length, 1);
+  assert.deepEqual(allDay.entries.map(e => e.date), ['2026-10-30']);
+  assert.equal(new Set(allDay.entries.map(e => e.entry.calendarUid)).size, 1);
+  assert(allDay.entries.every(e => e.entry.time === '00:00'));
+  assert.equal(allDay.notices.length, 0);
   const overnight = importCalendar(wrap(event('night', 'DTSTART:20260131T220000Z', 'DTEND:20260201T010000Z', 'SUMMARY:Nachtschicht')));
-  assert.deepEqual(overnight.entries.map(({ date, entry }) => [date, entry.time, entry.end]), [['2026-01-31','23:00','24:00'],['2026-02-01','00:00','02:00']]);
+  assert.deepEqual(overnight.entries.map(({ date, entry }) => [date, entry.time, entry.end]), [['2026-01-31','23:00','26:00']]);
 });
 
 test('IANA timezone identifiers without VTIMEZONE convert into local time', () => {
@@ -77,5 +77,22 @@ test('bad files, duplicate identities and dangerous-sized expansions fail before
 test('an appointment past midnight exports with an end on the next day', () => {
   const content = exportCalendar([{ date:'2026-10-31', title:'', entries:[entry({ text:'Nachtschicht', time:'22:00', end:'26:30' })] }]);
   const imported = importCalendar(content, 2026).entries.map(({ date, entry: item }) => [date, item.time, item.end]);
-  assert.deepEqual(imported, [['2026-10-31', '22:00', '24:00'], ['2026-11-01', '00:00', '02:30']]);
+  assert.deepEqual(imported, [['2026-10-31', '22:00', '26:30']]);
+});
+
+test('imported series retain exclusions and recurrence logic for future occurrences',async()=>{
+ const {occurrences}=await import('../src/repeat.ts');
+ const parsed=importCalendar(wrap(event('work','DTSTART:20261005T090000','DTEND:20261005T100000','RRULE:FREQ=WEEKLY;BYDAY=MO,WE;COUNT=6','EXDATE:20261007T090000','CATEGORIES:Arbeit','COLOR:#AEFF00')),2026);
+ assert(parsed.entries.length>1);assert.equal(new Set(parsed.entries.map(item=>item.entry.repeat.series)).size,1);
+ assert.deepEqual(occurrences(parsed.entries[0].entry.repeat.rule,'2026-10-01','2026-11-01'),parsed.entries.map(item=>item.date));
+ assert.equal(parsed.entries[0].tag.name,'Arbeit');assert.equal(parsed.entries[0].tag.color,'#AEFF00');
+});
+test('multi-day all-day import preserves the exclusive ICS end as one span',()=>{
+ const parsed=importCalendar(wrap(event('trip','DTSTART;VALUE=DATE:20261030','DTEND;VALUE=DATE:20261102','SUMMARY:Trip')));
+ assert.equal(parsed.entries.length,1);assert.equal(parsed.entries[0].entry.end,'72:00');
+});
+
+test('calendar names and colors supply reusable tag metadata',()=>{
+ const content=wrap(event('named','DTSTART;VALUE=DATE:20261103','SUMMARY:Meeting')).replace('VERSION:2.0','VERSION:2.0\r\nX-WR-CALNAME:Uni\r\nX-APPLE-CALENDAR-COLOR:#1A2B3CFF');
+ const parsed=importCalendar(content);assert.equal(parsed.entries[0].tag.name,'Uni');assert.equal(parsed.entries[0].tag.color,'#1A2B3C');
 });

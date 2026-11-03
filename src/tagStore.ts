@@ -25,6 +25,7 @@ function ensure() {
   if (!listening) {
     listening = true;
     void listen<Tag[]>('journal:tags', event => set(event.payload)).catch(() => { listening = false; });
+    void listen('history:restored', () => { loading = null; void ensure().catch(() => {}); });
   }
   return loading;
 }
