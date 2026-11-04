@@ -26,7 +26,7 @@ async function decrypt(data: string,key: CryptoKey): Promise<Json> {
   try {return JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({name:'AES-GCM',iv:decode(envelope.iv)},key,decode(envelope.cipher))));}
   catch {throw new Error('Cloud-Daten konnten nicht entschlüsselt werden. Geräteschlüssel prüfen.');}
 }
-const empty:Json={schema:12,tables:{days:{},entries:{},tags:{},series:{}},settings:{},images:{}};
+const empty:Json={schema:13,tables:{days:{},entries:{},tags:{},series:{}},settings:{},images:{},mailAccounts:{}};
 type Remote={id:string|null;etag:string|null;data:string|null};
 type Pending={local:Json;remote:Remote;result:MergeResult;key:CryptoKey;vault:string};
 
@@ -49,6 +49,7 @@ export function DriveSettings({beforeSync,onBusy}:{beforeSync:()=>Promise<void>;
     await flushPeriodData();await flushBoardData();
     const snapshot=upgradeSnapshot(value);
     await invoke('drive_validate',{expected:databaseSnapshot(p.local),snapshot:databaseSnapshot(snapshot)});
+    await invoke('mail_drive_validate',{expected:(p.local as Record<string,Json>).mailAccounts,accounts:snapshot.mailAccounts});
     for(const [id,data] of Object.entries(snapshot.images as Record<string,Json>)){
       if(typeof data!=='string')throw new Error('Ungültiges Pinnwandbild');
       await invoke('board_image_save',{id,data});
@@ -56,6 +57,7 @@ export function DriveSettings({beforeSync,onBusy}:{beforeSync:()=>Promise<void>;
     const data=await encrypt(value,p.key);
     await invoke('drive_write',{vault:p.vault,id:p.remote.id,etag:p.remote.etag,data});
     await invoke('drive_apply',{expected:databaseSnapshot(p.local),snapshot:databaseSnapshot(snapshot)});
+    await invoke('mail_drive_apply',{expected:(p.local as Record<string,Json>).mailAccounts,accounts:snapshot.mailAccounts});
     if(snapshot.preferences)localStorage.setItem('journal.settings',JSON.stringify(snapshot.preferences));
     localStorage.setItem(`journal.drive.base.${p.vault}`,await encrypt({...snapshot,images:{}},p.key));
     setPending(null);
@@ -69,6 +71,7 @@ export function DriveSettings({beforeSync,onBusy}:{beforeSync:()=>Promise<void>;
     const vault=Array.from(hash,b=>b.toString(16).padStart(2,'0')).join('');
     await flushPeriodData();await flushBoardData();
     const local=upgradeSnapshot(await invoke<Json>('drive_snapshot'));
+    local.mailAccounts=await invoke<Json>('mail_drive_snapshot');
     local.preferences=JSON.parse(localStorage.getItem('journal.settings')??'{}');
     const images:Record<string,Json>={};
     for(const card of Object.values(local.settings as Record<string,Json>)){
@@ -101,7 +104,7 @@ export function DriveSettings({beforeSync,onBusy}:{beforeSync:()=>Promise<void>;
   }
   return <section className="mail-settings drive-settings">
     <h3>Google Drive</h3>
-    <p className="settings-hint">{en?'Synchronise journal entries, tags, calendar and repeating series between your devices. Data is encrypted locally with your device key.':'Journaleinträge, Tags, Kalender und Wiederholungsserien zwischen deinen Geräten abgleichen. Die Daten werden lokal mit deinem Geräteschlüssel verschlüsselt.'}</p>
+    <p className="settings-hint">{en?'Synchronise journal, calendar, activities, board and mail accounts between your devices. Mail accounts must be signed in on each device. Data is encrypted locally with your device key.':'Journal, Kalender, Aktivitäten, Pinnwand und Mailkonten zwischen deinen Geräten abgleichen. Mailkonten müssen auf jedem Gerät angemeldet werden. Die Daten werden lokal mit deinem Geräteschlüssel verschlüsselt.'}</p>
     <details className="mail-oauth"><summary>{en?'One-time Google setup':'Einmalige Google-Einrichtung'}</summary><p>{en?'Enable the Google Drive API in Google Cloud, create a Desktop OAuth client and add your account as a test user if the app is in testing. Use the same client ID on both devices.':'In Google Cloud die Google Drive API aktivieren, einen OAuth-Client vom Typ Desktop-App erstellen und bei einer App im Testbetrieb dein Konto als Testnutzer eintragen. Auf beiden Geräten dieselbe Client-ID verwenden.'}</p><button className="mail-button" onClick={()=>void invoke('drive_help').catch(e=>setMessage(String(e)))}>Google Cloud Console</button></details>
     <label>Google Client-ID<input className="drive-client" value={client} disabled={busy||connected} onChange={e=>setClient(e.target.value.trim())} autoComplete="off" /></label>
     {!connected&&<label>Client-Secret<input type="password" value={secret} disabled={busy} onChange={e=>setSecret(e.target.value)} autoComplete="off" /></label>}

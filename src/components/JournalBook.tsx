@@ -20,7 +20,9 @@ export function useBookView(): [BookView, (view: BookView) => void] {
 }
 /** Below this width a spread would squeeze its pages; the book shows one page then. */
 const doubleMinWidth = 880;
-const turnTime = 460;
+const turnTime = 320;
+/** How long the calendar sheet takes to slide off the book (journal-theme.css, `.calendar-drawer-sheet`). */
+const sheetLeaveTime = 360;
 
 export const pageTitle = (page: PageKind) => ({
   entries: t('Einträge'), data: t('Daten'), board: t('Pinnwand'), notes: t('Notiz'), activities: t('Aktivitäten'),
@@ -37,7 +39,7 @@ type Leaf = { page: BookPage; slot: 'left' | 'right' | 'single' | 'wide'; motion
  * `paging`: one page at a time, or both at once (`spread`: the board then lies over both pages). `beside` (the calendar
  * sheet lies on the book while both pages turn at once): one page, from the sheet's edge (`sheetWidth`) to the right.
  */
-export function JournalBook({ mode, date, today, view, paging = 'page', beside = false, sheetWidth, onNavigate, onToday, renderPage, renderNav, entriesScrollRef, calendarTab, overlay, register, controlRef, onWideChange }: {
+export function JournalBook({ mode, date, today, view, paging = 'page', beside: besideAsked = false, sheetWidth, onNavigate, onToday, renderPage, renderNav, entriesScrollRef, calendarTab, overlay, register, controlRef, onWideChange }: {
   mode: PeriodMode; date: string; today: string; view: BookView; paging?: BookPaging; beside?: boolean; sheetWidth?: number; onNavigate: (date: string) => void; onToday: () => void;
   renderPage: (page: BookPage) => ReactNode; entriesScrollRef: RefObject<HTMLDivElement | null>; controlRef?: Ref<BookControl>; onWideChange?: (wide: boolean) => void;
   /** The head of the page showing the app's day: its title with the day (or period) navigation. */
@@ -50,6 +52,14 @@ export function JournalBook({ mode, date, today, view, paging = 'page', beside =
   register?: ReactNode;
 }) {
   useLanguage();
+  // The sheet slides away before the book lays out its spread again: changing both at once makes the sheet stutter.
+  const [besideShown, setBesideShown] = useState(besideAsked);
+  useEffect(() => {
+    if (besideAsked) { setBesideShown(true); return; }
+    const timer = window.setTimeout(() => setBesideShown(false), sheetLeaveTime);
+    return () => window.clearTimeout(timer);
+  }, [besideAsked]);
+  const beside = besideAsked || besideShown;
   const stageRef = useRef<HTMLDivElement>(null);
   const [wide, setWide] = useState(true);
   useLayoutEffect(() => {
@@ -88,9 +98,12 @@ export function JournalBook({ mode, date, today, view, paging = 'page', beside =
   const open = (page: PageKind) => {
     const { pages, mode, double, spreads } = latest.current;
     const day = mode === 'day' ? shownDate(pages) : pages[0].date;
+    // A page already open stays (its tab is part of the page).
+    if (pages.some(value => value.date === day && value.page === page)) return;
     const target = spreads ? spreadStart({ date: day, page }, mode) : startFor({ date: day, page }, mode, double);
     const order = (value: BookPage) => `${value.date}:${pagesOf(mode).indexOf(value.page)}`;
-    go(target, 'jump', order(target) > order(pages[0]) ? 1 : -1);
+    // The register turns the pages like the dog-ears do, however many pages lie between.
+    go(target, 'turn', order(target) > order(pages[0]) ? 1 : -1);
   };
   useImperativeHandle(controlRef, () => ({ turn: step, open }));
 
@@ -140,14 +153,14 @@ export function JournalBook({ mode, date, today, view, paging = 'page', beside =
   const edge = pages[pages.length - 1];
   const atToday = showsDate(pages, mode, today);
 
-  return <div className={`book-stage${double ? ' is-double' : ' is-single'}${spreads ? ' is-spreads' : ''}${beside ? ' is-beside' : ''}`} ref={stageRef}>
+  return <div className={`book-stage${double ? ' is-double' : ' is-single'}${spreads ? ' is-spreads' : ''}${beside ? ' is-beside' : ''}${double && pages.length === 1 ? ' is-wide-page' : ''}`} ref={stageRef}>
     <div className="book" style={sheetWidth ? { '--drawer-width': `${sheetWidth}px` } as CSSProperties : undefined}>
       {calendarTab}
       <div className="book-spread">
-        <CutRegister mode={mode} page={edge} onOpen={open} />
+        <CutRegister mode={mode} page={edge} shown={pages.filter(page => page.date === edge.date).map(page => page.page)} onOpen={open} />
         {leaves.map(({ page, slot, motion, outgoing }) => <article key={pageKey(page)} className={`book-page is-${slot} is-${page.page}${motion ? ` is-${motion}` : ''}${outgoing ? ' is-outgoing' : ''}`}
           inert={outgoing} aria-hidden={outgoing || undefined} data-page={page.page} data-date={page.date} aria-label={`${pageTitle(page.page)} · ${formatDate(page.date)}`}
-          style={slot === 'left' ? undefined : { '--cut': cutSteps(page, mode) } as CSSProperties}>
+          style={slot === 'left' ? undefined : { '--tab': pagesOf(mode).indexOf(page.page), '--tabs': pagesOf(mode).length } as CSSProperties}>
           <div className="book-page-scroll" ref={page.page === 'entries' && !outgoing ? entriesScrollRef : undefined}>
             <div className="book-page-content">
               {head(page, outgoing)}
@@ -179,7 +192,11 @@ function arrange(pages: BookPage[], turn: Turn | null, mode: PeriodMode, double:
   const leaves: Leaf[] = [], ghosts: string[] = [];
   const slotOf = (index: number, count: number): Leaf['slot'] => !double ? 'single' : count === 1 ? 'wide' : index === 0 ? 'left' : 'right';
   const live = turn && turn.spreads === spreads && turn.to.length === pages.length && turn.to.every((page, index) => samePage(page, pages[index])) ? turn : null;
-  if (live && live.kind === 'turn' && spreads && samePage(turnSpread(live.from[0], mode, live.step), pages[0])) {
+  const adjacent = live && live.kind === 'turn' && !spreads && (double
+    ? live.from.length === 2 && (live.step > 0 ? samePage(live.from[1], pages[0]) : samePage(live.from[0], pages[1]))
+    : live.from.length === 1);
+  // Both pages at once, or a spread further away (the register): the outer page lifts, the new one lands.
+  if (live && live.kind === 'turn' && (spreads ? samePage(turnSpread(live.from[0], mode, live.step), pages[0]) : double && !adjacent)) {
     const { from, to, step } = live, forward = step > 0, fromWide = from.length === 1, toWide = to.length === 1;
     const near = forward ? 'left' : 'right', far = forward ? 'right' : 'left';
     if (toWide) { leaves.push({ page: to[0], slot: 'wide', motion: '', outgoing: false }); ghosts.push(`land-${near}`); }
@@ -188,9 +205,6 @@ function arrange(pages: BookPage[], turn: Turn | null, mode: PeriodMode, double:
     else from.forEach((page, index) => leaves.push({ page, slot: index === 0 ? 'left' : 'right', motion: (index === 0) === forward ? (toWide ? 'beneath-fade' : 'beneath') : `lift-${far}`, outgoing: true }));
     return { leaves, ghosts };
   }
-  const adjacent = live && live.kind === 'turn' && !spreads && (double
-    ? live.from.length === 2 && (live.step > 0 ? samePage(live.from[1], pages[0]) : samePage(live.from[0], pages[1]))
-    : live.from.length === 1 && samePage(turnPage(live.from[0], mode, live.step), pages[0]));
   pages.forEach((page, index) => {
     let motion = '';
     if (live && !adjacent) motion = live.step > 0 ? 'jump-next' : 'jump-prev';
@@ -212,41 +226,17 @@ function PageHead({ page, mode }: { page: BookPage; mode: PeriodMode }) {
 }
 export const pageHeading = (date: string, mode: PeriodMode) => mode === 'day' ? formatDate(date) : periodTitle(date, mode);
 
-/** How many register steps are cut from a page's outer top corner: one for every kind of page that follows it in its
- *  day (or period), so the last kind keeps its corner. Pages of the same kind share the same cut. */
-const cutSteps = (page: BookPage, mode: PeriodMode) => Math.max(0, pagesOf(mode).length - 1 - pagesOf(mode).indexOf(page.page));
-
 /**
- * The register as on real paper: the outer page's top corner is cut away in steps, and through the cut the following
- * kinds of page show, each with its own (smaller) cut and its name on the step it keeps. The nearest kind is the
- * lowest step, the last one sits in the corner. A step opens its page.
+ * The register on the outer edge: every kind of page of the day (or period) has its tab at its own fixed height, and
+ * all of them always show. The outer page is cut away beside the tabs of the other kinds and keeps its own tab, so
+ * the current one is the paper of the page. The tab of the other page on screen (a spread of the same day) is paper
+ * too. A tab turns to its page.
  */
-function CutRegister({ mode, page, onOpen }: { mode: PeriodMode; page: BookPage; onOpen: (page: PageKind) => void }) {
+function CutRegister({ mode, page, shown, onOpen }: { mode: PeriodMode; page: BookPage; shown: PageKind[]; onOpen: (page: PageKind) => void }) {
   useLanguage();
-  const kinds = pagesOf(mode), steps = cutSteps(page, mode), index = kinds.indexOf(page.page);
-  if (!steps) return null;
-  // Deepest first, so each nearer page lies over it.
-  const behind = kinds.slice(index + 1).map((kind, offset) => ({ kind, own: steps - offset - 1 })).reverse();
-  return <nav className="book-cut-register" style={{ '--cut': steps } as CSSProperties} aria-label={t('Register')}>
-    {behind.map(({ kind, own }) => <div key={kind} className={`book-cut-layer is-${kind}`} style={{ '--own': own } as CSSProperties}>
-      <button type="button" className="book-cut-tab" data-page={kind} title={pageTitle(kind)} onClick={() => onOpen(kind)}><span>{pageTitle(kind)}</span></button>
-    </div>)}
+  const kinds = pagesOf(mode);
+  return <nav className="book-cut-register" style={{ '--tabs': kinds.length } as CSSProperties} aria-label={t('Register')}>
+    {kinds.map((kind, index) => <button type="button" key={kind} className={`book-cut-tab is-${kind}${shown.includes(kind) ? ' is-shown' : ''}`} style={{ '--tab': index } as CSSProperties} data-page={kind}
+      aria-current={kind === page.page ? 'page' : undefined} title={pageTitle(kind)} onClick={() => onOpen(kind)}><span>{pageTitle(kind)}</span></button>)}
   </nav>;
-}
-
-/** Spread or single page, for the toolbar. */
-export function BookViewSwitch({ view, narrow = false, onChange }: { view: BookView; narrow?: boolean; onChange: (view: BookView) => void }) {
-  useLanguage();
-  // In a narrow window the book shows one page whatever was chosen; the choice returns when there is room again.
-  const shown = narrow ? 'single' : view;
-  return <div className="book-view-switch" role="radiogroup" aria-label={t('Buchansicht')}>
-    {(['double', 'single'] as const).map(value => <button type="button" key={value} role="radio" aria-checked={shown === value} data-book-view={value}
-      title={value === 'double' ? (narrow ? t('Doppelseite · bei breiterem Fenster') : t('Doppelseite')) : t('Einzelseite')} onClick={() => onChange(value)}>
-      <svg className="icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" aria-hidden="true">
-        {value === 'double' ? <><path d="M8 4.2C6.6 3.2 4.4 2.8 2 3v9.6c2.4-.2 4.6.2 6 1.2 1.4-1 3.6-1.4 6-1.2V3c-2.4-.2-4.6.2-6 1.2Z" /><path d="M8 4.2v9.6" /></>
-          : <><path d="M4 2.5h6.5l2 2v9h-8.5Z" /><path d="M6 7h4.5M6 9.5h4.5" /></>}
-      </svg>
-      <span>{value === 'double' ? t('Doppelseite') : t('Einzelseite')}</span>
-    </button>)}
-  </div>;
 }

@@ -18,3 +18,13 @@ test('independent activity dates merge and concurrent notes conflict',()=>{
  assert.equal(Object.keys(result.value.settings['period-data'].days).length,2);
  assert.equal(result.conflicts.length,1);
 });
+test('mail accounts from both devices merge without losing legacy data',()=>{
+ const base=upgradeSnapshot({schema:12,tables:{},settings:{}});
+ const local=structuredClone(base),remote=structuredClone(base);
+ local.mailAccounts.a={id:'a',label:'Privat'};remote.mailAccounts.b={id:'b',label:'Arbeit'};
+ const result=mergeThreeWay(base,local,remote);
+ assert.deepEqual(result.conflicts,[]);
+ assert.deepEqual(Object.keys(result.value.mailAccounts).sort(),['a','b']);
+ assert.equal(databaseSnapshot(result.value).schema,12);
+ assert.equal(databaseSnapshot(result.value).mailAccounts,undefined);
+});

@@ -1,6 +1,8 @@
 # Google Drive
 
-Unter **Einstellungen → Google Drive** lassen sich Journaltage (Titel und Freitext), Einträge, Kalender, Tags und Wiederholungsserien manuell zwischen Windows-Geräten abgleichen. Fotos, Mailkonten, Zugangsdaten und gerätespezifische Oberflächeneinstellungen gehören nicht zum Sync-Stand.
+Unter **Einstellungen → Google Drive** lassen sich Journaltage, Einträge, Kalender, Tags, Wiederholungsserien, Aktivitäten, Checklisten, Bewertungen, Pinnwandkarten mit referenzierten Bildern, Mailkonten und allgemeine Darstellungseinstellungen manuell zwischen Windows-Geräten abgleichen. Übernommene Mailtermine enthalten auch ihre gespeicherten Mailinhalte. Zugangsdaten, der lokale Mailabruf und gerätespezifische Einstellungen gehören nicht zum Sync-Stand. Einzelheiten stehen unter [Erweiterter Drive-Abgleich](sync-format-12.md).
+
+Mailkonten erscheinen nach dem Abgleich auf dem anderen Gerät. Passwörter und Anmeldetokens bleiben auf dem ursprünglichen Gerät: Das übernommene Konto dort unter **E-Mail-Konten → Bearbeiten** anmelden beziehungsweise das Passwort eingeben und speichern. Danach ruft das Gerät das Postfach selbst ab. Änderungen und Löschungen von Konten werden beim manuellen Abgleich übernommen. Beide Geräte benötigen eine App-Version mit Sync-Format 13.
 
 ## Einmalige Einrichtung
 
@@ -26,7 +28,7 @@ Der Inhalt wird mit einem zufällig erzeugten 256-Bit-Schlüssel und AES-GCM ver
 
 Vor dem Upload prüft die App den geplanten Import innerhalb einer zurückgerollten Datenbanktransaktion. Vor der eigentlichen Übernahme prüft sie erneut, ob lokale Daten inzwischen geändert wurden. Der Dateidownload muss keinen ETag-Header liefern: Die App liest den expliziten ETag aus den Dateimetadaten vor und nach dem Download. Stimmen diese Versionen nicht überein, wird abgebrochen. Für diese Metadaten und den bedingten Upload mit `If-Match` verwendet die App Drive v2; Auflisten, Herunterladen und erstmaliges Anlegen bleiben bei v3. Der [ETag gehört zur v2-Dateiressource](https://developers.google.com/workspace/drive/api/reference/rest/v2/files). Fehlt auch dort eine gültige Version, wird nicht ohne Versionsschutz weitergemacht. Mehrere gleichnamige Tresordateien werden ebenfalls nicht automatisch überschrieben. Fehlende Cloud-Dateien nach einem früheren erfolgreichen Abgleich führen zum Abbruch, nicht zur Löschung lokaler Daten.
 
-Die letzte lokale Fassung vor einem Import bleibt als Sicherungsstand in der lokalen Datenbank erhalten und kann über den Wiederherstellungsbutton zurückgeholt werden. Das ist ein einzelner lokaler Sicherungsstand, kein unbegrenztes Versionsarchiv. Google Drive kann eigene Dateiversionen vorhalten; eine Oberfläche für deren Auswahl ist hier nicht enthalten. Ein Cloud-Stand ist auf 25 MB begrenzt.
+Die letzte lokale Fassung vor einem Import bleibt als Sicherungsstand in der lokalen Datenbank erhalten und kann über den Wiederherstellungsbutton zurückgeholt werden. Das ist ein einzelner lokaler Sicherungsstand, kein unbegrenztes Versionsarchiv. Google Drive kann eigene Dateiversionen vorhalten; eine Oberfläche für deren Auswahl ist hier nicht enthalten. Ein verschlüsselter Cloud-Stand ist auf 250 MB begrenzt.
 
 ## Prüfung
 

@@ -12,22 +12,20 @@ import type { UiScale } from './uiScale';
 export type Theme = 'classic' | 'pixel' | 'journal';
 export const themes: readonly Theme[] = ['classic', 'pixel', 'journal'];
 const isTheme = (value: unknown): value is Theme => themes.includes(value as Theme);
-/** In the journal style the calendar lies as a sheet over the left page (`overlay`) or docked beside the book (`side`). */
-export type CalendarDock = 'overlay' | 'side';
 /** In the journal style: one page at a time, or both at once (`spread`, the board then lies over both pages). */
 export type BookPaging = 'page' | 'spread';
 /**
  * `previousColorTheme`: the palette chosen before switching to the journal style, restored when leaving it.
  */
-export interface Settings extends ColorSettings { actionLayout: ActionLayout; theme: Theme; language: Language; uiScale: UiScale; calendarDock: CalendarDock; bookPaging: BookPaging; previousColorTheme?: ColorTheme }
+export interface Settings extends ColorSettings { actionLayout: ActionLayout; theme: Theme; language: Language; uiScale: UiScale; bookPaging: BookPaging; previousColorTheme?: ColorTheme }
 const key = 'journal.settings';
-export const defaultSettings: Settings = { actionLayout: 'orbit', theme: 'classic', language: 'de', uiScale: 'auto', calendarDock: 'overlay', bookPaging: 'page', ...defaultColorSettings };
+export const defaultSettings: Settings = { actionLayout: 'orbit', theme: 'classic', language: 'de', uiScale: 'auto', bookPaging: 'page', ...defaultColorSettings };
 
 export function loadSettings(): Settings {
   try {
     const stored = JSON.parse(localStorage.getItem(key) ?? '{}') as Partial<Settings>;
     return { actionLayout: stored.actionLayout === 'inline' || stored.actionLayout === 'swipe' ? stored.actionLayout : defaultSettings.actionLayout, theme: isTheme(stored.theme) ? stored.theme : 'classic', language: stored.language === 'en' ? 'en' : 'de', uiScale: isUiScale(stored.uiScale) ? stored.uiScale : 'auto', ...normalizeColorSettings(stored),
-      calendarDock: stored.calendarDock === 'side' ? 'side' : 'overlay', bookPaging: stored.bookPaging === 'spread' ? 'spread' : 'page',
+      bookPaging: stored.bookPaging === 'spread' ? 'spread' : 'page',
       ...colorThemeIds.includes(stored.previousColorTheme as ColorTheme) ? { previousColorTheme: stored.previousColorTheme } : {} };
   } catch { return defaultSettings; }
 }

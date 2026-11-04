@@ -11,6 +11,6 @@ Beide Geräte müssen aktualisiert werden. Format 11 wird beim Lesen auf Format 
 
 Das Paket bleibt ein vollständiger, verschlüsselter Snapshot. Die Obergrenze beträgt jetzt 250 MB verschlüsselte Daten. Bilder werden bei jedem Abgleich übertragen, nicht inkrementell. Der lokale Vergleichsstand enthält keine Bilddaten, damit diese nicht zusätzlich den WebView-localStorage belegen. Die AVIF-Dateien bleiben im App-Datenordner.
 
-Nicht übertragen werden Google-/Mail-Zugangsdaten, der Geräteschlüssel, laufende lokale Timer, Fensterpositionen und technische Caches. Diese Erweiterung ersetzt die früheren Hinweise, dass Aktivitäten, Pinnwand und Bilder nicht synchronisiert werden. Mailabruf und Mailkonten bleiben gerätespezifisch.
+Format 13 ergänzt Mailkonten ohne Zugangsdaten. Für jedes übernommene Konto ist auf dem jeweiligen Gerät eine Anmeldung nötig. Der Mailabruf und seine lokalen Zwischenstände bleiben gerätespezifisch; übernommene Mailtermine einschließlich ihrer gespeicherten Inhalte werden als Kalendereinträge synchronisiert. Google-/Mail-Zugangsdaten, der Geräteschlüssel, laufende lokale Timer, Fensterpositionen und technische Caches werden nicht übertragen.
 
 Geprüft mit lokalen Datenbanktests, Zusammenführung alter/neuer Snapshots und simuliertem Drive-Transport. Der echte Transfer zwischen zwei Google-Drive-Geräten ist separat zu prüfen.

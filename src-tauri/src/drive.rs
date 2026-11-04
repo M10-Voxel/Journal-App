@@ -314,7 +314,8 @@ mod tests {
         let mut db=Store::open(&p).unwrap();
         db.conn.execute("INSERT INTO days(date,title,body,revision) VALUES('2026-11-02','Privat','Notiz',7)",[]).unwrap();
         let id=uuid::Uuid::new_v4().to_string();
-        db.conn.execute("INSERT INTO entries(id,day_date,kind,text,done,position) VALUES(?1,'2026-11-02','task','Arbeit',0,0)",[&id]).unwrap();
+        let mail = "journal-mail:v1\n{\"html\":\"<h1>Grüße 👋</h1>\",\"text\":\"Hallo\",\"subject\":\"Termin\",\"sender\":\"test@example.org\"}";
+        db.conn.execute("INSERT INTO entries(id,day_date,kind,text,done,position,description) VALUES(?1,'2026-11-02','event','Arbeit',0,0,?2)",rusqlite::params![&id,mail]).unwrap();
         let before=db.sync_snapshot().unwrap();let mut next=before.clone();next["tables"]["days"]["2026-11-02"]["title"]=json!("Neu");
         next["settings"]["period-data"]=json!({"days":{"2026-11-02":{"rating":8}},"definitions":[]});
         next["settings"]["board:card:test"]=json!({"text":"Pinnwand","dates":["2026-11-02"]});
@@ -322,6 +323,7 @@ mod tests {
         assert!(db.sync_apply(before.clone(),invalid).is_err());assert_eq!(db.sync_snapshot().unwrap(),before);
         db.sync_apply(before.clone(),next.clone()).unwrap();assert_eq!(db.load("2026-11-02").unwrap().revision,8);
         assert_eq!(db.sync_snapshot().unwrap(),next);assert!(db.sync_apply(before,next.clone()).is_err());assert_eq!(db.sync_snapshot().unwrap(),next);
+        assert_eq!(db.load("2026-11-02").unwrap().entries[0].description,mail);
         assert!(db.period_data().unwrap().contains("rating"));
         drop(db);let _=std::fs::remove_file(p);
     }

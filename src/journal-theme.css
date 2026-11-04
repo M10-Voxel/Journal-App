@@ -17,6 +17,8 @@
   --leather: var(--cover, #6a4129);
   --leather-dark: color-mix(in srgb, var(--leather) 64%, #000);
   --leather-light: color-mix(in srgb, var(--leather) 78%, #fff);
+  /* The shadow where the pages curve into the spine: the palette's `spine` colour (Farben → Buch). */
+  --spine-ink: var(--spine, #3b2a1a);
   --ink-shadow: color-mix(in srgb, #3b2a1a 30%, transparent);
   --paper-shade: color-mix(in srgb, #5a462a 14%, transparent);
   --book-paper: var(--surface);
@@ -27,8 +29,6 @@
 /* ── Book head: title bar and toolbar on paper, with a leather edge ─────────────────────────────────────────────── */
 :root[data-theme='journal'] .app.is-book .topbar { background: var(--surface); border-bottom: 3px solid var(--leather); box-shadow: 0 1px 0 var(--leather-dark); }
 /* One bar: turning and the date sit in the title bar (the views are the book's register tabs). */
-.topbar.is-book-head { height: 48px; }
-.book-head-tools { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; padding-left: 12px; }
 :root[data-theme='journal'] .journal-tab[aria-current='page'] { color: var(--strong); font-family: var(--display); font-weight: 600; }
 :root[data-theme='journal'] .toolbar .date-picker-button { font-family: var(--serif); font-size: 13px; }
 :root[data-theme='journal'] .statusbar { background: var(--surface); border-top: 2px solid var(--leather); }
@@ -94,7 +94,7 @@
 
 /* ── The book ─────────────────────────────────────────────────────────────────────────────────────────────────── */
 .app.is-book .main { background: radial-gradient(120% 90% at 50% 40%, var(--leather-light), var(--leather) 55%, var(--leather-dark)); }
-.book-stage { position: relative; flex: 1; min-height: 0; display: flex; padding: 34px 18px 40px 38px; overflow: hidden; }
+.book-stage { position: relative; flex: 1; min-height: 0; display: flex; padding: 34px 18px 26px 38px; overflow: hidden; }
 /* The book fills the app: its pages grow with the window, in a spread and as a single page. */
 .book { position: relative; flex: 1; min-width: 0; display: flex; container: book / inline-size; }
 /* Page edges below and at the sides, mixed from the page's own colour so they suit every palette. */
@@ -105,7 +105,7 @@
     -1px 1px 0 var(--edge-1), -2px 2px 0 var(--edge-2), -3px 3px 0 var(--edge-3), -4px 4px 0 var(--edge-4), -5px 5px 0 var(--edge-5), 0 18px 34px -10px #1d0f0699; }
 .book-stage.is-single .book-spread { border-radius: 2px 5px 5px 2px; box-shadow: 1px 1px 0 var(--edge-1), 2px 2px 0 var(--edge-2), 3px 3px 0 var(--edge-3), 4px 4px 0 var(--edge-4), 5px 5px 0 var(--edge-5), -3px 0 0 var(--leather-dark), 0 18px 34px -10px #1d0f0699; }
 .book-stage.is-double .book-spread::after { content: ''; position: absolute; top: 0; bottom: 0; left: 50%; width: 56px; margin-left: -28px; z-index: 6; pointer-events: none;
-  background: linear-gradient(90deg, transparent, color-mix(in srgb, #3b2a1a 10%, transparent) 38%, color-mix(in srgb, #2a1a0c 30%, transparent) 50%, color-mix(in srgb, #3b2a1a 10%, transparent) 62%, transparent); }
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--spine-ink) 10%, transparent) 38%, color-mix(in srgb, var(--spine-ink) 30%, transparent) 50%, color-mix(in srgb, var(--spine-ink) 10%, transparent) 62%, transparent); }
 
 .book-page { position: absolute; top: 0; bottom: 0; z-index: 2; display: flex; flex-direction: column; min-width: 0; overflow: hidden; background-color: var(--book-paper); }
 .book-page.is-left { left: 0; width: 50%; border-radius: 3px 0 0 3px; }
@@ -113,14 +113,21 @@
 .book-page.is-single { left: 0; width: 100%; border-radius: 2px 5px 5px 2px; }
 /* The paper curves into the spine (and towards the outer edge, a little). */
 .book-page::after { content: ''; position: absolute; inset: 0; z-index: 3; pointer-events: none; }
-.book-page.is-left::after { background: linear-gradient(to left, color-mix(in srgb, #3b2a1a 13%, transparent), transparent 9%), linear-gradient(to right, color-mix(in srgb, #3b2a1a 5%, transparent), transparent 3%); }
-.book-page.is-right::after { background: linear-gradient(to right, color-mix(in srgb, #3b2a1a 13%, transparent), transparent 9%), linear-gradient(to left, color-mix(in srgb, #3b2a1a 5%, transparent), transparent 3%); }
+.book-page.is-left::after { background: linear-gradient(to left, color-mix(in srgb, var(--spine-ink) 13%, transparent), transparent 9%), linear-gradient(to right, color-mix(in srgb, var(--spine-ink) 5%, transparent), transparent 3%); }
+.book-page.is-right::after { background: linear-gradient(to right, color-mix(in srgb, var(--spine-ink) 13%, transparent), transparent 9%), linear-gradient(to left, color-mix(in srgb, var(--spine-ink) 5%, transparent), transparent 3%); }
 .book-page.is-wide { left: 0; width: 100%; border-radius: 3px 5px 5px 3px; }
 .book-page.is-wide .book-page-content { padding: 40px 56px 36px; }
-.book-page.is-wide::after { background: linear-gradient(to right, color-mix(in srgb, #3b2a1a 5%, transparent), transparent 3%), linear-gradient(to left, color-mix(in srgb, #3b2a1a 5%, transparent), transparent 3%); }
-.book-page.is-single::after { background: linear-gradient(to right, color-mix(in srgb, #3b2a1a 11%, transparent), transparent 4%); }
+.book-page.is-wide::after { background: linear-gradient(to right, color-mix(in srgb, var(--spine-ink) 5%, transparent), transparent 3%), linear-gradient(to left, color-mix(in srgb, var(--spine-ink) 5%, transparent), transparent 3%); }
+.book-page.is-single::after { background: linear-gradient(to right, color-mix(in srgb, var(--spine-ink) 11%, transparent), transparent 4%); }
 
 .book-page-scroll { position: relative; flex: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; scrollbar-width: thin; }
+/* The scrollbar starts below the register tabs (they lie over the page's outer edge) and is shorter for it. */
+:root[data-theme='journal'] .book-page-scroll { scrollbar-width: auto; scrollbar-color: auto; }
+.book-page-scroll::-webkit-scrollbar { width: 8px; }
+.book-page-scroll::-webkit-scrollbar-track { margin-top: calc(var(--tabs, 0) * var(--cut-h) + 6px); margin-bottom: 6px; background: transparent; }
+.book-page-scroll::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 4px; background: var(--scrollbar) padding-box; }
+.book-page-scroll::-webkit-scrollbar-thumb:hover { background-color: color-mix(in srgb, var(--scrollbar), var(--text) 25%); }
+.book-page-scroll::-webkit-scrollbar-button { display: none; }
 .book-page-content { padding: 40px 46px 36px 52px; }
 .book-page.is-left .book-page-content { padding: 40px 58px 36px 46px; }
 .book-page.is-right .book-page-content { padding: 40px 46px 36px 58px; }
@@ -156,38 +163,42 @@
 .book-corner.is-prev:hover svg { transform: translate(-2px,2px); }
 .book-corner:focus-visible { outline: 1px solid var(--focus); outline-offset: -5px; border-radius: 3px; }
 
-/* The register is cut into the paper: the outer page misses its top corner in steps (one per kind of page after it),
-   and the pages behind show through, each with its own smaller cut and its name on the step it keeps (JournalBook). */
-.book { --cut-w: 24px; --cut-h: 96px; --cut-shade: color-mix(in srgb, #2a1a0c 22%, transparent); }
-.book-page:not(.is-left) { clip-path: polygon(0 0, calc(100% - var(--cut, 0) * var(--cut-w)) 0, calc(100% - var(--cut, 0) * var(--cut-w)) calc(var(--cut, 0) * var(--cut-h)), 100% calc(var(--cut, 0) * var(--cut-h)), 100% 100%, 0 100%); }
-.book-cut-register { position: absolute; top: 0; right: 0; z-index: 1; width: calc(var(--cut) * var(--cut-w)); height: calc(var(--cut) * var(--cut-h)); border-top-right-radius: 5px; overflow: hidden; }
-.book-cut-layer { --mark: #2f5d9e; position: absolute; inset: 0;
-  clip-path: polygon(0 0, calc(100% - var(--own) * var(--cut-w)) 0, calc(100% - var(--own) * var(--cut-w)) calc(var(--own) * var(--cut-h)), 100% calc(var(--own) * var(--cut-h)), 100% 100%, 0 100%);
-  /* Each page lies a little deeper in the stack; the page above shades it along the edge of its cut. */
-  background: linear-gradient(to right, var(--cut-shade), transparent) no-repeat right calc((var(--own) + 1) * var(--cut-w) - 5px) top 0 / 5px calc((var(--own) + 1) * var(--cut-h)),
-    linear-gradient(to top, var(--cut-shade), transparent) no-repeat right 0 top calc((var(--own) + 1) * var(--cut-h) - 5px) / calc((var(--own) + 1) * var(--cut-w)) 5px,
-    color-mix(in srgb, var(--book-paper), #5a462a calc((var(--cut) - var(--own)) * 6%)); }
-.book-cut-tab { position: absolute; right: calc(var(--own) * var(--cut-w)); top: calc(var(--own) * var(--cut-h)); display: grid; place-items: center; width: var(--cut-w); height: var(--cut-h); padding: 0; border: 0;
-  background: color-mix(in srgb, var(--mark) 11%, transparent); color: color-mix(in srgb, var(--mark) 82%, var(--text)); cursor: pointer; transition: background-color 160ms ease; }
+/* The register on the outer edge: one tab per kind of page, each at its fixed height, all of them always. The outer
+   page is cut away beside the other kinds' tabs and keeps its own (JournalBook), so the current tab is its paper. */
+.book { --cut-w: 24px; --cut-h: 96px; --cut-shade: color-mix(in srgb, #2a1a0c 18%, transparent); }
+.book-page:not(.is-left) { clip-path: polygon(0 0, calc(100% - var(--cut-w)) 0, calc(100% - var(--cut-w)) calc(var(--tab, 0) * var(--cut-h)), 100% calc(var(--tab, 0) * var(--cut-h)),
+  100% calc((var(--tab, 0) + 1) * var(--cut-h) * min(var(--tabs, 0), 1)), calc(100% - var(--cut-w)) calc((var(--tab, 0) + 1) * var(--cut-h) * min(var(--tabs, 0), 1)),
+  calc(100% - var(--cut-w)) calc(var(--tabs, 0) * var(--cut-h)), 100% calc(var(--tabs, 0) * var(--cut-h)), 100% 100%, 0 100%); }
+.book-cut-register { position: absolute; top: 0; right: 0; z-index: 7; width: var(--cut-w); height: calc(var(--tabs) * var(--cut-h)); border-top-right-radius: 5px; overflow: hidden; pointer-events: none; }
+.book-cut-tab { --mark: #2f5d9e; position: absolute; top: calc(var(--tab) * var(--cut-h)); right: 0; display: grid; place-items: center; width: var(--cut-w); height: var(--cut-h); padding: 0; border: 0;
+  background: color-mix(in srgb, var(--mark) 13%, color-mix(in srgb, var(--book-paper), #5a462a 8%)); box-shadow: inset 4px 0 4px -3px var(--cut-shade);
+  color: color-mix(in srgb, var(--mark) 82%, var(--text)); cursor: pointer; pointer-events: auto; transition: background-color 120ms ease; }
 .book-cut-tab span { writing-mode: vertical-rl; font: 600 10px var(--sans); letter-spacing: .09em; text-transform: uppercase; }
-.book-cut-tab:hover { background: color-mix(in srgb, var(--mark) 22%, transparent); }
+.book-cut-tab:hover { background: color-mix(in srgb, var(--mark) 24%, color-mix(in srgb, var(--book-paper), #5a462a 8%)); }
 .book-cut-tab:focus-visible { outline: 2px solid var(--mark); outline-offset: -3px; }
-.book-cut-layer.is-data, .book-cut-layer.is-activities { --mark: #3f7a3a; }
-.book-cut-layer.is-board { --mark: #a8641a; }
+/* The other page of the spread is open too: its tab is paper, like the current one. */
+.book-cut-tab.is-shown:not([aria-current='page']) { background: var(--book-paper); box-shadow: inset 0 -1px 0 var(--edge), inset 0 1px 0 var(--edge); color: color-mix(in srgb, var(--mark) 92%, var(--text)); cursor: default; pointer-events: none; }
+.book-cut-tab[aria-current='page'] { background: transparent; box-shadow: none; color: color-mix(in srgb, var(--mark) 92%, var(--text)); cursor: default; pointer-events: none; }
+.book-cut-tab:is(.is-data, .is-activities) { --mark: #3f7a3a; }
+.book-cut-tab.is-board { --mark: #a8641a; }
 
-/* The ribbon bookmark: sewn into the spine at the top, a band of woven cloth. On today's pages it lies over them and
-   hangs out below; elsewhere only its end shows below the book, and pulling it opens today. */
-.book-ribbon { position: absolute; top: 0; bottom: -30px; left: 50%; z-index: 0; width: 13px; margin-left: -6.5px; padding: 0; border: 0; background: none; cursor: pointer;
-  filter: drop-shadow(0 1px 1.5px #1d0f0680); transition: bottom 200ms var(--ease); }
-.book-ribbon > span { display: block; width: 100%; height: 100%; clip-path: polygon(0 0, 100% 0, 100% 100%, 50% calc(100% - 7px), 0 100%);
-  background: repeating-linear-gradient(0deg, transparent 0 2px, #0000000f 2px 3px), linear-gradient(90deg, #6e1f1f, #a33a32 35%, #8e2c28 70%, #6e1f1f); }
+/* The ribbon bookmark, flat like the other controls: sewn into the spine, it comes over the top edge of the book (the
+   fold shows above it) and lies over today's pages, hanging out below. Elsewhere the pages cover it and only its end
+   shows below the book; pulling it opens today. */
+.book { --ribbon: #9b302b; --ribbon-fold: #74221f; }
+.book-ribbon { position: absolute; top: 100%; bottom: -22px; left: 50%; z-index: 0; width: 13px; margin-left: -6.5px; padding: 0; border: 0; background: none; cursor: pointer; transition: bottom 160ms var(--ease); }
+.book-ribbon > span { display: block; width: 100%; height: 100%; clip-path: polygon(0 0, 100% 0, 100% 100%, 50% calc(100% - 6px), 0 100%); background: var(--ribbon); }
 .book-stage.is-single .book-ribbon { left: 10px; }
-.book-ribbon:not(.is-here):hover { bottom: -36px; }
+.book-ribbon:not(.is-here):hover { bottom: -26px; }
 .book-ribbon:focus-visible { outline: none; }
 .book-ribbon:focus-visible > span { box-shadow: inset 0 0 0 2px #fbeee0; }
-.book-ribbon.is-here { z-index: 11; pointer-events: none; cursor: default; opacity: 1; }
-.book-ribbon.is-here > span { animation: ribbon-lay 520ms cubic-bezier(.3, .7, .3, 1) both; }
-@keyframes ribbon-lay { from { clip-path: polygon(0 0, 100% 0, 100% 0, 50% 0, 0 0); } }
+.book-ribbon.is-here { top: -9px; z-index: 11; pointer-events: none; cursor: default; opacity: 1; }
+/* The board lies over both pages: the spine's shadow and the ribbon fade out below the top edge, so the board shows
+   whole (the ribbon's end below the book stays). */
+.book-stage.is-wide-page .book-spread::after { -webkit-mask-image: linear-gradient(to bottom, #000, transparent 72px); mask-image: linear-gradient(to bottom, #000, transparent 72px); }
+.book-stage.is-wide-page .book-ribbon.is-here > span { -webkit-mask-image: linear-gradient(to bottom, #000 0 9px, transparent 64px, transparent calc(100% - 22px), #000 calc(100% - 22px)); mask-image: linear-gradient(to bottom, #000 0 9px, transparent 64px, transparent calc(100% - 22px), #000 calc(100% - 22px)); }
+.book-ribbon.is-here > span { border-radius: 2px 2px 0 0; background: linear-gradient(var(--ribbon-fold) 0 9px, var(--ribbon) 9px); animation: ribbon-lay 360ms cubic-bezier(.3, .7, .3, 1) both; }
+@keyframes ribbon-lay { from { clip-path: polygon(0 0, 100% 0, 100% 9px, 50% 9px, 0 9px); } }
 @media (prefers-reduced-motion: reduce) { .book-ribbon.is-here > span { animation: none; } }
 
 /* The calendar is a cloth tab on the book's left edge; it pulls the calendar sheet out to the left page. */
@@ -220,16 +231,16 @@
    (the page that leaves stays beneath until it is covered). One page: the page lifts off (or lays down) at its left. */
 .book-page.is-outgoing { z-index: 1; pointer-events: none; }
 .book-page:is(.is-turn-to-left, .is-turn-to-right, .is-lift-off, .is-lay-down) { z-index: 8; pointer-events: none; }
-.book-page.is-turn-to-left { animation: book-turn-to-left 460ms cubic-bezier(.45, .05, .35, 1) both; }
-.book-page.is-turn-to-right { animation: book-turn-to-right 460ms cubic-bezier(.45, .05, .35, 1) both; }
-.book-page.is-lift-off { animation: book-lift-off 420ms cubic-bezier(.5, 0, .7, .4) both; }
-.book-page.is-lay-down { animation: book-lay-down 420ms cubic-bezier(.3, .6, .5, 1) both; }
-.book-page:is(.is-turn-to-left, .is-turn-to-right, .is-lift-off, .is-lay-down)::before { content: ''; position: absolute; inset: 0; z-index: 5; pointer-events: none; animation: book-shade 460ms ease both; }
+.book-page.is-turn-to-left { animation: book-turn-to-left 320ms cubic-bezier(.45, .05, .35, 1) both; }
+.book-page.is-turn-to-right { animation: book-turn-to-right 320ms cubic-bezier(.45, .05, .35, 1) both; }
+.book-page.is-lift-off { animation: book-lift-off 290ms cubic-bezier(.5, 0, .7, .4) both; }
+.book-page.is-lay-down { animation: book-lay-down 290ms cubic-bezier(.3, .6, .5, 1) both; }
+.book-page:is(.is-turn-to-left, .is-turn-to-right, .is-lift-off, .is-lay-down)::before { content: ''; position: absolute; inset: 0; z-index: 5; pointer-events: none; animation: book-shade 320ms ease both; }
 .book-page.is-turn-to-left::before { background: linear-gradient(to right, color-mix(in srgb, #2a1a0c 35%, transparent), transparent 70%); }
 .book-page.is-turn-to-right::before { background: linear-gradient(to left, color-mix(in srgb, #2a1a0c 35%, transparent), transparent 70%); }
 .book-page:is(.is-lift-off, .is-lay-down)::before { background: linear-gradient(to right, color-mix(in srgb, #2a1a0c 35%, transparent), transparent 70%); }
-.book-page.is-jump-next { animation: book-jump-next 300ms var(--ease) both; }
-.book-page.is-jump-prev { animation: book-jump-prev 300ms var(--ease) both; }
+.book-page.is-jump-next { animation: book-jump-next 200ms var(--ease) both; }
+.book-page.is-jump-prev { animation: book-jump-prev 200ms var(--ease) both; }
 @keyframes book-turn-to-left {
   0% { transform-origin: left center; transform: translateX(100%) rotateY(0deg); }
   50% { transform-origin: left center; transform: translateX(100%) rotateY(-90deg); }
@@ -250,18 +261,11 @@
 @keyframes book-fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes book-fade-out { from { opacity: 1; } to { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) {
-  .book-page:is(.is-turn-to-left, .is-turn-to-right, .is-lay-down, .is-jump-next, .is-jump-prev) { animation: book-fade-in 200ms ease both; }
-  .book-page.is-lift-off { animation: book-fade-out 200ms ease both; }
+  .book-page:is(.is-turn-to-left, .is-turn-to-right, .is-lay-down, .is-jump-next, .is-jump-prev) { animation: book-fade-in 160ms ease both; }
+  .book-page.is-lift-off { animation: book-fade-out 160ms ease both; }
   .book-page:is(.is-turn-to-left, .is-turn-to-right, .is-lift-off, .is-lay-down)::before { display: none; }
 }
 
-/* Spread or single page (toolbar). */
-.book-view-switch { display: flex; align-items: center; gap: 2px; padding: 2px; border-radius: 6px; box-shadow: inset 0 0 0 1px var(--divider); }
-.book-view-switch button { display: flex; align-items: center; gap: 6px; height: 26px; padding: 0 9px; border: 0; border-radius: 4px; background: transparent; color: var(--muted); font: 12px var(--sans); cursor: pointer; }
-.book-view-switch button:hover { color: var(--text); background: var(--hover); }
-.book-view-switch button[aria-checked='true'] { color: var(--strong); background: var(--selected); }
-.book-view-switch .icon { width: 15px; height: 15px; }
-@container journal (max-width: 760px) { .book-view-switch span { display: none; } }
 
 /* ── The calendar drawer: a sheet that comes down from the ribbon and lies down left of the book ─────────────── */
 .calendar-drawer { position: relative; z-index: 20; flex: none; width: 0; background: var(--leather-dark); transition: width 440ms var(--ease) 120ms; }
@@ -290,6 +294,8 @@
   background: none; transition: none; pointer-events: none; }
 .book-stage.is-double .calendar-drawer.is-overlay { --sheet-w: calc(50cqw - 14px); }
 .calendar-drawer.is-overlay .sidebar-resizer { pointer-events: auto; }
+/* Its own layer: sliding the sheet away does not repaint the book (or the calendar) on every frame. */
+.calendar-drawer.is-overlay .calendar-drawer-sheet { will-change: transform; }
 .calendar-drawer.is-overlay .calendar-drawer-sheet { top: 6px; bottom: 8px; left: 8px; width: var(--sheet-w); border-radius: 2px; transform-origin: 50% 0;
   box-shadow: 0 0 0 1px var(--edge), 7px 12px 28px -8px #1d0f06b3, 1px 2px 3px #1d0f0640;
   transform: translate(calc(50cqw - var(--sheet-w) / 2 - 8px), -112%) rotate(-4deg); }
@@ -310,23 +316,23 @@
    is cut to the half that stays (leaving) or shows once the leaf has landed and faded (arriving). */
 .book-page.is-beneath, .book-page.is-beneath-fade, .book-page:is(.is-clip-to-left, .is-clip-to-right) { z-index: 3; }
 .book-page:is(.is-lift-left, .is-lift-right, .is-land-left, .is-land-right) { z-index: 8; pointer-events: none; }
-.book-page.is-lift-right { animation: leaf-lift-right 460ms cubic-bezier(.45, .05, .35, 1) both; }
-.book-page.is-lift-left { animation: leaf-lift-left 460ms cubic-bezier(.45, .05, .35, 1) both; }
-.book-page.is-land-left { animation: leaf-land-left 460ms cubic-bezier(.45, .05, .35, 1) both; }
-.book-page.is-land-right { animation: leaf-land-right 460ms cubic-bezier(.45, .05, .35, 1) both; }
-.book-page.is-beneath-fade { animation: leaf-beneath-fade 460ms linear both; }
-.book-page.is-clip-to-left { animation: leaf-clip-to-left 460ms linear both; }
-.book-page.is-clip-to-right { animation: leaf-clip-to-right 460ms linear both; }
-.book-page:is(.is-lift-left, .is-lift-right, .is-land-left, .is-land-right)::before, .book-ghost::before { content: ''; position: absolute; inset: 0; z-index: 5; pointer-events: none; animation: book-shade 460ms ease both; }
+.book-page.is-lift-right { animation: leaf-lift-right 320ms cubic-bezier(.45, .05, .35, 1) both; }
+.book-page.is-lift-left { animation: leaf-lift-left 320ms cubic-bezier(.45, .05, .35, 1) both; }
+.book-page.is-land-left { animation: leaf-land-left 320ms cubic-bezier(.45, .05, .35, 1) both; }
+.book-page.is-land-right { animation: leaf-land-right 320ms cubic-bezier(.45, .05, .35, 1) both; }
+.book-page.is-beneath-fade { animation: leaf-beneath-fade 320ms linear both; }
+.book-page.is-clip-to-left { animation: leaf-clip-to-left 320ms linear both; }
+.book-page.is-clip-to-right { animation: leaf-clip-to-right 320ms linear both; }
+.book-page:is(.is-lift-left, .is-lift-right, .is-land-left, .is-land-right)::before, .book-ghost::before { content: ''; position: absolute; inset: 0; z-index: 5; pointer-events: none; animation: book-shade 320ms ease both; }
 .book-page:is(.is-lift-right, .is-land-right)::before, .book-ghost:is(.is-lift-right, .is-land-right)::before { background: linear-gradient(to right, color-mix(in srgb, #2a1a0c 35%, transparent), transparent 70%); }
 .book-page:is(.is-lift-left, .is-land-left)::before, .book-ghost:is(.is-lift-left, .is-land-left)::before { background: linear-gradient(to left, color-mix(in srgb, #2a1a0c 35%, transparent), transparent 70%); }
 .book-ghost { position: absolute; top: 0; bottom: 0; width: 50%; z-index: 8; pointer-events: none; background: var(--book-paper); box-shadow: inset 0 0 0 1px var(--edge); }
 .book-ghost:is(.is-lift-left, .is-land-left) { left: 0; transform-origin: right center; }
 .book-ghost:is(.is-lift-right, .is-land-right) { left: 50%; transform-origin: left center; }
-.book-ghost.is-lift-right { animation: ghost-lift-right 460ms cubic-bezier(.45, .05, .35, 1) both; }
-.book-ghost.is-lift-left { animation: ghost-lift-left 460ms cubic-bezier(.45, .05, .35, 1) both; }
-.book-ghost.is-land-left { animation: ghost-land-left 460ms cubic-bezier(.45, .05, .35, 1) both; }
-.book-ghost.is-land-right { animation: ghost-land-right 460ms cubic-bezier(.45, .05, .35, 1) both; }
+.book-ghost.is-lift-right { animation: ghost-lift-right 320ms cubic-bezier(.45, .05, .35, 1) both; }
+.book-ghost.is-lift-left { animation: ghost-lift-left 320ms cubic-bezier(.45, .05, .35, 1) both; }
+.book-ghost.is-land-left { animation: ghost-land-left 320ms cubic-bezier(.45, .05, .35, 1) both; }
+.book-ghost.is-land-right { animation: ghost-land-right 320ms cubic-bezier(.45, .05, .35, 1) both; }
 @keyframes leaf-lift-right { 0% { transform-origin: left center; transform: rotateY(0deg); } 50% { transform-origin: left center; transform: rotateY(-90deg); visibility: visible; } 50.01%, 100% { transform-origin: left center; transform: rotateY(-90deg); visibility: hidden; } }
 @keyframes leaf-lift-left { 0% { transform-origin: right center; transform: rotateY(0deg); } 50% { transform-origin: right center; transform: rotateY(90deg); visibility: visible; } 50.01%, 100% { transform-origin: right center; transform: rotateY(90deg); visibility: hidden; } }
 @keyframes leaf-land-left { 0%, 50% { transform-origin: right center; transform: rotateY(90deg); visibility: hidden; } 50.01% { transform-origin: right center; transform: rotateY(90deg); visibility: visible; } 100% { transform-origin: right center; transform: rotateY(0deg); visibility: visible; } }
@@ -348,6 +354,17 @@
 /* While the calendar sheet lies on the book and both pages turn at once, one page lies beside it, up to its edge. */
 .book-stage.is-beside .book-spread { --sheet-w: min(var(--drawer-width), calc(100cqw - 24px)); }
 .book-stage.is-beside .book-page.is-single { left: calc(var(--sheet-w) + 18px); right: 0; width: auto; border-radius: 0 5px 5px 0; transition: left 420ms var(--ease) 120ms; }
+
+/* ── No title bar: settings and the window's controls sit on the cover in the top right corner ──────────────── */
+.app.is-book .main { position: relative; }
+.book-window-bar { position: absolute; top: 0; right: 0; z-index: 30; display: flex; align-items: stretch; height: 30px; }
+.book-window-bar :is(.titlebar-button, .window-controls button) { width: 40px; height: 30px; color: color-mix(in srgb, var(--book-paper) 78%, transparent); background: transparent; }
+.book-window-bar :is(.titlebar-button, .window-controls button):hover, .book-window-bar .titlebar-button:focus-visible { color: var(--book-paper); background: #ffffff1c; }
+.book-window-bar .window-controls { margin: 0; }
+.book-window-bar .window-controls button.window-close:hover { background: var(--error); color: var(--on-error); }
+.book-window-bar .titlebar-button.settings-button[data-mail-count]::after { top: 5px; }
+/* The register tabs end before them. */
+.app.is-book .book-register { right: 150px; }
 
 /* ── Register tabs ──────────────────────────────────────────────────────────────────────────────────────────────
    The views (day … year) are tabs on the book's top edge, towards the right. They stand flush on the edge; the tab
@@ -375,6 +392,12 @@
   100% { transform: rotate(-.35deg); }
 }
 .book-stage.is-beside .book-page.is-single { left: calc(var(--sheet-w) + 44px); }
+/* There the spine runs along the sheet's edge: the paper curves into it on both sides, and the ribbon lies in it. */
+.book-stage.is-beside .book-page.is-single::after { background: linear-gradient(to right, color-mix(in srgb, var(--spine-ink) 13%, transparent), transparent 9%), linear-gradient(to left, color-mix(in srgb, var(--spine-ink) 5%, transparent), transparent 3%); }
+.book-stage.is-beside .book-spread::after { content: ''; position: absolute; top: 0; bottom: 0; left: calc(var(--sheet-w) + 44px); width: 56px; margin-left: -28px; z-index: 6; pointer-events: none;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--spine-ink) 10%, transparent) 38%, color-mix(in srgb, var(--spine-ink) 30%, transparent) 50%, color-mix(in srgb, var(--spine-ink) 10%, transparent) 62%, transparent); }
+.book-stage.is-beside .book-ribbon { --sheet-w: min(var(--drawer-width), calc(100cqw - 24px)); left: calc(var(--sheet-w) + 44px);; transition: bottom 160ms var(--ease), left 420ms var(--ease) 120ms; }
+.book-stage.is-beside .book-spread::after { animation: book-fade-in 200ms ease 480ms both; }
 .calendar-drawer:not(.is-overlay) .calendar-drawer-sheet { left: 32px; width: calc(var(--drawer-width) - 32px); }
 
 :root[data-theme='journal'] .calendar-drawer-sheet, :root[data-theme='journal'] .calendar-drawer .cal.is-embedded { overflow: visible; }
@@ -404,9 +427,6 @@
 :root[data-theme='journal'] .calendar-drawer .cal-toolbar .cal-filter button { width: 22px; height: 22px; }
 :root[data-theme='journal'] .calendar-drawer .cal-toolbar .tag-filter-button { flex-direction: column; gap: 3px; width: 24px; height: auto; margin: 0; padding: 5px 0; border-radius: 6px; }
 
-/* The title bar: the same gap between its groups. */
-.book-head-tools .toolbar-end { gap: 10px; }
-.book-head-tools { gap: 16px; }
 
 /* Each day's paper subdivisions terminate exactly at the day boundaries. */
 :root[data-theme='journal'] .cal-time-column {
@@ -416,28 +436,16 @@
   background-position: 0 0;
 }
 .calendar-drawer.is-overlay .calendar-drawer-sheet { top: -20px; }
-/* The controls use the actual space left beside the window buttons. */
-.book-head-tools { container: book-tools / inline-size; gap: clamp(6px, 1.1vw, 16px); }
-.book-head-tools .mini-calendar-picker { flex: 0 1 auto; min-width: 0; }
-.book-head-tools .date-picker-button { max-width: 100%; }
-.book-head-tools .toolbar-end { flex: 0 1 auto; min-width: 0; margin-left: auto; gap: clamp(4px, .7vw, 10px); }
-.book-head-tools .book-view-switch { flex: none; }
-.topbar.is-book-head { gap: clamp(2px, .5vw, 8px); }
-@container book-tools (max-width: 590px) { .book-view-switch span { display: none; } }
-@container book-tools (max-width: 410px) { .date-picker-weekday { display: none; } }
-@container journal (max-width: 620px) {
-  .topbar.is-book-head { height: auto; min-height: 48px; }
-  .book-head-tools { flex-wrap: wrap; gap: 4px 6px; padding: 4px 0 4px 6px; }
-  .book-head-tools .toolbar-end { margin-left: 0; }
-  .topbar.is-book-head > .titlebar-button, .topbar.is-book-head .window-controls { align-self: flex-start; height: 46px; }
-  .topbar.is-book-head > .titlebar-button, .topbar.is-book-head .window-controls button { width: 28px; }
-}
 
 .book-register { left: 42px; right: 18px; justify-content: flex-end; min-width: 0; }
 .book-register-tab { flex: 0 1 auto; min-width: 0; white-space: nowrap; padding-inline: clamp(5px,1.2cqw,15px); }
 .book-tag-register { flex: none; display: flex; align-items: flex-end; }
-.book-tag-register .tag-filter-button { height: 26px; border-radius: 6px 6px 0 0; padding: 0 8px; background: color-mix(in srgb,var(--book-paper) 80%,var(--leather)); box-shadow: 0 -1px 2px #1d0f0633,inset 0 -4px 4px -3px #1d0f0630; }
-.book-tag-register .tag-filter-button:is(:hover,[aria-expanded='true']) { height: 29px; background: var(--book-paper); color: var(--strong); }
+/* The tag filter is a register tab too and moves like the others: a little up on hover, up to the page when open. */
+.book-tag-register .tag-filter-button { height: 24px; border-radius: 6px 6px 0 0; padding: 0 8px; background: color-mix(in srgb,var(--book-paper) 80%,var(--leather)); color: color-mix(in srgb, var(--muted) 85%, var(--leather));
+  box-shadow: 0 -1px 2px #1d0f0633,inset 0 -4px 4px -3px #1d0f0630; transition: background-color 160ms ease, color 160ms ease, height 160ms var(--ease); }
+.book-tag-register .tag-filter-button:hover { height: 26px; color: var(--text); background: color-mix(in srgb, var(--book-paper) 90%, var(--leather)); }
+.book-tag-register .tag-filter-button[aria-expanded='true'] { z-index: 1; height: 29px; margin-bottom: -1px; background: var(--book-paper); color: var(--strong); box-shadow: 0 -1px 3px #1d0f0640; }
+.book-tag-register .tag-filter-button:active { transform: none; }
 @container book (max-width: 430px) {
   .book-register { left: 8px; right: 8px; gap: 1px; }
   .book-register-tab { font-size: 10px; padding-inline: 4px; }
@@ -453,6 +461,11 @@
 .calendar-drawer.is-overlay.is-open .calendar-drawer-sheet { transform: rotate(-.35deg); }
 .calendar-drawer.is-open.is-animated .calendar-drawer-sheet { animation-name: drawer-slide; }
 .calendar-drawer.is-overlay.is-open.is-animated .calendar-drawer-sheet { animation-name: sheet-slide; animation-duration: 520ms; }
+/* Putting it back is an animation too: a transition would not start from the end of the opening animation (the
+   browser drops the animation and the new position in one step, and the sheet would vanish at once). */
+.calendar-drawer.is-overlay.is-animated:not(.is-open) .calendar-drawer-sheet { animation: sheet-slide-out 340ms cubic-bezier(.5, 0, .75, .3) both; }
+@keyframes sheet-slide-out { from { visibility: visible; transform: rotate(-.35deg); } to { visibility: hidden; transform: translateX(calc(-100% - 40px)) rotate(-1.5deg); } }
+@media (prefers-reduced-motion: reduce) { .calendar-drawer.is-overlay.is-animated:not(.is-open) .calendar-drawer-sheet { animation: book-fade-out 160ms ease both; } }
 @keyframes drawer-slide { from { transform: translateX(-100%); } to { transform: none; } }
 @keyframes sheet-slide { from { transform: translateX(calc(-100% - 40px)) rotate(-1.5deg); } to { transform: rotate(-.35deg); } }
 

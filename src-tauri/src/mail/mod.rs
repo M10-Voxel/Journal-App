@@ -88,6 +88,81 @@ impl MailState {
         Ok(())
     }
 }
+
+// The Drive snapshot contains account configuration only. Windows-bound secrets and
+// per-device status never leave this machine.
+fn sync_accounts(state: &MailState) -> Result<serde_json::Value> {
+    let mut result = serde_json::Map::new();
+    for mut account in state.accounts()? {
+        account.last_sync = None; account.error = None;
+        result.insert(account.id.clone(), serde_json::to_value(account).map_err(err)?);
+    }
+    Ok(serde_json::Value::Object(result))
+}
+
+#[tauri::command]
+pub fn mail_drive_snapshot(state: tauri::State<'_, MailState>) -> Result<serde_json::Value> {
+    sync_accounts(&state)
+}
+
+fn validate_drive_accounts(state: &MailState, expected: &serde_json::Value, accounts: &serde_json::Value) -> Result<Vec<Account>> {
+    if &sync_accounts(state)? != expected { return Err("Mailkonten wurden während der Synchronisierung geändert. Erneut versuchen.".into()); }
+    let records = accounts.as_object().ok_or("Ungültige Mailkonten")?;
+    let mut parsed = Vec::new();
+    for (id, value) in records {
+        let mut account: Account = serde_json::from_value(value.clone()).map_err(err)?;
+        if account.id != *id { return Err("Ungültige Mailkonto-ID".into()); }
+        validate(&mut account)?;
+        parsed.push(account);
+    }
+    Ok(parsed)
+}
+
+#[tauri::command]
+pub fn mail_drive_validate(state: tauri::State<'_, MailState>, expected: serde_json::Value, accounts: serde_json::Value) -> Result<()> {
+    let _guard = state.operation.try_lock().map_err(|_| "Bitte den laufenden Mailabruf abwarten")?;
+    validate_drive_accounts(&state, &expected, &accounts).map(|_| ())
+}
+
+#[tauri::command]
+pub fn mail_drive_apply(app: tauri::AppHandle, expected: serde_json::Value, accounts: serde_json::Value) -> Result<()> {
+    let state = app.state::<MailState>();
+    apply_drive_accounts(&state, expected, accounts)?;
+    let _ = app.emit("mail:changed", ());
+    Ok(())
+}
+
+fn apply_drive_accounts(state: &MailState, expected: serde_json::Value, accounts: serde_json::Value) -> Result<()> {
+    let _guard = state.operation.try_lock().map_err(|_| "Bitte den laufenden Mailabruf abwarten")?;
+    let parsed = validate_drive_accounts(state, &expected, &accounts)?;
+    let records = accounts.as_object().ok_or("Ungültige Mailkonten")?;
+    let empty_secret = secrets::protect(&serde_json::to_vec(&Secret::default()).map_err(err)?, true)?;
+    let mut db = state.db.lock().map_err(err)?;
+    let tx = db.transaction().map_err(err)?;
+    let existing: Vec<(String, String)> = {
+        let mut q = tx.prepare("SELECT id,config FROM accounts").map_err(err)?;
+        let rows = q.query_map([], |r| Ok((r.get(0)?,r.get(1)?))).map_err(err)?;
+        rows.collect::<std::result::Result<_,_>>().map_err(err)?
+    };
+    for (id, _) in &existing { if !records.contains_key(id) { tx.execute("DELETE FROM accounts WHERE id=?1", [id]).map_err(err)?; } }
+    for mut account in parsed {
+        if let Some((_,config)) = existing.iter().find(|(id,_)| *id == account.id) {
+            let old: Account = serde_json::from_str(config).map_err(err)?;
+            account.last_sync = old.last_sync; account.error = old.error;
+            if old.email != account.email || old.protocol != account.protocol || old.host != account.host || old.port != account.port || old.security != account.security || old.username != account.username || old.client_id != account.client_id || old.tenant != account.tenant {
+                account.last_sync = None; account.error = Some("Bitte dieses Konto auf diesem Gerät anmelden.".into());
+                tx.execute("UPDATE accounts SET config=?2,secret=?3 WHERE id=?1", params![account.id,serde_json::to_string(&account).map_err(err)?,&empty_secret]).map_err(err)?;
+            } else {
+                tx.execute("UPDATE accounts SET config=?2 WHERE id=?1", params![account.id,serde_json::to_string(&account).map_err(err)?]).map_err(err)?;
+            }
+        } else {
+            account.last_sync = None; account.error = Some("Bitte dieses Konto auf diesem Gerät anmelden.".into());
+            tx.execute("INSERT INTO accounts(id,config,secret) VALUES(?1,?2,?3)", params![account.id,serde_json::to_string(&account).map_err(err)?,&empty_secret]).map_err(err)?;
+        }
+    }
+    tx.commit().map_err(err)?;
+    Ok(())
+}
 fn validate(account: &mut Account) -> Result<()> {
     if uuid::Uuid::parse_str(&account.id).is_err() { return Err("Ungültige Konto-ID".into()); }
     account.email = account.email.trim().to_string(); account.username = account.username.trim().to_string();
@@ -130,6 +205,7 @@ fn sync_one(app: &tauri::AppHandle, mut account: Account) -> Result<()> {
     let state = app.state::<MailState>();
     let result: Result<()> = (|| {
         let mut secret = state.secret(&account.id)?;
+        if (matches!(account.protocol.as_str(), "gmail" | "microsoft") && secret.refresh_token.is_empty()) || (matches!(account.protocol.as_str(), "imap" | "pop3") && secret.password.is_empty()) { return Err("Bitte dieses Konto auf diesem Gerät anmelden.".into()); }
         if matches!(account.protocol.as_str(), "gmail" | "microsoft") { oauth::refresh(&account, &mut secret)?; state.persist(&account, &secret)?; }
         let known: HashSet<String> = {
             let db = state.db.lock().map_err(err)?;
@@ -288,6 +364,27 @@ pub fn mail_resolve(app: tauri::AppHandle, ids: Vec<String>, accepted: bool) -> 
 mod tests {
     use super::*;
     fn account() -> Account { serde_json::from_value(serde_json::json!({"id":uuid::Uuid::new_v4().to_string(),"provider":"custom","label":"Test","email":"test@example.org","protocol":"imap","host":"imap.example.org","port":993,"security":"tls","username":"","enabled":true})).unwrap() }
+    #[cfg(windows)]
+    #[test] fn drive_accounts_preserve_local_secrets_and_require_new_login() {
+        let path=std::env::temp_dir().join(format!("journal-mail-sync-{}.sqlite",uuid::Uuid::new_v4()));
+        let state=MailState::open(&path).unwrap();
+        let mut a=account(); validate(&mut a).unwrap();
+        state.persist(&a,&Secret { password:"local-password".into(), ..Default::default() }).unwrap();
+        let before=sync_accounts(&state).unwrap();
+        assert!(!before.to_string().contains("local-password"));
+        let mut b=account(); validate(&mut b).unwrap();
+        let mut next=before.clone(); next[&b.id]=serde_json::to_value(&b).unwrap();
+        apply_drive_accounts(&state,before.clone(),next.clone()).unwrap();
+        assert_eq!(state.secret(&a.id).unwrap().password,"local-password");
+        assert!(state.secret(&b.id).unwrap().password.is_empty());
+        assert!(state.accounts().unwrap().iter().find(|x| x.id==b.id).unwrap().error.is_some());
+        assert!(apply_drive_accounts(&state,before,next.clone()).is_err());
+        next[&a.id]["host"]=serde_json::json!("new.example.org");
+        let expected=sync_accounts(&state).unwrap();
+        apply_drive_accounts(&state,expected,next).unwrap();
+        assert!(state.secret(&a.id).unwrap().password.is_empty());
+        drop(state); let _=std::fs::remove_file(path);
+    }
     #[test] fn rejects_remote_insecure_bridge_and_protocol_injection() {
         let mut a = account(); assert!(validate(&mut a).is_ok());
         a.security = "bridge".into(); assert!(validate(&mut a).is_err());

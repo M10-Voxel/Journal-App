@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { themes, withTheme } from '../settings';
 import type { Settings, Theme } from '../settings';
 import type { ActionLayout } from './EntryActionDock';
+import type { BookView } from './JournalBook';
 import type { CalendarImport } from '../journal';
 import { DriveSettings } from './DriveSettings';
 import { MailSettings } from './MailSettings';
@@ -47,7 +48,7 @@ function Preview({ layout }: { layout: ActionLayout }) {
   </svg>;
 }
 
-export function SettingsDialog({ settings, onChange, onClose, onImport, mailStatus, beforeSync, onDriveBusy, initialTab = 'appearance' }: { beforeSync: () => Promise<void>; onDriveBusy: (busy: boolean) => void; initialTab?: SettingsTab; settings: Settings; onChange: (settings: Settings) => void; onClose: () => void; onImport: (entries: CalendarImport[]) => Promise<void>; mailStatus: { count: number; error: string } }) {
+export function SettingsDialog({ settings, onChange, onClose, onImport, mailStatus, beforeSync, onDriveBusy, initialTab = 'appearance', bookView = 'double', onBookView }: { bookView?: BookView; onBookView?: (view: BookView) => void; beforeSync: () => Promise<void>; onDriveBusy: (busy: boolean) => void; initialTab?: SettingsTab; settings: Settings; onChange: (settings: Settings) => void; onClose: () => void; onImport: (entries: CalendarImport[]) => Promise<void>; mailStatus: { count: number; error: string } }) {
   const language = useLanguage();
   const [driveBusy, setDriveBusy] = useState(false);
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -111,16 +112,16 @@ export function SettingsDialog({ settings, onChange, onClose, onImport, mailStat
         </button>)}
       </div>
       {settings.theme === 'journal' && <>
-        <h3 id="settings-calendar-dock">{t('Kalender im Buch')}</h3>
-        <p className="settings-hint">{t('Wo der Kalender liegt, wenn er herunterklappt (Band oben oder Strg K).')}</p>
-        <div className="language-options" role="radiogroup" aria-labelledby="settings-calendar-dock" onKeyDown={event => {
+        <h3 id="settings-book-view">{t('Buchansicht')}</h3>
+        <p className="settings-hint">{t('In einem schmalen Fenster zeigt das Buch immer eine Seite.')}</p>
+        <div className="language-options" role="radiogroup" aria-labelledby="settings-book-view" onKeyDown={event => {
           if (!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key)) return;
-          event.preventDefault(); const calendarDock = settings.calendarDock === 'overlay' ? 'side' : 'overlay';
-          onChange({ ...settings, calendarDock });
-          requestAnimationFrame(() => dialogRef.current?.querySelector<HTMLElement>(`[data-calendar-dock="${calendarDock}"]`)?.focus());
+          event.preventDefault(); const view = bookView === 'double' ? 'single' : 'double';
+          onBookView?.(view);
+          requestAnimationFrame(() => dialogRef.current?.querySelector<HTMLElement>(`[data-book-view="${view}"]`)?.focus());
         }}>
-          {(['overlay', 'side'] as const).map(dock => <button key={dock} type="button" role="radio" data-calendar-dock={dock} aria-checked={settings.calendarDock === dock} tabIndex={settings.calendarDock === dock ? 0 : -1}
-            onClick={() => onChange({ ...settings, calendarDock: dock })}>{dock === 'overlay' ? t('Als Blatt über der linken Seite') : t('Neben dem Buch angedockt')}</button>)}
+          {(['double', 'single'] as const).map(view => <button key={view} type="button" role="radio" data-book-view={view} aria-checked={bookView === view} tabIndex={bookView === view ? 0 : -1}
+            onClick={() => onBookView?.(view)}>{view === 'double' ? t('Doppelseite') : t('Einzelseite')}</button>)}
         </div>
         <h3 id="settings-book-paging">{t('Blättern')}</h3>
         <p className="settings-hint">{t('Beide Seiten auf einmal: Die Pinnwand liegt dann über zwei Seiten. Liegt der Kalender als Blatt auf dem Buch, zeigt es daneben eine Seite.')}</p>

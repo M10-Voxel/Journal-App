@@ -39,7 +39,7 @@ import { MiniCalendar } from './components/MiniCalendar';
 import { MiniCalendarPicker } from './components/MiniCalendarPicker';
 import { WindowControls } from './components/WindowControls';
 import { NavCluster } from './components/NavCluster';
-import { BookViewSwitch, JournalBook, pageHeading, useBookView } from './components/JournalBook';
+import { JournalBook, pageHeading, useBookView } from './components/JournalBook';
 import type { BookControl } from './components/JournalBook';
 import { CalendarDrawer, CalendarTab, useCalendarDrawer } from './components/CalendarDrawer';
 import type { BookPage } from './book';
@@ -131,6 +131,13 @@ function App() {
   const [bookWide, setBookWide] = useState(true);
   const bookRef = useRef<BookControl>(null);
   const drawer = useCalendarDrawer();
+  // The window has no system title bar: its own bar (or, in the book, the cover) moves it; a double click maximizes.
+  const dragWindow = (event: React.MouseEvent) => {
+    if (event.button !== 0 || (event.target as Element).closest('button, input, [role="dialog"]')) return;
+    event.preventDefault();
+    const window = getCurrentWindow();
+    void (event.detail === 2 ? window.toggleMaximize() : window.startDragging()).catch(reason => setError(t("Fensteraktion fehlgeschlagen: {0}", String(reason))));
+  };
   const toggleDrawer = (focus = false) => {
     const opening = !drawer.open;
     drawer.setOpen(opening);
@@ -231,7 +238,7 @@ function App() {
   }, []);
   // The calendar sheet over the book covers the left page; opening a day there folds it away so the day can be seen.
   const openFromCalendar = useStableCallback((target: string, entryId?: string) => {
-    if (bookMode && settings.calendarDock === 'overlay' && drawer.open && settings.bookPaging !== 'spread') drawer.setOpen(false);
+    if (bookMode && drawer.open && settings.bookPaging !== 'spread') drawer.setOpen(false);
     showFromCalendar(target, entryId ?? null);
   });
   const showFromCalendar = useStableCallback((target: string, entryId: string | null) => {
@@ -584,44 +591,41 @@ function App() {
     {periodModes.map((mode, index) => <button type="button" key={mode} className="book-register-tab" data-period-mode={mode} aria-current={periodMode === mode ? 'page' : undefined}
       title={`${periodLabels[index]} · ${t('Strg')} ${index + 1}`} onClick={() => setPeriodMode(mode)}>{periodLabels[index]}{index === 0 && dirty && <span className="unsaved-dot" aria-label={t("Ungespeicherte Änderungen")} />}</button>)}
   </nav>;
-  const overlayCalendar = bookMode && settings.calendarDock === 'overlay';
   // Turning both pages at once, the sheet does not cover a page: the book shows one page beside it.
-  const besideCalendar = overlayCalendar && drawer.open && settings.bookPaging === 'spread';
+  const besideCalendar = bookMode && drawer.open && settings.bookPaging === 'spread';
   const calendar = <Calendar embedded journalDate={date} onOpen={openFromCalendar} onCreate={createFromCalendar} onEdit={editFromCalendar} onRemove={removeFromCalendar} onExport={exportFromCalendar} onImport={importFromCalendar} />;
   return <div className={`app actions-${settings.actionLayout}${sidebar.dragging ? ' is-resizing' : ''}${bookMode ? ' is-book' : ''}`} onFocusCapture={event => {
     const target = event.target as HTMLElement;
     if (newEntryId && !target.closest('.popover') && target.closest<HTMLElement>('[data-entry-id]')?.dataset.entryId !== newEntryId) setNewEntryId(null);
   }}>
     {/* The sidebar is the calendar (its view switch in line with the toolbar next to it); dragging its edge sets the width.
-        In the book it comes down from its ribbon instead and lies next to the book. */}
-    {bookMode ? overlayCalendar ? null : <CalendarDrawer open={drawer.open} animated={drawer.animated} width={sidebar.width} resizer={sidebar.handle} disabled={driveBusy} onClose={() => toggleDrawer(true)}>{calendar}</CalendarDrawer>
+        In the book it is always a sheet pulled out onto the book instead (JournalBook's overlay). */}
+    {bookMode ? null
       : <aside inert={driveBusy} className="sidebar" aria-label={t("Kalender und Navigation")} style={{ width: sidebar.width }}>
         {calendar}
         <div className="sidebar-resizer" {...sidebar.handle} />
       </aside>}
 
     {/* Swiping sideways on a trackpad, or Shift + wheel, turns the day; entries that are swiped themselves keep the gesture. */}
-    <main inert={driveBusy} className="main" ref={mainRef}>
-      <header className={`topbar${bookMode ? ' is-book-head' : ''}`} onMouseDown={event => {
-        if (event.button !== 0 || (event.target as Element).closest('button, input, [role="dialog"]')) return;
-        event.preventDefault();
-        const window = getCurrentWindow();
-        void (event.detail === 2 ? window.toggleMaximize() : window.startDragging()).catch(reason => setError(t("Fensteraktion fehlgeschlagen: {0}", String(reason))));
-      }}>
-        {/* In the book the views are its register tabs; turning and the date join the title bar, so there is one bar. */}
-        {bookMode ? <div className="book-head-tools"><div className="toolbar-end"><BookViewSwitch view={bookView} narrow={!bookWide} onChange={setBookView} /></div></div> : <nav className="journal-tabs" aria-label={language === 'en' ? 'Journal views' : 'Journalansichten'}>{periodModes.map((mode, index) => <button type="button" key={mode} className="journal-tab" aria-current={periodMode === mode ? 'page' : undefined} onClick={() => setPeriodMode(mode)}><Icon name={({ day: 'journal', week: 'week', month: 'month', quarter: 'quarter', year: 'year' } as const)[mode]} /><span>{(language === 'en' ? ['Day', 'Week', 'Month', 'Quarter', 'Year'] : ['Tag', 'Woche', 'Monat', 'Quartal', 'Jahr'])[index]}</span>{index === 0 && dirty && <span className="unsaved-dot" aria-label={t("Ungespeicherte Änderungen")} />}</button>)}</nav>}
-        {!bookMode && <div className="titlebar-space" />}
-        {/* Settings sit with the window's own controls, where Zed and most apps keep them. */}
-        <button type="button" className="titlebar-button titlebar-help" aria-label={t("Tastenkürzel")} aria-keyshortcuts="F1" title={t("Tastenkürzel") + ' · F1'} onClick={()=>setHelp(true)}>F1</button>
+    <main inert={driveBusy} className="main" ref={mainRef} onMouseDown={event => { if (bookMode && (event.target === event.currentTarget || (event.target as Element).classList.contains('book-stage'))) dragWindow(event); }}>
+      {/* In the book there is no title bar: the cover around the book moves the window; settings and the window's
+          controls sit on it in the top right corner, beside the register tabs. */}
+      {bookMode ? <div className="book-window-bar" onMouseDown={dragWindow}>
         <button type="button" className="titlebar-button settings-button" data-mail-count={mailStatus.count || undefined} aria-label={t("Einstellungen")} aria-keyshortcuts="Control+," title={t("Einstellungen · Strg ,")} onClick={() => openSettings()}><Icon name="settings" /></button>
         <WindowControls onError={setError} />
-      </header>
+      </div> : <header className="topbar" onMouseDown={dragWindow}>
+        <nav className="journal-tabs" aria-label={language === 'en' ? 'Journal views' : 'Journalansichten'}>{periodModes.map((mode, index) => <button type="button" key={mode} className="journal-tab" aria-current={periodMode === mode ? 'page' : undefined} onClick={() => setPeriodMode(mode)}><Icon name={({ day: 'journal', week: 'week', month: 'month', quarter: 'quarter', year: 'year' } as const)[mode]} /><span>{(language === 'en' ? ['Day', 'Week', 'Month', 'Quarter', 'Year'] : ['Tag', 'Woche', 'Monat', 'Quartal', 'Jahr'])[index]}</span>{index === 0 && dirty && <span className="unsaved-dot" aria-label={t("Ungespeicherte Änderungen")} />}</button>)}</nav>
+        <div className="titlebar-space" />
+        {/* Settings sit with the window's own controls, where Zed and most apps keep them. */}
+        <button type="button" className="titlebar-button settings-button" data-mail-count={mailStatus.count || undefined} aria-label={t("Einstellungen")} aria-keyshortcuts="Control+," title={t("Einstellungen · Strg ,")} onClick={() => openSettings()}><Icon name="settings" /></button>
+        <WindowControls onError={setError} />
+      </header>}
       {/* Like the calendar's toolbar (and Zed's under its tabs): turning the days first, then what is shown. */}
       {!bookMode && <div className="toolbar">{toolbarItems}</div>}
 
       {bookMode ? <JournalBook mode={periodMode} date={date} today={today} onToday={() => navigate(today)} renderNav={bookNav} view={bookView} paging={settings.bookPaging} beside={besideCalendar} sheetWidth={sidebar.width} onNavigate={navigate} renderPage={bookPage} entriesScrollRef={scrollRef} controlRef={bookRef} onWideChange={setBookWide}
         calendarTab={<CalendarTab open={drawer.open} onToggle={() => toggleDrawer()} />} register={register}
-        overlay={overlayCalendar && <CalendarDrawer overlay open={drawer.open} animated={drawer.animated} width={sidebar.width} resizer={sidebar.handle} resizable={besideCalendar || !(bookView === 'double' && bookWide)} disabled={driveBusy} onClose={() => toggleDrawer(true)}>{calendar}</CalendarDrawer>} />
+        overlay={<CalendarDrawer overlay open={drawer.open} animated={drawer.animated} width={sidebar.width} resizer={sidebar.handle} resizable={besideCalendar || !(bookView === 'double' && bookWide)} disabled={driveBusy} onClose={() => toggleDrawer(true)}>{calendar}</CalendarDrawer>} />
         : <div className="scroll" ref={scrollRef}>
           <div className="content">
             {periodMode === 'day' && entriesPage()}
@@ -637,7 +641,7 @@ function App() {
       onSnooze={reminder => { dismissReminder(reminder); journal.snoozeReminder(reminder).catch(reason => setError(t("Erinnerung: {0}", String(reason)))); }}
       onOpen={reminder => { dismissReminder(reminder); showFromCalendar(reminder.date, reminder.id); }} onDismiss={dismissReminder} />
     {help && <ShortcutHelp onClose={() => setHelp(false)} />}
-    {settingsOpen && <SettingsDialog key={settingsTab} initialTab={settingsTab} beforeSync={async () => { if (!await save()) throw new Error("Lokale ?nderungen konnten nicht gespeichert werden."); }} onDriveBusy={value => { driveWorking.current = value; setDriveBusy(value); }} settings={settings} mailStatus={mailStatus} onImport={importFromCalendar} onClose={() => { if (!driveWorking.current) setSettingsOpen(false); }} onChange={next => { setOpenEntryId(null); setSettings(next); saveSettings(next); }} />}
+    {settingsOpen && <SettingsDialog key={settingsTab} bookView={bookView} onBookView={setBookView} initialTab={settingsTab} beforeSync={async () => { if (!await save()) throw new Error("Lokale ?nderungen konnten nicht gespeichert werden."); }} onDriveBusy={value => { driveWorking.current = value; setDriveBusy(value); }} settings={settings} mailStatus={mailStatus} onImport={importFromCalendar} onClose={() => { if (!driveWorking.current) setSettingsOpen(false); }} onChange={next => { setOpenEntryId(null); setSettings(next); saveSettings(next); }} />}
   </div>;
 }
 

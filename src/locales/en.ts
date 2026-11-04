@@ -2,6 +2,7 @@
 const english: Record<string, string> = {
   "Buch (Journal-Stil)": "Book (journal style)",
   "Einband und Hintergrund": "Cover and background",
+  "Buchfalz (Schatten in der Mitte)": "Spine (shadow in the middle)",
   "Tag · Woche · Monat · Quartal · Jahr": "Day · week · month · quarter · year",
   "Blättern": "Turning pages",
   "Beide Seiten auf einmal: Die Pinnwand liegt dann über zwei Seiten. Liegt der Kalender als Blatt auf dem Buch, zeigt es daneben eine Seite.": "Both pages at once: the pinboard then spans two pages. While the calendar sheet lies on the book, one page is shown beside it.",

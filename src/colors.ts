@@ -25,7 +25,7 @@ export const colorGroups = [
     ['md-highlight-background', 'Markierung: Hintergrund'], ['md-highlight-text', 'Markierung: Text'],
   ] },
   { id: 'book', label: 'Buch (Journal-Stil)', colors: [
-    ['cover', 'Einband und Hintergrund'],
+    ['cover', 'Einband und Hintergrund'], ['spine', 'Buchfalz (Schatten in der Mitte)'],
   ] },
 ] as const;
 export type ColorToken = typeof colorGroups[number]['colors'][number][0];
@@ -46,7 +46,7 @@ const original: Palette = {
   'md-red': '#df6262', 'md-orange': '#e6a85c', 'md-yellow': '#e2d7b7', 'md-green': '#76d982',
   'md-cyan': '#c2dce9', 'md-blue': '#569eff', 'md-purple': '#c69bff', 'md-pink': '#ad4075',
   'md-highlight-background': '#e6a85c2e', 'md-highlight-text': '#e2d7b7',
-  cover: '#2a2b30',
+  cover: '#2a2b30', spine: '#000000',
 };
 const green: Palette = {
   background: '#0a120c', surface: '#202e22', inset: '#141f16', hover: '#2c4028', selected: '#3c542d', focus: '#405431',
@@ -58,7 +58,7 @@ const green: Palette = {
   'md-red': '#eca390', 'md-orange': '#dbc18a', 'md-yellow': '#dce8a0', 'md-green': '#aeff00',
   'md-cyan': '#9bd4bc', 'md-blue': '#a1c8dc', 'md-purple': '#c2bbce', 'md-pink': '#d6aaba',
   'md-highlight-background': '#aeff002e', 'md-highlight-text': '#e3ffb0',
-  cover: '#2c4027',
+  cover: '#2c4027', spine: '#000000',
 };
 // Summer sky, shaded stone, foliage and the warm red railings in the reference image.
 const summer: Palette = {
@@ -71,7 +71,7 @@ const summer: Palette = {
   'md-red': '#ff9f93', 'md-orange': '#f2bd80', 'md-yellow': '#f3de9d', 'md-green': '#b9df8a',
   'md-cyan': '#78e0de', 'md-blue': '#78cfff', 'md-purple': '#bdbdf2', 'md-pink': '#edb5c9',
   'md-highlight-background': '#f1ce8533', 'md-highlight-text': '#ffebba',
-  cover: '#1d3d50',
+  cover: '#1d3d50', spine: '#000000',
 };
 // Light paper and ink for the journal style: cream pages, dark brown ink and blue ink as the accent.
 const paper: Palette = {
@@ -84,7 +84,7 @@ const paper: Palette = {
   'md-red': '#b03a2e', 'md-orange': '#8f4c12', 'md-yellow': '#6e560a', 'md-green': '#33652f',
   'md-cyan': '#225c5c', 'md-blue': '#2f5d9e', 'md-purple': '#6a4a9a', 'md-pink': '#a4426e',
   'md-highlight-background': '#f2d36b66', 'md-highlight-text': '#2b2620',
-  cover: '#6a4129',
+  cover: '#6a4129', spine: '#3b2a1a',
 };
 // The journal style at night: dark brown pages, warm cream ink and candle gold as the accent.
 const candle: Palette = {
@@ -97,7 +97,7 @@ const candle: Palette = {
   'md-red': '#f0958a', 'md-orange': '#eba86d', 'md-yellow': '#e9d08a', 'md-green': '#abd08b',
   'md-cyan': '#93d0c5', 'md-blue': '#9db9e6', 'md-purple': '#c6abe1', 'md-pink': '#e9a6c1',
   'md-highlight-background': '#e3ab5233', 'md-highlight-text': '#f8e2b0',
-  cover: '#5a3020',
+  cover: '#5a3020', spine: '#000000',
 };
 /** The palettes made for the journal style. */
 export const journalColorThemes: readonly ColorTheme[] = ['paper', 'candle'];
