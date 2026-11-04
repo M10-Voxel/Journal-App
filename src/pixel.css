@@ -1,97 +1,87 @@
-/* Theme selection uses the existing palette; the layout and hit areas stay intact. */
-.theme-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 12px 0 22px; }
-.theme-options > button { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 5px; padding: 12px; border: 0; border-radius: 10px; box-shadow: inset 0 0 0 1px var(--edge); background: var(--border); text-align: left; }
-.theme-options > button[aria-checked='true'] { box-shadow: inset 0 0 0 1.5px var(--accent); background: var(--selection); }
-.theme-options strong { font: 500 13px var(--sans); color: var(--text); }
-.theme-options small { font: 11px var(--sans); color: var(--muted); }
-.theme-sample { display: flex; align-items: center; gap: 5px; height: 38px; }
-.theme-sample > span { width: 48px; font: 600 23px 'IBM Plex Sans'; color: var(--text); }
-.theme-sample i { width: 14px; height: 14px; border-radius: 50%; background: var(--accent); }
-.theme-sample i:nth-of-type(2) { background: var(--priority); }
-.theme-sample i:nth-of-type(3) { background: var(--success); }
-.theme-sample.is-pixel > span { font-family: 'Pixelify Sans'; }
-.theme-sample.is-pixel i { border-radius: 0; }
+/* Icons have a pixel variant (PixelIcon); only one of them shows. */
 .icon-pixel { display: none; }
 
-:root[data-theme='pixel'] {
+:root[data-pixel] {
   --sans: 'Pixelify Sans', system-ui, sans-serif;
   --mono: 'VT323', Consolas, monospace;
   --write: 'VT323', Consolas, monospace;
   font-synthesis: weight style;
 }
 /* Flat square pixels instead of rounded pills. No padding, dimensions or grid changes. */
-:root[data-theme='pixel'] *,
-:root[data-theme='pixel'] *::before,
-:root[data-theme='pixel'] *::after { border-radius: 0 !important; }
-:root[data-theme='pixel'] :where(.cal-composer, .planner, .shortcuts, .format-menu, .repeat-suggest, .mini-picker-panel, .reminder, .mail-import-toast) {
+:root[data-pixel] *,
+:root[data-pixel] *::before,
+:root[data-pixel] *::after { border-radius: 0 !important; }
+/* Popups (popups.css) as square sheets with a hard, stepped shadow and a thin frame. */
+:root[data-pixel] { --popup-shadow: 3px 3px 0 var(--border), 5px 5px 0 #0008; }
+:root[data-pixel] :where(.popover, .cal-composer, .planner, .shortcuts, .format-menu, .repeat-suggest, .mini-picker-panel, .cal-transfer-panel, .reminder, .mail-import-toast) {
   outline: 1px solid var(--edge); outline-offset: 1px;
-  box-shadow: 3px 3px 0 var(--border), 5px 5px 0 #0008;
+  box-shadow: var(--popup-shadow);
 }
-:root[data-theme='pixel'] :focus-visible { outline-width: 2px; outline-offset: 2px; }
-:root[data-theme='pixel'] .icon-standard { display: none; }
-:root[data-theme='pixel'] .icon-pixel { display: initial; }
-:root[data-theme='pixel'] .icon { shape-rendering: crispEdges; }
-:root[data-theme='pixel'] .settings-preview { shape-rendering: crispEdges; }
-:root[data-theme='pixel'] :is(.settings-preview rect, .settings-preview circle, .clock svg) { shape-rendering: crispEdges; }
-:root[data-theme='pixel'] .settings-preview rect { rx: 0; }
+:root[data-pixel] :focus-visible { outline-width: 2px; outline-offset: 2px; }
+:root[data-pixel] .icon-standard { display: none; }
+:root[data-pixel] .icon-pixel { display: initial; }
+:root[data-pixel] .icon { shape-rendering: crispEdges; }
+:root[data-pixel] .settings-preview { shape-rendering: crispEdges; }
+:root[data-pixel] :is(.settings-preview rect, .settings-preview circle, .clock svg) { shape-rendering: crispEdges; }
+:root[data-pixel] .settings-preview rect { rx: 0; }
 /* The terminal face needs a larger em for the same readable x-height. Keep row height/caret rhythm. */
-:root[data-theme='pixel'] :is(.cm-editor, .entry-text, .cal-composer-text, .cal-composer-description, .reminder-text, .dock-word) { font-size: 16px; }
-:root[data-theme='pixel'] .title-input { font-size: 24px; line-height: 30px; }
-:root[data-theme='pixel'] :is(.repeat-write, .repeat-ghost, .repeat-suggest-word) { font-size: 16px; }
-:root[data-theme='pixel'] .repeat-write-icon { shape-rendering: crispEdges; }
-:root[data-theme='pixel'] .cal-item-text { font-size: 14px; }
-:root[data-theme='pixel'] :is(.cal-composer-time, .cal-composer-day, .cal-item-time, .entry-when) { font-size: 14px; }
-:root[data-theme='pixel'] kbd { font-size: 14px; }
-:root[data-theme='pixel'] .cal-time-hours span { font-size: 13px; }
-:root[data-theme='pixel'] .cal-time-corner { font-size: 12px; }
-:root[data-theme='pixel'] .cal-now-row span { font-size: 13px; }
-:root[data-theme='pixel'] .toolbar .date-picker-button { font-size: 15px; }
-:root[data-theme='pixel'] .entry-symbol .icon { image-rendering: pixelated; }
+:root[data-pixel] :is(.cm-editor, .entry-text, .cal-composer-text, .cal-composer-description, .reminder-text, .dock-word) { font-size: 16px; }
+:root[data-pixel] .title-input { font-size: 24px; line-height: 30px; }
+:root[data-pixel] :is(.repeat-write, .repeat-ghost, .repeat-suggest-word) { font-size: 16px; }
+:root[data-pixel] .repeat-write-icon { shape-rendering: crispEdges; }
+:root[data-pixel] .cal-item-text { font-size: 14px; }
+:root[data-pixel] :is(.cal-composer-time, .cal-composer-day, .cal-item-time, .entry-when) { font-size: 14px; }
+:root[data-pixel] kbd { font-size: 14px; }
+:root[data-pixel] .cal-time-hours span { font-size: 13px; }
+:root[data-pixel] .cal-time-corner { font-size: 12px; }
+:root[data-pixel] .cal-now-row span { font-size: 13px; }
+:root[data-pixel] .toolbar .date-picker-button { font-size: 15px; }
+:root[data-pixel] .entry-symbol .icon { image-rendering: pixelated; }
 /* Pixel scrollbars: a wide square thumb in the accent tone on a dark track, stepped arrows at the ends. The standard
    scrollbar-width/-color would win over these in Chromium, so they are reset first. */
-:root[data-theme='pixel'], :root[data-theme='pixel'] * { scrollbar-width: auto; scrollbar-color: auto; }
-:root[data-theme='pixel'] ::-webkit-scrollbar { width: 14px; height: 14px; background: var(--background); }
-:root[data-theme='pixel'] ::-webkit-scrollbar-track { background: var(--background); box-shadow: inset 2px 0 0 var(--border); }
-:root[data-theme='pixel'] ::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--accent) 45%, var(--surface)); border: 2px solid var(--background); }
-:root[data-theme='pixel'] ::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--accent) 65%, var(--surface)); }
-:root[data-theme='pixel'] ::-webkit-scrollbar-thumb:active { background: var(--accent); }
-:root[data-theme='pixel'] ::-webkit-scrollbar-corner { background: var(--background); }
-:root[data-theme='pixel'] ::-webkit-scrollbar-button { display: none; }
-:root[data-theme='pixel'] ::-webkit-scrollbar-button:vertical:start:decrement, :root[data-theme='pixel'] ::-webkit-scrollbar-button:vertical:end:increment, :root[data-theme='pixel'] ::-webkit-scrollbar-button:horizontal:start:decrement, :root[data-theme='pixel'] ::-webkit-scrollbar-button:horizontal:end:increment {
+:root[data-pixel], :root[data-pixel] * { scrollbar-width: auto; scrollbar-color: auto; }
+:root[data-pixel] ::-webkit-scrollbar { width: 14px; height: 14px; background: var(--background); }
+:root[data-pixel] ::-webkit-scrollbar-track { background: var(--background); box-shadow: inset 2px 0 0 var(--border); }
+:root[data-pixel] ::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--accent) 45%, var(--surface)); border: 2px solid var(--background); }
+:root[data-pixel] ::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--accent) 65%, var(--surface)); }
+:root[data-pixel] ::-webkit-scrollbar-thumb:active { background: var(--accent); }
+:root[data-pixel] ::-webkit-scrollbar-corner { background: var(--background); }
+:root[data-pixel] ::-webkit-scrollbar-button { display: none; }
+:root[data-pixel] ::-webkit-scrollbar-button:vertical:start:decrement, :root[data-pixel] ::-webkit-scrollbar-button:vertical:end:increment, :root[data-pixel] ::-webkit-scrollbar-button:horizontal:start:decrement, :root[data-pixel] ::-webkit-scrollbar-button:horizontal:end:increment {
   display: block; width: 14px; height: 14px; background-color: var(--background); background-repeat: no-repeat; background-image: linear-gradient(var(--muted), var(--muted)), linear-gradient(var(--muted), var(--muted)), linear-gradient(var(--muted), var(--muted)); }
-:root[data-theme='pixel'] ::-webkit-scrollbar-button:vertical:start:decrement { background-size: 2px 2px, 6px 2px, 10px 2px; background-position: 6px 4px, 4px 6px, 2px 8px; }
-:root[data-theme='pixel'] ::-webkit-scrollbar-button:vertical:end:increment { background-size: 10px 2px, 6px 2px, 2px 2px; background-position: 2px 4px, 4px 6px, 6px 8px; }
-:root[data-theme='pixel'] ::-webkit-scrollbar-button:horizontal:start:decrement { background-size: 2px 2px, 2px 6px, 2px 10px; background-position: 4px 6px, 6px 4px, 8px 2px; }
-:root[data-theme='pixel'] ::-webkit-scrollbar-button:horizontal:end:increment { background-size: 2px 10px, 2px 6px, 2px 2px; background-position: 4px 2px, 6px 4px, 8px 6px; }
+:root[data-pixel] ::-webkit-scrollbar-button:vertical:start:decrement { background-size: 2px 2px, 6px 2px, 10px 2px; background-position: 6px 4px, 4px 6px, 2px 8px; }
+:root[data-pixel] ::-webkit-scrollbar-button:vertical:end:increment { background-size: 10px 2px, 6px 2px, 2px 2px; background-position: 2px 4px, 4px 6px, 6px 8px; }
+:root[data-pixel] ::-webkit-scrollbar-button:horizontal:start:decrement { background-size: 2px 2px, 2px 6px, 2px 10px; background-position: 4px 6px, 6px 4px, 8px 2px; }
+:root[data-pixel] ::-webkit-scrollbar-button:horizontal:end:increment { background-size: 2px 10px, 2px 6px, 2px 2px; background-position: 4px 2px, 6px 4px, 8px 6px; }
 /* Motion in square steps, like an old screen: every animation and transition jumps in a few frames instead of gliding,
    and animations a little faster than in the standard theme (one duration for all; staggering delays stay). The long,
    repeating ones keep their own pace below, only in steps. */
-:root[data-theme='pixel'] *, :root[data-theme='pixel'] *::before, :root[data-theme='pixel'] *::after {
+:root[data-pixel] *, :root[data-pixel] *::before, :root[data-pixel] *::after {
   animation-duration: 160ms !important; animation-timing-function: steps(8, end) !important;
   /* Transitions only change how they move: a global duration would give every element transitions on all properties. */
   transition-timing-function: steps(6, end) !important;
 }
-:root[data-theme='pixel'] .cal-item-time.is-scrolling span { animation-duration: var(--duration) !important; animation-timing-function: steps(48, end) !important; }
-:root[data-theme='pixel'] .planner-day.is-pending { animation-duration: 1.2s !important; }
-:root[data-theme='pixel'] .status-dot.just-saved { animation-duration: 900ms !important; }
-:root[data-theme='pixel'] .reminder-icon > .icon { animation-duration: 500ms !important; animation-timing-function: steps(12, end) !important; }
+:root[data-pixel] .cal-item-time.is-scrolling span { animation-duration: var(--duration) !important; animation-timing-function: steps(48, end) !important; }
+:root[data-pixel] .planner-day.is-pending { animation-duration: 1.2s !important; }
+:root[data-pixel] .status-dot.just-saved { animation-duration: 900ms !important; }
+:root[data-pixel] .reminder-icon > .icon { animation-duration: 500ms !important; animation-timing-function: steps(12, end) !important; }
 /* Removing from the orbit: the question unrolls out of the trash square in square steps (the standard rounded clip
    would snap to square only at its end). */
-:root[data-theme='pixel'] .scope-choice.is-satellite { animation: scope-extend-pixel 180ms steps(8, end); animation-duration: 180ms !important; animation-timing-function: steps(8, end) !important; }
+:root[data-pixel] .scope-choice.is-satellite { animation: scope-extend-pixel 180ms steps(8, end); animation-duration: 180ms !important; animation-timing-function: steps(8, end) !important; }
 @keyframes scope-extend-pixel { from { clip-path: inset(0 calc(100% - 30px) 0 0); } to { clip-path: inset(0); } }
 /* Orbit: the smooth stroke becomes a ring of square pixels whose arcs appear clockwise in quick steps. The satellites
    and clusters keep their path but move in a fraction of the standard time (the springs would crawl in steps). */
 .dock-orbit-pixel { display: none; }
-:root[data-theme='pixel'] .actions-orbit .dock-orbit circle { display: none; }
-:root[data-theme='pixel'] .actions-orbit .dock-orbit-pixel { display: initial; fill: var(--hover); shape-rendering: crispEdges; }
-:root[data-theme='pixel'] .actions-orbit .dock-orbit-pixel path { opacity: 0; transition: opacity 0s; }
-:root[data-theme='pixel'] .actions-orbit .is-open .dock-orbit-pixel path { opacity: 1; transition-delay: calc(var(--i) * 10ms); }
-:root[data-theme='pixel'] .actions-orbit .dock-satellite { transition-duration: 90ms, 60ms, 0s, 0s, 0s; }
-:root[data-theme='pixel'] .actions-orbit .is-open .dock-satellite {
+:root[data-pixel] .actions-orbit .dock-orbit circle { display: none; }
+:root[data-pixel] .actions-orbit .dock-orbit-pixel { display: initial; fill: var(--hover); shape-rendering: crispEdges; }
+:root[data-pixel] .actions-orbit .dock-orbit-pixel path { opacity: 0; transition: opacity 0s; }
+:root[data-pixel] .actions-orbit .is-open .dock-orbit-pixel path { opacity: 1; transition-delay: calc(var(--i) * 10ms); }
+:root[data-pixel] .actions-orbit .dock-satellite { transition-duration: 90ms, 60ms, 0s, 0s, 0s; }
+:root[data-pixel] .actions-orbit .is-open .dock-satellite {
   transition-duration: 120ms, 40ms, 0s, 0s, 0s;
   transition-delay: calc(var(--i, 0) * 15ms), calc(var(--i, 0) * 15ms), 0s, 0s, 0s; }
-:root[data-theme='pixel'] .actions-orbit :is(.dock-planning, .dock-kind) { transition-duration: 90ms, 60ms; }
-:root[data-theme='pixel'] .actions-orbit .is-open :is(.dock-planning, .dock-kind) { transition-duration: 120ms, 40ms; transition-delay: 60ms; }
-:root[data-theme='pixel'] .actions-orbit .is-open .dock-kind { transition-delay: 30ms; }
-:root[data-theme='pixel'] .actions-orbit .entry-dock-shell { transition-delay: 100ms; }
-:root[data-theme='pixel'] .actions-orbit .entry-dock-shell.is-open { transition-delay: 0s; }
+:root[data-pixel] .actions-orbit :is(.dock-planning, .dock-kind) { transition-duration: 90ms, 60ms; }
+:root[data-pixel] .actions-orbit .is-open :is(.dock-planning, .dock-kind) { transition-duration: 120ms, 40ms; transition-delay: 60ms; }
+:root[data-pixel] .actions-orbit .is-open .dock-kind { transition-delay: 30ms; }
+:root[data-pixel] .actions-orbit .entry-dock-shell { transition-delay: 100ms; }
+:root[data-pixel] .actions-orbit .entry-dock-shell.is-open { transition-delay: 0s; }

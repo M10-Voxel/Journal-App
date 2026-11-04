@@ -47,8 +47,8 @@ function useCards() {
   return { cards, patch, error };
 }
 function usePixelTheme() {
-  const [pixel, setPixel] = useState(document.documentElement.dataset.theme === 'pixel');
-  useEffect(() => { const observer = new MutationObserver(() => setPixel(document.documentElement.dataset.theme === 'pixel')); observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] }); return () => observer.disconnect(); }, []);
+  const [pixel, setPixel] = useState(document.documentElement.dataset.pixel !== undefined);
+  useEffect(() => { const observer = new MutationObserver(() => setPixel(document.documentElement.dataset.pixel !== undefined)); observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-pixel'] }); return () => observer.disconnect(); }, []);
   return pixel;
 }
 function Note({ card, patch }: { card: Card; patch: (id: string, value: Partial<Card>) => unknown }) {

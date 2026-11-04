@@ -177,19 +177,19 @@
 .color-field .color-well { width: 30px; height: 30px; }
 
 /* Pixel: hard edges and offset shadows like the other panels, square thumbs and dots, the terminal face a size up. */
-:root[data-theme='pixel'] .popover { outline: 1px solid var(--edge); outline-offset: 1px; box-shadow: 3px 3px 0 var(--border), 5px 5px 0 #0008; animation-timing-function: steps(3); }
-:root[data-theme='pixel'] .color-picker-thumb { width: 12px; height: 12px; margin: -6px 0 0 -6px; box-shadow: 0 0 0 2px #fff, 0 0 0 4px #000; }
-:root[data-theme='pixel'] .color-picker-bar { height: 14px; }
-:root[data-theme='pixel'] .color-picker-bar .color-picker-thumb { width: 8px; height: 18px; margin: -9px 0 0 -4px; }
-:root[data-theme='pixel'] :is(.color-well > span, .color-picker-compare, .color-picker-bar.is-alpha) { background-size: 8px 8px; image-rendering: pixelated; }
-:root[data-theme='pixel'] .color-picker-swatches button[aria-pressed='true'] { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--strong); }
-:root[data-theme='pixel'] :is(.color-picker-hex, .color-picker-alpha, .tag-filter-count, .entry-hidden-count, .popover kbd, .tag-row-key) { font-size: 15px; }
-:root[data-theme='pixel'] .tag-filter-dots i + i { margin-left: 1px; }
-:root[data-theme='pixel'] .tag-filter-dots i { box-shadow: none; }
-:root[data-theme='pixel'] .entry.has-tag::after { width: 2px; opacity: 1; background: repeating-linear-gradient(var(--tag) 0 4px, transparent 4px 6px); }
-:root[data-theme='pixel'] .tag-row { box-shadow: inset 4px 0 var(--tag), inset 0 0 0 1px var(--edge); }
-:root[data-theme='pixel'] .cal-composer.has-tag::before { left: 10px; right: 10px; height: 3px; }
-:root[data-theme='pixel'] .entry-tag, :root[data-theme='pixel'] .tag-row-sample { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tag) 45%, transparent); }
+:root[data-pixel] .popover { outline: 1px solid var(--edge); outline-offset: 1px; box-shadow: 3px 3px 0 var(--border), 5px 5px 0 #0008; animation-timing-function: steps(3); }
+:root[data-pixel] .color-picker-thumb { width: 12px; height: 12px; margin: -6px 0 0 -6px; box-shadow: 0 0 0 2px #fff, 0 0 0 4px #000; }
+:root[data-pixel] .color-picker-bar { height: 14px; }
+:root[data-pixel] .color-picker-bar .color-picker-thumb { width: 8px; height: 18px; margin: -9px 0 0 -4px; }
+:root[data-pixel] :is(.color-well > span, .color-picker-compare, .color-picker-bar.is-alpha) { background-size: 8px 8px; image-rendering: pixelated; }
+:root[data-pixel] .color-picker-swatches button[aria-pressed='true'] { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--strong); }
+:root[data-pixel] :is(.color-picker-hex, .color-picker-alpha, .tag-filter-count, .entry-hidden-count, .popover kbd, .tag-row-key) { font-size: 15px; }
+:root[data-pixel] .tag-filter-dots i + i { margin-left: 1px; }
+:root[data-pixel] .tag-filter-dots i { box-shadow: none; }
+:root[data-pixel] .entry.has-tag::after { width: 2px; opacity: 1; background: repeating-linear-gradient(var(--tag) 0 4px, transparent 4px 6px); }
+:root[data-pixel] .tag-row { box-shadow: inset 4px 0 var(--tag), inset 0 0 0 1px var(--edge); }
+:root[data-pixel] .cal-composer.has-tag::before { left: 10px; right: 10px; height: 3px; }
+:root[data-pixel] .entry-tag, :root[data-pixel] .tag-row-sample { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tag) 45%, transparent); }
 
 /* Calendar entries as tinted cards: the colour (tag, else the kind's) fills them lightly and draws a thin outline.
    A bar on the left only marks priority. */
@@ -217,14 +217,6 @@
 :root .cal-item .cal-item-time { background: color-mix(in srgb, var(--tone) 34%, var(--background)); color: var(--strong); }
 
 /* The field that opens the description */
-.cal-item-note { display: grid; flex: none; place-items: center; width: 16px; height: 14px; margin-left: auto; border-radius: 4px; color: color-mix(in srgb, var(--tone) 55%, var(--strong));
-  background: color-mix(in srgb, var(--tone) 22%, transparent); cursor: pointer; transition: background-color var(--fast) ease, transform 200ms var(--spring); }
-.cal-item-note .icon { width: 10px !important; height: 10px !important; color: inherit !important; position: static !important; }
-.cal-item-note:hover, .cal-item-note.is-open { background: color-mix(in srgb, var(--tone) 42%, transparent); color: var(--strong); }
-.cal-item-note:active { transform: scale(.88); }
-.cal-item-note:focus-visible { outline: 1.5px solid var(--accent); outline-offset: 1px; }
-.cal-item.is-block .cal-item-note { position: absolute; left: 6px; bottom: 5px; margin: 0; }
-.cal-item.is-block.is-short .cal-item-note { left: auto; bottom: auto; top: 2px; right: 22px; }
 .cal-details { width: 280px; padding: 10px 12px 6px; }
 .cal-details-head { display: flex; align-items: flex-start; gap: 8px; }
 .cal-details-head .icon { flex: none; width: 13px; height: 13px; margin-top: 2px; color: var(--tag, var(--accent)); }
@@ -234,9 +226,8 @@
 .cal-details-text { max-height: 260px; margin: 10px 0 4px; padding: 8px 10px; overflow: auto; border-radius: 7px; background: var(--inset); box-shadow: inset 0 0 0 1px var(--edge); color: var(--text); font: 12.5px/1.5 var(--write, var(--sans)); white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
 
 /* Pixel: square cards with a hard outline, the description in the terminal face. */
-:root[data-theme='pixel'] .cal-item:is(.is-block, .is-event, .has-tag) { box-shadow: inset 0 0 0 1px var(--tone), 2px 2px 0 #0008; }
-:root[data-theme='pixel'] .cal-item.is-priority:is(.is-block, .is-event, .has-tag) { box-shadow: inset 3px 0 var(--priority), inset 0 0 0 1px var(--tone), 2px 2px 0 #0008; }
-:root[data-theme='pixel'] .cal-item-note { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 60%, transparent); }
-:root[data-theme='pixel'] .cal-details-text { font-size: 16px; line-height: 1.3; }
-:root[data-theme='pixel'] .cal-details-meta { font-size: 14px; }
-:root[data-theme='pixel'] .cal-details-head strong { font-size: 14px; }
+:root[data-pixel] .cal-item:is(.is-block, .is-event, .has-tag) { box-shadow: inset 0 0 0 1px var(--tone), 2px 2px 0 #0008; }
+:root[data-pixel] .cal-item.is-priority:is(.is-block, .is-event, .has-tag) { box-shadow: inset 3px 0 var(--priority), inset 0 0 0 1px var(--tone), 2px 2px 0 #0008; }
+:root[data-pixel] .cal-details-text { font-size: 16px; line-height: 1.3; }
+:root[data-pixel] .cal-details-meta { font-size: 14px; }
+:root[data-pixel] .cal-details-head strong { font-size: 14px; }

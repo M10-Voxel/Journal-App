@@ -133,6 +133,23 @@ export function pickedDays(range: { from: string; to: string } | null, toggled: 
   return [...inRange].sort();
 }
 
+export type DayRange = { from: string; to: string };
+/**
+ * Choosing several days with clicks. Without a range the first click starts one (`pending`: its other end follows the
+ * pointer until the next click). With a range, a click before or after it moves that end there, a click inside moves the
+ * nearer end, and a click on an end picks that end up again (the other one stays as the anchor).
+ */
+export function adjustRange(range: DayRange | null, pending: string | null, date: string): { range: DayRange; pending: string | null } {
+  if (pending) return { range: date < pending ? { from: date, to: pending } : { from: pending, to: date }, pending: null };
+  if (!range) return { range: { from: date, to: date }, pending: date };
+  if (date === range.from) return { range, pending: range.to };
+  if (date === range.to) return { range, pending: range.from };
+  if (date < range.from) return { range: { from: date, to: range.to }, pending: null };
+  if (date > range.to) return { range: { from: range.from, to: date }, pending: null };
+  const toStart = datesBetween(range.from, date).length, toEnd = datesBetween(date, range.to).length;
+  return { range: toStart <= toEnd ? { from: date, to: range.to } : { from: range.from, to: date }, pending: null };
+}
+
 /** Removing, finishing or cancelling an entry that belongs to a linked group may reach more of it. */
 export type ScopeAction = 'remove' | 'done' | 'cancelled';
 /** What ScopeChoice asks about: one of those actions, or applying an edit made in the calendar. */

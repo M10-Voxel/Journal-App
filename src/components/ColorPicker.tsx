@@ -13,11 +13,11 @@ import { Popover } from './Popover';
 
 /** Whether the pixel theme is on (it can change while a picker is open, from another window). */
 function usePixelTheme(): boolean {
-  const read = () => document.documentElement.dataset.theme === 'pixel';
+  const read = () => document.documentElement.dataset.pixel !== undefined;
   const [pixel, setPixel] = useState(read);
   useEffect(() => {
     const observer = new MutationObserver(() => setPixel(read()));
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-pixel'] });
     return () => observer.disconnect();
   }, []);
   return pixel;

@@ -515,7 +515,7 @@ async function checkLanguage() {
   await until("document.documentElement.lang==='en' && document.querySelector('#settings-appearance-tab').textContent==='Appearance'");
   assert.equal(await evaluate("document.querySelector('.entry-text').value"),draft,'Switching languages preserves unsaved user content.');
   assert.equal(await evaluate("JSON.parse(localStorage.getItem('journal.settings')).language"),'en');
-  assert.equal(await evaluate("document.querySelector('#settings-language').textContent"),'Display language');
+  assert.equal(await evaluate("document.querySelector('#settings-language').textContent"),'Language');
   await pause(300); await screenshot('language-english-settings.png');
   await key('Escape');
   assert.match(await evaluate("document.querySelector('.document-header h1').textContent"),/Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday/);
@@ -670,8 +670,8 @@ async function checkColors() {
   assert.equal(saved.customColors.green['md-red'],'#ffbbaa');
   await openSettings();
   await evaluate("document.querySelector('#settings-appearance-tab').click()");
-  await until("Boolean(document.querySelector('[data-theme-choice=pixel]'))");
-  await evaluate("document.querySelector('[data-theme-choice=pixel]').click()");
+  await until("Boolean(document.querySelector('[data-pixel-toggle]'))");
+  await evaluate("(() => { const s=document.querySelector('[data-pixel-toggle]'); if (s.getAttribute('aria-checked')!=='true') s.click(); })()");
   assert.equal(await token('accent'),'#aeff00','Pixel and Classic share the chosen palette.');
   await evaluate("document.querySelector('[data-language=en]').click()");
   await evaluate("document.querySelector('#settings-colors-tab').click()");
@@ -682,7 +682,7 @@ async function checkColors() {
   await pause(150); await screenshot('colors-green-pixel-journal.png');
   for (const window of ['calendar','mini','reminder']) {
     await command('Page.navigate',{url:`${origin}/?window=${window}`});
-    await until("document.documentElement.dataset.colorTheme==='green' && document.documentElement.dataset.theme==='pixel'");
+    await until("document.documentElement.dataset.colorTheme==='green' && document.documentElement.dataset.pixel!==undefined");
     assert.equal(await token('md-red'),'#ffbbaa');
     // A window already open must also update from the device event without losing its content.
     await evaluate("window.__uiTest.emit('journal:colors',{colorTheme:'original',customColors:{}})");
@@ -707,7 +707,7 @@ async function checkColors() {
   await pause(200); await screenshot('colors-summer-pixel-journal.png');
   for (const window of ['calendar','mini','reminder']) {
     await command('Page.navigate',{url:`${origin}/?window=${window}`});
-    await until("document.documentElement.dataset.colorTheme==='summer' && document.documentElement.dataset.theme==='pixel'");
+    await until("document.documentElement.dataset.colorTheme==='summer' && document.documentElement.dataset.pixel!==undefined");
     assert.equal(await token('md-blue'),'#82ddff');
   }
   await command('Page.navigate',{url:origin});
@@ -724,6 +724,7 @@ async function checkColors() {
   await evaluate("document.querySelector('#settings-appearance-tab').click()");
   await until("Boolean(document.querySelector('[data-theme-choice=classic]'))");
   await evaluate("document.querySelector('[data-theme-choice=classic]').click()");
+  await evaluate("(() => { const s=document.querySelector('[data-pixel-toggle]'); if (s.getAttribute('aria-checked')==='true') s.click(); })()");
   await evaluate("document.querySelector('[data-language=de]').click()");
   await until("document.documentElement.dataset.colorTheme==='original' && document.documentElement.dataset.theme==='classic' && document.documentElement.lang==='de'");
   await key('Escape');
@@ -936,12 +937,13 @@ async function checkTags() {
   await key('Enter', 'Enter');
   await until("!document.querySelector('.cal-composer') && document.querySelectorAll('.entry[data-tag=Sport]').length===2");
 
-  // An entry with a description shows a small field; a click opens the description in its own card, not the journal.
+  // A click on an entry opens its description in its own card, not the journal.
   await key('s', 'KeyS', 2);
   await until("!document.querySelector('.save-status.is-dirty')");
   await evaluate("(() => { const day = window.__uiTest.day(); day.entries.find(entry => entry.text === 'Kaffee am Nachmittag').description = 'Mit Anna im Café am Markt, Kuchen mitbringen.'; return window.__uiTest.store(day); })()");
-  await until("Boolean(document.querySelector('.sidebar .cal-item .cal-item-note'))");
-  await evaluate("document.querySelector('.sidebar .cal-item .cal-item-note').click()");
+  const coffee = "[...document.querySelectorAll('.sidebar .cal-item')].find(item => item.textContent.includes('Kaffee am Nachmittag'))";
+  await until(`Boolean(${coffee})`);
+  await evaluate(`${coffee}.click()`);
   await until("document.querySelector('.cal-details-text')?.textContent.startsWith('Mit Anna')");
   await pause(150); await screenshot('calendar-description.png');
   await key('Escape');
@@ -958,9 +960,9 @@ async function checkTags() {
 
   // Pixel: the same, drawn in coarse pixels.
   await evaluate("document.querySelector('#settings-appearance-tab').click()");
-  await until("Boolean(document.querySelector('[data-theme-choice=pixel]'))");
-  await evaluate("document.querySelector('[data-theme-choice=pixel]').click()");
-  await until("document.documentElement.dataset.theme==='pixel'");
+  await until("Boolean(document.querySelector('[data-pixel-toggle]'))");
+  await evaluate("(() => { const s=document.querySelector('[data-pixel-toggle]'); if (s.getAttribute('aria-checked')!=='true') s.click(); })()");
+  await until("document.documentElement.dataset.pixel!==undefined");
   await evaluate("document.querySelector('#settings-tags-tab').click()");
   await until("Boolean(document.querySelector('[data-tag-row=Arbeit] .color-well'))");
   await evaluate("document.querySelector('[data-tag-row=Arbeit] .color-well').click()");
@@ -986,12 +988,12 @@ async function checkPixelTheme() {
   const colors = await palette();
   const layout = await evaluate("[document.querySelector('.sidebar').getBoundingClientRect().width,document.querySelector('.topbar').getBoundingClientRect().height]");
   await key(',', 'Comma', 2);
-  await until("Boolean(document.querySelector('[data-theme-choice=pixel]'))");
-  await evaluate("document.querySelector('[data-theme-choice=pixel]').click()");
-  await until("document.documentElement.dataset.theme==='pixel'");
+  await until("Boolean(document.querySelector('[data-pixel-toggle]'))");
+  await evaluate("(() => { const s=document.querySelector('[data-pixel-toggle]'); if (s.getAttribute('aria-checked')!=='true') s.click(); })()");
+  await until("document.documentElement.dataset.pixel!==undefined");
   await evaluate("Promise.all([document.fonts.load('400 16px VT323'),document.fonts.load('400 13px \"Pixelify Sans\"')])");
   assert.deepEqual(await palette(),colors, 'The pixel theme preserves every palette token.');
-  assert.equal(await evaluate("document.querySelector('[data-theme-choice=pixel]').getAttribute('aria-checked')"),'true');
+  assert.equal(await evaluate("document.querySelector('[data-pixel-toggle]').getAttribute('aria-checked')"),'true');
   assert(await evaluate("[...document.querySelectorAll('.theme-options button')].every(button=>button.scrollWidth<=button.clientWidth+1)"));
   await pause(250); await screenshot('pixel-settings.png');
   await command('Emulation.setDeviceMetricsOverride',{width:760,height:520,deviceScaleFactor:1,mobile:false});
@@ -1015,7 +1017,7 @@ async function checkPixelTheme() {
   await screenshot('pixel-orbit.png');
   await key('Escape');
   await command('Page.reload');
-  await until("document.documentElement.dataset.theme==='pixel' && document.querySelectorAll('.entry').length===5");
+  await until("document.documentElement.dataset.pixel!==undefined && document.querySelectorAll('.entry').length===5");
   await evaluate("document.querySelector('.entry-text').focus()");
   await command('Input.insertText', { text:'Pixel ÄÖÜ äöü ß – lesbar' });
   await saveNow();
@@ -1043,7 +1045,7 @@ async function checkPixelTheme() {
   await key('Enter');
   await until("!document.querySelector('.cal-composer') && window.__uiTest.day().entries.some(entry=>entry.text==='Pixel-Termin')");
   await command('Page.navigate',{url:`${origin}/?window=calendar`});
-  await until("document.documentElement.dataset.theme==='pixel' && Boolean(document.querySelector('.cal'))");
+  await until("document.documentElement.dataset.pixel!==undefined && Boolean(document.querySelector('.cal'))");
   // Cross-window events also update windows already open, without reloading their content.
   await evaluate("window.__uiTest.emit('journal:theme','classic')");
   await until("document.documentElement.dataset.theme==='classic'");
@@ -1052,6 +1054,7 @@ async function checkPixelTheme() {
   await key(',', 'Comma', 2);
   await until("Boolean(document.querySelector('[data-theme-choice=classic]'))");
   await evaluate("document.querySelector('[data-theme-choice=classic]').click()");
+  await evaluate("(() => { const s=document.querySelector('[data-pixel-toggle]'); if (s.getAttribute('aria-checked')==='true') s.click(); })()");
   await until("document.documentElement.dataset.theme==='classic'");
   await key('Escape');
   console.log('Pixel theme checks passed: unchanged palette/layout, bundled mono font, saved preference, editing/saving, shortcuts, calendar drawing and cross-window synchronization.');
@@ -1068,7 +1071,9 @@ async function checkJournalTheme() {
   // Choosing the style brings the paper palette and the book (a spread: entries | data).
   await key(',', 'Comma', 2);
   await until("Boolean(document.querySelector('[data-theme-choice=journal]'))");
-  assert.equal(await evaluate("document.querySelectorAll('.theme-options button').length"), 3);
+  // Two designs (normal, journal); the pixel look is a switch over either.
+  assert.deepEqual(await evaluate("[...document.querySelectorAll('.theme-options button')].map(b => b.dataset.themeChoice)"), ['classic', 'journal']);
+  assert.equal(await evaluate("document.querySelector('[data-pixel-toggle]').getAttribute('role')"), 'switch');
   await evaluate("document.querySelector('[data-theme-choice=journal]').click()");
   await until("document.documentElement.dataset.theme==='journal' && document.documentElement.dataset.colorTheme==='paper'");
   assert.equal(await evaluate("getComputedStyle(document.documentElement).getPropertyValue('--background').trim()"), '#f3ecdc');
@@ -1301,6 +1306,7 @@ async function checkJournalTheme() {
   await key(',', 'Comma', 2);
   await until("Boolean(document.querySelector('[data-theme-choice=classic]'))");
   await evaluate("document.querySelector('[data-theme-choice=classic]').click()");
+  await evaluate("(() => { const s=document.querySelector('[data-pixel-toggle]'); if (s.getAttribute('aria-checked')==='true') s.click(); })()");
   await until("document.documentElement.dataset.theme==='classic' && document.documentElement.dataset.colorTheme==='original'");
   await key('Escape');
   await until("Boolean(document.querySelector('.sidebar')) && !document.querySelector('.book-stage')");
@@ -1855,8 +1861,12 @@ async function checkCalendars() {
   await hoverAt(`[...${cell(tomorrow)}.querySelectorAll('.cal-item')][1]`);
   await until(`${timeOf(1)} === '1'`);
   assert.equal(await evaluate(`(() => { const item=[...${cell(tomorrow)}.querySelectorAll('.cal-item')][1], time=item.querySelector('.cal-item-time').getBoundingClientRect(), box=item.getBoundingClientRect(); return Math.abs(time.right - box.right) < 4 && Math.abs(time.bottom - box.bottom) < 4 && !item.querySelector('.cal-item-time').classList.contains('is-scrolling'); })()`), true, 'It sits in the bottom right corner and fits.');
+  // A click shows the entry's details in a card (the journal opens from the day number).
   await evaluate(`[...${cell(tomorrow)}.querySelectorAll('.cal-item')][1].click()`);
-  assert.deepEqual(await evaluate(lastCall), ['show_day', { date:tomorrow, entry:'20000000-0000-4000-8000-000000000001' }], 'An entry opens in the journal.');
+  await until("Boolean(document.querySelector('.popover.cal-details'))");
+  assert.equal(await evaluate("getComputedStyle(document.querySelector('.popover.cal-details')).borderRadius"), await evaluate("getComputedStyle(document.documentElement).getPropertyValue('--popup-radius').trim()"), 'The card is a popup like the others.');
+  await key('Escape');
+  await until("!document.querySelector('.popover.cal-details')");
 
   // The journal saving a day shows up at once.
   await evaluate(`window.__uiTest.store({ ...window.__uiTest.day('${today}'), entries:[...window.__uiTest.day('${today}').entries, { id:'30000000-0000-4000-8000-000000000001', kind:'event', text:'Spontan dazu', done:false, cancelled:false, priority:false, time:'20:00', reminder:false, plan:null }] })`);
@@ -2005,7 +2015,21 @@ try {
   await until("document.querySelectorAll('.entry').length === 5");
   await pause(250);
   await evaluate('document.fonts.ready.then(() => true)');
-  if (process.env.JOURNAL_UI_SCOPE === 'journal-layout') {
+  if (process.env.JOURNAL_UI_SCOPE === 'allday-columns') {
+    for (const viewIndex of [2,3,4]) {
+      await evaluate(`document.querySelectorAll('.sidebar .cal-views [role=tab]')[${viewIndex}].click()`);
+      await until("Boolean(document.querySelector('.sidebar .cal-time-allday-cell'))");
+      for (const theme of ['classic','journal']) for (const pixel of [false,true]) {
+        await evaluate(`document.documentElement.dataset.theme='${theme}';if(${pixel})document.documentElement.dataset.pixel='';else delete document.documentElement.dataset.pixel;`);
+        await pause(80);
+        const aligned=await evaluate(`(() => {const root=document.querySelector('.sidebar .cal'),corner=root.querySelector('.cal-time-allday > .cal-time-corner').getBoundingClientRect(),week=root.querySelector('.cal-time-head > .cal-time-corner').getBoundingClientRect(),cells=[...root.querySelectorAll('.cal-time-allday-cell')],headers=[...root.querySelectorAll('.cal-time-day')],timed=[...root.querySelectorAll('.cal-time-column')];return Math.abs(corner.left-week.left)<1 && cells.every((cell,i)=>{const r=cell.getBoundingClientRect(),h=headers[i].getBoundingClientRect(),t=timed[i].getBoundingClientRect();return Math.abs(r.left-h.left)<1 && Math.abs(r.width-h.width)<1 && Math.abs(r.left-t.left)<1;});})()`);
+        assert(aligned,`All-day columns align with weekdays: view ${viewIndex}, ${theme}, pixel=${pixel}`);
+      }
+    }
+    await screenshot('allday-columns.png');
+    assert.deepEqual(errors,[]);
+    console.log('All-day column alignment passed for week, workweek and day, with both designs and pixel on/off.');
+  } else if (process.env.JOURNAL_UI_SCOPE === 'journal-layout') {
     await evaluate("localStorage.setItem('journal.settings',JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'),theme:'journal',colorTheme:'paper'}));localStorage.setItem('journal.calendarDrawer','1')");
     await command('Page.navigate',{url:`http://127.0.0.1:${server.address().port}/`});
     await until("Boolean(document.querySelector('.calendar-drawer.is-overlay.is-open'))");await pause(500);
@@ -2096,6 +2120,17 @@ try {
     await evaluate("document.querySelector('.book-register-tab[data-period-mode=week]').click()");
     await until("document.querySelector('.book-page:not(.is-outgoing)')?.dataset.page==='notes'"); await pause(600);
     await screenshot('journal-sheet-week.png');
+    // The journal with the pixel look: still the book, in the pixel type.
+    await evaluate("document.querySelector('.book-register-tab[data-period-mode=day]').click()");
+    await key(',', 'Comma', 2);
+    await until("Boolean(document.querySelector('[data-pixel-toggle]'))");
+    await evaluate("document.querySelector('[data-pixel-toggle]').click()");
+    await key('Escape');
+    await until("!document.querySelector('.settings') && document.documentElement.dataset.pixel!==undefined && document.documentElement.dataset.theme==='journal'"); await pause(500);
+    assert(await evaluate("Boolean(document.querySelector('.book-page .book-nav'))"));
+    assert.match(await evaluate("getComputedStyle(document.querySelector('.book-nav h1')).fontFamily"), /Pixelify/);
+    assert.match(await evaluate("getComputedStyle(document.querySelector('.book-page .entry-text')).fontFamily"), /VT323/);
+    await screenshot('journal-sheet-pixel.png');
     assert.deepEqual(errors,[]);
     console.log('Journal sheet passed: navigation on the page, decluttered heads, cut register, ribbon to today, calendar tab.');
   } else if (process.env.JOURNAL_UI_SCOPE === 'journal-grid') {
@@ -2171,8 +2206,16 @@ try {
     await command('Input.dispatchMouseEvent',{type:'mouseReleased',x:points[1].x,y:points[1].y,button:'left',buttons:0,clickCount:1});
     // The normal card opens, with the span's end and everything else (kinds, tag, repeating, reminder).
     await until("Boolean(document.querySelector('.cal-composer.is-placed .cal-multi-form')) && document.activeElement===document.querySelector('.cal-composer-text')");
-    assert.equal(await evaluate("document.querySelector('.cal-multi-input.is-date').value"),points[1].date);
+    assert.equal(await evaluate("document.querySelector('.cal-multi-input.is-end').value"),points[1].date);
     assert(await evaluate("['.cal-composer-kinds','.cal-composer-repeat','.cal-composer-tag','.cal-composer-reminder','.cal-composer-priority'].every(s=>document.querySelector('.cal-composer '+s))"), 'The span uses the normal calendar card.');
+    assert(await evaluate(`document.querySelector('[data-range-date="${points[0].date}"]').hasAttribute('data-range-selected')`),'The draft stays highlighted while the popup is open.');
+    const later = new Date(Date.parse(points[0].date)+86400000).toISOString().slice(0,10);
+    const setStart = value => evaluate(`(() => {const f=document.querySelector('.cal-multi-input.is-start');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(f,${JSON.stringify(value)});f.dispatchEvent(new Event('input',{bubbles:true}));f.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+    await setStart(later);
+    await until(`document.querySelector('.cal-multi-input.is-start').value===${JSON.stringify(later)} && !document.querySelector('[data-range-date="${points[0].date}"]').hasAttribute('data-range-selected')`);
+    await setStart(points[0].date);
+    await until(`document.querySelector('[data-range-date="${points[0].date}"]').hasAttribute('data-range-selected')`);
+    await evaluate("document.querySelector('.cal-composer-text').focus()");
     await pause(300); await screenshot('multi-composer.png');
     await command('Input.insertText',{text:'Multiple days'});
     await key('Enter','Enter');
@@ -2193,7 +2236,7 @@ try {
     await pause(150);
     await command('Input.dispatchMouseEvent',{type:'mouseReleased',x:band.right,y:band.y,button:'left',buttons:0,clickCount:1});
     await until("Boolean(document.querySelector('.cal-composer .cal-multi-form'))");
-    const range=await evaluate("[document.querySelector('.cal-composer').getAttribute('aria-label'),document.querySelector('.cal-multi-input.is-date').value]");
+    const range=await evaluate("[document.querySelector('.cal-composer').getAttribute('aria-label'),document.querySelector('.cal-multi-input.is-end').value]");
     assert(Date.parse(range[1])-Date.now()>5*86400000,'Drag continues into the next week: '+JSON.stringify(range));
     console.log('Multiday UI passed: ten-day entry, top-band rendering and dragging into the next week.');
   } else if (process.env.JOURNAL_UI_SCOPE === 'calendar-actions') {
@@ -2234,7 +2277,7 @@ try {
     await until("Boolean(document.querySelector('.board-note .cm-content'))");
     await evaluate("document.querySelector('.board-note .cm-content').focus()");
     await command('Input.insertText',{text:'First line\nLast line editable'});
-    await evaluate("document.querySelector('.board-card').style.height='160px';document.querySelector('.board-card').classList.add('has-height');document.querySelector('.board-note').scrollTop=999;document.documentElement.dataset.theme='pixel'");
+    await evaluate("document.querySelector('.board-card').style.height='160px';document.querySelector('.board-card').classList.add('has-height');document.querySelector('.board-note').scrollTop=999;document.documentElement.dataset.pixel=''");
     await pause(400);
     const point=await evaluate("(() => {const l=[...document.querySelectorAll('.board-note .cm-line')].at(-1);l.scrollIntoView({block:'center'});const r=l.getBoundingClientRect();return {x:r.left+8,y:r.top+r.height/2};})()");
     await command('Input.dispatchMouseEvent',{type:'mousePressed',...point,button:'left',buttons:1,clickCount:1});
@@ -2319,7 +2362,7 @@ try {
     await pause(300); await screenshot('board-lightbox.png');
     await key('Escape');
     await until("!document.querySelector('.board-lightbox')");
-    await evaluate("document.documentElement.dataset.theme='pixel'");
+    await evaluate("document.documentElement.dataset.pixel=''");
     await until("Boolean(document.querySelector('.board-pixel-switch'))");
     await evaluate("document.querySelector('.board-pixel-switch').click()");
     await until("document.querySelector('.board-image canvas')?.width===48");
@@ -2470,10 +2513,10 @@ try {
     assert.equal(await evaluate(checklistShape), beforeLayout);
     await screenshot('period-inline.png');
     await key(',', 'Comma', 2);
-    await until("Boolean(document.querySelector('[data-theme-choice=pixel]'))");
-    await evaluate("document.querySelector('[data-theme-choice=pixel]').click()");
+    await until("Boolean(document.querySelector('[data-pixel-toggle]'))");
+    await evaluate("(() => { const s=document.querySelector('[data-pixel-toggle]'); if (s.getAttribute('aria-checked')!=='true') s.click(); })()");
     await key('Escape');
-    await until("!document.querySelector('.settings') && document.documentElement.dataset.theme==='pixel'");
+    await until("!document.querySelector('.settings') && document.documentElement.dataset.pixel!==undefined");
     await evaluate("document.querySelector('.period-item input[type=checkbox]').click()");
     await evaluate("document.querySelector('.checklist-section-heading').scrollIntoView({block:'start'})");
     await pause(300); await screenshot('period-pixel.png');
@@ -2481,14 +2524,18 @@ try {
     await key(',', 'Comma', 2);
     await until("Boolean(document.querySelector('[data-theme-choice=classic]'))");
     await evaluate("document.querySelector('[data-theme-choice=classic]').click()");
+    await evaluate("(() => { const s=document.querySelector('[data-pixel-toggle]'); if (s.getAttribute('aria-checked')==='true') s.click(); })()");
     await key('Escape');
-    await until("!document.querySelector('.settings') && document.documentElement.dataset.theme!=='pixel'");
+    await until("!document.querySelector('.settings') && document.documentElement.dataset.pixel===undefined");
     await evaluate("document.querySelector('.period-item input[type=number]').focus();document.querySelector('.period-item input[type=number]').select()");
     await command('Input.insertText',{text:'95'});
     await until("window.__uiTest.periodData?.days[window.__uiTest.date]?.items.reading.minutes===95");
     await evaluate("document.querySelector('.period-item input[type=checkbox]').click()");
     await evaluate("document.querySelectorAll('.journal-tab')[1].click()");
-    await until("document.querySelector('.activity-metrics strong')?.textContent.includes('1 h 35 min')");
+    // The week's total: the typed 95 minutes today plus the other days of this week so far.
+    const weekMinutes = await evaluate("(() => { const d=window.__uiTest.periodData.days, t=new Date(); const monday=new Date(t.getFullYear(), t.getMonth(), t.getDate() - (t.getDay()+6)%7, 12); let sum=0; for (let i=0;i<7;i++) { const x=new Date(monday.getFullYear(), monday.getMonth(), monday.getDate()+i, 12); const key=[x.getFullYear(), String(x.getMonth()+1).padStart(2,'0'), String(x.getDate()).padStart(2,'0')].join('-'); sum += d[key]?.items?.reading?.minutes ?? 0; } return sum; })()");
+    const weekText = `${Math.floor(weekMinutes / 60)} h${weekMinutes % 60 ? ` ${weekMinutes % 60} min` : ''}`;
+    await until(`document.querySelector('.activity-metrics strong')?.textContent.includes(${JSON.stringify(weekText)})`);
     await evaluate("document.querySelector('.activity-summary-card').scrollIntoView({block:'center'})");
     await screenshot('period-week-activities.png');
     await evaluate("document.querySelector('.checklist-manage').click()");
@@ -3259,7 +3306,8 @@ try {
   // Setting: the entry actions as an orbit (default), as words in the text or as gestures; the choice is remembered.
   assert.equal(await evaluate("document.querySelector('.app').classList.contains('actions-orbit')"), true, 'The orbit is the default.');
   await key(',', 'Comma', 2);
-  await until("Boolean(document.querySelector('.settings')) && document.activeElement.dataset.layout === 'orbit'");
+  // The settings open on the design, the first choice of the panel.
+  await until("Boolean(document.querySelector('.settings')) && document.activeElement.dataset.themeChoice === 'classic'");
   assert.deepEqual(await evaluate("[...document.querySelectorAll('.settings-option')].map(option => option.dataset.layout)"), ['orbit', 'inline', 'swipe'], 'The bar and the palette are gone.');
   await pause(350);
   await screenshot('settings.png');
@@ -3273,6 +3321,8 @@ try {
   await until("document.querySelectorAll('.entry').length > 0");
   assert.equal(await evaluate("document.querySelector('.app').classList.contains('actions-inline')"), true, 'The layout is remembered.');
   await evaluate("document.querySelector('.settings-button').click()");
+  await until("document.activeElement?.dataset.themeChoice === 'classic'");
+  await evaluate("document.querySelector('.settings-option[aria-checked=true]').focus()");
   await until("document.activeElement?.dataset.layout === 'inline'");
   await key('ArrowLeft');
   await until("document.querySelector('.app').classList.contains('actions-orbit') && document.activeElement.dataset.layout === 'orbit'");
@@ -3461,6 +3511,21 @@ try {
   await clickDay(days[0]);
   await until(`${row(held)}.querySelectorAll('.planner-day.is-pending').length === 1`);
   await clickDay(days[3]);
+  await until(`${row(held)}.querySelectorAll('.planner-day.in-range').length === 5 && ${row(held)}.querySelector('.planner-confirm').textContent === '5 Tage'`);
+  // The start can be moved too: clicking it picks it up, the band follows the pointer before the next click sets it.
+  await clickDay(days[0]);
+  await until(`${row(held)}.querySelectorAll('.planner-day.is-pending').length === 1`);
+  const hoverDay = async date => { const point = await evaluate(`(() => { const label=new Intl.DateTimeFormat('de-DE', { weekday:'long', day:'numeric', month:'long', year:'numeric' }).format(new Date('${date}T12:00')); const r=${row(held)}.querySelector('.planner-day[aria-label^="' + label + '"]').getBoundingClientRect(); return { x:r.left+r.width/2, y:r.top+r.height/2 }; })()`);
+    await command('Input.dispatchMouseEvent', { type:'mouseMoved', x:point.x, y:point.y }); };
+  await hoverDay(days[2]);
+  await until(`${row(held)}.querySelector('.planner-grid.is-previewing') && ${row(held)}.querySelectorAll('.planner-day.in-range').length === 3`);
+  assert.equal(await evaluate(`${row(held)}.querySelector('.planner-confirm').textContent`), '5 Tage', 'The preview is not chosen yet.');
+  await pause(200); await screenshot('multi-days-moving.png');
+  await clickDay(days[1]);
+  await until(`${row(held)}.querySelector('.planner-confirm').textContent === '4 Tage'`);
+  // … and back: the start again, then the first day.
+  await clickDay(days[1]);
+  await clickDay(days[0]);
   await until(`${row(held)}.querySelectorAll('.planner-day.in-range').length === 5 && ${row(held)}.querySelector('.planner-confirm').textContent === '5 Tage'`);
   await clickDay(excluded, true);
   await until(`${row(held)}.querySelectorAll('.planner-day.is-excluded').length === 1`);

@@ -85,4 +85,4 @@
 .drive-settings input { width:100%; min-height:32px; padding:6px 9px; border:1px solid var(--edge); border-radius:6px; background:var(--inset); color:var(--text); font:12px var(--mono); }
 .drive-settings pre { max-height:150px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; font:11px var(--mono); }
 .drive-settings details { margin:12px 0; font-size:12px; line-height:1.6; }
-:root[data-theme='pixel'] .drive-settings input { font-size:15px; }
+:root[data-pixel] .drive-settings input { font-size:15px; }

@@ -171,30 +171,30 @@
 @container journal (max-width:600px) { .activity-summary-grid.is-month, .activity-summary-grid.is-quarter { grid-template-columns:1fr; } }
 
 /* Pixel theme: square boxes with a hard offset shadow, the terminal face at the entries' sizes, crisp marks. */
-:root[data-theme='pixel'] .activity-name { font-size:16px; }
-:root[data-theme='pixel'] .period-item .activity-note-input { font-size:16px; }
-:root[data-theme='pixel'] :is(.activity-time, .activity-timer output) { font-size:14px; }
-:root[data-theme='pixel'] .rating-heading label { font-size:16px; }
-:root[data-theme='pixel'] .rating-heading output { font-size:30px; }
-:root[data-theme='pixel'] .activity-checkbox input[type=checkbox] { width:16px; height:16px; box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--activity-color) 70%,transparent), 2px 2px 0 var(--border); }
-:root[data-theme='pixel'] .activity-checkbox input[type=checkbox]:hover { box-shadow:inset 0 0 0 2px var(--activity-color), 2px 2px 0 var(--border); }
-:root[data-theme='pixel'] .activity-checkbox input[type=checkbox]:checked { box-shadow:inset 0 0 0 2px var(--activity-color), 2px 2px 0 color-mix(in srgb,var(--activity-color) 35%,var(--background)); }
-:root[data-theme='pixel'] .activity-check-mark.icon { width:12px; height:12px; }
-:root[data-theme='pixel'] .activity-checkbox input:checked + .activity-check-mark { transform:none; }
-:root[data-theme='pixel'] :is(.activity-time, .activity-timer output) { box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--activity-color) 45%,transparent); }
-:root[data-theme='pixel'] .period-item .activity-note-input:focus { box-shadow:inset 0 0 0 1px var(--edge); }
-:root[data-theme='pixel'] .period-section input[type=range]::-webkit-slider-thumb { border-radius:0; border-width:2px;box-shadow:0 0 0 2px var(--accent), 2px 2px 0 2px var(--border); }
-:root[data-theme='pixel'] .period-section input[type=range]::-webkit-slider-runnable-track { height:4px; background:repeating-linear-gradient(90deg,var(--focus) 0 6px,transparent 6px 8px); }
+:root[data-pixel] .activity-name { font-size:16px; }
+:root[data-pixel] .period-item .activity-note-input { font-size:16px; }
+:root[data-pixel] :is(.activity-time, .activity-timer output) { font-size:14px; }
+:root[data-pixel] .rating-heading label { font-size:16px; }
+:root[data-pixel] .rating-heading output { font-size:30px; }
+:root[data-pixel] .activity-checkbox input[type=checkbox] { width:16px; height:16px; box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--activity-color) 70%,transparent), 2px 2px 0 var(--border); }
+:root[data-pixel] .activity-checkbox input[type=checkbox]:hover { box-shadow:inset 0 0 0 2px var(--activity-color), 2px 2px 0 var(--border); }
+:root[data-pixel] .activity-checkbox input[type=checkbox]:checked { box-shadow:inset 0 0 0 2px var(--activity-color), 2px 2px 0 color-mix(in srgb,var(--activity-color) 35%,var(--background)); }
+:root[data-pixel] .activity-check-mark.icon { width:12px; height:12px; }
+:root[data-pixel] .activity-checkbox input:checked + .activity-check-mark { transform:none; }
+:root[data-pixel] :is(.activity-time, .activity-timer output) { box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--activity-color) 45%,transparent); }
+:root[data-pixel] .period-item .activity-note-input:focus { box-shadow:inset 0 0 0 1px var(--edge); }
+:root[data-pixel] .period-section input[type=range]::-webkit-slider-thumb { border-radius:0; border-width:2px;box-shadow:0 0 0 2px var(--accent), 2px 2px 0 2px var(--border); }
+:root[data-pixel] .period-section input[type=range]::-webkit-slider-runnable-track { height:4px; background:repeating-linear-gradient(90deg,var(--focus) 0 6px,transparent 6px 8px); }
 
 /* Ratings chart in the pixel style: square bars on a pixel grid, crisp edges, the terminal face, a hard frame. */
-:root[data-theme='pixel'] .rating-chart { border-radius:0; outline:1px solid var(--edge); outline-offset:1px; box-shadow:3px 3px 0 var(--border), 5px 5px 0 #0008; }
-:root[data-theme='pixel'] .rating-chart svg { shape-rendering:crispEdges; }
-:root[data-theme='pixel'] .rating-chart-detail { font-size:15px; }
-:root[data-theme='pixel'] .chart-label { font:15px var(--mono); }
-:root[data-theme='pixel'] .chart-grid { stroke-width:2; stroke-dasharray:2 6; }
-:root[data-theme='pixel'] .chart-column { rx:0; opacity:1; fill:color-mix(in srgb,var(--accent) 55%,var(--background)); stroke:var(--accent); stroke-width:2; paint-order:stroke; transition:none; }
-:root[data-theme='pixel'] .chart-column.is-active { fill:var(--accent); stroke:var(--strong); }
-:root[data-theme='pixel'] .chart-column[data-empty] { fill:var(--focus); stroke:none; }
-:root[data-theme='pixel'] .chart-hit:focus-visible { outline-width:2px; }
-:root[data-theme='pixel'] .rating-summary { font-size:15px; }
-:root[data-theme='pixel'] .rating-scale { font-size:13px; }
+:root[data-pixel] .rating-chart { border-radius:0; outline:1px solid var(--edge); outline-offset:1px; box-shadow:3px 3px 0 var(--border), 5px 5px 0 #0008; }
+:root[data-pixel] .rating-chart svg { shape-rendering:crispEdges; }
+:root[data-pixel] .rating-chart-detail { font-size:15px; }
+:root[data-pixel] .chart-label { font:15px var(--mono); }
+:root[data-pixel] .chart-grid { stroke-width:2; stroke-dasharray:2 6; }
+:root[data-pixel] .chart-column { rx:0; opacity:1; fill:color-mix(in srgb,var(--accent) 55%,var(--background)); stroke:var(--accent); stroke-width:2; paint-order:stroke; transition:none; }
+:root[data-pixel] .chart-column.is-active { fill:var(--accent); stroke:var(--strong); }
+:root[data-pixel] .chart-column[data-empty] { fill:var(--focus); stroke:none; }
+:root[data-pixel] .chart-hit:focus-visible { outline-width:2px; }
+:root[data-pixel] .rating-summary { font-size:15px; }
+:root[data-pixel] .rating-scale { font-size:13px; }

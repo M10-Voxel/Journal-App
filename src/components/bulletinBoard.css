@@ -117,24 +117,24 @@
 .floating-note > p { margin: 0; font: 11px var(--sans); opacity: .7; }
 
 /* Pixel: a dithered cork in two tones, square paper with hard offset shadows, square pins, no tilt, stepped motion. */
-:root[data-theme='pixel'] .board-surface { border-radius: 0; background-image: conic-gradient(var(--cork-fleck) 25%, transparent 0 50%, var(--cork-fleck) 0 75%, transparent 0), radial-gradient(var(--cork-hole) 1px, transparent 1px);
+:root[data-pixel] .board-surface { border-radius: 0; background-image: conic-gradient(var(--cork-fleck) 25%, transparent 0 50%, var(--cork-fleck) 0 75%, transparent 0), radial-gradient(var(--cork-hole) 1px, transparent 1px);
   background-size: 4px 4px, 12px 12px; background-position: 0 0, 4px 4px;
   box-shadow: inset 0 0 0 2px var(--border), inset 0 0 0 6px var(--cork-frame), inset 0 0 0 8px var(--border); image-rendering: pixelated; }
-:root[data-theme='pixel'] .board-card { border-radius: 0; box-shadow: 4px 4px 0 #000a; transition: none; animation-timing-function: steps(4); }
-:root[data-theme='pixel'] .board-card.is-moving { transform: translate(-2px, -2px); box-shadow: 8px 8px 0 #000a; }
-:root[data-theme='pixel'] .board-card:focus-visible { box-shadow: 0 0 0 2px var(--accent), 4px 4px 0 #000a; }
-:root[data-theme='pixel'] .board-pin { width: 12px; height: 12px; margin-left: -6px; top: -6px; border-radius: 0; background: linear-gradient(#fff8, #fff8) 2px 2px / 4px 4px no-repeat, var(--pin, #d9534f); box-shadow: 2px 2px 0 #0009; }
-:root[data-theme='pixel'] :is(.board-actions, .board-actions button, .board-link-form, .board-library, .board-library > button, .board-tools button, .board-lightbox figure, .board-lightbox figcaption button, .board-image) { border-radius: 0; }
-:root[data-theme='pixel'] :is(.board-link-form, .board-library) { outline: 1px solid var(--edge); outline-offset: 1px; box-shadow: 3px 3px 0 var(--border), 5px 5px 0 #0008; }
-:root[data-theme='pixel'] .board-actions { box-shadow: 0 0 0 1px var(--edge), 3px 3px 0 #0008; }
-:root[data-theme='pixel'] .board-paper i { border-radius: 0; }
-:root[data-theme='pixel'] .board-card header input, :root[data-theme='pixel'] .floating-note > header input { font-size: 14px; }
-:root[data-theme='pixel'] .board-note .entry-edit, :root[data-theme='pixel'] .board-note .cm-content { font-size: 18px; line-height: 24px; }
-:root[data-theme='pixel'] .board-caption, :root[data-theme='pixel'] .board-link small, :root[data-theme='pixel'] .board-lightbox figcaption small { font-size: 13px; }
-:root[data-theme='pixel'] .board-lightbox { backdrop-filter: none; background: repeating-conic-gradient(#000d 0 25%, #000a 0 50%) 0 0 / 4px 4px; }
-:root[data-theme='pixel'] .board-lightbox figure { box-shadow: 8px 8px 0 #000; }
-:root[data-theme='pixel'] .board-link img { border-radius: 0; image-rendering: pixelated; }
-:root[data-theme='pixel'] .floating-note { box-shadow: inset 0 0 0 2px #0003; }
+:root[data-pixel] .board-card { border-radius: 0; box-shadow: 4px 4px 0 #000a; transition: none; animation-timing-function: steps(4); }
+:root[data-pixel] .board-card.is-moving { transform: translate(-2px, -2px); box-shadow: 8px 8px 0 #000a; }
+:root[data-pixel] .board-card:focus-visible { box-shadow: 0 0 0 2px var(--accent), 4px 4px 0 #000a; }
+:root[data-pixel] .board-pin { width: 12px; height: 12px; margin-left: -6px; top: -6px; border-radius: 0; background: linear-gradient(#fff8, #fff8) 2px 2px / 4px 4px no-repeat, var(--pin, #d9534f); box-shadow: 2px 2px 0 #0009; }
+:root[data-pixel] :is(.board-actions, .board-actions button, .board-link-form, .board-library, .board-library > button, .board-tools button, .board-lightbox figure, .board-lightbox figcaption button, .board-image) { border-radius: 0; }
+:root[data-pixel] :is(.board-link-form, .board-library) { outline: 1px solid var(--edge); outline-offset: 1px; box-shadow: 3px 3px 0 var(--border), 5px 5px 0 #0008; }
+:root[data-pixel] .board-actions { box-shadow: 0 0 0 1px var(--edge), 3px 3px 0 #0008; }
+:root[data-pixel] .board-paper i { border-radius: 0; }
+:root[data-pixel] .board-card header input, :root[data-pixel] .floating-note > header input { font-size: 14px; }
+:root[data-pixel] .board-note .entry-edit, :root[data-pixel] .board-note .cm-content { font-size: 18px; line-height: 24px; }
+:root[data-pixel] .board-caption, :root[data-pixel] .board-link small, :root[data-pixel] .board-lightbox figcaption small { font-size: 13px; }
+:root[data-pixel] .board-lightbox { backdrop-filter: none; background: repeating-conic-gradient(#000d 0 25%, #000a 0 50%) 0 0 / 4px 4px; }
+:root[data-pixel] .board-lightbox figure { box-shadow: 8px 8px 0 #000; }
+:root[data-pixel] .board-link img { border-radius: 0; image-rendering: pixelated; }
+:root[data-pixel] .floating-note { box-shadow: inset 0 0 0 2px #0003; }
 @media (max-width: 600px) { .board-actions button span { display: none; } }
 /* On paper, the editor's text colours follow the ink. */
 :is(.board-card, .floating-note) { --text: var(--paper-ink); --strong: var(--paper-ink); --muted: color-mix(in srgb, var(--paper-ink) 65%, transparent); --placeholder: color-mix(in srgb, var(--paper-ink) 45%, transparent); --selection: color-mix(in srgb, var(--paper-ink) 18%, transparent); }
@@ -142,8 +142,8 @@
 :is(.board-card, .floating-note) .board-note { color: var(--paper-ink); }
 
 /* Tilted like the classic board, the pixel way: paper stays crisp-edged. */
-:root[data-theme='pixel'] .board-card { transform: rotate(var(--tilt, 0deg)); }
-:root[data-theme='pixel'] .board-card.is-moving { transform: rotate(0deg) translate(-2px, -2px); }
+:root[data-pixel] .board-card { transform: rotate(var(--tilt, 0deg)); }
+:root[data-pixel] .board-card.is-moving { transform: rotate(0deg) translate(-2px, -2px); }
 /* The floating note's handle: a strip at the pin to move the window by. */
 .floating-note-handle { position: absolute; inset: 0 0 auto; height: 14px; cursor: move; }
 .floating-note-handle .board-pin { top: 2px; }
@@ -194,16 +194,16 @@
 .format-block:hover, .format-table-action:hover { background: var(--hover); color: var(--strong); }
 .format-table-action { height: 24px; padding: 0 8px; border: 0; border-radius: 5px; background: transparent; color: var(--accent); font: 500 11.5px var(--sans); cursor: pointer; }
 /* Pixel: square boxes and cells, a terminal-black code block, the pixel faces. */
-:root[data-theme='pixel'] .md-checkbox { border-radius: 0; box-shadow: inset 0 0 0 2px currentColor; }
-:root[data-theme='pixel'] .md-checkbox.is-checked::after { border-width: 0 3px 3px 0; margin-left: 4px; }
-:root[data-theme='pixel'] .md-bullet::before { border-radius: 0; width: 6px; height: 6px; }
-:root[data-theme='pixel'] .cm-line.md-code-line { font-size: 17px !important; line-height: 22px !important; background: #111; color: #b8f28c; }
-:root[data-theme='pixel'] :is(.cm-line.md-code-top, .cm-line.md-code-bottom, .md-code-copy, .md-table-add) { border-radius: 0; }
-:root[data-theme='pixel'] .md-code-lang, :root[data-theme='pixel'] .md-code-copy { font-size: 14px; }
-:root[data-theme='pixel'] .md-table { font-size: 14px; }
-:root[data-theme='pixel'] .md-table :is(th, td) { border-width: 2px; }
-:root[data-theme='pixel'] .cm-line.md-table-source { font-size: 16px; }
-:root[data-theme='pixel'] .format-block { font-size: 15px; }
+:root[data-pixel] .md-checkbox { border-radius: 0; box-shadow: inset 0 0 0 2px currentColor; }
+:root[data-pixel] .md-checkbox.is-checked::after { border-width: 0 3px 3px 0; margin-left: 4px; }
+:root[data-pixel] .md-bullet::before { border-radius: 0; width: 6px; height: 6px; }
+:root[data-pixel] .cm-line.md-code-line { font-size: 17px !important; line-height: 22px !important; background: #111; color: #b8f28c; }
+:root[data-pixel] :is(.cm-line.md-code-top, .cm-line.md-code-bottom, .md-code-copy, .md-table-add) { border-radius: 0; }
+:root[data-pixel] .md-code-lang, :root[data-pixel] .md-code-copy { font-size: 14px; }
+:root[data-pixel] .md-table { font-size: 14px; }
+:root[data-pixel] .md-table :is(th, td) { border-width: 2px; }
+:root[data-pixel] .cm-line.md-table-source { font-size: 16px; }
+:root[data-pixel] .format-block { font-size: 15px; }
 
 /* Cards on their own layer, so menus and popovers of the app stay in front of them. */
 .board-surface { isolation: isolate; }
@@ -214,13 +214,13 @@
 .board-card.is-sizing { transition: none; transform: rotate(0deg); box-shadow: 0 0 0 1.5px var(--accent), 0 14px 28px -8px #000c; }
 .board-card.is-note.has-height .board-note { flex: 1; min-height: 0; overflow: auto; }
 .board-card.is-note.has-height { overflow: visible; }
-:root[data-theme='pixel'] .board-resize { background: linear-gradient(var(--paper-ink), var(--paper-ink)) 12px 4px / 2px 2px no-repeat, linear-gradient(var(--paper-ink), var(--paper-ink)) 8px 8px / 2px 2px no-repeat, linear-gradient(var(--paper-ink), var(--paper-ink)) 12px 8px / 2px 2px no-repeat, linear-gradient(var(--paper-ink), var(--paper-ink)) 4px 12px / 2px 2px no-repeat, linear-gradient(var(--paper-ink), var(--paper-ink)) 8px 12px / 2px 2px no-repeat, linear-gradient(var(--paper-ink), var(--paper-ink)) 12px 12px / 2px 2px no-repeat; opacity: 0; }
-:root[data-theme='pixel'] .board-card:is(:hover, :focus-within) .board-resize { opacity: .6; }
-:root[data-theme='pixel'] .board-card.is-sizing { box-shadow: 0 0 0 2px var(--accent), 4px 4px 0 #000a; }
+:root[data-pixel] .board-resize { background: linear-gradient(var(--paper-ink), var(--paper-ink)) 12px 4px / 2px 2px no-repeat, linear-gradient(var(--paper-ink), var(--paper-ink)) 8px 8px / 2px 2px no-repeat, linear-gradient(var(--paper-ink), var(--paper-ink)) 12px 8px / 2px 2px no-repeat, linear-gradient(var(--paper-ink), var(--paper-ink)) 4px 12px / 2px 2px no-repeat, linear-gradient(var(--paper-ink), var(--paper-ink)) 8px 12px / 2px 2px no-repeat, linear-gradient(var(--paper-ink), var(--paper-ink)) 12px 12px / 2px 2px no-repeat; opacity: 0; }
+:root[data-pixel] .board-card:is(:hover, :focus-within) .board-resize { opacity: .6; }
+:root[data-pixel] .board-card.is-sizing { box-shadow: 0 0 0 2px var(--accent), 4px 4px 0 #000a; }
 /* The cursor in code blocks: light on the dark block (the paper's dark ink would vanish there). */
 .board-note .cm-line.md-code-line, .floating-note .cm-line.md-code-line { caret-color: #fff8e0; }
 .board-note .cm-line.md-code-line ::selection, .floating-note .cm-line.md-code-line ::selection { background: #ffffff40; }
-:root[data-theme='pixel'] .board-note .cm-line.md-code-line, :root[data-theme='pixel'] .floating-note .cm-line.md-code-line { caret-color: #b8f28c; }
+:root[data-pixel] .board-note .cm-line.md-code-line, :root[data-pixel] .floating-note .cm-line.md-code-line { caret-color: #b8f28c; }
 
 /* Leave the pin outside the paper; only the text area scrolls. */
 .board-note .cm-content { padding-bottom: 24px !important; }

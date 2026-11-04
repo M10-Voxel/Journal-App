@@ -69,10 +69,11 @@ import './pixel-sizes.css';
 import './pixel.css';
 import './colors.css';
 import './tags.css';
+import './popups.css';
 import './journal-theme.css';
 import { applyColors } from './colors';
 
-applyTheme(loadSettings().theme);
+applyTheme(loadSettings());
 applyColors(loadSettings());
 setLanguage(loadSettings().language);
 

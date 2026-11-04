@@ -2,12 +2,6 @@
    default, see colors.ts); only the leather of the cover and the ribbons are the book's own. Layout and hit areas of
    the controls stay as in the other styles; the book (JournalBook) and the calendar drawer exist only here. */
 
-/* The style's card in Settings → UI-Stil is drawn on paper whatever the current palette. */
-.theme-options { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.theme-sample.is-journal > span { font-family: 'Fraunces', 'Source Serif 4', Georgia, serif; font-weight: 600; font-style: italic; }
-.theme-sample.is-journal i { border-radius: 50% 45% 55% 40%; background: #2f5d9e; }
-.theme-sample.is-journal i:nth-of-type(2) { background: #a8641a; }
-.theme-sample.is-journal i:nth-of-type(3) { background: #3f7a3a; }
 
 :root[data-theme='journal'] {
   --write: 'Source Serif 4', Georgia, 'Times New Roman', serif;
@@ -49,9 +43,8 @@
 :root[data-theme='journal'] .entry-symbol .icon { stroke-width: 1.7; }
 :root[data-theme='journal'] .entry-symbol:hover, :root[data-theme='journal'] .entry-symbol[aria-expanded='true'] { background: var(--paper-shade); }
 
-/* ── Popups as paper slips; settings and shortcuts as index cards ─────────────────────────────────────────────── */
-:root[data-theme='journal'] :is(.popover, .planner, .format-menu, .cal-composer, .repeat-suggest, .mini-picker-panel, .mail-import-toast, .reminder) { box-shadow: var(--soft-shadow); }
-:root[data-theme='journal'] :is(.popover, .planner, .format-menu, .cal-composer, .mini-picker-panel) { border-radius: 4px; }
+/* ── Popups as paper slips (see popups.css); settings and shortcuts as index cards ─────────────────────────────── */
+:root[data-theme='journal'] { --popup-radius: 4px; --popup-shadow: var(--soft-shadow); }
 :root[data-theme='journal'] .shortcut-backdrop { background: color-mix(in srgb, #2b2620 32%, transparent); }
 :root[data-theme='journal'] .shortcuts { border-radius: 4px; box-shadow: 0 0 0 1px var(--edge), 0 26px 50px -16px color-mix(in srgb, #3b2a1a 60%, transparent); background-color: var(--surface); }
 :root[data-theme='journal'] .settings-head strong { font-family: var(--display); font-weight: 600; font-size: 16px; }
@@ -472,3 +465,16 @@
 /* Decluttered paper: no lines that repeat what the page shows or explain what can be done. */
 :root[data-theme='journal'] .page-hint { display: none; }
 .book-page.is-entries .section-title :is(h2, .entry-count) { display: none; }
+
+/* ── Journal with the pixel look ──────────────────────────────────────────────────────────────────────────────────
+   The book stays a book; its type becomes the pixel fonts (the terminal face for writing, Pixelify for titles), at the
+   sizes the pixel look uses. Square corners and stepped motion come from pixel.css. */
+:root[data-theme='journal'][data-pixel] {
+  --write: 'VT323', Consolas, monospace;
+  --serif: 'VT323', Consolas, monospace;
+  --display: 'Pixelify Sans', system-ui, sans-serif;
+}
+:root[data-theme='journal'][data-pixel] :is(.cm-editor, .entry-text, .cal-composer-text, .cal-composer-description, .reminder-text, .activity-name) { font-size: 16px; }
+:root[data-theme='journal'][data-pixel] .title-input { font-style: normal; font-size: 24px; }
+:root[data-theme='journal'][data-pixel] :is(.eyebrow, .book-page-foot) { font-style: normal; }
+:root[data-theme='journal'][data-pixel] .font-warmup { font-family: 'Lilex'; }

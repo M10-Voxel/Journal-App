@@ -1,27 +1,66 @@
 import { t, useLanguage } from '../i18n';
 import { useEffect, useRef, useState } from 'react';
+import type { KeyboardEvent, ReactNode } from 'react';
 import { themes, withTheme } from '../settings';
-import type { Settings, Theme } from '../settings';
+import type { Settings } from '../settings';
 import type { ActionLayout } from './EntryActionDock';
 import type { BookView } from './JournalBook';
 import type { CalendarImport } from '../journal';
 import { DriveSettings } from './DriveSettings';
 import { MailSettings } from './MailSettings';
 import { Icon } from './Icon';
+import type { IconName } from './Icon';
 import { ColorSettings } from './ColorSettings';
 import { TagSettings } from './TagSettings';
 import { factorOf, screenWidth } from '../uiScale';
 import type { UiScale } from '../uiScale';
 import { ActivitySettings } from './ActivitySettings';
+import '../settings.css';
 
 const tabs = ['appearance', 'colors', 'tags', 'activities', 'drive', 'mail'] as const;
 export type SettingsTab = typeof tabs[number];
+const tabInfo = (): Record<SettingsTab, { icon: IconName; label: string }> => ({
+  appearance: { icon: 'layout', label: t("Darstellung") }, colors: { icon: 'pencil', label: t('Farben') }, tags: { icon: 'tag', label: t('Tags') },
+  activities: { icon: 'check', label: t('Aktivitäten') }, drive: { icon: 'transfer', label: 'Google Drive' }, mail: { icon: 'mail', label: t("E-Mail-Konten") },
+});
 
 const layouts = (): { value: ActionLayout; title: string; text: string }[] => ([
-  { value: 'orbit', title: 'Orbit', text: t("Aktionen kreisen um den Punkt, Planen sitzt am Zeilenende.") },
-  { value: 'inline', title: t("Eingebettet"), text: t("Eine Zeile Wörter im Text, ohne Fenster.") },
-  { value: 'swipe', title: t("Wischen"), text: t("Punkt zur Seite ziehen: rechts erledigen, links planen oder löschen. Antippen schaltet weiter.") },
+  { value: 'orbit', title: 'Orbit', text: t("Aktionen kreisen um den Punkt.") },
+  { value: 'inline', title: t("Eingebettet"), text: t("Eine Zeile Wörter unter dem Eintrag.") },
+  { value: 'swipe', title: t("Wischen"), text: t("Den Punkt zur Seite ziehen.") },
 ]);
+
+/** Arrow keys move through a row of radio buttons (the options' order), like a native radio group. */
+function arrowStep<T>(event: KeyboardEvent, values: readonly T[], current: T): T | null {
+  if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return null;
+  event.preventDefault();
+  const step = event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 1;
+  return values[(values.indexOf(current) + step + values.length) % values.length];
+}
+
+/** One setting: its name (and a short note) on the left, its control on the right. */
+function SettingRow({ label, id, note, children }: { label: string; id: string; note?: ReactNode; children: ReactNode }) {
+  return <div className="setting-row">
+    <div className="setting-label"><span id={id}>{label}</span>{note && <small>{note}</small>}</div>
+    <div className="setting-control">{children}</div>
+  </div>;
+}
+
+/** A few choices side by side (language, book view …); `attribute` names the data attribute each option carries. */
+function Segmented<T extends string>({ labelledBy, value, options, attribute, onChange }: {
+  labelledBy: string; value: T; options: readonly { value: T; label: string }[]; attribute: string; onChange: (value: T) => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  return <div ref={ref} className="segmented" role="radiogroup" aria-labelledby={labelledBy} onKeyDown={event => {
+    const next = arrowStep(event, options.map(option => option.value), value);
+    if (next === null) return;
+    onChange(next);
+    requestAnimationFrame(() => ref.current?.querySelector<HTMLElement>(`[${attribute}="${next}"]`)?.focus());
+  }}>
+    {options.map(option => <button key={option.value} type="button" role="radio" aria-checked={value === option.value} tabIndex={value === option.value ? 0 : -1}
+      {...{ [attribute]: option.value }} onClick={() => onChange(option.value)}>{option.label}</button>)}
+  </div>;
+}
 
 // Small previews of the layouts, drawn like the real thing: the entry's dot, a text line and its actions.
 function Preview({ layout }: { layout: ActionLayout }) {
@@ -49,106 +88,72 @@ function Preview({ layout }: { layout: ActionLayout }) {
 }
 
 export function SettingsDialog({ settings, onChange, onClose, onImport, mailStatus, beforeSync, onDriveBusy, initialTab = 'appearance', bookView = 'double', onBookView }: { bookView?: BookView; onBookView?: (view: BookView) => void; beforeSync: () => Promise<void>; onDriveBusy: (busy: boolean) => void; initialTab?: SettingsTab; settings: Settings; onChange: (settings: Settings) => void; onClose: () => void; onImport: (entries: CalendarImport[]) => Promise<void>; mailStatus: { count: number; error: string } }) {
-  const language = useLanguage();
+  useLanguage();
   const [driveBusy, setDriveBusy] = useState(false);
   const dialogRef = useRef<HTMLDivElement>(null);
-  const [tab, setTab] = useState<string>(initialTab);
+  const [tab, setTab] = useState<SettingsTab>(initialTab);
   const [screenSize, setScreenSize] = useState(1920);
   useEffect(() => { void screenWidth().then(setScreenSize); }, []);
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
-    const selector = initialTab === 'tags' ? '#settings-tags .tag-name' : initialTab === 'activities' ? '#settings-activities input' : '.settings-option[aria-checked="true"]';
+    const selector = initialTab === 'tags' ? '#settings-tags .tag-name' : initialTab === 'activities' ? '#settings-activities input' : '[data-theme-choice][aria-checked="true"]';
     (dialogRef.current?.querySelector<HTMLElement>(selector) ?? dialogRef.current?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]'))?.focus();
     return () => previous?.focus({ preventScroll: true });
   }, []);
-  return <div className="shortcut-backdrop" onPointerDown={event => { if (event.target === event.currentTarget) onClose(); }}>
-    <div ref={dialogRef} className="shortcuts settings dialog-panes" role="dialog" aria-modal="true" aria-label={t("Einstellungen")} tabIndex={-1}
-      onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); onClose(); } }}>
-      <div className="settings-head">
-        <Icon name="settings" /><strong>{t("Einstellungen")}</strong>
-        <span className="settings-keys"><kbd>{t("Strg")}</kbd> <kbd>,</kbd></span>
-        <button type="button" className="settings-close" disabled={driveBusy} aria-label={t("Einstellungen schließen")} title={t("Schließen · Esc")} onClick={onClose}><Icon name="done" /></button>
-      </div>
-      <div className="settings-body">
-      <div className="settings-tabs" inert={driveBusy} role="tablist" aria-label={t("Einstellungsbereich")} aria-orientation="vertical" onKeyDown={event => {
-        if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
-        event.preventDefault();
-        const step = event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 1;
-        const next = event.key === 'Home' ? 'appearance' : event.key === 'End' ? 'mail' : tabs[(tabs.indexOf(tab as typeof tabs[number]) + step + tabs.length) % tabs.length];
-        setTab(next); dialogRef.current?.querySelector<HTMLButtonElement>(`#settings-${next}-tab`)?.focus();
-      }}>
-        <button id="settings-appearance-tab" type="button" role="tab" tabIndex={tab === 'appearance' ? 0 : -1} aria-selected={tab === 'appearance'} aria-controls="settings-appearance" onClick={event => { event.currentTarget.focus(); setTab('appearance'); }}><Icon name="layout" />{t("Darstellung")}</button>
-        <button id="settings-colors-tab" type="button" role="tab" tabIndex={tab === 'colors' ? 0 : -1} aria-selected={tab === 'colors'} aria-controls="settings-colors" onClick={event => { event.currentTarget.focus(); setTab('colors'); }}><Icon name="pencil" />{t('Farben')}</button>
-        <button id="settings-tags-tab" type="button" role="tab" tabIndex={tab === 'tags' ? 0 : -1} aria-selected={tab === 'tags'} aria-controls="settings-tags" onClick={event => { event.currentTarget.focus(); setTab('tags'); }}><Icon name="tag" />{t('Tags')}</button>
-        <button id="settings-activities-tab" type="button" role="tab" tabIndex={tab === 'activities' ? 0 : -1} aria-selected={tab === 'activities'} aria-controls="settings-activities" onClick={event => { event.currentTarget.focus(); setTab('activities'); }}><Icon name="check" />{language === 'en' ? 'Activities' : 'Aktivit\u00e4ten'}</button>
-        <button type="button" id="settings-drive-tab" role="tab" aria-selected={tab === 'drive'} tabIndex={tab === 'drive' ? 0 : -1} onClick={() => setTab('drive')}><Icon name="transfer" />Google Drive</button>
-        <button id="settings-mail-tab" type="button" role="tab" tabIndex={tab === 'mail' ? 0 : -1} aria-selected={tab === 'mail'} aria-controls="settings-mail" onClick={event => { event.currentTarget.focus(); setTab('mail'); }}><Icon name="mail" />{t("E-Mail-Konten")}{mailStatus.count > 0 && <span className="mail-badge">{mailStatus.count}</span>}</button>
-      </div>
-      {tab === 'appearance' ? <div className="settings-panel" role="tabpanel" id="settings-appearance" aria-labelledby="settings-appearance-tab">
-      <h3 id="settings-language">{t("Anzeigesprache")}</h3>
-      <div className="language-options" role="radiogroup" aria-labelledby="settings-language" onKeyDown={event => {
-        if (!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key)) return;
-        event.preventDefault(); const language = settings.language === 'de' ? 'en' : 'de';
-        onChange({ ...settings, language });
-        requestAnimationFrame(() => dialogRef.current?.querySelector<HTMLElement>(`[data-language="${language}"]`)?.focus());
-      }}>
-        {(['de','en'] as const).map(language => <button key={language} type="button" role="radio" data-language={language} aria-checked={settings.language === language} tabIndex={settings.language === language ? 0 : -1} onClick={() => onChange({ ...settings, language })}>{language === 'de' ? 'Deutsch' : 'English'}</button>)}
-      </div>
-      <h3 id="settings-theme">{t('UI-Stil')}</h3>
-      <p className="settings-hint">{t('Gleiche Bedienung, ein anderer Stil. Die Farben wählst du unter „Farben“.')}</p>
+  const show = (next: SettingsTab) => { setTab(next); requestAnimationFrame(() => dialogRef.current?.querySelector<HTMLButtonElement>(`#settings-${next}-tab`)?.focus()); };
+  const scale = Math.round(factorOf(settings.uiScale, screenSize, settings.pixel) * 100);
+  const info = tabInfo();
+
+  const appearance = <>
+    <section className="settings-section">
+      <h3 id="settings-theme">{t('Design')}</h3>
       <div className="theme-options" role="radiogroup" aria-labelledby="settings-theme" onKeyDown={event => {
-        if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
-        event.preventDefault();
-        const step = event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 1;
-        const theme: Theme = themes[(themes.indexOf(settings.theme) + step + themes.length) % themes.length];
+        const theme = arrowStep(event, themes, settings.theme);
+        if (theme === null) return;
         onChange(withTheme(settings, theme));
         requestAnimationFrame(() => dialogRef.current?.querySelector<HTMLElement>(`[data-theme-choice="${theme}"]`)?.focus());
       }}>
         {themes.map(theme => <button key={theme} type="button" role="radio" aria-checked={settings.theme === theme} tabIndex={settings.theme === theme ? 0 : -1} data-theme-choice={theme}
           onClick={() => onChange(withTheme(settings, theme))}>
-          <span className={`theme-sample is-${theme}`} aria-hidden="true"><span>Aa</span><i /><i /><i /></span>
-          <strong>{theme === 'classic' ? t("Klassisch") : theme === 'pixel' ? 'Pixel' : 'Journal'}</strong>
-          <small>{theme === 'classic' ? 'IBM Plex Sans · Lilex' : theme === 'pixel' ? 'Pixelify Sans · VT323' : t('Papier, Tinte, Seiten zum Umblättern')}</small>
+          <span className={`theme-sample is-${theme}${settings.pixel ? ' is-pixel' : ''}`} aria-hidden="true"><span>Aa</span><i /><i /><i /></span>
+          <strong>{theme === 'classic' ? t('Normal') : 'Journal'}</strong>
+          <small>{theme === 'classic' ? t('Klar und kompakt') : t('Ein Buch zum Umblättern')}</small>
         </button>)}
       </div>
-      {settings.theme === 'journal' && <>
-        <h3 id="settings-book-view">{t('Buchansicht')}</h3>
-        <p className="settings-hint">{t('In einem schmalen Fenster zeigt das Buch immer eine Seite.')}</p>
-        <div className="language-options" role="radiogroup" aria-labelledby="settings-book-view" onKeyDown={event => {
-          if (!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key)) return;
-          event.preventDefault(); const view = bookView === 'double' ? 'single' : 'double';
-          onBookView?.(view);
-          requestAnimationFrame(() => dialogRef.current?.querySelector<HTMLElement>(`[data-book-view="${view}"]`)?.focus());
-        }}>
-          {(['double', 'single'] as const).map(view => <button key={view} type="button" role="radio" data-book-view={view} aria-checked={bookView === view} tabIndex={bookView === view ? 0 : -1}
-            onClick={() => onBookView?.(view)}>{view === 'double' ? t('Doppelseite') : t('Einzelseite')}</button>)}
+      <SettingRow id="settings-pixel" label={t('Pixel-Look')} note={t('Pixelschrift, eckige Formen, Bewegung in Stufen')}>
+        <button type="button" role="switch" className="switch" aria-checked={settings.pixel} aria-labelledby="settings-pixel" data-pixel-toggle onClick={() => onChange({ ...settings, pixel: !settings.pixel })}><span /></button>
+      </SettingRow>
+    </section>
+    {settings.theme === 'journal' && <section className="settings-section">
+      <h3>{t('Buch')}</h3>
+      <SettingRow id="settings-book-view" label={t('Ansicht')} note={t('Im schmalen Fenster immer eine Seite')}>
+        <Segmented labelledBy="settings-book-view" attribute="data-book-view" value={bookView} onChange={view => onBookView?.(view)}
+          options={[{ value: 'double', label: t('Doppelseite') }, { value: 'single', label: t('Einzelseite') }]} />
+      </SettingRow>
+      <SettingRow id="settings-book-paging" label={t('Blättern')} note={t('Auf einmal: Die Pinnwand liegt über beiden Seiten')}>
+        <Segmented labelledBy="settings-book-paging" attribute="data-book-paging" value={settings.bookPaging} onChange={bookPaging => onChange({ ...settings, bookPaging })}
+          options={[{ value: 'page', label: t('Seite für Seite') }, { value: 'spread', label: t('Beide auf einmal') }]} />
+      </SettingRow>
+    </section>}
+    <section className="settings-section">
+      <h3>{t('Allgemein')}</h3>
+      <SettingRow id="settings-language" label={t("Sprache")}>
+        <Segmented labelledBy="settings-language" attribute="data-language" value={settings.language} onChange={language => onChange({ ...settings, language })}
+          options={[{ value: 'de', label: 'Deutsch' }, { value: 'en', label: 'English' }]} />
+      </SettingRow>
+      <SettingRow id="settings-scale" label={t('Größe')} note={<><kbd>{t('Strg')}</kbd> <kbd>+</kbd> <kbd>−</kbd> <kbd>0</kbd></>}>
+        <div className="scale-options scale-slider">
+          <input type="range" min="75" max="200" step="1" aria-labelledby="settings-scale" value={scale} onChange={event => onChange({ ...settings, uiScale: event.target.value as UiScale })} />
+          <output>{scale} %</output>
+          <button type="button" aria-pressed={settings.uiScale === 'auto'} title={t('Nach dem Bildschirm richten')} onClick={() => onChange({ ...settings, uiScale: 'auto' })}>{t('Automatisch')}</button>
         </div>
-        <h3 id="settings-book-paging">{t('Blättern')}</h3>
-        <p className="settings-hint">{t('Beide Seiten auf einmal: Die Pinnwand liegt dann über zwei Seiten. Liegt der Kalender als Blatt auf dem Buch, zeigt es daneben eine Seite.')}</p>
-        <div className="language-options" role="radiogroup" aria-labelledby="settings-book-paging" onKeyDown={event => {
-          if (!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key)) return;
-          event.preventDefault(); const bookPaging = settings.bookPaging === 'page' ? 'spread' : 'page';
-          onChange({ ...settings, bookPaging });
-          requestAnimationFrame(() => dialogRef.current?.querySelector<HTMLElement>(`[data-book-paging="${bookPaging}"]`)?.focus());
-        }}>
-          {(['page', 'spread'] as const).map(paging => <button key={paging} type="button" role="radio" data-book-paging={paging} aria-checked={settings.bookPaging === paging} tabIndex={settings.bookPaging === paging ? 0 : -1}
-            onClick={() => onChange({ ...settings, bookPaging: paging })}>{paging === 'page' ? t('Seite für Seite') : t('Beide Seiten auf einmal')}</button>)}
-        </div>
-      </>}
-      <h3 id="settings-scale">{t('Größe')}</h3>
-      <p className="settings-hint">{t('Text und Bedienelemente größer, z. B. für 4K-Bildschirme. „Automatisch“ richtet sich nach dem Bildschirm, im Pixel-Stil etwas größer. ')}<kbd>{t('Strg')}</kbd> <kbd>+</kbd> / <kbd>−</kbd> / <kbd>0</kbd></p>
-      <div className="scale-options scale-slider">
-        <button type="button" aria-pressed={settings.uiScale === 'auto'} onClick={() => onChange({ ...settings, uiScale: 'auto' })}>{t('Automatisch')}</button>
-        <input type="range" min="75" max="200" step="1" aria-labelledby="settings-scale" value={Math.round(factorOf(settings.uiScale, screenSize, settings.theme === 'pixel') * 100)} onChange={event => onChange({ ...settings, uiScale: event.target.value as UiScale })} />
-        <output>{Math.round(factorOf(settings.uiScale, screenSize, settings.theme === 'pixel') * 100)} %</output>
-      </div>
+      </SettingRow>
+    </section>
+    <section className="settings-section">
       <h3 id="settings-layout">{t("Aktionen am Eintrag")}</h3>
-      <p className="settings-hint">{t("Wie sich die Aktionen eines Eintrags zeigen, wenn man auf seinen Punkt klickt. ")}<kbd>←</kbd> <kbd>→</kbd>{t(" wählt.")}</p>
       <div className="settings-options" role="radiogroup" aria-labelledby="settings-layout" onKeyDown={event => {
-        if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
-        event.preventDefault();
-        const step = event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 1;
-        const next = layouts()[(layouts().findIndex(layout => layout.value === settings.actionLayout) + step + layouts().length) % layouts().length].value;
+        const next = arrowStep(event, layouts().map(layout => layout.value), settings.actionLayout);
+        if (next === null) return;
         onChange({ ...settings, actionLayout: next });
         requestAnimationFrame(() => dialogRef.current?.querySelector<HTMLElement>('.settings-option[aria-checked="true"]')?.focus());
       }}>
@@ -159,8 +164,35 @@ export function SettingsDialog({ settings, onChange, onClose, onImport, mailStat
           <span>{layout.text}</span>
         </button>)}
       </div>
-      </div> : tab === 'colors' ? <div className="settings-panel" role="tabpanel" id="settings-colors" aria-labelledby="settings-colors-tab"><ColorSettings settings={settings} onChange={onChange} /></div>
-        : tab === 'tags' ? <div className="settings-panel" role="tabpanel" id="settings-tags" aria-labelledby="settings-tags-tab"><TagSettings /></div> : tab === 'activities' ? <div className="settings-panel" role="tabpanel" id="settings-activities" aria-labelledby="settings-activities-tab"><ActivitySettings /></div> : tab === 'drive' ? <div className="settings-panel" role="tabpanel" id="settings-drive"><DriveSettings beforeSync={beforeSync} onBusy={value => { setDriveBusy(value); onDriveBusy(value); }} /></div> : <div className="settings-panel" role="tabpanel" id="settings-mail" aria-labelledby="settings-mail-tab"><MailSettings onImport={onImport} importError={mailStatus.error} /></div>}
+    </section>
+  </>;
+
+  const panels: Record<SettingsTab, ReactNode> = {
+    appearance, colors: <ColorSettings settings={settings} onChange={onChange} />, tags: <TagSettings />, activities: <ActivitySettings />,
+    drive: <DriveSettings beforeSync={beforeSync} onBusy={value => { setDriveBusy(value); onDriveBusy(value); }} />,
+    mail: <MailSettings onImport={onImport} importError={mailStatus.error} />,
+  };
+
+  return <div className="shortcut-backdrop" onPointerDown={event => { if (event.target === event.currentTarget) onClose(); }}>
+    <div ref={dialogRef} className="shortcuts settings dialog-panes" role="dialog" aria-modal="true" aria-label={t("Einstellungen")} tabIndex={-1}
+      onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); onClose(); } }}>
+      <div className="settings-head">
+        <Icon name="settings" /><strong>{t("Einstellungen")}</strong>
+        <span className="settings-keys"><kbd>{t("Strg")}</kbd> <kbd>,</kbd></span>
+        <button type="button" className="settings-close" disabled={driveBusy} aria-label={t("Einstellungen schließen")} title={t("Schließen · Esc")} onClick={onClose}><Icon name="done" /></button>
+      </div>
+      <div className="settings-body">
+        <div className="settings-tabs" inert={driveBusy} role="tablist" aria-label={t("Einstellungsbereich")} aria-orientation="vertical" onKeyDown={event => {
+          if (event.key === 'Home' || event.key === 'End') { event.preventDefault(); show(event.key === 'Home' ? tabs[0] : tabs[tabs.length - 1]); return; }
+          const next = arrowStep(event, tabs, tab);
+          if (next !== null) show(next);
+        }}>
+          {tabs.map(id => <button key={id} id={`settings-${id}-tab`} type="button" role="tab" tabIndex={tab === id ? 0 : -1} aria-selected={tab === id} aria-controls={`settings-${id}`}
+            onClick={event => { event.currentTarget.focus(); setTab(id); }}>
+            <Icon name={info[id].icon} />{info[id].label}{id === 'mail' && mailStatus.count > 0 && <span className="mail-badge">{mailStatus.count}</span>}
+          </button>)}
+        </div>
+        <div className="settings-panel" role="tabpanel" id={`settings-${tab}`} aria-labelledby={`settings-${tab}-tab`}>{panels[tab]}</div>
       </div>
     </div>
   </div>;

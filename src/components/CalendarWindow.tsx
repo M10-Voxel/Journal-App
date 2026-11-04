@@ -127,7 +127,7 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
   const [rangeDraw,setRangeDraw]=useState<{start:string;end:string}|null>(null);
   const suppressClick=useRef(false);
   const rangePage=useRef(date);rangePage.current=date;
-  useEffect(()=>{rootRef.current?.querySelectorAll<HTMLElement>('[data-range-date]').forEach(cell=>{const date=cell.dataset.rangeDate!;cell.toggleAttribute('data-range-selected',Boolean(rangeDraw && date>=rangeDraw.start && date<=rangeDraw.end));});},[rangeDraw,date,view]);
+  useEffect(()=>{rootRef.current?.querySelectorAll<HTMLElement>('[data-range-date]').forEach(cell=>{const date=cell.dataset.rangeDate!, shown=rangeDraw ?? multi;cell.toggleAttribute('data-range-selected',Boolean(shown && date>=shown.start && date<=shown.end));});},[rangeDraw,multi,date,view]);
 
   const beginMulti=(event:ReactPointerEvent<HTMLDivElement>)=>{
    if(!onCreate || event.button!==0 || (event.target as Element).closest('.cal-item,input,button:not(.cal-year-day)'))return;
@@ -167,7 +167,7 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
   return <OpenInJournal.Provider value={onOpen}><EditInCalendar.Provider value={editContext}>
     <div ref={rootRef} className={`cal${embedded ? ' is-embedded' : ''}`} data-view={view} tabIndex={-1} aria-label={t("Kalender")} onKeyDown={onKeyDown} onPointerDown={beginMulti} onClickCapture={event=>{if(suppressClick.current){event.preventDefault();event.stopPropagation();suppressClick.current=false;}}} onPointerMove={event=>{const day=(event.target as Element).closest<HTMLElement>('[data-date]')?.dataset.date;pasteTarget.current=day ?? date;}}>
       {/* Drawn over several days: the normal card, with the span's start and end (and repeating, tags, priority …). */}
-      {multi && onCreate && <CalendarComposer key={`multi-${multi.start}-${multi.end}`} date={multi.start} draft={null} span={{ end: multi.end }} tag={newTag}
+      {multi && onCreate && <CalendarComposer key="multi" date={multi.start} draft={null} span={{ end: multi.end }} onSpanChange={setMulti} tag={newTag}
         anchor={() => (rootRef.current?.querySelector(`[data-range-date="${multi.end}"]`) ?? rootRef.current?.querySelector(`[data-range-date="${multi.start}"]`) ?? rootRef.current)?.getBoundingClientRect() ?? null}
         onCancel={byKey => { setMulti(null); if (byKey) refocus(); }} onCreate={async entry => { await onCreate(multi.start, entry); setMulti(null); refocus(); }} />}
       {rangeDraw && <div className="cal-action-notice">{formatDate(rangeDraw.start)} – {formatDate(rangeDraw.end)}</div>}
@@ -517,7 +517,7 @@ function TimeGrid({ journalDays, dates, today, now, journalDate, entriesOn, onDa
       </div>
       <div className={`cal-time-allday${columns.some(column => column.untimed.length) ? '' : ' is-empty'}`}>
         <span className="cal-time-corner">{t("ohne Zeit")}</span>{spans.map((item,index)=><div key={item.entry.id} className="cal-multiday-bar" style={{gridColumn:`${Math.max(0,dates.indexOf(item.date))+2} / ${item.end>=dates[dates.length-1]?dates.length+2:dates.indexOf(item.end)+3}`,gridRow:index+2}}><CalendarItem entry={item.entry} date={item.date}/></div>)}
-        {columns.map(column => <div key={column.date} data-range-date={column.date} className={`cal-time-allday-cell${weekendClass(column.date)}${allDay?.date === column.date ? ' is-composing' : ''}`}
+        {columns.map((column,index) => <div key={column.date} data-range-date={column.date} style={{gridColumn:index+2}} className={`cal-time-allday-cell${weekendClass(column.date)}${allDay?.date === column.date ? ' is-composing' : ''}`}
           title={onCreate ? t("Klicken: Eintrag für den ganzen Tag") : undefined}
           onClick={event => { if (!onCreate || event.button !== 0 || (event.target as Element).closest('.cal-item')) return; setDraft(null); if (editing) onEditEnd(false); setAllDay({ date: column.date, element: event.currentTarget }); }}>
           {column.untimed.map(entry => <CalendarItem key={entry.id} entry={entry} date={column.date} />)}

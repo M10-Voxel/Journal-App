@@ -152,7 +152,7 @@ button.cal-time-day:hover { background: color-mix(in srgb, var(--strong) 3.137%,
 .cal-time-day.is-today { color: var(--now); }
 .cal-time-day.is-today strong { background: var(--now); color: var(--on-now); font-weight: 600; }
 .cal-time-allday { border-top: 1px solid var(--line); }
-.cal-time-allday .cal-time-corner { align-self: start; padding-top: 5px; white-space: normal; line-height: 1.25; }
+.cal-time-allday .cal-time-corner { grid-column:1; grid-row:1; align-self: start; padding-top: 5px; white-space: normal; line-height: 1.25; }
 .cal-time-allday-cell { display: flex; flex-direction: column; gap: 2px; min-width: 0; min-height: 28px; max-height: 112px; padding: 4px; overflow-y: auto; border-left: 1px solid var(--line); scrollbar-width: none; }
 .cal-time-allday.is-empty .cal-time-allday-cell { min-height: 22px; padding-block: 0; }
 .cal-time-allday.is-empty .cal-time-corner { padding-top: 0; align-self: center; }
@@ -475,11 +475,11 @@ button.cal-time-day:hover { background: color-mix(in srgb, var(--strong) 3.137%,
 [data-range-date] { user-select: none; }
 [data-range-selected] { background-color: color-mix(in srgb, var(--accent) 16%, transparent) !important; box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 70%, transparent); }
 
-:root[data-theme='pixel'] .cal-action-notice { border-radius: 0; outline: 1px solid var(--edge); outline-offset: 1px; box-shadow: 3px 3px 0 var(--border), 5px 5px 0 #0008; font-size: 15px; animation-timing-function: steps(3); }
-:root[data-theme='pixel'] :is(.cal-paste-choice button, .cal-composer-copy, .cal-multi-form, .cal-multi-input, .cal-composer-copy kbd, .cal-details .tag-picker-foot kbd) { border-radius: 0; }
-:root[data-theme='pixel'] :is(.cal-multi-input, .cal-composer-copy kbd, .cal-details .tag-picker-foot kbd) { font-size: 15px; }
-:root[data-theme='pixel'] .cal-multi-label { font-size: 13px; }
-:root[data-theme='pixel'] [data-range-selected] { box-shadow: inset 0 0 0 2px var(--accent); background-image: repeating-conic-gradient(color-mix(in srgb, var(--accent) 22%, transparent) 0 25%, transparent 0 50%) !important; background-size: 4px 4px !important; }
+:root[data-pixel] .cal-action-notice { border-radius: 0; outline: 1px solid var(--edge); outline-offset: 1px; box-shadow: 3px 3px 0 var(--border), 5px 5px 0 #0008; font-size: 15px; animation-timing-function: steps(3); }
+:root[data-pixel] :is(.cal-paste-choice button, .cal-composer-copy, .cal-multi-form, .cal-multi-input, .cal-composer-copy kbd, .cal-details .tag-picker-foot kbd) { border-radius: 0; }
+:root[data-pixel] :is(.cal-multi-input, .cal-composer-copy kbd, .cal-details .tag-picker-foot kbd) { font-size: 15px; }
+:root[data-pixel] .cal-multi-label { font-size: 13px; }
+:root[data-pixel] [data-range-selected] { box-shadow: inset 0 0 0 2px var(--accent); background-image: repeating-conic-gradient(color-mix(in srgb, var(--accent) 22%, transparent) 0 25%, transparent 0 50%) !important; background-size: 4px 4px !important; }
 
 .popover.cal-details.has-mail { width: min(760px, calc(100vw - 24px)); }
 .mail-content { min-width: 0; color: var(--text); }

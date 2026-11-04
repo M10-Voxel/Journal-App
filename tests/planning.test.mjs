@@ -131,3 +131,18 @@ test('removing also offers every one on the same weekday', () => {
   assert.equal(options[2].weekday, 1);
   assert.deepEqual(linkedScopes(group.map(entry => ({ ...entry, kind:'task' })), 'tu1', 'done').map(option => option.scope), ['this', 'following'], 'Only removing asks for the weekday.');
 });
+
+test('a range of days can be changed at both ends', async () => {
+  const { adjustRange } = await import('../src/planning.ts');
+  const first = adjustRange(null, null, '2026-11-10');
+  assert.deepEqual(first, { range: { from: '2026-11-10', to: '2026-11-10' }, pending: '2026-11-10' }, 'The first click starts a range.');
+  const closed = adjustRange(first.range, first.pending, '2026-11-06');
+  assert.deepEqual(closed, { range: { from: '2026-11-06', to: '2026-11-10' }, pending: null }, 'The second click closes it, in either direction.');
+  assert.deepEqual(adjustRange(closed.range, null, '2026-11-03').range, { from: '2026-11-03', to: '2026-11-10' }, 'Before the range: the start moves.');
+  assert.deepEqual(adjustRange(closed.range, null, '2026-11-14').range, { from: '2026-11-06', to: '2026-11-14' }, 'After it: the end moves.');
+  assert.deepEqual(adjustRange(closed.range, null, '2026-11-07').range, { from: '2026-11-07', to: '2026-11-10' }, 'Inside: the nearer end moves.');
+  assert.deepEqual(adjustRange(closed.range, null, '2026-11-09').range, { from: '2026-11-06', to: '2026-11-09' });
+  const grabbed = adjustRange(closed.range, null, '2026-11-06');
+  assert.equal(grabbed.pending, '2026-11-10', 'Clicking the start picks it up; the end stays as the anchor.');
+  assert.deepEqual(adjustRange(grabbed.range, grabbed.pending, '2026-11-12').range, { from: '2026-11-10', to: '2026-11-12' });
+});

@@ -21,7 +21,7 @@ export function useListMotion(containerRef: RefObject<HTMLElement | null>) {
     const rows = Array.from(container.querySelectorAll<HTMLElement>('[data-entry-id]'));
     for (const row of rows) for (const animation of row.getAnimations()) if (animation.id === 'list-motion') animation.cancel();
     // The pixel theme moves in square steps, a little faster (see pixel.css).
-    const pixel = document.documentElement.dataset.theme === 'pixel';
+    const pixel = document.documentElement.dataset.pixel !== undefined;
     const origin = container.getBoundingClientRect().top;
     for (const row of rows) {
       const top = before.get(row.dataset.entryId!);

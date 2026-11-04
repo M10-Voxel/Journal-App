@@ -42,9 +42,10 @@ const kindKey: Record<ComposerKind, string> = { event: 'E', task: 'A', note: 'N'
  * range with ↑ ↓ in the text, its end with ⇧ ↑ ↓. Enter creates or saves, Escape (or a click elsewhere) discards.
  * Editing also offers the note (where it may be one: no time, reminder or planning) and removing.
  */
-export function CalendarComposer({ date, draft, entry, span, tag: initialTag = null, anchor, onChange, onCancel, onCreate, onSave, onRemove }: {
+export function CalendarComposer({ date, draft, entry, span, onSpanChange, tag: initialTag = null, anchor, onChange, onCancel, onCreate, onSave, onRemove }: {
   /** A new entry over several days (drawn over days): from `date` to `span.end`, all day unless times are chosen. */
   span?: { end: string };
+  onSpanChange?: (range: { start: string; end: string }) => void;
   date: string; draft: Draft | null; entry?: Entry; tag?: string | null; anchor: () => DOMRect | null; onChange?: (draft: Draft) => void; onCancel: (byKey: boolean) => void;
   onCreate?: (entry: NewEntry) => Promise<void>; onSave?: (change: EntryEdit, scope?: ScopeOption) => Promise<void>; onRemove?: (others: ScopeOption['others']) => Promise<void>;
 }) {
@@ -249,8 +250,8 @@ export function CalendarComposer({ date, draft, entry, span, tag: initialTag = n
     </div>
     {entry && <button type="button" className="cal-composer-copy" onClick={() => copyCalendarEntry({...entry,text,description,priority,tag:tagId,reminder,showInJournal,kind,repeat:rule ? {...entry.repeat!,rule} : null})}><Icon name="copy" />{t("Kopieren")}<kbd>{t("Strg")} C</kbd></button>}
     {longSpan && <div className="cal-multi-form" role="group" aria-label={t('Zeitraum')}>
-      <div className="cal-multi-row"><span className="cal-multi-label">{t('Beginn')}</span><span className="cal-composer-day">{formatShortDate(date)}</span><input className="cal-multi-input is-time" type="time" aria-label={t('Beginn')} value={longStartTime} onChange={e=>setLongStartTime(e.target.value)}/></div>
-      <div className="cal-multi-row"><span className="cal-multi-label">{t('Ende')}</span><input className="cal-multi-input is-date" type="date" aria-label={t('Ende')} min={date} value={longEndDate} onChange={e=>setLongEndDate(e.target.value)}/><input className="cal-multi-input is-time" type="time" aria-label={t('Ende')} value={longEndTime} onChange={e=>setLongEndTime(e.target.value)}/></div>
+      <div className="cal-multi-row"><span className="cal-multi-label">{t('Beginn')}</span>{onSpanChange ? <input className="cal-multi-input is-date is-start" type="date" aria-label={t('Beginn')} value={date} onChange={e => { const start=e.target.value; if (!start) return; const end=longEndDate < start ? start : longEndDate; setLongEndDate(end); onSpanChange({start,end}); }} /> : <span className="cal-composer-day">{formatShortDate(date)}</span>}<input className="cal-multi-input is-time" type="time" aria-label={t('Beginn')} value={longStartTime} onChange={e=>setLongStartTime(e.target.value)}/></div>
+      <div className="cal-multi-row"><span className="cal-multi-label">{t('Ende')}</span><input className="cal-multi-input is-date is-end" type="date" aria-label={t('Ende')} min={date} value={longEndDate} onChange={e=>{ const end=e.target.value; setLongEndDate(end); if (end && end>=date) onSpanChange?.({start:date,end}); }}/><input className="cal-multi-input is-time" type="time" aria-label={t('Ende')} value={longEndTime} onChange={e=>setLongEndTime(e.target.value)}/></div>
     </div>}
     {decodeMailContent(description) ? <MailContent mail={decodeMailContent(description)!}/> : <textarea className="cal-composer-description" aria-label={t("Beschreibung")} placeholder={t("Beschreibung hinzufügen …")} value={description} onChange={event => setDescription(event.target.value)} disabled={busy} rows={2} maxLength={100000} />}
     <div className="cal-composer-foot">

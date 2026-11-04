@@ -2,7 +2,7 @@ import { t, useLanguage, getLanguage } from '../i18n';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { formatDate, formatMonth, formatShortDate, localDate, monthGrid, shiftDate, shiftMonth } from '../dates';
-import { nextFullHour, pickedDays } from '../planning';
+import { adjustRange, nextFullHour, pickedDays } from '../planning';
 import type { Schedule } from '../planning';
 import { defaultRule, describe, occurrences, withStart } from '../repeat';
 import type { RepeatRule } from '../repeat';
@@ -15,7 +15,9 @@ const weekdayInitials = () => getLanguage() === 'en' ? ['M','T','W','T','F','S',
 // Month calendar with optional time, reminder and repetition.
 // Keyboard: arrows move the day, Page↑/↓ the month, H today, U clock, W repeat, E reminder, Entf clears the time, Enter plans, Escape goes back.
 // "Mehrere Tage" is chosen before opening (its own action, Alt ⇧ T) and stays for the whole planner: two left clicks (or Space)
-// set a range; right clicks (or Shift+Space) take days out of it or add days outside it. The entry is planned to all picked days.
+// set a range, and further clicks move its start or end (see adjustRange); while an end is open, the range the next click
+// makes follows the pointer. Right clicks (or Shift+Space) take days out of it or add days outside it. The entry is planned
+// to all picked days.
 // Several days do not repeat; so there is no switching between the two inside the planner.
 // "Wiederholen" (W or the ↻ toggle, only when planning one day): the repeat view (see RepeatPanel) lies over the calendar like the clock; the calendar then
 // marks the occurrences. A new repetition starts on the chosen date; an entry repeating already keeps its series' start.
@@ -37,8 +39,13 @@ export function PlanCalendar({ day, initial, initialView = 'date', onPreview, on
   const multi = initialView === 'days';
   const [range, setRange] = useState<{ from: string; to: string } | null>(null);
   const [pending, setPending] = useState<string | null>(null);
+  const [hovered, setHovered] = useState<string | null>(null);
   const [toggled, setToggled] = useState<string[]>([]);
   const picked = pickedDays(range, toggled, day);
+  // What the calendar shows: while one end is open (after the first click, or an end picked up), the range the next click
+  // makes, following the pointer; else the range.
+  const shownRange = multi && pending && hovered ? adjustRange(range, pending, hovered).range : range;
+  const shownPicked = shownRange === range ? picked : pickedDays(shownRange, toggled, day);
   const gridRef = useRef<HTMLDivElement>(null);
   const focusSelected = useRef(initialView !== 'time' && initialView !== 'repeat');
   const today = localDate();
@@ -106,18 +113,18 @@ export function PlanCalendar({ day, initial, initialView = 'date', onPreview, on
     setRule(ruleFor(date));
   }
   function moveCursor(date: string) {
+    if (multi && pending) setHovered(date);
     if (!pickEnd) { select(date, true); return; }
     focusSelected.current = true;
     setEndCursor(date);
     setMonth(date.slice(0, 7));
   }
   const confirm = () => { if (!multi || picked.length) onConfirm(multi ? picked : [selected], { time: time || null, reminder }, multi ? initial.repeat ?? null : rule); };
-  /** Left click: the first click starts a range, the second closes it (a third starts a new one, clearing the flips). */
+  /** Left click: starts a range, closes it, or moves one of its ends (adjustRange). */
   function setPoint(date: string) {
-    if (pending) { setRange({ from: [pending, date].sort()[0], to: [pending, date].sort()[1] }); setPending(null); return; }
-    setPending(date);
-    setRange({ from: date, to: date });
-    setToggled([]);
+    const next = adjustRange(range, pending, date);
+    setRange(next.range);
+    setPending(next.pending);
   }
   /** Right click: flips a single day, out of the range or in addition to it. */
   function flip(date: string) {
@@ -125,11 +132,12 @@ export function PlanCalendar({ day, initial, initialView = 'date', onPreview, on
     setToggled(current => current.includes(date) ? current.filter(value => value !== date) : [...current, date]);
   }
 
-  // Cell look in multi mode: the range is a continuous band; flipped days are holes in it, or single dots outside.
+  // Cell look in multi mode: the range is a continuous band; flipped days are holes in it, or single dots outside. The
+  // band follows the pointer (shownRange) before the click makes it so.
   function rangeClass(date: string): string {
-    const inside = range !== null && date >= range.from && date <= range.to;
-    const isPicked = picked.includes(date);
-    return `${inside ? ' in-range' : ''}${inside && date === range!.from ? ' range-start' : ''}${inside && date === range!.to ? ' range-end' : ''}${date === pending ? ' is-pending' : ''}${isPicked ? ' is-picked' : ''}${inside && !isPicked && date !== day ? ' is-excluded' : ''}${!inside && isPicked ? ' is-added' : ''}`;
+    const inside = shownRange !== null && date >= shownRange.from && date <= shownRange.to;
+    const isPicked = shownPicked.includes(date);
+    return `${inside ? ' in-range' : ''}${inside && date === shownRange!.from ? ' range-start' : ''}${inside && date === shownRange!.to ? ' range-end' : ''}${date === pending ? ' is-pending' : ''}${isPicked ? ' is-picked' : ''}${inside && !isPicked && date !== day ? ' is-excluded' : ''}${!inside && isPicked ? ' is-added' : ''}`;
   }
 
   function onGridKey(event: KeyboardEvent<HTMLDivElement>) {
@@ -183,11 +191,13 @@ export function PlanCalendar({ day, initial, initialView = 'date', onPreview, on
       <button type="button" className="planner-nav" aria-label={t("Nächster Monat")} onClick={() => setMonth(current => shiftMonth(current, 1))}><Icon name="right" /></button>
     </div>}
     <div className="planner-weekdays" aria-hidden="true">{weekdayInitials().map((initial, index) => <span key={index}>{initial}</span>)}</div>
-    <div className="planner-grid" role="grid" aria-label={pickEnd ? t("Ende wählen, {0}", formatMonth(month)) : formatMonth(month)} ref={gridRef} onKeyDown={onGridKey}>
+    <div className={`planner-grid${shownRange !== range ? ' is-previewing' : ''}`} role="grid" aria-label={pickEnd ? t("Ende wählen, {0}", formatMonth(month)) : formatMonth(month)} ref={gridRef} onKeyDown={onGridKey}
+      onPointerLeave={() => setHovered(null)}>
       {grid.map(date => <button key={date} type="button" role="gridcell" tabIndex={date === cursor ? 0 : -1}
         className={`planner-day${date.startsWith(month) ? '' : ' is-outside'}${date === today ? ' is-today' : ''}${date === day ? ' is-origin' : ''}${date < today ? ' is-past' : ''}${(multi || pickEnd) && date === cursor ? ' is-cursor' : ''}${multi ? rangeClass(date) : ''}${repeating.has(date) ? ' is-repeat' : ''}${shownRule?.end?.until === date ? ' is-repeat-end' : ''}`}
         aria-selected={multi ? picked.includes(date) : date === selected} aria-current={(multi || pickEnd) && date === cursor ? 'true' : undefined}
         aria-label={`${formatDate(date)}${date === day ? t(", aktueller Tag") : ''}${repeating.has(date) ? t(", Wiederholung") : ''}`}
+        onPointerEnter={() => { if (multi) setHovered(date); }}
         onClick={() => { if (pickEnd) { chooseEnd(date); return; } select(date); if (multi) setPoint(date); }}
         onDoubleClick={() => { if (!multi && !pickEnd) onConfirm([date], { time: time || null, reminder }, ruleFor(date)); }}
         onContextMenu={event => { if (!multi) return; event.preventDefault(); select(date); flip(date); }}>
