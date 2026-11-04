@@ -1071,8 +1071,8 @@ async function checkJournalTheme() {
   // Choosing the style brings the paper palette and the book (a spread: entries | data).
   await key(',', 'Comma', 2);
   await until("Boolean(document.querySelector('[data-theme-choice=journal]'))");
-  // Two designs (normal, journal); the pixel look is a switch over either.
-  assert.deepEqual(await evaluate("[...document.querySelectorAll('.theme-options button')].map(b => b.dataset.themeChoice)"), ['classic', 'journal']);
+  // Three designs (normal, journal, Nebula); the pixel look is a switch over the first two.
+  assert.deepEqual(await evaluate("[...document.querySelectorAll('.theme-options button')].map(b => b.dataset.themeChoice)"), ['classic', 'journal', 'nebula']);
   assert.equal(await evaluate("document.querySelector('[data-pixel-toggle]').getAttribute('role')"), 'switch');
   await evaluate("document.querySelector('[data-theme-choice=journal]').click()");
   await until("document.documentElement.dataset.theme==='journal' && document.documentElement.dataset.colorTheme==='paper'");
@@ -1314,6 +1314,201 @@ async function checkJournalTheme() {
   assert.deepEqual(errors, []);
   console.log('Journal style checks passed: paper palette and fonts, spreads and single pages, turning across days, bookmarks, the calendar drawer, writing and saving, overviews, narrow windows and switching back.');
 }
+async function checkNebulaTheme() {
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  await command('Emulation.setDeviceMetricsOverride',{width:1380,height:860,deviceScaleFactor:1,mobile:false});
+  await command('Page.navigate', { url:origin });
+  await until("document.querySelectorAll('.entry').length===5");
+  const today = await evaluate('window.__uiTest.date'), tomorrow = await evaluate('window.__uiTest.shift(1)');
+  const prompt = "document.querySelector('.nebula-terminal.is-entries .nebula-prompt')?.textContent";
+  // Three designs; with the pixel look switched on, Nebula still shows none of it (and keeps the switch for the others).
+  await key(',', 'Comma', 2);
+  await until("Boolean(document.querySelector('[data-theme-choice=nebula]'))");
+  assert.deepEqual(await evaluate("[...document.querySelectorAll('.theme-options button')].map(b => b.dataset.themeChoice)"), ['classic', 'journal', 'nebula']);
+  await evaluate("(() => { const s=document.querySelector('[data-pixel-toggle]'); if (s.getAttribute('aria-checked')!=='true') s.click(); })()");
+  await until("document.documentElement.dataset.pixel!==undefined");
+  await evaluate("document.querySelector('[data-theme-choice=nebula]').click()");
+  await until("document.documentElement.dataset.theme==='nebula'");
+  assert.equal(await evaluate("document.documentElement.dataset.pixel"), undefined, 'Nebula has no pixel look.');
+  assert.equal(await evaluate("document.querySelector('[data-pixel-toggle]').disabled"), true, 'The pixel switch is disabled in Nebula.');
+  assert.equal(await evaluate("document.querySelector('[data-pixel-toggle]').getAttribute('aria-checked')"), 'true', 'The stored pixel choice stays.');
+  // The fixed palette wins over the chosen one (original: #000000 background), which stays stored.
+  assert.equal(await evaluate("getComputedStyle(document.documentElement).getPropertyValue('--background').trim()"), '#050505');
+  assert.equal(await evaluate("getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()"), '#a66cf0');
+  assert.equal(await evaluate("getComputedStyle(document.documentElement).colorScheme"), 'dark');
+  assert.equal(await evaluate("JSON.parse(localStorage.getItem('journal.settings')).colorTheme"), 'original');
+  await evaluate("Promise.all([document.fonts.load('400 15px \"Space Mono\"'),document.fonts.load('400 40px \"Instrument Serif\"'),document.fonts.load('700 12px \"Space Grotesk\"')])");
+  await pause(300); await screenshot('nebula-settings.png');
+  await evaluate("document.querySelector('#settings-colors-tab').click()");
+  await until("Boolean(document.querySelector('.color-settings.is-fixed .color-fixed-hint')) && !document.querySelector('[data-color-theme-choice]')");
+  await key('Escape');
+  await until("!document.querySelector('.settings') && Boolean(document.querySelector('.nebula-desk'))");
+  // Its own layout: no sidebar, toolbar or title bar; rail, terminals, poster; the window's controls in its own bar.
+  assert.deepEqual(await evaluate("[...document.querySelectorAll('.app > .sidebar, .main > .toolbar, .main > .topbar, .book-stage')].map(e => e.className)"), []);
+  assert(await evaluate("['.nebula-rail','.nebula-terminal.is-entries','.nebula-terminal.is-data','.nebula-terminal.is-board','.nebula-poster','.nebula-backdrop'].every(s => document.querySelector(s))"));
+  assert.equal(await evaluate("document.querySelectorAll('.nebula-window-bar .window-controls button').length"), 3);
+  assert.equal(await evaluate("document.querySelector('.nebula-backdrop').getAttribute('aria-hidden')"), 'true');
+  assert.equal(await evaluate("getComputedStyle(document.querySelector('.nebula-backdrop')).pointerEvents"), 'none');
+  assert.equal(await evaluate("document.querySelector('.nebula-poster-figure').textContent"), today.slice(8));
+  assert.match(await evaluate(prompt), new RegExp(`--day ${today}`));
+  assert.match(await evaluate("getComputedStyle(document.querySelector('.nebula-terminal .entry-text')).fontFamily"), /Space Mono/);
+  assert.match(await evaluate("getComputedStyle(document.querySelector('.nebula-poster-figure')).fontFamily"), /Instrument Serif/);
+  assert.match(await evaluate("getComputedStyle(document.querySelector('.nebula-tab')).fontFamily"), /Space Grotesk/);
+  assert.equal(await evaluate("document.querySelector('[data-stat=entries]').textContent"), '5');
+  assert.equal(await evaluate("document.querySelector('[data-stat=open]').textContent"), '1');
+  assert.equal(await evaluate("document.querySelector('.nebula-today').disabled"), true);
+  // Animated decoration (it stands still with reduced motion, below).
+  assert(await evaluate("document.getAnimations().some(a => a.playState==='running' && a.effect?.getTiming().iterations===Infinity)"));
+  // The glitch boxes stand still (no blinking), and the marquee runs slowly.
+  assert.equal(await evaluate("document.getAnimations().filter(a => a.effect?.target?.classList?.contains('nebula-glitch')).length"), 0);
+  assert(await evaluate("parseFloat(getComputedStyle(document.querySelector('.nebula-marquee-track')).animationDuration) >= 120"));
+  // The small calendar beside the poster: a month to pick days in.
+  assert.equal(await evaluate("document.querySelectorAll('.nebula-side .nebula-cal-panel .cal-compact-day').length"), 42);
+  assert.equal(await evaluate("document.querySelector('.nebula-side .cal-compact-day[aria-selected=true]')?.textContent"), String(Number(today.slice(8))));
+  await pause(400); await screenshot('nebula-day.png');
+  // Writing in the terminal: a new task, then done with Alt+D.
+  await evaluate("[...document.querySelectorAll('.nebula-terminal .kind-picker button')].find(b => b.title.includes('Alt A')).click()");
+  await until("document.querySelectorAll('.entry').length===6 && document.activeElement?.classList.contains('entry-text')");
+  await command('Input.insertText', { text:'Nebula schreibt mit' });
+  await key('d', 'KeyD', 1);
+  await until("document.activeElement.closest('.entry')?.dataset.status==='done'");
+  await saveNow();
+  await until("window.__uiTest.saves>0 && window.__uiTest.day().entries.some(e => e.text==='Nebula schreibt mit' && e.done)");
+  assert.equal(await evaluate("document.querySelector('[data-stat=entries]').textContent"), '6');
+  // Turning days in the rail, and back with [ HEUTE ].
+  await evaluate("document.querySelectorAll('.nebula-step')[1].click()");
+  await until(`${prompt}?.includes(${JSON.stringify(tomorrow)})`);
+  assert.equal(await evaluate("document.querySelector('.nebula-today').disabled"), false);
+  await evaluate("document.querySelector('.nebula-today').click()");
+  await until(`${prompt}?.includes(${JSON.stringify(today)}) && document.querySelector('.nebula-today').disabled`);
+  await evaluate("document.activeElement?.blur()");
+  await key('ArrowRight', 'ArrowRight', 1);
+  await until(`${prompt}?.includes(${JSON.stringify(tomorrow)})`);
+  await key('h', 'KeyH', 1);
+  await until(`${prompt}?.includes(${JSON.stringify(today)})`);
+  // The views as hooked tabs (and Ctrl+1–5): an overview has a note and an activities terminal.
+  await evaluate("document.querySelector('.nebula-tab[data-period-mode=week]').click()");
+  await until("Boolean(document.querySelector('.nebula-terminal.is-notes')) && Boolean(document.querySelector('.nebula-terminal.is-activities')) && !document.querySelector('.nebula-terminal.is-entries')");
+  assert.equal(await evaluate("document.querySelector('.nebula-tab[aria-current=page]').dataset.periodMode"), 'week');
+  // The calendar's day view: in the week, a strip of its days changes the day shown without leaving the overview.
+  await evaluate("document.querySelector('.nebula-cal-views [data-cal-view=day]').click()");
+  // It is the calendar's own day view: 24 hours in one column, no view tabs, and the main calendar keeps its view.
+  const panelCal = ".nebula-cal-panel .cal.is-fixed[data-view=day]";
+  await until(`document.querySelectorAll('.nebula-cal-strip button').length===7 && document.querySelectorAll('${panelCal} .cal-time-column').length===1`);
+  assert.equal(await evaluate(`document.querySelectorAll('${panelCal} .cal-time-hours span').length`), 24);
+  assert.equal(await evaluate(`document.querySelectorAll('${panelCal} .cal-viewbar').length`), 0);
+  assert.equal(await evaluate("document.querySelector('.nebula-calendar .cal').dataset.view"), 'month');
+  assert.equal(await evaluate("JSON.parse(localStorage.getItem('journal.calendar') ?? '{}').view ?? 'month'"), 'month');
+  // In the week, the strip moves the calendar to another of its days; the overview stays.
+  const otherDay = await evaluate("[...document.querySelectorAll('.nebula-cal-strip button')].find(b => b.getAttribute('aria-pressed')!=='true').dataset.stripDate");
+  await evaluate(`document.querySelector('.nebula-cal-strip [data-strip-date="${otherDay}"]').click()`);
+  await until(`document.querySelector('.nebula-cal-strip [data-strip-date="${otherDay}"]').getAttribute('aria-pressed')==='true'`);
+  assert.equal(await evaluate("document.querySelector('.nebula-tab[aria-current=page]').dataset.periodMode"), 'week');
+  // Entries are made in it like in the calendar: dragging over the hours opens the composer.
+  const column = await evaluate(`(() => { const r=document.querySelector('${panelCal} .cal-time-column').getBoundingClientRect(), b=document.querySelector('${panelCal} .cal-body').getBoundingClientRect(); const allday=document.querySelector('${panelCal} .cal-time-allday').getBoundingClientRect(); const top=Math.max(r.top,b.top,allday.bottom)+30; return {x:r.left+r.width/2, y:top}; })()`);
+  await command('Input.dispatchMouseEvent', { type:'mouseMoved', x:column.x, y:column.y });
+  await command('Input.dispatchMouseEvent', { type:'mousePressed', x:column.x, y:column.y, button:'left', clickCount:1 });
+  for (let step = 1; step <= 6; step++) await command('Input.dispatchMouseEvent', { type:'mouseMoved', x:column.x, y:column.y + step * 12, button:'left', buttons:1 });
+  await command('Input.dispatchMouseEvent', { type:'mouseReleased', x:column.x, y:column.y + 72, button:'left', clickCount:1 });
+  await until("Boolean(document.querySelector('.cal-composer'))");
+  assert(await evaluate(`Boolean(document.querySelector('${panelCal} .cal-selection'))`), 'The dragged hours are marked in the day view (not the whole day).');
+  assert(await evaluate(`[...document.querySelectorAll('${panelCal} .cal-toolbar :is(.cal-nav, .cal-actions)')].every(e => { const r=e.getBoundingClientRect(), p=document.querySelector('.nebula-cal-panel').getBoundingClientRect(); return r.width>0 && r.left>=p.left-1 && r.right<=p.right+1; })`), 'Turning and filters fit the panel.');
+  await pause(300); await screenshot('nebula-day-composer.png');
+  await key('Escape');
+  await until("!document.querySelector('.cal-composer')");
+  // The poster scrolls away; the calendar sticks to the top and grows into its room, down to the window's edge.
+  const panelBox = "(() => { const p=document.querySelector('.nebula-cal-panel').getBoundingClientRect(), d=document.querySelector('.nebula-desk').getBoundingClientRect(), q=document.querySelector('.nebula-poster').getBoundingClientRect(); return { top:p.top-d.top, bottom:innerHeight-p.bottom, height:p.height, poster:q.bottom-d.top }; })()";
+  const before = await evaluate(panelBox);
+  assert(before.top > before.poster && Math.abs(before.bottom - 18) <= 2, `The calendar fills the column below the poster: ${JSON.stringify(before)}`);
+  await evaluate("document.querySelector('.nebula-desk').scrollTop=420");
+  await pause(200);
+  const after = await evaluate(panelBox);
+  assert(after.poster < 0 && Math.abs(after.top - 18) <= 2 && Math.abs(after.bottom - 18) <= 2 && after.height > before.height + 100, `The poster is gone, the calendar takes its room: ${JSON.stringify(after)}`);
+  await pause(300); await screenshot('nebula-week.png');
+  await evaluate("document.querySelector('.nebula-desk').scrollTop=0");
+  await evaluate("document.querySelector('.nebula-cal-views [data-cal-view=month]').click()");
+  await until("Boolean(document.querySelector('.nebula-side .cal-compact-grid'))");
+  await key('3', 'Digit3', 2);
+  await until("document.querySelector('.nebula-tab[aria-current=page]').dataset.periodMode==='month'");
+  await key('1', 'Digit1', 2);
+  await until("Boolean(document.querySelector('.nebula-terminal.is-entries .entry'))");
+  // Ctrl+K brings the calendar window over the terminals, Esc in it takes it away again.
+  assert.equal(await evaluate("getComputedStyle(document.querySelector('.nebula-calendar')).visibility"), 'hidden');
+  await evaluate("document.activeElement?.blur()");
+  await key('k', 'KeyK', 2);
+  await until("document.querySelector('.nebula-calendar').classList.contains('is-open') && Boolean(document.activeElement?.closest('.nebula-calendar'))");
+  await pause(400);
+  assert.equal(await evaluate("getComputedStyle(document.querySelector('.nebula-calendar')).visibility"), 'visible');
+  await screenshot('nebula-calendar.png');
+  await key('Escape');
+  await until("!document.querySelector('.nebula-calendar').classList.contains('is-open') && document.activeElement?.classList.contains('nebula-calendar-toggle')");
+  await evaluate("document.querySelector('.nebula-calendar-toggle').click()");
+  await until("document.querySelector('.nebula-calendar').classList.contains('is-open')");
+  await evaluate("document.querySelector('.nebula-calendar-close').click()");
+  await until("!document.querySelector('.nebula-calendar').classList.contains('is-open')");
+  // Tickets: only entries tagged delivery, payment or appointments (the fixed mail tags); a click opens their day.
+  const ticketEntry = (id, text, extra) => `{id:'30000000-0000-4000-8000-00000000000${id}',kind:'event',text:'${text}',done:false,cancelled:false,priority:false,time:null,reminder:false,plan:null,...${JSON.stringify(extra)}}`;
+  await evaluate(`window.__uiTest.store({date:${JSON.stringify(tomorrow)},title:'',body:'',revision:1,entries:[${ticketEntry(1, 'Kino ohne Tag', { time:'18:00' })}]})`);
+  await pause(600);
+  assert.equal(await evaluate("document.querySelectorAll('.nebula-ticket').length"), 0, 'Untagged entries get no ticket.');
+  await evaluate(`window.__uiTest.store({date:${JSON.stringify(tomorrow)},title:'',body:'',revision:2,entries:[${ticketEntry(1, 'Kino ohne Tag', { time:'18:00' })},${ticketEntry(2, 'Konzert im Park', { time:'19:30', end:'22:00', tag:'f4c8191a-2d70-4b01-9d00-000000000003' })},${ticketEntry(3, 'Paket kommt', { kind:'task', tag:'f4c8191a-2d70-4b01-9d00-000000000001' })}]})`);
+  await until("document.querySelectorAll('.nebula-ticket').length===2");
+  assert.deepEqual(await evaluate("[...document.querySelectorAll('.nebula-ticket')].map(t => t.dataset.ticketTag)"), ['Lieferung', 'Termine']);
+  assert.match(await evaluate("document.querySelectorAll('.nebula-ticket')[1].textContent"), /Konzert im Park.*19:30/);
+  await evaluate("document.querySelector('.nebula-tickets').scrollIntoView({block:'end'})");
+  await pause(300); await screenshot('nebula-tickets.png');
+  await evaluate("document.querySelector('.nebula-ticket').click()");
+  await until(`${prompt}?.includes(${JSON.stringify(tomorrow)})`);
+  await evaluate("document.activeElement?.blur()");
+  await key('h', 'KeyH', 1);
+  await until(`${prompt}?.includes(${JSON.stringify(today)})`);
+  // The pinboard in the style: square cards without tilt, on Nebula paper.
+  await evaluate("document.querySelector('.nebula-terminal.is-board .board-actions button').click()");
+  await until("Boolean(document.querySelector('.nebula-terminal.is-board .board-card'))");
+  assert.equal(await evaluate("getComputedStyle(document.querySelector('.board-card')).getPropertyValue('--tilt').trim()"), '0deg');
+  assert.equal(await evaluate("getComputedStyle(document.querySelector('.board-card')).borderTopLeftRadius"), '0px');
+  await evaluate("document.querySelector('.nebula-terminal.is-board').scrollIntoView({block:'center'})");
+  await pause(400); await screenshot('nebula-board.png');
+  // Widths: nothing runs out of the window; narrow, the rail is a bar on top and the poster lies below.
+  for (const width of [1380, 1180, 820, 560]) {
+    await command('Emulation.setDeviceMetricsOverride',{width,height:820,deviceScaleFactor:1,mobile:false}); await evaluate("document.querySelector('.nebula-desk').scrollTop=0"); await pause(350);
+    assert(await evaluate("(() => { const d=document.querySelector('.nebula-desk'); return d.scrollWidth<=d.clientWidth+1; })()"), `No horizontal overflow at ${width}`);
+    assert(await evaluate("[...document.querySelectorAll('.nebula-tab, .nebula-window-bar button, .nebula-step, .nebula-today, .nebula-calendar-toggle')].every(e => { const r=e.getBoundingClientRect(); return r.width>0 && r.left>=-1 && r.right<=innerWidth+1; })"), `Controls fit at ${width}`);
+    const order = await evaluate("(() => { const r=document.querySelector('.nebula-rail').getBoundingClientRect(), c=document.querySelector('.nebula-terminals').getBoundingClientRect(), p=document.querySelector('.nebula-side').getBoundingClientRect(); return { railAbove: r.bottom<=c.top+1, posterBelow: p.top>=c.bottom-1, posterRight: p.left>=c.right-1 }; })()");
+    if (width >= 1180) assert(order.posterRight, `Poster right of the terminals at ${width}`);
+    else assert(order.posterBelow, `Poster below the terminals at ${width}`);
+    if (width <= 820) assert(order.railAbove, `Rail above the terminals at ${width}`);
+    if (width === 1180) await screenshot('nebula-1180.png');
+    if (width === 820) await screenshot('nebula-narrow.png');
+    if (width === 560) await screenshot('nebula-small.png');
+  }
+  await command('Emulation.setDeviceMetricsOverride',{width:1180,height:780,deviceScaleFactor:1,mobile:false});
+  // Reduced motion: the desk stands still.
+  await command('Emulation.setEmulatedMedia', { features:[{name:'prefers-reduced-motion',value:'reduce'}] });
+  await pause(100);
+  assert.deepEqual(await evaluate("document.getAnimations().filter(a => a.playState==='running' && a.effect?.getTiming().iterations===Infinity).map(a => String(a.effect.target?.className?.baseVal ?? a.effect.target?.className))"), []);
+  await command('Emulation.setEmulatedMedia', { features:[] });
+  // Other windows take the design (and no pixel look) too.
+  await command('Page.navigate',{url:`${origin}/?window=calendar`});
+  await until("document.documentElement.dataset.theme==='nebula' && document.documentElement.dataset.pixel===undefined && Boolean(document.querySelector('.cal'))");
+  assert.equal(await evaluate("getComputedStyle(document.documentElement).getPropertyValue('--background').trim()"), '#050505');
+  await pause(300); await screenshot('nebula-calendar-window.png');
+  await command('Page.navigate',{url:origin});
+  await until("document.documentElement.dataset.theme==='nebula' && Boolean(document.querySelector('.nebula-desk .entry'))");
+  // Back to the normal design: the pixel look chosen before returns with it; then off again.
+  await key(',', 'Comma', 2);
+  await until("Boolean(document.querySelector('[data-theme-choice=classic]'))");
+  await evaluate("document.querySelector('[data-theme-choice=classic]').click()");
+  await until("document.documentElement.dataset.theme==='classic' && document.documentElement.dataset.pixel!==undefined && !document.querySelector('[data-pixel-toggle]').disabled");
+  await evaluate("document.querySelector('[data-pixel-toggle]').click()");
+  await until("document.documentElement.dataset.pixel===undefined");
+  assert.equal(await evaluate("getComputedStyle(document.documentElement).getPropertyValue('--background').trim()"), '#000000');
+  await key('Escape');
+  await until("Boolean(document.querySelector('.sidebar')) && !document.querySelector('.nebula-desk')");
+  assert.deepEqual(errors, []);
+  console.log('Nebula checks passed: third design card, no pixel look (switch disabled, choice kept), fixed palette over the stored one, fonts, rail/terminals/poster layout, writing and Alt+D in the terminal, day turning and [ HEUTE ], view tabs and Ctrl+1–5, the calendar window (Ctrl+K, Esc, ×), tickets opening their day, widths 1380–560, reduced motion, the calendar window and switching back.');
+}
+
 async function checkCalendarStart() {
   const origin = `http://127.0.0.1:${server.address().port}`;
   const atHour = hour => `(() => { const grid=document.querySelector('.cal-time'); return grid && Math.abs(grid.scrollTop/parseFloat(getComputedStyle(grid).getPropertyValue('--hour'))-${hour}) < .05; })()`;
@@ -2599,6 +2794,36 @@ try {
     await checkJournalTheme();
   } else if (process.env.JOURNAL_UI_SCOPE === 'pixel') {
     await checkPixelTheme();
+  } else if (process.env.JOURNAL_UI_SCOPE === 'nebula') {
+    await checkNebulaTheme();
+  } else if (process.env.JOURNAL_UI_SCOPE === 'popups') {
+    // Two looks of the popups per design: the planner (Alt+T) and editing a calendar entry (right click).
+    const origin = `http://127.0.0.1:${server.address().port}`;
+    await command('Emulation.setDeviceMetricsOverride',{width:1380,height:860,deviceScaleFactor:1,mobile:false});
+    for (const theme of ['classic', 'journal', 'nebula']) for (const style of ['a', 'b']) {
+      await evaluate(`localStorage.setItem('journal.settings', JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'), theme:'${theme}', popupStyle:'${style}', pixel:false, colorTheme:'${theme === 'journal' ? 'paper' : 'original'}'})); localStorage.setItem('journal.calendarDrawer','0'); localStorage.setItem('journal.calendar', JSON.stringify({view:'month', kinds:{event:true,task:true,note:false}}))`);
+      await command('Page.navigate', { url:origin });
+      await until(`document.documentElement.dataset.theme==='${theme}' && document.documentElement.dataset.popups==='${style}' && document.querySelectorAll('.entry').length===5`);
+      await evaluate("document.fonts.ready.then(() => true)");
+      await evaluate("[...document.querySelectorAll('.entry')].find(e => e.dataset.entryKind==='task' && e.dataset.status==='open').querySelector('.entry-text').focus()");
+      await key('t', 'KeyT', 1);
+      await until("Boolean(document.querySelector('.planner-grid'))");
+      await pause(450); await screenshot(`popups-${theme}-${style}-planner.png`);
+      assert(await evaluate("(() => { const r=document.querySelector('.planner').getBoundingClientRect(); return r.width>200 && r.top>=0 && r.bottom<=innerHeight; })()"), `The planner is on screen (${theme} ${style}).`);
+      if (theme === 'nebula' && style === 'a') assert.match(await evaluate("getComputedStyle(document.querySelector('.planner'), '::before').content"), /plan\.sh/);
+      await key('Escape'); await until("!document.querySelector('.planner-grid')");
+      if (theme !== 'classic') { await evaluate("document.activeElement?.blur()"); await key('k', 'KeyK', 2); }
+      const host = theme === 'classic' ? '.sidebar' : theme === 'journal' ? '.calendar-drawer' : '.nebula-calendar';
+      await until(`Boolean(document.querySelector('${host} .cal-item'))`);
+      await pause(theme === 'classic' ? 100 : 800);
+      await evaluate(`(() => { const item=document.querySelector('${host} .cal-item'); const r=item.getBoundingClientRect(); item.dispatchEvent(new MouseEvent('contextmenu', { bubbles:true, cancelable:true, clientX:r.left+5, clientY:r.top+5 })); })()`);
+      await until("Boolean(document.querySelector('.cal-composer.is-placed'))");
+      await pause(450); await screenshot(`popups-${theme}-${style}-composer.png`);
+      assert(await evaluate("(() => { const r=document.querySelector('.cal-composer').getBoundingClientRect(); return r.width>200 && r.top>=0 && r.left>=0 && r.bottom<=innerHeight && r.right<=innerWidth; })()"), `The composer is on screen (${theme} ${style}).`);
+      await key('Escape'); await until("!document.querySelector('.cal-composer')");
+    }
+    assert.deepEqual(errors, []);
+    console.log('Popup styles passed: planner and composer in both looks of the normal, journal and Nebula designs.');
   } else if (process.env.JOURNAL_UI_SCOPE === 'calendar-start') {
     await checkCalendarStart();
   } else if (process.env.JOURNAL_UI_SCOPE === 'mail') {
@@ -3308,7 +3533,7 @@ try {
   await key(',', 'Comma', 2);
   // The settings open on the design, the first choice of the panel.
   await until("Boolean(document.querySelector('.settings')) && document.activeElement.dataset.themeChoice === 'classic'");
-  assert.deepEqual(await evaluate("[...document.querySelectorAll('.settings-option')].map(option => option.dataset.layout)"), ['orbit', 'inline', 'swipe'], 'The bar and the palette are gone.');
+  assert.deepEqual(await evaluate("[...document.querySelectorAll('.settings-option')].map(option => option.dataset.layout)"), ['orbit', 'inline'], 'Swiping is not offered on the desktop (kept for touch screens).');
   await pause(350);
   await screenshot('settings.png');
   await evaluate("document.querySelector('.settings-option[data-layout=inline]').click()");
@@ -3364,6 +3589,7 @@ try {
   await key('Delete', 'Delete', 1);
   await until(`!${row(inlineTask)}`);
   // Fifth layout: gestures instead of a menu.
+  await evaluate("window.__journalSwipeLayout = true");
   await key(',', 'Comma', 2);
   await until("Boolean(document.querySelector('.settings'))");
   await evaluate("document.querySelector('.settings-option[data-layout=swipe]').click()");
@@ -3638,6 +3864,7 @@ try {
     await key('Enter', 'Enter', 1);
     await until("!document.querySelector('.entry-dock-shell.is-open')");
   }
+  await evaluate("window.__journalSwipeLayout = true");
   await key(',', 'Comma', 2);
   await until("Boolean(document.querySelector('.settings'))");
   await evaluate("document.querySelector('.settings-option[data-layout=swipe]').click()");

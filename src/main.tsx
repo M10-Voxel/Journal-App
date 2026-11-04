@@ -43,6 +43,7 @@ import { JournalBook, pageHeading, useBookView } from './components/JournalBook'
 import type { BookControl } from './components/JournalBook';
 import { CalendarDrawer, CalendarTab, useCalendarDrawer } from './components/CalendarDrawer';
 import type { BookPage } from './book';
+import { NebulaDesk } from './components/NebulaDesk';
 import '@fontsource/ibm-plex-sans/400.css';
 import '@fontsource/ibm-plex-sans/500.css';
 import '@fontsource/ibm-plex-sans/600.css';
@@ -65,12 +66,23 @@ import '@fontsource/source-serif-4/700-italic.css';
 import '@fontsource/fraunces/500.css';
 import '@fontsource/fraunces/600.css';
 import '@fontsource/fraunces/400-italic.css';
+import '@fontsource/space-mono/400.css';
+import '@fontsource/space-mono/400-italic.css';
+import '@fontsource/space-mono/700.css';
+import '@fontsource/space-mono/700-italic.css';
+import '@fontsource/space-grotesk/400.css';
+import '@fontsource/space-grotesk/500.css';
+import '@fontsource/space-grotesk/700.css';
+import '@fontsource/instrument-serif/400.css';
+import '@fontsource/instrument-serif/400-italic.css';
 import './pixel-sizes.css';
 import './pixel.css';
 import './colors.css';
 import './tags.css';
 import './popups.css';
 import './journal-theme.css';
+import './nebula-theme.css';
+import './popup-styles.css';
 import { applyColors } from './colors';
 
 applyTheme(loadSettings());
@@ -128,6 +140,10 @@ function App() {
   const sidebar = useSidebarWidth();
   // The journal style shows the app as a book; its calendar comes down from a ribbon instead of the sidebar.
   const bookMode = settings.theme === 'journal';
+  // Nebula lays the app out as a desktop of terminals (NebulaDesk); its calendar is a window of its own over them.
+  const nebulaMode = settings.theme === 'nebula';
+  // Both have their own head for the day (the book's page, Nebula's poster) and their own calendar (Ctrl+K).
+  const ownLayout = bookMode || nebulaMode;
   const [bookView, setBookView] = useBookView();
   const [bookWide, setBookWide] = useState(true);
   const bookRef = useRef<BookControl>(null);
@@ -142,7 +158,7 @@ function App() {
   const toggleDrawer = (focus = false) => {
     const opening = !drawer.open;
     drawer.setOpen(opening);
-    if (focus) requestAnimationFrame(() => document.querySelector<HTMLElement>(opening ? '.calendar-drawer .cal' : '.calendar-tab')?.focus({ preventScroll: true }));
+    if (focus) requestAnimationFrame(() => document.querySelector<HTMLElement>(opening ? '.calendar-drawer .cal, .nebula-calendar .cal' : '.calendar-tab, .nebula-calendar-toggle')?.focus({ preventScroll: true }));
   };
   const datePickerButtonRef = useRef<HTMLButtonElement>(null);
   const [datePickerOpen, setDatePickerOpen] = useState(false);
@@ -239,7 +255,7 @@ function App() {
   }, []);
   // The calendar sheet over the book covers the left page; opening a day there folds it away so the day can be seen.
   const openFromCalendar = useStableCallback((target: string, entryId?: string) => {
-    if (bookMode && drawer.open && settings.bookPaging !== 'spread') drawer.setOpen(false);
+    if ((bookMode && drawer.open && settings.bookPaging !== 'spread') || (nebulaMode && drawer.open)) drawer.setOpen(false);
     showFromCalendar(target, entryId ?? null);
   });
   const showFromCalendar = useStableCallback((target: string, entryId: string | null) => {
@@ -476,8 +492,8 @@ function App() {
     else if (ctrl && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) focusText(event.key === 'ArrowDown' ? adjacentText(null, 1) : titleInput());
     // The book: Ctrl+PageDown/PageUp turn a page, Ctrl+K brings the calendar down (Esc on the page takes it back up).
     else if (bookMode && ctrl && (event.key === 'PageDown' || event.key === 'PageUp')) bookRef.current?.turn(event.key === 'PageDown' ? 1 : -1);
-    else if (bookMode && ctrl && event.code === 'KeyK') toggleDrawer(true);
-    else if (bookMode && drawer.open && event.key === 'Escape' && target === document.body) toggleDrawer(true);
+    else if (ownLayout && ctrl && event.code === 'KeyK') toggleDrawer(true);
+    else if (ownLayout && drawer.open && event.key === 'Escape' && target === document.body) toggleDrawer(true);
     else return;
     event.preventDefault();
   });
@@ -528,8 +544,8 @@ function App() {
   const entriesPage = (pageDate = date) => {
     const here = ready && pageDate === date;
     const slideClass = slide && !bookMode ? ` slide-${slide}` : '';
-    // In the book the page's head (JournalBook) shows the date with the navigation.
-    return <>{!bookMode && <div className={`document-header${slideClass}`}>
+    // In the book the page's head (JournalBook) shows the date with the navigation; in Nebula the poster does.
+    return <>{!ownLayout && <div className={`document-header${slideClass}`}>
         <div className="eyebrow">{t("Tagesnotiz")}{pageDate === today && <span className="today-label">{t("Heute")}</span>}</div>
         <h1>{formatDate(pageDate)}</h1>
       </div>}
@@ -594,14 +610,16 @@ function App() {
   </nav>;
   // Turning both pages at once, the sheet does not cover a page: the book shows one page beside it.
   const besideCalendar = bookMode && drawer.open && settings.bookPaging === 'spread';
+  const visibleOpen = visibleEntries.filter(entry => entry.kind === 'task' && !entry.done && !entry.cancelled).length;
+  const nebulaStats = { entries: entryCount, open: visibleOpen, done: visibleEntries.filter(entry => entry.done).length, events: visibleEntries.filter(entry => entry.kind === 'event').length };
   const calendar = <Calendar embedded journalDate={date} onOpen={openFromCalendar} onCreate={createFromCalendar} onEdit={editFromCalendar} onRemove={removeFromCalendar} onExport={exportFromCalendar} onImport={importFromCalendar} />;
-  return <div className={`app actions-${settings.actionLayout}${sidebar.dragging ? ' is-resizing' : ''}${bookMode ? ' is-book' : ''}`} onFocusCapture={event => {
+  return <div className={`app actions-${settings.actionLayout}${sidebar.dragging ? ' is-resizing' : ''}${bookMode ? ' is-book' : ''}${nebulaMode ? ' is-nebula' : ''}`} onFocusCapture={event => {
     const target = event.target as HTMLElement;
     if (newEntryId && !target.closest('.popover') && target.closest<HTMLElement>('[data-entry-id]')?.dataset.entryId !== newEntryId) setNewEntryId(null);
   }}>
     {/* The sidebar is the calendar (its view switch in line with the toolbar next to it); dragging its edge sets the width.
         In the book it is always a sheet pulled out onto the book instead (JournalBook's overlay). */}
-    {bookMode ? null
+    {ownLayout ? null
       : <aside inert={driveBusy} className="sidebar" aria-label={t("Kalender und Navigation")} style={{ width: sidebar.width }}>
         {calendar}
         <div className="sidebar-resizer" {...sidebar.handle} />
@@ -611,7 +629,12 @@ function App() {
     <main inert={driveBusy} className="main" ref={mainRef} onMouseDown={event => { if (bookMode && (event.target === event.currentTarget || (event.target as Element).classList.contains('book-stage'))) dragWindow(event); }}>
       {/* In the book there is no title bar: the cover around the book moves the window; settings and the window's
           controls sit on it in the top right corner, beside the register tabs. */}
-      {bookMode ? <div className="book-window-bar" onMouseDown={dragWindow}>
+      {nebulaMode ? <div className="nebula-window-bar" onMouseDown={dragWindow}>
+        <span className="nebula-window-title" aria-hidden="true"><b>journal</b>@desk:~ <span className="nebula-cursor">▍</span></span>
+        <span className="nebula-window-space" />
+        <button type="button" className="titlebar-button settings-button" data-mail-count={mailStatus.count || undefined} aria-label={t("Einstellungen")} aria-keyshortcuts="Control+," title={t("Einstellungen · Strg ,")} onClick={() => openSettings()}><Icon name="settings" /></button>
+        <WindowControls onError={setError} />
+      </div> : bookMode ? <div className="book-window-bar" onMouseDown={dragWindow}>
         <button type="button" className="titlebar-button settings-button" data-mail-count={mailStatus.count || undefined} aria-label={t("Einstellungen")} aria-keyshortcuts="Control+," title={t("Einstellungen · Strg ,")} onClick={() => openSettings()}><Icon name="settings" /></button>
         <WindowControls onError={setError} />
       </div> : <header className="topbar" onMouseDown={dragWindow}>
@@ -622,11 +645,20 @@ function App() {
         <WindowControls onError={setError} />
       </header>}
       {/* Like the calendar's toolbar (and Zed's under its tabs): turning the days first, then what is shown. */}
-      {!bookMode && <div className="toolbar">{toolbarItems}</div>}
+      {!ownLayout && <div className="toolbar">{toolbarItems}</div>}
 
       {bookMode ? <JournalBook mode={periodMode} date={date} today={today} onToday={() => navigate(today)} renderNav={bookNav} view={bookView} paging={settings.bookPaging} beside={besideCalendar} sheetWidth={sidebar.width} onNavigate={navigate} renderPage={bookPage} entriesScrollRef={scrollRef} controlRef={bookRef} onWideChange={setBookWide}
         calendarTab={<CalendarTab open={drawer.open} onToggle={() => toggleDrawer()} />} register={register}
         overlay={<CalendarDrawer overlay open={drawer.open} animated={drawer.animated} width={sidebar.width} resizer={sidebar.handle} resizable={besideCalendar || !(bookView === 'double' && bookWide)} disabled={driveBusy} onClose={() => toggleDrawer(true)}>{calendar}</CalendarDrawer>} />
+        : nebulaMode ? <NebulaDesk mode={periodMode} date={date} today={today} modes={periodModes} modeLabels={periodLabels} dirty={dirty} title={ready ? day.title : ''} stats={nebulaStats}
+          onMode={setPeriodMode} onStep={stepPeriod} onToday={() => navigate(today)} stepLabels={stepLabels} disabled={driveBusy}
+          datePicker={<MiniCalendarPicker date={date} open={datePickerOpen} onOpenChange={setDatePickerOpen} onPick={navigate} buttonRef={datePickerButtonRef} className="nebula-date">{pageHeading(date, periodMode)}</MiniCalendarPicker>}
+          tagFilter={<TagFilter label={t("Tags im Journal")} hidden={hiddenTags} onChange={next => { setNewEntryId(null); setHiddenTags(next); }} />}
+          entries={entriesPage()} data={<PeriodNotes date={date} mode="day" onManage={() => openSettings('activities')} onImport={importFromCalendar} />} board={<BulletinBoard key={date} date={date} />}
+          notes={<PeriodNotes date={date} mode={periodMode} part="notes" onManage={() => openSettings('activities')} onImport={importFromCalendar} />}
+          activities={<PeriodNotes date={date} mode={periodMode} part="activities" onManage={() => openSettings('activities')} onImport={importFromCalendar} />}
+          calendar={calendar} calendarOpen={drawer.open} onCalendarToggle={() => toggleDrawer()} onCalendarClose={() => toggleDrawer(true)} onOpenDay={(target, entry) => showFromCalendar(target, entry ?? null)} onNavigate={navigate} scrollRef={scrollRef}
+          dayCalendar={(showDate, onDateChange) => <Calendar embedded fixedView="day" journalDate={date} showDate={showDate} onDateChange={onDateChange} onOpen={openFromCalendar} onCreate={createFromCalendar} onEdit={editFromCalendar} onRemove={removeFromCalendar} />} />
         : <div className="scroll" ref={scrollRef}>
           <div className="content">
             {periodMode === 'day' && entriesPage()}

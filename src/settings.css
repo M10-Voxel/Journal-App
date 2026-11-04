@@ -23,6 +23,7 @@
 .switch > span { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--muted); transition: transform 200ms var(--spring), background-color var(--fast) ease; }
 .switch:hover > span { background: var(--text); }
 .switch[aria-checked='true'] { background: var(--accent); }
+.switch:disabled { cursor: not-allowed; opacity: .45; }
 .switch[aria-checked='true'] > span { background: var(--on-accent, #fff); transform: translateX(16px); }
 
 .scale-slider { display: flex; align-items: center; gap: 10px; }
@@ -32,8 +33,8 @@
 .scale-slider button:hover { color: var(--text); }
 .scale-slider button[aria-pressed='true'] { color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 
-/* The two designs as cards, each with a small sample of its type and colours (the pixel look shows in both). */
-.theme-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 6px; }
+/* The three designs as cards, each with a small sample of its type and colours (the pixel look shows in both). */
+.theme-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 6px; }
 .theme-options > button { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; padding: 12px; border: 0; border-radius: 10px; background: var(--border);
   box-shadow: inset 0 0 0 1px var(--edge); text-align: left; cursor: pointer; transition: background-color var(--fast) ease, box-shadow var(--fast) ease; }
 .theme-options > button:hover { background: color-mix(in srgb, var(--strong) 3%, var(--border)); }
@@ -52,3 +53,41 @@
 .theme-sample.is-journal i:nth-of-type(3) { background: #3f7a3a; }
 .theme-sample.is-pixel > span { font-family: 'Pixelify Sans'; font-style: normal; }
 .theme-sample.is-pixel i { border-radius: 0; }
+
+/* The popups' two looks per design, as cards with a small popup drawn in each (popup-styles.css has the real ones). */
+.settings-subhead { margin: 18px 0 2px; color: var(--muted); font: 600 11px var(--sans); letter-spacing: .06em; text-transform: uppercase; }
+.popup-style-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 8px; }
+.popup-style-options > button { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; padding: 12px; border: 0; border-radius: 10px; background: var(--border);
+  box-shadow: inset 0 0 0 1px var(--edge); text-align: left; cursor: pointer; transition: background-color var(--fast) ease, box-shadow var(--fast) ease; }
+.popup-style-options > button:hover { background: color-mix(in srgb, var(--strong) 3%, var(--border)); }
+.popup-style-options > button[aria-checked='true'] { background: color-mix(in srgb, var(--accent) 6%, transparent); box-shadow: inset 0 0 0 1.5px var(--accent); }
+.popup-style-options strong { color: var(--text); font: 600 13px var(--sans); }
+.popup-style-options > button[aria-checked='true'] strong { color: var(--accent); }
+.popup-style-options small { color: var(--muted); font: 11.5px var(--sans); }
+.popup-sample { --ps-bg: #292929; --ps-ink: #bcbcbc; --ps-day: #ffffff1c; --ps-on: #569eff; --ps-head: #ffffff2a;
+  position: relative; display: flex; flex-direction: column; gap: 5px; width: 132px; height: 72px; margin-bottom: 4px; padding: 7px 8px; box-sizing: border-box;
+  border-radius: 9px; background: var(--ps-bg); box-shadow: 0 0 0 1px #ffffff14, 0 8px 18px -8px #000; overflow: hidden; }
+.popup-sample > b { display: block; width: 46%; height: 5px; margin: 0 auto 1px; border-radius: 3px; background: var(--ps-head); }
+.popup-sample > span { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+.popup-sample i { height: 9px; border-radius: 3px; background: var(--ps-day); }
+.popup-sample i.is-on { background: var(--ps-on); }
+.popup-sample > em { align-self: flex-end; width: 34px; height: 10px; margin-top: auto; border-radius: 5px; background: var(--ps-on); }
+.popup-sample.is-classic-b { --ps-bg: linear-gradient(140deg, #5a6a8a66, #29292999); border-radius: 14px; box-shadow: inset 0 1px 0 #ffffff33, 0 0 0 1px #ffffff2e, 0 10px 22px -8px #000;
+  background: linear-gradient(140deg, #6b7fa855, #3a3a3a99), repeating-linear-gradient(45deg, #ffffff08 0 6px, transparent 6px 12px); }
+.popup-sample.is-classic-b i { border-radius: 50%; }
+.popup-sample.is-classic-b > em { border-radius: 999px; box-shadow: 0 0 10px #569eff99; }
+.popup-sample:is(.is-journal-a, .is-journal-b) { --ps-ink: #2b2620; --ps-day: transparent; --ps-on: #2f5d9e; --ps-head: #2b262055; border-radius: 2px; font-family: 'Source Serif 4', serif; }
+.popup-sample.is-journal-a { background: #f8f3e7; box-shadow: inset 0 2px 0 #c0392b88, 0 6px 14px -6px #3b2a1a99; }
+.popup-sample.is-journal-a i.is-on { border-radius: 50% 45% 55% 40%; background: transparent; box-shadow: inset 0 0 0 1.5px #2f5d9e; }
+.popup-sample.is-journal-a > em { height: 2px; width: 50px; border-radius: 0; background: #2b2620aa; }
+.popup-sample.is-journal-b { padding-top: 15px; background: radial-gradient(circle at 50% 5px, #3b2a1a 2px, transparent 2.5px) 0 0 / 12px 10px repeat-x, #f3df8f; box-shadow: inset 0 10px 0 #e3c96a, 0 6px 14px -6px #3b2a1a99; }
+.popup-sample.is-journal-b i { background: #2b262014; }
+.popup-sample.is-journal-b i.is-on { background: #a8641a; }
+.popup-sample.is-journal-b > em { background: #a8641a; border-radius: 1px; }
+.popup-sample:is(.is-nebula-a, .is-nebula-b) { border-radius: 0; font-family: 'Space Mono', monospace; }
+.popup-sample:is(.is-nebula-a, .is-nebula-b) i, .popup-sample:is(.is-nebula-a, .is-nebula-b) > em { border-radius: 0; }
+.popup-sample.is-nebula-a { --ps-bg: #0c0c0e; --ps-day: #ffffff1f; --ps-on: #7b2cbf; --ps-head: #cfcfcf; padding-top: 0; background: #0c0c0e; box-shadow: 0 0 0 1px #e8e8e8, 4px 4px 0 #7b2cbf; }
+.popup-sample.is-nebula-a > b { width: auto; height: 9px; margin: 0 -8px 2px; border-radius: 0; background: #cfcfcf linear-gradient(90deg, #7b2cbf 0 28px, transparent 28px) 4px 3px / 60px 3px no-repeat; }
+.popup-sample.is-nebula-b { --ps-day: #11111122; --ps-on: linear-gradient(115deg, #d5b8ff, #a6f2dc, #ffd0b0); --ps-head: #111; background: #cfcfcf; box-shadow: inset 0 6px 0 #7b2cbf, 0 0 0 1px #000, 4px 4px 0 #000; padding-top: 11px; }
+.popup-sample.is-nebula-b > b { display: none; }
+.popup-sample.is-nebula-b i.is-on, .popup-sample.is-nebula-b > em { background: linear-gradient(115deg, #d5b8ff, #a6f2dc, #ffd0b0); box-shadow: 0 0 0 1px #111; }

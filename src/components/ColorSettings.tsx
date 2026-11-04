@@ -47,6 +47,11 @@ export function ColorSettings({ settings, onChange }: { settings: Settings; onCh
     else next[token] = value;
     onChange({ ...settings, customColors: { ...settings.customColors, [settings.colorTheme]: next } });
   };
+  if (settings.theme === 'nebula') return <div className="color-settings is-fixed">
+    <h3 id="settings-colors-title">{t('Basis-Farbtheme')}</h3>
+    <p className="settings-hint color-fixed-hint" role="note">{t('Nebula hat feste Farben: Schwarz, Papiergrau und Violett. Deine Farbwahl bleibt gespeichert und gilt wieder in Normal und Journal.')}</p>
+    <span className="nebula-fixed-swatches" aria-hidden="true"><i /><i /><i /><i /></span>
+  </div>;
   return <div className="color-settings">
     <h3 id="settings-colors-title">{t('Basis-Farbtheme')}</h3>
     <p className="settings-hint">{t('Wähle eine Basis und passe einzelne Farben an. Funktioniert mit Klassisch, Pixel und Journal.')}</p>

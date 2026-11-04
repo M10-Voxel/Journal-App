@@ -1,8 +1,8 @@
 import { t, useLanguage } from '../i18n';
 import { useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent, ReactNode } from 'react';
-import { themes, withTheme } from '../settings';
-import type { Settings } from '../settings';
+import { pixelActive, swipeAvailable, themes, withTheme } from '../settings';
+import type { PopupStyle, Settings, Theme } from '../settings';
 import type { ActionLayout } from './EntryActionDock';
 import type { BookView } from './JournalBook';
 import type { CalendarImport } from '../journal';
@@ -24,11 +24,25 @@ const tabInfo = (): Record<SettingsTab, { icon: IconName; label: string }> => ({
   activities: { icon: 'check', label: t('Aktivitäten') }, drive: { icon: 'transfer', label: 'Google Drive' }, mail: { icon: 'mail', label: t("E-Mail-Konten") },
 });
 
+const themeInfo = (): Record<Theme, { title: string; text: string }> => ({
+  classic: { title: t('Normal'), text: t('Klar und kompakt') },
+  journal: { title: 'Journal', text: t('Ein Buch zum Umblättern') },
+  nebula: { title: 'Nebula', text: t('Y2K · Cybercore · Brutalismus') },
+});
+
 const layouts = (): { value: ActionLayout; title: string; text: string }[] => ([
   { value: 'orbit', title: 'Orbit', text: t("Aktionen kreisen um den Punkt.") },
   { value: 'inline', title: t("Eingebettet"), text: t("Eine Zeile Wörter unter dem Eintrag.") },
-  { value: 'swipe', title: t("Wischen"), text: t("Den Punkt zur Seite ziehen.") },
+  // Swiping stays for touch screens (the Android version); on the desktop it is not offered (settings.ts).
+  ...swipeAvailable() ? [{ value: 'swipe' as const, title: t("Wischen"), text: t("Den Punkt zur Seite ziehen.") }] : [],
 ]);
+
+/** The two looks of the popups in each design (popup-styles.css). */
+const popupStyles = (theme: Theme): { value: PopupStyle; title: string; text: string }[] => ({
+  classic: [{ value: 'a' as const, title: t('Karte'), text: t('Fest, mit weichem Schatten') }, { value: 'b' as const, title: t('Glas'), text: t('Durchscheinend und hell umrandet') }],
+  journal: [{ value: 'a' as const, title: t('Karteikarte'), text: t('Papier mit rotem Rand') }, { value: 'b' as const, title: t('Notizblock'), text: t('Gelbes Blatt mit Ringbindung') }],
+  nebula: [{ value: 'a' as const, title: 'Terminal', text: t('Schwarzes Fenster mit Prompt') }, { value: 'b' as const, title: t('Holo-Papier'), text: t('Graues Papier, violetter Balken') }],
+})[theme];
 
 /** Arrow keys move through a row of radio buttons (the options' order), like a native radio group. */
 function arrowStep<T>(event: KeyboardEvent, values: readonly T[], current: T): T | null {
@@ -101,7 +115,7 @@ export function SettingsDialog({ settings, onChange, onClose, onImport, mailStat
     return () => previous?.focus({ preventScroll: true });
   }, []);
   const show = (next: SettingsTab) => { setTab(next); requestAnimationFrame(() => dialogRef.current?.querySelector<HTMLButtonElement>(`#settings-${next}-tab`)?.focus()); };
-  const scale = Math.round(factorOf(settings.uiScale, screenSize, settings.pixel) * 100);
+  const scale = Math.round(factorOf(settings.uiScale, screenSize, pixelActive(settings)) * 100);
   const info = tabInfo();
 
   const appearance = <>
@@ -115,14 +129,29 @@ export function SettingsDialog({ settings, onChange, onClose, onImport, mailStat
       }}>
         {themes.map(theme => <button key={theme} type="button" role="radio" aria-checked={settings.theme === theme} tabIndex={settings.theme === theme ? 0 : -1} data-theme-choice={theme}
           onClick={() => onChange(withTheme(settings, theme))}>
-          <span className={`theme-sample is-${theme}${settings.pixel ? ' is-pixel' : ''}`} aria-hidden="true"><span>Aa</span><i /><i /><i /></span>
-          <strong>{theme === 'classic' ? t('Normal') : 'Journal'}</strong>
-          <small>{theme === 'classic' ? t('Klar und kompakt') : t('Ein Buch zum Umblättern')}</small>
+          <span className={`theme-sample is-${theme}${settings.pixel && theme !== 'nebula' ? ' is-pixel' : ''}`} aria-hidden="true"><span>Aa</span><i /><i /><i /></span>
+          <strong>{themeInfo()[theme].title}</strong>
+          <small>{themeInfo()[theme].text}</small>
         </button>)}
       </div>
-      <SettingRow id="settings-pixel" label={t('Pixel-Look')} note={t('Pixelschrift, eckige Formen, Bewegung in Stufen')}>
-        <button type="button" role="switch" className="switch" aria-checked={settings.pixel} aria-labelledby="settings-pixel" data-pixel-toggle onClick={() => onChange({ ...settings, pixel: !settings.pixel })}><span /></button>
+      <SettingRow id="settings-pixel" label={t('Pixel-Look')} note={settings.theme === 'nebula' ? t('Nebula hat eine eigene Schrift; gilt für Normal und Journal') : t('Pixelschrift, eckige Formen, Bewegung in Stufen')}>
+        <button type="button" role="switch" className="switch" aria-checked={settings.pixel} aria-labelledby="settings-pixel" data-pixel-toggle disabled={settings.theme === 'nebula'} onClick={() => onChange({ ...settings, pixel: !settings.pixel })}><span /></button>
       </SettingRow>
+      <h3 id="settings-popups" className="settings-subhead">{t('Popups')}</h3>
+      <p className="settings-hint">{t('Planer, Kalendereinträge und Auswahlen')}</p>
+      <div className="popup-style-options" role="radiogroup" aria-labelledby="settings-popups" onKeyDown={event => {
+        const next = arrowStep(event, ['a', 'b'] as const, settings.popupStyle);
+        if (next === null) return;
+        onChange({ ...settings, popupStyle: next });
+        requestAnimationFrame(() => dialogRef.current?.querySelector<HTMLElement>(`[data-popup-style="${next}"]`)?.focus());
+      }}>
+        {popupStyles(settings.theme).map(option => <button key={option.value} type="button" role="radio" aria-checked={settings.popupStyle === option.value} tabIndex={settings.popupStyle === option.value ? 0 : -1}
+          data-popup-style={option.value} onClick={() => onChange({ ...settings, popupStyle: option.value })}>
+          <span className={`popup-sample is-${settings.theme}-${option.value}`} aria-hidden="true"><b /><span>{Array.from({ length: 14 }, (_, index) => <i key={index} className={index === 9 ? 'is-on' : undefined} />)}</span><em /></span>
+          <strong>{option.title}</strong>
+          <small>{option.text}</small>
+        </button>)}
+      </div>
     </section>
     {settings.theme === 'journal' && <section className="settings-section">
       <h3>{t('Buch')}</h3>

@@ -9,24 +9,37 @@ import type { UiScale } from './uiScale';
 
 // Device-local UI preferences live in localStorage. ThemeSync also mirrors language
 // to native preferences so the tray and reminders use it before a webview opens.
-/** The base design: the normal app or the journal (a book). The pixel look (`pixel`) can be laid over either. */
-export type Theme = 'classic' | 'journal';
-export const themes: readonly Theme[] = ['classic', 'journal'];
+/**
+ * The base design: the normal app, the journal (a book) or Nebula (a Y2K desktop of terminals and posters). The pixel
+ * look (`pixel`) can be laid over the first two; Nebula has its own type and fixed colours.
+ */
+export type Theme = 'classic' | 'journal' | 'nebula';
+export const themes: readonly Theme[] = ['classic', 'journal', 'nebula'];
 const isTheme = (value: unknown): value is Theme => themes.includes(value as Theme);
 /** In the journal style: one page at a time, or both at once (`spread`, the board then lies over both pages). */
 export type BookPaging = 'page' | 'spread';
 /**
+ * The look of the popups (planner, calendar entries, pickers): two variants per design, `a` and `b` (settings.css and
+ * popup-styles.css name them: Karte/Glas, Karteikarte/Notizblock, Terminal/Holo-Papier).
+ */
+export type PopupStyle = 'a' | 'b';
+/**
+ * Swiping an entry's dot (the `swipe` action layout) is kept for touch screens (the Android version) but not offered on
+ * the desktop. The UI checks still exercise it through `window.__journalSwipeLayout`.
+ */
+export const swipeAvailable = () => /android/i.test(navigator.userAgent) || (window as { __journalSwipeLayout?: boolean }).__journalSwipeLayout === true;
+/**
  * `previousColorTheme`: the palette chosen before switching to the journal style, restored when leaving it.
  */
-export interface Settings extends ColorSettings { actionLayout: ActionLayout; theme: Theme; pixel: boolean; language: Language; uiScale: UiScale; bookPaging: BookPaging; previousColorTheme?: ColorTheme }
+export interface Settings extends ColorSettings { actionLayout: ActionLayout; theme: Theme; pixel: boolean; popupStyle: PopupStyle; language: Language; uiScale: UiScale; bookPaging: BookPaging; previousColorTheme?: ColorTheme }
 const key = 'journal.settings';
-export const defaultSettings: Settings = { actionLayout: 'orbit', theme: 'classic', pixel: false, language: 'de', uiScale: 'auto', bookPaging: 'page', ...defaultColorSettings };
+export const defaultSettings: Settings = { actionLayout: 'orbit', theme: 'classic', pixel: false, popupStyle: 'a', language: 'de', uiScale: 'auto', bookPaging: 'page', ...defaultColorSettings };
 
 export function loadSettings(): Settings {
   try {
     const stored = JSON.parse(localStorage.getItem(key) ?? '{}') as Partial<Omit<Settings, 'theme'>> & { theme?: string };
     // The pixel style used to be a theme of its own; it is the normal design with the pixel look now.
-    return { actionLayout: stored.actionLayout === 'inline' || stored.actionLayout === 'swipe' ? stored.actionLayout : defaultSettings.actionLayout, theme: isTheme(stored.theme) ? stored.theme : 'classic',
+    return { actionLayout: stored.actionLayout === 'inline' || (stored.actionLayout === 'swipe' && swipeAvailable()) ? stored.actionLayout : defaultSettings.actionLayout, popupStyle: stored.popupStyle === 'b' ? 'b' : 'a', theme: isTheme(stored.theme) ? stored.theme : 'classic',
       pixel: stored.pixel === true || stored.theme === 'pixel', language: stored.language === 'en' ? 'en' : 'de', uiScale: isUiScale(stored.uiScale) ? stored.uiScale : 'auto', ...normalizeColorSettings(stored),
       bookPaging: stored.bookPaging === 'spread' ? 'spread' : 'page',
       ...colorThemeIds.includes(stored.previousColorTheme as ColorTheme) ? { previousColorTheme: stored.previousColorTheme } : {} };
@@ -36,20 +49,23 @@ export function saveSettings(settings: Settings) {
   settings = { ...settings, ...normalizeColorSettings(settings) };
   try { localStorage.setItem(key, JSON.stringify(settings)); } catch { /* storage unavailable: keep it for this session */ }
   applyTheme(settings);
-  void applyScale(settings.uiScale, settings.pixel);
+  void applyScale(settings.uiScale, pixelActive(settings));
   applyColors(settings);
   setLanguage(settings.language);
-  void emit('journal:theme', { theme: settings.theme, pixel: settings.pixel }).catch(() => {});
-  void emit('journal:scale', { scale: settings.uiScale, pixel: settings.pixel }).catch(() => {});
+  void emit('journal:theme', { theme: settings.theme, pixel: settings.pixel, popupStyle: settings.popupStyle }).catch(() => {});
+  void emit('journal:scale', { scale: settings.uiScale, pixel: pixelActive(settings) }).catch(() => {});
   void emit('journal:language', settings.language).catch(() => {});
   void emit('journal:colors', { colorTheme: settings.colorTheme, customColors: settings.customColors }).catch(() => {});
 }
 
+/** Whether the pixel look shows: Nebula never takes it (the stored choice stays for the other designs). */
+export const pixelActive = ({ theme, pixel }: Pick<Settings, 'theme' | 'pixel'>) => pixel && theme !== 'nebula';
 /** The design on the page: `data-theme` is the base design, `data-pixel` the pixel look over it. */
-export function applyTheme({ theme, pixel }: Pick<Settings, 'theme' | 'pixel'>) {
+export function applyTheme({ theme, pixel, popupStyle }: Pick<Settings, 'theme' | 'pixel'> & { popupStyle?: PopupStyle }) {
   const root = document.documentElement;
   root.dataset.theme = isTheme(theme) ? theme : 'classic';
-  if (pixel) root.dataset.pixel = ''; else delete root.dataset.pixel;
+  root.dataset.popups = popupStyle === 'b' ? 'b' : 'a';
+  if (pixelActive({ theme, pixel })) root.dataset.pixel = ''; else delete root.dataset.pixel;
 }
 /** Whether the pixel look is on in this window. */
 export const pixelOn = () => document.documentElement.dataset.pixel !== undefined;

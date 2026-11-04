@@ -53,14 +53,21 @@ export function CalendarWindow() {
 // Memoized: in the sidebar it must not re-render while the journal is being typed in (`onOpen` is stable).
 /** An entry being edited (right click): its day and the element the card is placed at. */
 type Editing = { entry: Entry; date: string; element: HTMLElement };
-export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, onEdit, onRemove, onExport, onImport, embedded = false, autoFocus = false }: {
+export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, onEdit, onRemove, onExport, onImport, embedded = false, autoFocus = false, fixedView, showDate, onDateChange }: {
   onExport?: () => Promise<CalendarDay[]>; onImport?: (entries: CalendarImport[]) => Promise<void>;
   journalDate: string | null; onOpen: (date: string, entry?: string) => void; embedded?: boolean; autoFocus?: boolean;
+  /** Always this view, without the view tabs (Nebula's day beside the overview); the stored view stays the other calendars'. */
+  fixedView?: CalendarView;
+  /** A day to show other than the journal's (Nebula: a day of the week picked in its strip). */
+  showDate?: string;
+  /** Hears the day the calendar shows. */
+  onDateChange?: (date: string) => void;
   onCreate?: (date: string, entry: NewEntry) => Promise<void>; onEdit?: (date: string, id: string, change: EntryEdit, scope?: ScopeOption) => Promise<void>; onRemove?: (date: string, id: string, others: { id: string; date: string }[]) => Promise<void>;
 }) {
   useLanguage();
   const [prefs, setPrefs] = useState(loadPrefs);
-  const { view, kinds } = prefs;
+  const { kinds } = prefs;
+  const view = fixedView ?? prefs.view;
   const now = useNow();
   const today = localDate(now);
   const [date, setDate] = useState(journalDate ?? today);
@@ -89,10 +96,16 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
   // A range drawn while entries without a tag are hidden takes the first tag shown, so it does not vanish at once.
   const newTag = isShown(hiddenTags, null) ? null : tags.find(tag => !hiddenTags.has(tag.id))?.id ?? null;
 
-  useEffect(() => { try { localStorage.setItem(storageKey, JSON.stringify(prefs)); } catch { /* keep it for this session */ } }, [prefs]);
+  useEffect(() => { try {
+    // A calendar with a fixed view keeps the stored view (another calendar's) and stores only the kinds shown.
+    const stored = fixedView ? { ...loadPrefs(), kinds: prefs.kinds } : prefs;
+    localStorage.setItem(storageKey, JSON.stringify(stored));
+  } catch { /* keep it for this session */ } }, [prefs]);
   useEffect(() => { if (autoFocus) rootRef.current?.focus(); }, []);
   // Whenever the journal shows another day, the calendar goes there; browsing the calendar leaves the journal alone.
-  useEffect(() => { if (journalDate) go(journalDate); }, [journalDate]);
+  useEffect(() => { if (journalDate && !showDate) go(journalDate); }, [journalDate]);
+  useEffect(() => { if (showDate) go(showDate); }, [showDate]);
+  useEffect(() => { onDateChange?.(date); }, [date]);
   // Another page or view leaves the entry being edited behind.
   const pageKey = view === 'year' ? date.slice(0, 4) : view === 'month' ? date.slice(0, 7) : viewDates(view, date)[0];
   useEffect(() => setEditing(null), [view, pageKey]);
@@ -104,7 +117,7 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
   const remove = async (others: { id: string; date: string }[]) => { if (editing) { await onRemove!(editing.date, editing.entry.id, others); setEditing(null); refocus(); } };
   const editContext = { remove: onRemove ? (entry:Entry, value:string, others:ScopeOption['others'])=>onRemove(value,entry.id,others) : undefined, edit: onEdit ? (entry: Entry, value: string, element: HTMLElement) => setEditing({ entry, date: value, element }) : null, editingId: editing?.entry.id ?? null };
 
-  const setView = (next: CalendarView) => setPrefs(current => ({ ...current, view: next }));
+  const setView = (next: CalendarView) => { if (!fixedView) setPrefs(current => ({ ...current, view: next })); };
   // Going somewhere directly shows it in place; stepping slides the next page in from that side.
   const go = (value: string) => { setSlide(null); setDate(value); };
   const show = (next: CalendarView, value: string) => { go(value); setView(next); };
@@ -165,7 +178,7 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
   },[date,onCreate]);
   const selectedIndex = calendarViews().findIndex(item => item.view === view);
   return <OpenInJournal.Provider value={onOpen}><EditInCalendar.Provider value={editContext}>
-    <div ref={rootRef} className={`cal${embedded ? ' is-embedded' : ''}`} data-view={view} tabIndex={-1} aria-label={t("Kalender")} onKeyDown={onKeyDown} onPointerDown={beginMulti} onClickCapture={event=>{if(suppressClick.current){event.preventDefault();event.stopPropagation();suppressClick.current=false;}}} onPointerMove={event=>{const day=(event.target as Element).closest<HTMLElement>('[data-date]')?.dataset.date;pasteTarget.current=day ?? date;}}>
+    <div ref={rootRef} className={`cal${embedded ? ' is-embedded' : ''}${fixedView ? ' is-fixed' : ''}`} data-view={view} tabIndex={-1} aria-label={t("Kalender")} onKeyDown={onKeyDown} onPointerDown={beginMulti} onClickCapture={event=>{if(suppressClick.current){event.preventDefault();event.stopPropagation();suppressClick.current=false;}}} onPointerMove={event=>{const day=(event.target as Element).closest<HTMLElement>('[data-date]')?.dataset.date;pasteTarget.current=day ?? date;}}>
       {/* Drawn over several days: the normal card, with the span's start and end (and repeating, tags, priority …). */}
       {multi && onCreate && <CalendarComposer key="multi" date={multi.start} draft={null} span={{ end: multi.end }} onSpanChange={setMulti} tag={newTag}
         anchor={() => (rootRef.current?.querySelector(`[data-range-date="${multi.end}"]`) ?? rootRef.current?.querySelector(`[data-range-date="${multi.start}"]`) ?? rootRef.current)?.getBoundingClientRect() ?? null}
@@ -173,7 +186,7 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
       {rangeDraw && <div className="cal-action-notice">{formatDate(rangeDraw.start)} – {formatDate(rangeDraw.end)}</div>}
       {notice && <div className="cal-action-notice" role="status">{notice}</div>}
       {pasting && <Popover anchor={rootRef.current} label={t('Einfügen')} onClose={()=>setPasting(null)}><div className="cal-paste-choice"><p>{t('Wiederholung einfügen')}</p><button type="button" onClick={()=>void paste(pasting.entry,pasting.date,false)}>{t('Nur diesen Tag')}</button><button type="button" onClick={()=>void paste(pasting.entry,pasting.date,true)}>{t('Mit Wiederholung')}</button></div></Popover>}
-      <nav className="cal-viewbar" aria-label={t("Kalenderansicht")}>
+      {!fixedView && <nav className="cal-viewbar" aria-label={t("Kalenderansicht")}>
         <div className="cal-views" role="tablist" aria-label={t("Ansicht")} style={{ '--index': selectedIndex, '--count': calendarViews().length } as CSSProperties}>
           <span className="cal-views-indicator" aria-hidden="true" />
           {calendarViews().map((item, index) => <button key={item.view} type="button" role="tab" aria-selected={item.view === view} aria-label={item.label} title={`${item.label} · ${item.key} ${t('oder')} ${index + 1}`} onClick={() => setView(item.view)}>
@@ -181,7 +194,7 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
           </button>)}
         </div>
         {onExport && onImport && <CalendarTransfer onExport={onExport} onImport={onImport} />}
-      </nav>
+      </nav>}
       {/* The same toolbar as the journal's: turning first (the same capsule), then the title, the filters at the end. */}
       <header className="cal-toolbar toolbar">
         <div className="cal-nav"><NavCluster label={t("Kalendernavigation")} prev={{ label: t("Zurück"), tip: t("Zurück · ←") }} next={{ label: t("Weiter"), tip: t("Weiter · →") }} today={{ tip: t("Heute · H") }}

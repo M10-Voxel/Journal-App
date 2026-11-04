@@ -1,0 +1,139 @@
+/* The popups for entries and calendar entries in two looks per design (Settings → Darstellung → Popups, `data-popups`
+   on the root, settings.ts): the planner (date, time, repeat), the calendar's composer (creating and editing), and the
+   pickers and cards (`.popover`: tags, details, choices). Variant `a` of the normal design is the base in popups.css,
+   styles.css and calendar.css; everything else is laid over it here. Most of it works through the colour tokens set on
+   the popup itself, so the clock, repeat panel and pickers inside follow without rules of their own.
+   Arrows: the small pointer (`::before`) is hidden where the sheet has an edge of its own (binding, head bar); the
+   composer's tag strip (`.has-tag::before`) is kept where it fits. */
+
+/* ── Normal · B · Glas: translucent, blurred, a bright rim, round fields and a glowing choice ───────────────────── */
+:root[data-theme='classic'][data-popups='b'] :is(.planner, .cal-composer, .popover, .repeat-suggest) {
+  --background: color-mix(in srgb, var(--strong) 7%, transparent);
+  --border: color-mix(in srgb, var(--strong) 8%, transparent);
+  --hover: color-mix(in srgb, var(--strong) 12%, transparent);
+  --inset: color-mix(in srgb, var(--strong) 6%, transparent);
+  background: color-mix(in srgb, var(--surface) 62%, transparent);
+  -webkit-backdrop-filter: blur(22px) saturate(1.6); backdrop-filter: blur(22px) saturate(1.6);
+  border-radius: 18px;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--strong) 22%, transparent), inset 0 0 0 1px color-mix(in srgb, var(--strong) 12%, transparent), 0 30px 60px -22px #000000f2, 0 0 0 1px #00000055;
+}
+:root[data-theme='classic'][data-popups='b'] .planner::before, :root[data-theme='classic'][data-popups='b'] .cal-composer:not(.has-tag)::before { display: none; }
+:root[data-theme='classic'][data-popups='b'] :is(.cal-composer-text, .cal-composer-when, .planner-time, .planner-reminder, .planner-confirm, .tag-picker-search, .repeat-chip, .cal-satellite) { border-radius: 999px; }
+:root[data-theme='classic'][data-popups='b'] .cal-composer-description { border-radius: 14px; }
+:root[data-theme='classic'][data-popups='b'] :is(.cal-composer-text, .cal-composer-description) { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--strong) 10%, transparent); }
+:root[data-theme='classic'][data-popups='b'] .planner-day, :root[data-theme='classic'][data-popups='b'] .cal-composer .cal-compact-day { border-radius: 999px; }
+:root[data-theme='classic'][data-popups='b'] :is(.planner-day[aria-selected='true'], .cal-composer .cal-compact-day[aria-selected='true']) { box-shadow: 0 0 16px color-mix(in srgb, var(--accent) 65%, transparent); }
+:root[data-theme='classic'][data-popups='b'] :is(.cal-composer-create, .planner-confirm:hover) { box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 60%, transparent); }
+:root[data-theme='classic'][data-popups='b'] .planner-foot { border-top-color: color-mix(in srgb, var(--strong) 10%, transparent); }
+:root[data-theme='classic'][data-popups='b'] .tag-option { border-radius: 999px; }
+
+/* ── Journal · A · Karteikarte: plain paper, a red rule on top, underlined fields, circled days ──────────────────── */
+:root[data-theme='journal'][data-popups='a'] :is(.planner, .cal-composer, .popover) {
+  border-radius: 2px;
+  background-color: var(--surface);
+  box-shadow: inset 0 3px 0 color-mix(in srgb, var(--error) 55%, transparent), 0 0 0 1px var(--edge), 0 18px 34px -14px color-mix(in srgb, #3b2a1a 60%, transparent);
+  font-family: var(--serif);
+}
+:root[data-theme='journal'][data-popups='a'] .planner::before, :root[data-theme='journal'][data-popups='a'] .cal-composer:not(.has-tag)::before { background: var(--surface); }
+:root[data-theme='journal'][data-popups='a'] :is(.cal-composer-text, .cal-composer-description, .tag-picker-search) {
+  border-radius: 0; background: transparent; box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--text) 35%, transparent); font-family: var(--write); font-style: italic; }
+:root[data-theme='journal'][data-popups='a'] :is(.cal-composer-text, .cal-composer-description):focus { outline: none; box-shadow: inset 0 -2px 0 var(--accent); }
+:root[data-theme='journal'][data-popups='a'] .cal-composer-text { font-size: 15px; }
+:root[data-theme='journal'][data-popups='a'] :is(.cal-composer-when, .planner-time, .planner-reminder, .planner-confirm, .repeat-chip) { border-radius: 3px; background: transparent; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 30%, transparent); }
+:root[data-theme='journal'][data-popups='a'] :is(.planner-month, .mini-picker-head strong) { font: italic 600 15px var(--display); }
+:root[data-theme='journal'][data-popups='a'] :is(.planner-day, .cal-composer .cal-compact-day) { border-radius: 50% 45% 55% 42% / 48% 55% 45% 52%; font-family: var(--serif); }
+:root[data-theme='journal'][data-popups='a'] :is(.planner-day[aria-selected='true'], .cal-composer .cal-compact-day[aria-selected='true']) { background: transparent !important; color: var(--accent) !important; box-shadow: inset 0 0 0 2px var(--accent); }
+:root[data-theme='journal'][data-popups='a'] .planner-day[aria-selected='true']::after { background: var(--accent); }
+:root[data-theme='journal'][data-popups='a'] .planner-day.is-today { box-shadow: inset 0 -2px 0 var(--now); }
+:root[data-theme='journal'][data-popups='a'] .planner-foot { border-top: 1px solid color-mix(in srgb, var(--error) 35%, transparent); }
+:root[data-theme='journal'][data-popups='a'] .cal-composer-create { border-radius: 3px; }
+
+/* ── Journal · B · Notizblock: an amber sheet on a spiral binding, a highlighter for the choice ─────────── */
+:root[data-theme='journal'][data-popups='b'] :is(.planner, .cal-composer, .popover) {
+  --surface: color-mix(in srgb, var(--priority) 26%, var(--book-paper, var(--surface)));
+  --border: color-mix(in srgb, var(--priority) 12%, transparent);
+  --hover: color-mix(in srgb, var(--priority) 22%, transparent);
+  --binding: color-mix(in srgb, var(--priority) 34%, var(--book-paper, var(--surface)));
+  border-radius: 3px 3px 1px 1px;
+  background-color: var(--surface);
+  background-image: radial-gradient(circle at 50% 9px, color-mix(in srgb, var(--text) 75%, transparent) 2.6px, transparent 3.3px),
+    linear-gradient(var(--binding) 0 18px, transparent 18px);
+  background-size: 16px 18px, 100% 100%;
+  background-repeat: repeat-x, no-repeat;
+  background-position: 4px 0, 0 0;
+  box-shadow: 0 0 0 1px var(--edge), 0 3px 0 -1px color-mix(in srgb, var(--surface) 86%, #000), 0 5px 0 -2px color-mix(in srgb, var(--surface) 78%, #000), 0 20px 34px -14px color-mix(in srgb, #3b2a1a 60%, transparent);
+  font-family: var(--serif);
+}
+:root[data-theme='journal'][data-popups='b'] .planner { padding-top: 26px; }
+:root[data-theme='journal'][data-popups='b'] .cal-composer { padding-top: 26px; }
+:root[data-theme='journal'][data-popups='b'] .popover { padding-top: 24px; }
+:root[data-theme='journal'][data-popups='b'] .planner::before, :root[data-theme='journal'][data-popups='b'] .cal-composer::before { display: none; }
+:root[data-theme='journal'][data-popups='b'] .cal-composer.has-tag { box-shadow: inset 4px 0 0 var(--tag), 0 0 0 1px var(--edge), 0 20px 34px -14px color-mix(in srgb, #3b2a1a 60%, transparent); }
+:root[data-theme='journal'][data-popups='b'] :is(.cal-composer-text, .cal-composer-description, .tag-picker-search) {
+  border-radius: 0; background: transparent; box-shadow: inset 0 -1.5px 0 color-mix(in srgb, var(--text) 40%, transparent); font-family: var(--write); font-style: italic; }
+:root[data-theme='journal'][data-popups='b'] .cal-composer-text { font-size: 15px; }
+:root[data-theme='journal'][data-popups='b'] :is(.cal-composer-text, .cal-composer-description):focus { outline: none; box-shadow: inset 0 -2px 0 var(--accent); }
+:root[data-theme='journal'][data-popups='b'] :is(.cal-composer-when, .planner-time, .planner-reminder, .repeat-chip) { border-radius: 2px; background: color-mix(in srgb, var(--surface) 70%, #fff 30%); box-shadow: 0 1px 0 color-mix(in srgb, #3b2a1a 25%, transparent); }
+:root[data-theme='journal'][data-popups='b'] :is(.planner-month, .mini-picker-head strong) { font: italic 600 15px var(--display); }
+:root[data-theme='journal'][data-popups='b'] :is(.planner-day, .cal-composer .cal-compact-day) { border-radius: 2px 6px 3px 5px; font-family: var(--serif); }
+:root[data-theme='journal'][data-popups='b'] :is(.planner-day[aria-selected='true'], .cal-composer .cal-compact-day[aria-selected='true']) {
+  background: color-mix(in srgb, var(--priority) 60%, transparent) !important; color: var(--strong) !important; transform: rotate(-2deg); }
+:root[data-theme='journal'][data-popups='b'] .planner-day[aria-selected='true']::after { background: var(--strong); }
+:root[data-theme='journal'][data-popups='b'] :is(.cal-composer-create, .planner-confirm) { border-radius: 2px; background: var(--priority) !important; color: #2b2620 !important; }
+:root[data-theme='journal'][data-popups='b'] .planner-foot { border-top: 1px dashed color-mix(in srgb, var(--text) 30%, transparent); }
+
+/* ── Nebula · A · Terminal: a black window with a grey prompt bar, mono type, a violet offset shadow ─────────── */
+:root[data-theme='nebula'][data-popups='a'] :is(.planner, .cal-composer, .popover) {
+  --background: #050505; --inset: #050505; --border: #141417; --hover: #1d1d23;
+  border-radius: 0; background: #0c0c0e;
+  box-shadow: 0 0 0 1px var(--nb-line), 6px 6px 0 var(--nb-violet);
+  font-family: var(--mono);
+}
+:root[data-theme='nebula'][data-popups='a'] .planner { padding-top: 34px; }
+:root[data-theme='nebula'][data-popups='a'] .cal-composer { padding-top: 34px; }
+:root[data-theme='nebula'][data-popups='a'] .popover { padding-top: 30px; }
+/* The prompt bar, in place of the arrow. */
+:root[data-theme='nebula'][data-popups='a'] :is(.planner, .cal-composer, .popover)::before {
+  content: '[journal@~]$ ./pick.sh'; position: absolute; display: block; top: 0; left: 0; right: 0; width: auto; height: 22px; padding: 0 10px; margin: 0;
+  overflow: hidden; border: 0; border-radius: 0; background: var(--nb-paper); color: var(--nb-ink); box-shadow: inset 0 -1px 0 var(--nb-line);
+  font: 700 10px/22px var(--mono); letter-spacing: .02em; text-align: left; white-space: nowrap; transform: none; pointer-events: none; }
+:root[data-theme='nebula'][data-popups='a'] .planner::before { content: '[journal@~]$ ./plan.sh'; }
+:root[data-theme='nebula'][data-popups='a'] .cal-composer::before { content: '[journal@~]$ ./entry.sh --new'; }
+:root[data-theme='nebula'][data-popups='a'] .cal-composer.is-editing::before { content: '[journal@~]$ ./entry.sh --edit'; }
+:root[data-theme='nebula'][data-popups='a'] .cal-composer.has-tag { box-shadow: inset 4px 0 0 var(--tag), 0 0 0 1px var(--nb-line), 6px 6px 0 var(--nb-violet); }
+:root[data-theme='nebula'][data-popups='a'] :is(.cal-composer-text, .cal-composer-description, .tag-picker-search) { border-radius: 0; background: #050505; box-shadow: inset 0 0 0 1px var(--edge); font-family: var(--mono); caret-color: var(--nb-violet-light); }
+:root[data-theme='nebula'][data-popups='a'] :is(.cal-composer-text, .cal-composer-description):focus { box-shadow: inset 0 0 0 1px var(--nb-violet-light); }
+:root[data-theme='nebula'][data-popups='a'] :is(.cal-composer-when, .planner-time, .planner-reminder, .planner-confirm, .repeat-chip) { border-radius: 0; background: transparent; box-shadow: inset 0 0 0 1px var(--edge); }
+:root[data-theme='nebula'][data-popups='a'] :is(.planner-month, .mini-picker-head strong) { font: italic 400 18px var(--display); }
+:root[data-theme='nebula'][data-popups='a'] :is(.planner-day, .cal-composer .cal-compact-day) { border-radius: 0; font-family: var(--mono); }
+:root[data-theme='nebula'][data-popups='a'] :is(.planner-day[aria-selected='true'], .cal-composer .cal-compact-day[aria-selected='true']) { background: var(--nb-violet) !important; color: #fff !important; }
+:root[data-theme='nebula'][data-popups='a'] .planner-day.is-today { box-shadow: inset 0 0 0 1.5px var(--now); }
+:root[data-theme='nebula'][data-popups='a'] :is(.cal-composer-create, .planner-confirm:hover) { border-radius: 0; background: var(--nb-violet) !important; color: #fff !important; }
+:root[data-theme='nebula'][data-popups='a'] .planner-foot { border-top: 1px dashed var(--edge); }
+
+/* ── Nebula · B · Holo-Papier: grey paper with a violet bar, black outlines and holographic choices ─────────── */
+:root[data-theme='nebula'][data-popups='b'] :is(.planner, .cal-composer, .popover, .repeat-suggest) {
+  --background: #e6e6e6; --surface: #cfcfcf; --inset: #e6e6e6; --hover: #bcbcbc; --selected: #b9a5d8; --focus: #b5b5b5; --border: #c4c4c4;
+  --divider: #9e9e9e; --edge: #1111113a; --line: #11111126; --text: #111111; --strong: #000000; --muted: #3e3e44; --placeholder: #5c5c63; --disabled: #85858b;
+  --accent: #7b2cbf; --on-accent: #ffffff; --now: #0d8a63; --event-text: #2a1050;
+  color-scheme: light; border-radius: 0; background: #cfcfcf; color: #111;
+  box-shadow: inset 0 10px 0 var(--nb-violet), 0 0 0 1px #000, 6px 6px 0 #000;
+  font-family: var(--sans);
+}
+:root[data-theme='nebula'][data-popups='b'] .planner { padding-top: 22px; }
+:root[data-theme='nebula'][data-popups='b'] .cal-composer { padding-top: 22px; }
+:root[data-theme='nebula'][data-popups='b'] .popover { padding-top: 18px; }
+:root[data-theme='nebula'][data-popups='b'] .planner::before, :root[data-theme='nebula'][data-popups='b'] .cal-composer::before { display: none; }
+:root[data-theme='nebula'][data-popups='b'] .cal-composer.has-tag { box-shadow: inset 0 10px 0 var(--tag), 0 0 0 1px #000, 6px 6px 0 #000; }
+:root[data-theme='nebula'][data-popups='b'] :is(.cal-composer-text, .cal-composer-description, .tag-picker-search) { border-radius: 0; background: #ececec; box-shadow: inset 0 0 0 1px #111; color: #111; font-family: var(--mono); }
+:root[data-theme='nebula'][data-popups='b'] :is(.cal-composer-when, .planner-time, .planner-reminder, .planner-confirm, .repeat-chip) { border-radius: 0; background: #e2e2e2; box-shadow: inset 0 0 0 1px #111; }
+:root[data-theme='nebula'][data-popups='b'] :is(.planner-month, .mini-picker-head strong) { color: #111; font: 700 11px var(--sans); letter-spacing: .14em; text-transform: uppercase; }
+:root[data-theme='nebula'][data-popups='b'] :is(.planner-day, .cal-composer .cal-compact-day) { border-radius: 0; font-family: var(--mono); }
+:root[data-theme='nebula'][data-popups='b'] :is(.planner-day[aria-selected='true'], .cal-composer .cal-compact-day[aria-selected='true']) { background: var(--holo) !important; color: #111 !important; box-shadow: inset 0 0 0 1px #111; }
+:root[data-theme='nebula'][data-popups='b'] .planner-day[aria-selected='true']::after { background: #111; }
+:root[data-theme='nebula'][data-popups='b'] :is(.cal-composer-create, .planner-confirm:hover) { border-radius: 0; background: var(--holo) !important; color: #111 !important; box-shadow: inset 0 0 0 1px #111; }
+:root[data-theme='nebula'][data-popups='b'] .planner-foot { border-top: 2px solid #111; }
+:root[data-theme='nebula'][data-popups='b'] :is(.planner, .cal-composer) .icon { color: inherit; }
+
+/* In every look: the composer's copy button reads like the other small labels. */
+:root .cal-composer button.cal-composer-copy { font-size: 11.5px; }
