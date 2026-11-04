@@ -1,0 +1,23 @@
+/* Popups: every floating panel (pickers, planner, menus, cards, toasts) is the same sheet: the surface colour, one corner
+   radius, one shadow, one way in. The pixel look (pixel.css) and the journal (journal-theme.css) restyle them together. */
+:root {
+  --popup-radius: 12px;
+  --popup-shadow: 0 0 0 1px var(--edge), 0 16px 40px -12px #000000e6, 0 3px 8px #00000066;
+}
+:is(.popover, .planner, .format-menu, .cal-composer, .mini-picker-panel, .cal-transfer-panel, .reminder, .mail-import-toast, .shortcuts) {
+  border: 0; border-radius: var(--popup-radius); background: var(--surface); color: var(--text); box-shadow: var(--popup-shadow);
+}
+:is(.mini-picker-panel, .cal-transfer-panel) { transform-origin: top right; animation: planner-in 260ms var(--spring); }
+/* A list that drops from a field inside a popup (repeat suggestions) is a smaller sheet of the same kind. */
+.repeat-suggest { border-radius: 8px; background: var(--surface); box-shadow: var(--popup-shadow); }
+
+/* The calendars in popups (planner, mini calendar, the composer's end date) read alike: the month in the middle between
+   its arrows, the same weekday letters, today ringed in the calendar's colour for now, the chosen day filled. */
+.mini-picker-head { height: 32px; margin-bottom: 6px; }
+.mini-picker-head strong { order: 1; flex: 1; text-align: center; font: 600 12px var(--sans); color: var(--text); }
+.mini-picker-head strong span { color: var(--muted); font-weight: 400; }
+.mini-picker-head .cal-icon-button:first-of-type { order: 0; }
+.mini-picker-head .cal-icon-button:last-of-type { order: 2; }
+:is(.mini-picker-head .cal-icon-button, .planner-nav) { width: 28px; height: 26px; border-radius: 7px; }
+:is(.cal-compact-weekdays span, .planner-weekdays span) { font: 9.5px var(--mono); color: var(--placeholder); }
+.planner-day.is-today { box-shadow: inset 0 0 0 1.5px var(--now); }
