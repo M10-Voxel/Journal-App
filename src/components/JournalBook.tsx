@@ -1,11 +1,11 @@
 import { useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
 import type { CSSProperties, ReactNode, Ref, RefObject } from 'react';
 import { t, useLanguage } from '../i18n';
-import { formatDate, formatShortDate } from '../dates';
+import { formatDate } from '../dates';
 import { firstPage, normalizePage, pageKey, pageNumber, pagesOf, samePage, showsDate, shownDate, spreadOf, spreadPagesOf, spreadStart, startFor, turnPage, turnSpread } from '../book';
 import type { BookPage, BookPaging, PageKind } from '../book';
 import type { PeriodMode } from '../periods';
-import { periodEyebrow, periodTitle } from './PeriodNotes';
+import { periodTitle } from './PeriodNotes';
 import { useWheelSwipe } from './useWheelSwipe';
 
 /** What the app can ask of the book: turn one page, or open a page of the shown day (bookmarks). */
@@ -37,9 +37,13 @@ type Leaf = { page: BookPage; slot: 'left' | 'right' | 'single' | 'wide'; motion
  * `paging`: one page at a time, or both at once (`spread`: the board then lies over both pages). `beside` (the calendar
  * sheet lies on the book while both pages turn at once): one page, from the sheet's edge (`sheetWidth`) to the right.
  */
-export function JournalBook({ mode, date, view, paging = 'page', beside = false, sheetWidth, onNavigate, renderPage, entriesScrollRef, ribbon, overlay, register, controlRef, onWideChange }: {
-  mode: PeriodMode; date: string; view: BookView; paging?: BookPaging; beside?: boolean; sheetWidth?: number; onNavigate: (date: string) => void; renderPage: (page: BookPage) => ReactNode;
-  entriesScrollRef: RefObject<HTMLDivElement | null>; ribbon?: ReactNode; controlRef?: Ref<BookControl>; onWideChange?: (wide: boolean) => void;
+export function JournalBook({ mode, date, today, view, paging = 'page', beside = false, sheetWidth, onNavigate, onToday, renderPage, renderNav, entriesScrollRef, calendarTab, overlay, register, controlRef, onWideChange }: {
+  mode: PeriodMode; date: string; today: string; view: BookView; paging?: BookPaging; beside?: boolean; sheetWidth?: number; onNavigate: (date: string) => void; onToday: () => void;
+  renderPage: (page: BookPage) => ReactNode; entriesScrollRef: RefObject<HTMLDivElement | null>; controlRef?: Ref<BookControl>; onWideChange?: (wide: boolean) => void;
+  /** The head of the page showing the app's day: its title with the day (or period) navigation. */
+  renderNav: (page: BookPage) => ReactNode;
+  /** The tab on the book's left edge that brings out the calendar. */
+  calendarTab?: ReactNode;
   /** Lies over the left page (the calendar sheet). */
   overlay?: ReactNode;
   /** Tabs on the book's top edge (the views: day … year). */
@@ -127,31 +131,39 @@ export function JournalBook({ mode, date, view, paging = 'page', beside = false,
 
   const { leaves, ghosts } = arrange(pages, turn, mode, double, spreads);
   const shown = mode === 'day' ? shownDate(pages) : pages[0].date;
-  const marks = pagesOf(mode);
+  // One head per date: the page of the app's day carries the title with the navigation; a page of another day (a
+  // spread across two days) names its own; a second page of the same day or period needs none.
+  const navPage = pages.find(page => page.date === shown) ?? pages[0];
+  const head = (page: BookPage, outgoing: boolean) => !outgoing && samePage(page, navPage) ? <div className="document-header book-page-head is-nav">{renderNav(page)}</div>
+    : page.date !== shown || outgoing ? <PageHead page={page} mode={mode} /> : null;
+  // The register is cut into the pages (see CutRegister): the page at the book's outer edge decides what shows.
+  const edge = pages[pages.length - 1];
+  const atToday = showsDate(pages, mode, today);
 
   return <div className={`book-stage${double ? ' is-double' : ' is-single'}${spreads ? ' is-spreads' : ''}${beside ? ' is-beside' : ''}`} ref={stageRef}>
     <div className="book" style={sheetWidth ? { '--drawer-width': `${sheetWidth}px` } as CSSProperties : undefined}>
-      {ribbon}
+      {calendarTab}
       <div className="book-spread">
+        <CutRegister mode={mode} page={edge} onOpen={open} />
         {leaves.map(({ page, slot, motion, outgoing }) => <article key={pageKey(page)} className={`book-page is-${slot} is-${page.page}${motion ? ` is-${motion}` : ''}${outgoing ? ' is-outgoing' : ''}`}
-          inert={outgoing} aria-hidden={outgoing || undefined} data-page={page.page} data-date={page.date} aria-label={`${pageTitle(page.page)} · ${formatDate(page.date)}`}>
+          inert={outgoing} aria-hidden={outgoing || undefined} data-page={page.page} data-date={page.date} aria-label={`${pageTitle(page.page)} · ${formatDate(page.date)}`}
+          style={slot === 'left' ? undefined : { '--cut': cutSteps(page, mode) } as CSSProperties}>
           <div className="book-page-scroll" ref={page.page === 'entries' && !outgoing ? entriesScrollRef : undefined}>
             <div className="book-page-content">
-              {page.page !== 'entries' && <PageHead page={page} mode={mode} />}
+              {head(page, outgoing)}
               {renderPage(page)}
             </div>
           </div>
-          <footer className="book-page-foot" aria-hidden="true"><span>{pageTitle(page.page)}</span><span className="book-page-number">{pageNumber(page, mode)}</span><span>{mode === 'day' ? formatShortDate(page.date) : periodTitle(page.date, mode)}</span></footer>
+          <footer className="book-page-foot" aria-hidden="true"><span className="book-page-number">{pageNumber(page, mode)}</span></footer>
           {slot !== 'right' && <button type="button" className="book-corner is-prev" tabIndex={-1} aria-label={t('Zurückblättern')} title={t('Zurückblättern · Strg Bild↑')} onClick={() => step(-1)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 20H4V7" /></svg></button>}
           {slot !== 'left' && <button type="button" className="book-corner is-next" tabIndex={-1} aria-label={t('Umblättern')} title={t('Umblättern · Strg Bild↓')} onClick={() => step(1)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 20h13V7" /></svg></button>}
         </article>)}
         {/* The back of a turning leaf where its page cannot be drawn twice (the board over both pages). */}
         {ghosts.map(ghost => <div key={`${turn?.id}-${ghost}`} className={`book-ghost is-${ghost}`} aria-hidden="true" />)}
       </div>
-      <nav className="book-marks" aria-label={t('Lesezeichen')}>
-        {marks.map(mark => <button type="button" key={mark} className={`book-mark is-${mark}`} aria-current={pages.some(page => page.page === mark && page.date === shown) ? 'page' : undefined}
-          title={pageTitle(mark)} onClick={() => open(mark)}><span>{pageTitle(mark)}</span></button>)}
-      </nav>
+      {/* The ribbon bookmark is sewn into the spine at today's page: it lies over the pages while today (this week …)
+          is open, otherwise only its end hangs out below the book and opens today. */}
+      <button type="button" className={`book-ribbon${atToday ? ' is-here' : ''}`} disabled={atToday} aria-label={t('Heute aufschlagen')} title={t('Heute · Alt H')} onClick={onToday}><span /></button>
       {register}
       {overlay}
     </div>
@@ -194,12 +206,32 @@ function arrange(pages: BookPage[], turn: Turn | null, mode: PeriodMode, double:
   return { leaves, ghosts };
 }
 
+/** The title of a page that is not the app's day (or period): its date, nothing else. */
 function PageHead({ page, mode }: { page: BookPage; mode: PeriodMode }) {
-  const eyebrow = mode === 'day' ? (page.page === 'data' ? t('Tagesbewertung & Checkliste') : t('Pinnwand')) : `${periodEyebrow(mode)} · ${pageTitle(page.page)}`;
-  return <div className="document-header book-page-head">
-    <div className="eyebrow">{eyebrow}</div>
-    <h1>{mode === 'day' ? formatDate(page.date) : periodTitle(page.date, mode)}</h1>
-  </div>;
+  return <div className="document-header book-page-head"><h1>{pageHeading(page.date, mode)}</h1></div>;
+}
+export const pageHeading = (date: string, mode: PeriodMode) => mode === 'day' ? formatDate(date) : periodTitle(date, mode);
+
+/** How many register steps are cut from a page's outer top corner: one for every kind of page that follows it in its
+ *  day (or period), so the last kind keeps its corner. Pages of the same kind share the same cut. */
+const cutSteps = (page: BookPage, mode: PeriodMode) => Math.max(0, pagesOf(mode).length - 1 - pagesOf(mode).indexOf(page.page));
+
+/**
+ * The register as on real paper: the outer page's top corner is cut away in steps, and through the cut the following
+ * kinds of page show, each with its own (smaller) cut and its name on the step it keeps. The nearest kind is the
+ * lowest step, the last one sits in the corner. A step opens its page.
+ */
+function CutRegister({ mode, page, onOpen }: { mode: PeriodMode; page: BookPage; onOpen: (page: PageKind) => void }) {
+  useLanguage();
+  const kinds = pagesOf(mode), steps = cutSteps(page, mode), index = kinds.indexOf(page.page);
+  if (!steps) return null;
+  // Deepest first, so each nearer page lies over it.
+  const behind = kinds.slice(index + 1).map((kind, offset) => ({ kind, own: steps - offset - 1 })).reverse();
+  return <nav className="book-cut-register" style={{ '--cut': steps } as CSSProperties} aria-label={t('Register')}>
+    {behind.map(({ kind, own }) => <div key={kind} className={`book-cut-layer is-${kind}`} style={{ '--own': own } as CSSProperties}>
+      <button type="button" className="book-cut-tab" data-page={kind} title={pageTitle(kind)} onClick={() => onOpen(kind)}><span>{pageTitle(kind)}</span></button>
+    </div>)}
+  </nav>;
 }
 
 /** Spread or single page, for the toolbar. */

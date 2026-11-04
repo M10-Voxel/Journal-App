@@ -94,7 +94,7 @@
 
 /* ── The book ─────────────────────────────────────────────────────────────────────────────────────────────────── */
 .app.is-book .main { background: radial-gradient(120% 90% at 50% 40%, var(--leather-light), var(--leather) 55%, var(--leather-dark)); }
-.book-stage { position: relative; flex: 1; min-height: 0; display: flex; padding: 34px 40px 13px 10px; overflow: hidden; }
+.book-stage { position: relative; flex: 1; min-height: 0; display: flex; padding: 34px 18px 40px 38px; overflow: hidden; }
 /* The book fills the app: its pages grow with the window, in a spread and as a single page. */
 .book { position: relative; flex: 1; min-width: 0; display: flex; container: book / inline-size; }
 /* Page edges below and at the sides, mixed from the page's own colour so they suit every palette. */
@@ -136,13 +136,12 @@
 .book-page .document-header h1 { margin-top: 6px; font-size: clamp(24px, 2.2vw, 31px); }
 .book-page-head { padding-bottom: 12px; border-bottom: 1px solid var(--divider); }
 .book-page .period-section { margin-top: 0; }
-.book-page.is-data .period-section > .section-heading:first-of-type { display: none; }
+.book-page .period-section > .section-heading { display: none; }
 .book-page .period-section { padding-top: 8px; }
 .book-page.is-activities .checklist-section-heading { margin-top: 0; padding-top: 0; border-top: 0; }
 
-.book-page-foot { position: relative; z-index: 4; flex: none; display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 4px 56px 12px; color: var(--placeholder); font: italic 12px var(--display); user-select: none; }
+.book-page-foot { position: relative; z-index: 4; flex: none; display: flex; align-items: baseline; justify-content: center; gap: 12px; padding: 4px 56px 12px; color: var(--placeholder); font: italic 12px var(--display); user-select: none; }
 .book-page-number { font-style: normal; font-weight: 600; color: var(--muted); }
-.book-page.is-left .book-page-foot { flex-direction: row-reverse; }
 
 /* Dog-ears: the lower outer corners turn the page. */
 .book-corner { position: absolute; bottom: 0; z-index: 7; width: 46px; height: 46px; padding: 0; border: 0; background: transparent; cursor: pointer; }
@@ -157,30 +156,64 @@
 .book-corner.is-prev:hover svg { transform: translate(-2px,2px); }
 .book-corner:focus-visible { outline: 1px solid var(--focus); outline-offset: -5px; border-radius: 3px; }
 
-/* Bookmarks: ribbons on the right edge of the book; the one of the page shown sticks out further. */
-.book-marks { position: absolute; top: 44px; right: -38px; z-index: 9; display: flex; flex-direction: column; gap: 10px; }
-.book-mark { --mark: #2f5d9e; display: flex; align-items: center; justify-content: center; width: 32px; height: 96px; padding: 0 0 0 6px; border: 0; border-radius: 0 4px 4px 0;
-  background: linear-gradient(90deg, color-mix(in srgb, #000 22%, var(--mark)), var(--mark) 22%); color: #fbf4e6; box-shadow: 2px 2px 4px -1px #1d0f0688; cursor: pointer;
-  transform: translateX(-8px); transition: transform 180ms var(--ease), filter 160ms ease; }
-.book-mark span { writing-mode: vertical-rl; font: 600 10.5px var(--sans); letter-spacing: .08em; text-transform: uppercase; }
-.book-mark:hover { transform: translateX(-3px); }
-.book-mark[aria-current='page'] { transform: translateX(0); filter: saturate(1.15); }
-.book-mark:not([aria-current='page']) { filter: saturate(.75) brightness(.92); }
-.book-mark:focus-visible { outline: 2px solid #fbf4e6; outline-offset: -4px; }
-.book-mark.is-data, .book-mark.is-activities { --mark: #3f7a3a; }
-.book-mark.is-board { --mark: #a8641a; }
-.book-mark.is-notes { --mark: #2f5d9e; }
+/* The register is cut into the paper: the outer page misses its top corner in steps (one per kind of page after it),
+   and the pages behind show through, each with its own smaller cut and its name on the step it keeps (JournalBook). */
+.book { --cut-w: 24px; --cut-h: 96px; --cut-shade: color-mix(in srgb, #2a1a0c 22%, transparent); }
+.book-page:not(.is-left) { clip-path: polygon(0 0, calc(100% - var(--cut, 0) * var(--cut-w)) 0, calc(100% - var(--cut, 0) * var(--cut-w)) calc(var(--cut, 0) * var(--cut-h)), 100% calc(var(--cut, 0) * var(--cut-h)), 100% 100%, 0 100%); }
+.book-cut-register { position: absolute; top: 0; right: 0; z-index: 1; width: calc(var(--cut) * var(--cut-w)); height: calc(var(--cut) * var(--cut-h)); border-top-right-radius: 5px; overflow: hidden; }
+.book-cut-layer { --mark: #2f5d9e; position: absolute; inset: 0;
+  clip-path: polygon(0 0, calc(100% - var(--own) * var(--cut-w)) 0, calc(100% - var(--own) * var(--cut-w)) calc(var(--own) * var(--cut-h)), 100% calc(var(--own) * var(--cut-h)), 100% 100%, 0 100%);
+  /* Each page lies a little deeper in the stack; the page above shades it along the edge of its cut. */
+  background: linear-gradient(to right, var(--cut-shade), transparent) no-repeat right calc((var(--own) + 1) * var(--cut-w) - 5px) top 0 / 5px calc((var(--own) + 1) * var(--cut-h)),
+    linear-gradient(to top, var(--cut-shade), transparent) no-repeat right 0 top calc((var(--own) + 1) * var(--cut-h) - 5px) / calc((var(--own) + 1) * var(--cut-w)) 5px,
+    color-mix(in srgb, var(--book-paper), #5a462a calc((var(--cut) - var(--own)) * 6%)); }
+.book-cut-tab { position: absolute; right: calc(var(--own) * var(--cut-w)); top: calc(var(--own) * var(--cut-h)); display: grid; place-items: center; width: var(--cut-w); height: var(--cut-h); padding: 0; border: 0;
+  background: color-mix(in srgb, var(--mark) 11%, transparent); color: color-mix(in srgb, var(--mark) 82%, var(--text)); cursor: pointer; transition: background-color 160ms ease; }
+.book-cut-tab span { writing-mode: vertical-rl; font: 600 10px var(--sans); letter-spacing: .09em; text-transform: uppercase; }
+.book-cut-tab:hover { background: color-mix(in srgb, var(--mark) 22%, transparent); }
+.book-cut-tab:focus-visible { outline: 2px solid var(--mark); outline-offset: -3px; }
+.book-cut-layer.is-data, .book-cut-layer.is-activities { --mark: #3f7a3a; }
+.book-cut-layer.is-board { --mark: #a8641a; }
 
-/* The calendar's ribbon hangs from the top of the book, in the middle. */
-.calendar-ribbon { position: absolute; top: 0; left: 50%; z-index: 12; display: flex; flex-direction: column; align-items: center; gap: 6px; width: 32px; height: 58px; margin-left: 0; padding: 9px 0 0; border: 0;
-  background: linear-gradient(90deg, #7d2323, #a63434 30%, #9a2d2d 70%, #7d2323); color: #fbeee0; clip-path: polygon(0 0, 100% 0, 100% 100%, 50% calc(100% - 10px), 0 100%);
-  filter: drop-shadow(0 2px 2px #1d0f0688); cursor: pointer; transition: height 200ms var(--ease); }
-.calendar-ribbon .icon { flex: none; width: 15px; height: 15px; }
-.calendar-ribbon span { writing-mode: vertical-rl; font: 600 10px var(--sans); letter-spacing: .08em; text-transform: uppercase; opacity: 0; transition: opacity 160ms ease; }
-.calendar-ribbon:hover, .calendar-ribbon:focus-visible { height: 118px; }
-.calendar-ribbon:hover span, .calendar-ribbon:focus-visible span { opacity: 1; }
-.calendar-ribbon.is-open { background: linear-gradient(90deg, #5b1818, #7d2323 40%, #5b1818); }
-.calendar-ribbon:focus-visible { outline: none; filter: drop-shadow(0 0 0 #fbeee0) drop-shadow(0 2px 3px #1d0f06); }
+/* The ribbon bookmark: sewn into the spine at the top, a band of woven cloth. On today's pages it lies over them and
+   hangs out below; elsewhere only its end shows below the book, and pulling it opens today. */
+.book-ribbon { position: absolute; top: 0; bottom: -30px; left: 50%; z-index: 0; width: 13px; margin-left: -6.5px; padding: 0; border: 0; background: none; cursor: pointer;
+  filter: drop-shadow(0 1px 1.5px #1d0f0680); transition: bottom 200ms var(--ease); }
+.book-ribbon > span { display: block; width: 100%; height: 100%; clip-path: polygon(0 0, 100% 0, 100% 100%, 50% calc(100% - 7px), 0 100%);
+  background: repeating-linear-gradient(0deg, transparent 0 2px, #0000000f 2px 3px), linear-gradient(90deg, #6e1f1f, #a33a32 35%, #8e2c28 70%, #6e1f1f); }
+.book-stage.is-single .book-ribbon { left: 10px; }
+.book-ribbon:not(.is-here):hover { bottom: -36px; }
+.book-ribbon:focus-visible { outline: none; }
+.book-ribbon:focus-visible > span { box-shadow: inset 0 0 0 2px #fbeee0; }
+.book-ribbon.is-here { z-index: 11; pointer-events: none; cursor: default; opacity: 1; }
+.book-ribbon.is-here > span { animation: ribbon-lay 520ms cubic-bezier(.3, .7, .3, 1) both; }
+@keyframes ribbon-lay { from { clip-path: polygon(0 0, 100% 0, 100% 0, 50% 0, 0 0); } }
+@media (prefers-reduced-motion: reduce) { .book-ribbon.is-here > span { animation: none; } }
+
+/* The calendar is a cloth tab on the book's left edge; it pulls the calendar sheet out to the left page. */
+.calendar-tab { position: absolute; top: 56px; left: -30px; z-index: 9; display: flex; flex-direction: column; align-items: center; gap: 8px; width: 30px; padding: 12px 0 14px; border: 0; border-radius: 5px 0 0 5px;
+  background: linear-gradient(90deg, #8e2c28, #a33a32 70%, color-mix(in srgb, #000 22%, #a33a32)); color: #fbeee0; box-shadow: -2px 2px 4px -1px #1d0f0688; cursor: pointer;
+  transform: translateX(6px); transition: transform 180ms var(--ease), filter 160ms ease; }
+.calendar-tab .icon { flex: none; width: 15px; height: 15px; }
+.calendar-tab span { writing-mode: vertical-rl; transform: rotate(180deg); font: 600 10.5px var(--sans); letter-spacing: .08em; text-transform: uppercase; }
+.calendar-tab:hover { transform: translateX(2px); }
+.calendar-tab.is-open { transform: none; filter: brightness(.82); }
+.calendar-tab:focus-visible { outline: 2px solid #fbeee0; outline-offset: -4px; }
+
+/* The day's head on the page: the date opens the mini calendar, the arrows beside it step a day (or period). The
+   back arrow hangs in the margin so the date lines up with the text. */
+.book-page-head.is-nav { position: relative; z-index: 5; }
+.book-nav { display: flex; align-items: center; gap: 4px; margin-left: -34px; }
+.book-nav h1 { min-width: 0; margin: 0; }
+.book-nav .mini-calendar-picker { position: relative; }
+.book-nav-date { max-width: 100%; margin: 0; padding: 0 6px; border: 0; border-radius: 4px; background: transparent; color: inherit; font: inherit; letter-spacing: inherit; text-align: left; cursor: pointer; }
+.book-nav-date:hover, .book-nav-date[aria-expanded='true'] { background: var(--paper-shade); }
+.book-nav-date:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.book-nav-step { display: grid; place-items: center; flex: none; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--placeholder); cursor: pointer; transition: color 160ms ease, background-color 160ms ease; }
+.book-nav-step .icon { width: 16px; height: 16px; }
+.book-nav-step:hover { color: var(--text); background: var(--paper-shade); }
+.book-nav-step:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.book-nav .mini-picker-panel { left: 0; right: auto; font: 400 13px var(--sans); letter-spacing: normal; }
 
 /* ── Turning pages ─────────────────────────────────────────────────────────────────────────────────────────────
    Spreads: the page shared by both spreads turns about the spine; it rises edge-on and lies down on the other side
@@ -400,9 +433,6 @@
   .topbar.is-book-head > .titlebar-button, .topbar.is-book-head .window-controls button { width: 28px; }
 }
 
-/* The ribbon is tucked into the page edge, rather than hanging from the app's title bar. */
-.book > .calendar-ribbon { top: 0; }
-.book > .calendar-ribbon::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 5px; background: linear-gradient(#0004,transparent); pointer-events: none; }
 .book-register { left: 42px; right: 18px; justify-content: flex-end; min-width: 0; }
 .book-register-tab { flex: 0 1 auto; min-width: 0; white-space: nowrap; padding-inline: clamp(5px,1.2cqw,15px); }
 .book-tag-register { flex: none; display: flex; align-items: flex-end; }
@@ -415,3 +445,17 @@
   .book-tag-register .tag-filter-button { padding-inline: 5px; gap: 3px; }
   .book-tag-register .tag-filter-dots { max-width: 28px; overflow: hidden; }
 }
+
+/* The calendar sheet comes out of its tab on the left: docked it slides in beside the book, over the book it slides
+   onto the left page. */
+.calendar-drawer:not(.is-overlay) .calendar-drawer-sheet { transform: translateX(-100%); }
+.calendar-drawer.is-overlay .calendar-drawer-sheet { transform: translateX(calc(-100% - 40px)) rotate(-1.5deg); }
+.calendar-drawer.is-overlay.is-open .calendar-drawer-sheet { transform: rotate(-.35deg); }
+.calendar-drawer.is-open.is-animated .calendar-drawer-sheet { animation-name: drawer-slide; }
+.calendar-drawer.is-overlay.is-open.is-animated .calendar-drawer-sheet { animation-name: sheet-slide; animation-duration: 520ms; }
+@keyframes drawer-slide { from { transform: translateX(-100%); } to { transform: none; } }
+@keyframes sheet-slide { from { transform: translateX(calc(-100% - 40px)) rotate(-1.5deg); } to { transform: rotate(-.35deg); } }
+
+/* Decluttered paper: no lines that repeat what the page shows or explain what can be done. */
+:root[data-theme='journal'] .page-hint { display: none; }
+.book-page.is-entries .section-title :is(h2, .entry-count) { display: none; }

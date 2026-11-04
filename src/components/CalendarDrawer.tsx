@@ -18,7 +18,7 @@ export function useCalendarDrawer() {
 }
 
 /**
- * The journal style's calendar: a sheet of paper that comes down from the top (from the ribbon over the book). As an
+ * The journal style's calendar: a sheet of paper pulled out at the book's left edge (its tab, CalendarTab). As an
  * `overlay` it lies over the left page of the book (inside JournalBook); otherwise it lies down left of the book, which
  * moves aside. Its width is dragged at its edge like the sidebar's (`resizable`; over a spread it covers the left page).
  */
@@ -36,11 +36,11 @@ export function CalendarDrawer({ open, animated, width, resizer, resizable = tru
   </aside>;
 }
 
-/** The ribbon over the book that brings the calendar down (Ctrl+K) and takes it back up. */
-export function CalendarRibbon({ open, onToggle }: { open: boolean; onToggle: () => void }) {
+/** The cloth tab on the book's left edge that pulls the calendar out (Ctrl+K) and puts it back. */
+export function CalendarTab({ open, onToggle }: { open: boolean; onToggle: () => void }) {
   useLanguage();
-  return <button type="button" className={`calendar-ribbon${open ? ' is-open' : ''}`} aria-expanded={open} aria-keyshortcuts="Control+K"
-    title={open ? t('Kalender zuklappen · Strg K') : t('Kalender herunterklappen · Strg K')} onClick={onToggle}>
+  return <button type="button" className={`calendar-tab${open ? ' is-open' : ''}`} aria-expanded={open} aria-keyshortcuts="Control+K"
+    title={open ? t('Kalender zurücklegen · Strg K') : t('Kalender herausziehen · Strg K')} onClick={onToggle}>
     <Icon name="calendar" /><span>{t('Kalender')}</span>
   </button>;
 }

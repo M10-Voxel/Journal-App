@@ -39,9 +39,9 @@ import { MiniCalendar } from './components/MiniCalendar';
 import { MiniCalendarPicker } from './components/MiniCalendarPicker';
 import { WindowControls } from './components/WindowControls';
 import { NavCluster } from './components/NavCluster';
-import { BookViewSwitch, JournalBook, useBookView } from './components/JournalBook';
+import { BookViewSwitch, JournalBook, pageHeading, useBookView } from './components/JournalBook';
 import type { BookControl } from './components/JournalBook';
-import { CalendarDrawer, CalendarRibbon, useCalendarDrawer } from './components/CalendarDrawer';
+import { CalendarDrawer, CalendarTab, useCalendarDrawer } from './components/CalendarDrawer';
 import type { BookPage } from './book';
 import '@fontsource/ibm-plex-sans/400.css';
 import '@fontsource/ibm-plex-sans/500.css';
@@ -134,7 +134,7 @@ function App() {
   const toggleDrawer = (focus = false) => {
     const opening = !drawer.open;
     drawer.setOpen(opening);
-    if (focus) requestAnimationFrame(() => document.querySelector<HTMLElement>(opening ? '.calendar-drawer .cal' : '.calendar-ribbon')?.focus({ preventScroll: true }));
+    if (focus) requestAnimationFrame(() => document.querySelector<HTMLElement>(opening ? '.calendar-drawer .cal' : '.calendar-tab')?.focus({ preventScroll: true }));
   };
   const datePickerButtonRef = useRef<HTMLButtonElement>(null);
   const [datePickerOpen, setDatePickerOpen] = useState(false);
@@ -520,10 +520,11 @@ function App() {
   const entriesPage = (pageDate = date) => {
     const here = ready && pageDate === date;
     const slideClass = slide && !bookMode ? ` slide-${slide}` : '';
-    return <><div className={`document-header${slideClass}`}>
+    // In the book the page's head (JournalBook) shows the date with the navigation.
+    return <>{!bookMode && <div className={`document-header${slideClass}`}>
         <div className="eyebrow">{t("Tagesnotiz")}{pageDate === today && <span className="today-label">{t("Heute")}</span>}</div>
         <h1>{formatDate(pageDate)}</h1>
-      </div>
+      </div>}
       {error && <div className="error" role="alert">{error}</div>}
       {!here && !error && <p className="loading" role="status">{t("Tagesnotiz wird geöffnet …")}</p>}
       {here && <div className={`editor${slideClass}`}>
@@ -541,7 +542,7 @@ function App() {
           <div className="entries" ref={entriesRef}>
             <span className="visually-hidden" id="entry-reorder-help">{t("Innerhalb desselben Typs und derselben Priorität ziehen oder mit Alt und den Pfeiltasten nach oben und unten verschieben. Das funktioniert auch direkt im Text.")}</span>
             <span className="visually-hidden" role="status">{moveAnnouncement}</span>
-            {visibleEntries.length === 0 && <div className="empty"><Icon name="journal" /><p>{t("Ein neuer Tag. Platz für deine Gedanken.")}</p><span>{t("Füge oben eine Aufgabe, Notiz oder ein Ereignis hinzu.")}</span></div>}
+            {visibleEntries.length === 0 && <div className="empty"><Icon name="journal" /><p>{t("Ein neuer Tag. Platz für deine Gedanken.")}</p><span className="page-hint">{t("Füge oben eine Aufgabe, Notiz oder ein Ereignis hinzu.")}</span></div>}
             {visibleEntries.map((entry, index) => <JournalEntry key={entry.id} layout={settings.actionLayout} entry={entry} day={day.date} tag={tagOf(tags, entry.tag)}
               tagFirst={index === 0 || visibleEntries[index - 1].kind !== entry.kind || filterKey(visibleEntries[index - 1].tag) !== filterKey(entry.tag)}
               tagLast={index === visibleEntries.length - 1 || visibleEntries[index + 1].kind !== entry.kind || filterKey(visibleEntries[index + 1].tag) !== filterKey(entry.tag)} onCreate={addEntry} traceSaved={savedTraces.has(entry.id)} onNavigate={navigate} isNew={entry.id === newEntryId} isOpen={entry.id === openEntryId} focusEntryId={focusEntryId} focusMoveEntryId={focusMoveEntryId}
@@ -558,11 +559,22 @@ function App() {
   const bookPage = (page: BookPage) => page.page === 'entries' ? entriesPage(page.date)
     : page.page === 'board' ? <BulletinBoard date={page.date} />
     : <PeriodNotes date={page.date} mode={page.page === 'data' ? 'day' : periodMode} part={page.page === 'data' ? undefined : page.page} onManage={() => openSettings('activities')} onImport={importFromCalendar} />;
+  const stepLabels = {
+    prev: { label: periodMode === 'day' ? t("Vorheriger Tag") : language === 'en' ? 'Previous period' : 'Vorheriger Zeitraum', tip: periodMode === 'day' ? t("Vorheriger Tag · Alt ←") : language === 'en' ? 'Previous period' : 'Vorheriger Zeitraum' },
+    next: { label: periodMode === 'day' ? t("Nächster Tag") : language === 'en' ? 'Next period' : 'Nächster Zeitraum', tip: periodMode === 'day' ? t("Nächster Tag · Alt →") : language === 'en' ? 'Next period' : 'Nächster Zeitraum' },
+  };
+  // The book turns days on its page: the page's title opens the mini calendar, the arrows beside it step a day (or
+  // period); today is the ribbon (JournalBook).
+  const bookNav = (page: BookPage) => <div className="book-nav">
+    <button type="button" className="book-nav-step" aria-label={stepLabels.prev.label} title={stepLabels.prev.tip} onClick={() => stepPeriod(-1)}><Icon name="left" /></button>
+    <h1><MiniCalendarPicker date={date} open={datePickerOpen} onOpenChange={setDatePickerOpen} onPick={navigate} buttonRef={datePickerButtonRef} className="book-nav-date">{pageHeading(page.date, periodMode)}</MiniCalendarPicker></h1>
+    <button type="button" className="book-nav-step" aria-label={stepLabels.next.label} title={stepLabels.next.tip} onClick={() => stepPeriod(1)}><Icon name="right" /></button>
+  </div>;
   const toolbarItems = <>
-    <NavCluster label={periodMode === 'day' ? t("Tagesnavigation") : language === 'en' ? 'Period navigation' : 'Zeitraumnavigation'} prev={{ label: periodMode === 'day' ? t("Vorheriger Tag") : language === 'en' ? 'Previous period' : 'Vorheriger Zeitraum', tip: periodMode === 'day' ? t("Vorheriger Tag · Alt ←") : language === 'en' ? 'Previous period' : 'Vorheriger Zeitraum' }} next={{ label: periodMode === 'day' ? t("Nächster Tag") : language === 'en' ? 'Next period' : 'Nächster Zeitraum', tip: periodMode === 'day' ? t("Nächster Tag · Alt →") : language === 'en' ? 'Next period' : 'Nächster Zeitraum' }}
+    <NavCluster label={periodMode === 'day' ? t("Tagesnavigation") : language === 'en' ? 'Period navigation' : 'Zeitraumnavigation'} prev={stepLabels.prev} next={stepLabels.next}
       today={{ tip: t("Heute · Alt H"), disabled: date === today }} atToday={date === today} onPrev={() => stepPeriod(-1)} onToday={() => navigate(today)} onNext={() => stepPeriod(1)} />
     <MiniCalendarPicker date={date} open={datePickerOpen} onOpenChange={setDatePickerOpen} onPick={navigate} buttonRef={datePickerButtonRef} />
-    <div className="toolbar-end">{bookMode && <BookViewSwitch view={bookView} narrow={!bookWide} onChange={setBookView} />}{!bookMode && periodMode === 'day' && <TagFilter label={t("Tags im Journal")} hidden={hiddenTags} onChange={next => { setNewEntryId(null); setHiddenTags(next); }} />}</div>
+    <div className="toolbar-end">{!bookMode && periodMode === 'day' && <TagFilter label={t("Tags im Journal")} hidden={hiddenTags} onChange={next => { setNewEntryId(null); setHiddenTags(next); }} />}</div>
   </>;
   const periodLabels = language === 'en' ? ['Day', 'Week', 'Month', 'Quarter', 'Year'] : ['Tag', 'Woche', 'Monat', 'Quartal', 'Jahr'];
   // The book's views as register tabs on its top edge (Ctrl+1–5).
@@ -597,7 +609,7 @@ function App() {
         void (event.detail === 2 ? window.toggleMaximize() : window.startDragging()).catch(reason => setError(t("Fensteraktion fehlgeschlagen: {0}", String(reason))));
       }}>
         {/* In the book the views are its register tabs; turning and the date join the title bar, so there is one bar. */}
-        {bookMode ? <div className="book-head-tools">{toolbarItems}</div> : <nav className="journal-tabs" aria-label={language === 'en' ? 'Journal views' : 'Journalansichten'}>{periodModes.map((mode, index) => <button type="button" key={mode} className="journal-tab" aria-current={periodMode === mode ? 'page' : undefined} onClick={() => setPeriodMode(mode)}><Icon name={({ day: 'journal', week: 'week', month: 'month', quarter: 'quarter', year: 'year' } as const)[mode]} /><span>{(language === 'en' ? ['Day', 'Week', 'Month', 'Quarter', 'Year'] : ['Tag', 'Woche', 'Monat', 'Quartal', 'Jahr'])[index]}</span>{index === 0 && dirty && <span className="unsaved-dot" aria-label={t("Ungespeicherte Änderungen")} />}</button>)}</nav>}
+        {bookMode ? <div className="book-head-tools"><div className="toolbar-end"><BookViewSwitch view={bookView} narrow={!bookWide} onChange={setBookView} /></div></div> : <nav className="journal-tabs" aria-label={language === 'en' ? 'Journal views' : 'Journalansichten'}>{periodModes.map((mode, index) => <button type="button" key={mode} className="journal-tab" aria-current={periodMode === mode ? 'page' : undefined} onClick={() => setPeriodMode(mode)}><Icon name={({ day: 'journal', week: 'week', month: 'month', quarter: 'quarter', year: 'year' } as const)[mode]} /><span>{(language === 'en' ? ['Day', 'Week', 'Month', 'Quarter', 'Year'] : ['Tag', 'Woche', 'Monat', 'Quartal', 'Jahr'])[index]}</span>{index === 0 && dirty && <span className="unsaved-dot" aria-label={t("Ungespeicherte Änderungen")} />}</button>)}</nav>}
         {!bookMode && <div className="titlebar-space" />}
         {/* Settings sit with the window's own controls, where Zed and most apps keep them. */}
         <button type="button" className="titlebar-button titlebar-help" aria-label={t("Tastenkürzel")} aria-keyshortcuts="F1" title={t("Tastenkürzel") + ' · F1'} onClick={()=>setHelp(true)}>F1</button>
@@ -607,8 +619,8 @@ function App() {
       {/* Like the calendar's toolbar (and Zed's under its tabs): turning the days first, then what is shown. */}
       {!bookMode && <div className="toolbar">{toolbarItems}</div>}
 
-      {bookMode ? <JournalBook mode={periodMode} date={date} view={bookView} paging={settings.bookPaging} beside={besideCalendar} sheetWidth={sidebar.width} onNavigate={navigate} renderPage={bookPage} entriesScrollRef={scrollRef} controlRef={bookRef} onWideChange={setBookWide}
-        ribbon={<CalendarRibbon open={drawer.open} onToggle={() => toggleDrawer()} />} register={register}
+      {bookMode ? <JournalBook mode={periodMode} date={date} today={today} onToday={() => navigate(today)} renderNav={bookNav} view={bookView} paging={settings.bookPaging} beside={besideCalendar} sheetWidth={sidebar.width} onNavigate={navigate} renderPage={bookPage} entriesScrollRef={scrollRef} controlRef={bookRef} onWideChange={setBookWide}
+        calendarTab={<CalendarTab open={drawer.open} onToggle={() => toggleDrawer()} />} register={register}
         overlay={overlayCalendar && <CalendarDrawer overlay open={drawer.open} animated={drawer.animated} width={sidebar.width} resizer={sidebar.handle} resizable={besideCalendar || !(bookView === 'double' && bookWide)} disabled={driveBusy} onClose={() => toggleDrawer(true)}>{calendar}</CalendarDrawer>} />
         : <div className="scroll" ref={scrollRef}>
           <div className="content">

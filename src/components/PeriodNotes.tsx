@@ -62,7 +62,7 @@ export function PeriodNotes({ date, mode, onManage, onImport, part }: { date: st
         <input id="daily-rating" type="range" min="1" max="10" step="1" value={day.rating ?? 1} aria-valuetext={day.rating == null ? tr('Noch nicht bewertet','Not rated yet') : `${day.rating} / 10`} onChange={e => changeDay(current => ({ ...current, rating: Number(e.target.value) }))} onPointerDown={() => { if (day.rating == null) changeDay(current => ({ ...current, rating: 1 })); }} onKeyDown={e => { if (['Enter',' '].includes(e.key) && day.rating == null) { e.preventDefault(); changeDay(current => ({ ...current, rating: 1 })); } }} />
         <div className="rating-scale"><span>1 · {tr('Schwierig','Difficult')}</span><button type="button" disabled={day.rating == null} onClick={() => changeDay(current => ({ ...current, rating: undefined }))}>{tr('Zurücksetzen','Reset')}</button><span>10 · {tr('Großartig','Great')}</span></div>
       </div>
-      <div className="checklist-section-heading"><div><h3>{tr('Checkliste','Checklist')}</h3><p>{tr('Deine Aktivitäten für diesen Tag.','Your activities for this day.')}</p></div><button type="button" className="checklist-manage" onClick={onManage}><Icon name="settings" />{tr('Aktivitäten','Activities')}</button></div>
+      <div className="checklist-section-heading"><div><h3>{tr('Checkliste','Checklist')}</h3><p className="page-hint">{tr('Deine Aktivitäten für diesen Tag.','Your activities for this day.')}</p></div><button type="button" className="checklist-manage" onClick={onManage}><Icon name="settings" />{tr('Aktivitäten','Activities')}</button></div>
       {!data.definitions.some(item => item.active) && <p className="checklist-empty">{tr('Lege deine Aktivitäten in den Einstellungen fest.','Set up your activities in settings.')}</p>}
       {/* One line per activity, like a journal entry: check box in the symbol slot, name, optional note and time. Turning
           the note or time off leaves the row's height unchanged, so the rows below never move. */}
@@ -84,7 +84,7 @@ export function PeriodNotes({ date, mode, onManage, onImport, part }: { date: st
       <RatingChart dates={dates} ratings={Object.fromEntries(records.map(([d, value]) => [d, value.rating]))} monthly={mode === 'quarter' || mode === 'year'} />
       </>}
       {part !== 'notes' && <>
-      <div className="checklist-section-heading"><div><h3>{tr('Aktivitäten im Überblick','Activity overview')}</h3><p>{tr('Erfasste Zeit und Aktivitätstage im gewählten Zeitraum.','Recorded time and activity days in this period.')}</p></div><button type="button" className="checklist-manage" onClick={onManage}><Icon name="settings" />{tr('Aktivitäten','Activities')}</button></div>
+      <div className="checklist-section-heading"><div><h3>{tr('Aktivitäten im Überblick','Activity overview')}</h3><p className="page-hint">{tr('Erfasste Zeit und Aktivitätstage im gewählten Zeitraum.','Recorded time and activity days in this period.')}</p></div><button type="button" className="checklist-manage" onClick={onManage}><Icon name="settings" />{tr('Aktivitäten','Activities')}</button></div>
       {!data.definitions.length && <p className="checklist-empty">{tr('Lege deine Aktivitäten in den Einstellungen fest.','Set up your activities in settings.')}</p>}
       <div className={`activity-summary-grid is-${mode}`}>{data.definitions.filter(item => item.active || dates.some(d => shown.days[d]?.items?.[item.id])).map(item => <ActivitySummary key={item.id} activity={item} dates={dates} data={shown} mode={mode} />)}</div>
       </>}

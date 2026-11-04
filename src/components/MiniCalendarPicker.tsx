@@ -1,20 +1,22 @@
 import { t, useLanguage } from '../i18n';
 import { useEffect, useRef, useState } from 'react';
-import type { RefObject } from 'react';
+import type { ReactNode, RefObject } from 'react';
 import { localDate, monthGrid, shiftMonth } from '../dates';
 import { formatMonthName, formatWeekdayLong } from '../calendar';
 import { CompactMonth, useCalendarData, useNow } from './calendarShared';
 import { Icon } from './Icon';
 
-/** The existing compact calendar, used as a date picker without a native Windows popup. */
-export function MiniCalendarPicker({ date, open, onOpenChange, onPick, buttonRef }: {
+/** The existing compact calendar, used as a date picker without a native Windows popup. `children` replace the button's
+ *  own label (weekday, date, icon), e.g. the book's page title. */
+export function MiniCalendarPicker({ date, open, onOpenChange, onPick, buttonRef, className = 'date-picker-button', children }: {
   date: string; open: boolean; onOpenChange: (open: boolean) => void; onPick: (date: string) => void; buttonRef: RefObject<HTMLButtonElement | null>;
+  className?: string; children?: ReactNode;
 }) {
   useLanguage();
   const rootRef = useRef<HTMLDivElement>(null);
   return <div className="mini-calendar-picker" ref={rootRef}>
-    <button ref={buttonRef} type="button" className="date-picker-button" aria-label={t("Datum auswählen")} title={t("Mini-Kalender · Strg G")} aria-expanded={open} aria-controls="journal-mini-calendar" onClick={() => onOpenChange(!open)}>
-      <span className="date-picker-weekday">{formatWeekdayLong(date)}</span><span>{date.split('-').reverse().join('.')}</span><Icon name="calendar" />
+    <button ref={buttonRef} type="button" className={className} aria-label={children ? undefined : t("Datum auswählen")} title={t("Mini-Kalender · Strg G")} aria-expanded={open} aria-controls="journal-mini-calendar" onClick={() => onOpenChange(!open)}>
+      {children ?? <><span className="date-picker-weekday">{formatWeekdayLong(date)}</span><span>{date.split('-').reverse().join('.')}</span><Icon name="calendar" /></>}
     </button>
     {open && <PickerPanel date={date} rootRef={rootRef} onPick={value => { onPick(value); onOpenChange(false); buttonRef.current?.focus(); }} onClose={restore => { onOpenChange(false); if (restore) buttonRef.current?.focus(); }} />}
   </div>;
@@ -55,6 +57,6 @@ function PickerPanel({ date, rootRef, onPick, onClose }: {
     </div>
     {error && <div className="mini-picker-error" role="alert">{error}</div>}
     <CompactMonth month={month} days={days} today={today} selected={date} onMonth={setMonth} onPick={onPick} />
-    <div className="mini-picker-foot"><button type="button" onClick={() => onPick(today)}>{t("Heute")}</button><span>{t("← → Tage · Bild ↑ ↓ Monat")}</span></div>
+    <div className="mini-picker-foot"><button type="button" onClick={() => onPick(today)}>{t("Heute")}</button><span className="page-hint">{t("← → Tage · Bild ↑ ↓ Monat")}</span></div>
   </div>;
 }

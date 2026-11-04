@@ -365,6 +365,8 @@ async function until(expression) {
   for (let attempt = 0; attempt < 100; attempt++) { if (await evaluate(expression)) return; await pause(75); }
   throw new Error(`Condition failed: ${expression}`);
 }
+// The last command the page sent, leaving out the windows' monitor queries (they come whenever a window measures itself).
+const lastCall = "window.__uiTest.invoked.filter(call => call[0] !== 'plugin:window|current_monitor').at(-1)";
 async function screenshot(name) {
   const result = await command('Page.captureScreenshot', { format: 'png' });
   await writeFile(join(artifacts, name), Buffer.from(result.data, 'base64'));
@@ -1060,7 +1062,8 @@ async function checkJournalTheme() {
   await until("document.querySelectorAll('.entry').length===5");
   const pagesNow = "[...document.querySelectorAll('.book-page:not(.is-outgoing)')].map(p=>p.dataset.page+':'+p.dataset.date).join()";
   const kindsNow = "[...document.querySelectorAll('.book-page:not(.is-outgoing)')].map(p=>p.dataset.page).join()";
-  const pickerDate = value => `document.querySelector('.date-picker-button span:not(.date-picker-weekday)').textContent === ${JSON.stringify(value.split('-').reverse().join('.'))}`;
+  // The app's day is the one whose page carries the head with the navigation (the date picker).
+  const pickerDate = value => `document.querySelector('.book-page:not(.is-outgoing):has(.book-nav)')?.dataset.date === ${JSON.stringify(value)}`;
   const today = await evaluate('window.__uiTest.date'), tomorrow = await evaluate('window.__uiTest.shift(1)');
   // Choosing the style brings the paper palette and the book (a spread: entries | data).
   await key(',', 'Comma', 2);
@@ -1078,7 +1081,8 @@ async function checkJournalTheme() {
   assert.equal(await evaluate(pagesNow), `entries:${today},data:${today}`);
   assert.match(await evaluate("getComputedStyle(document.querySelector('.book-page .entry-edit')).fontFamily"), /Source Serif 4/);
   assert.match(await evaluate("getComputedStyle(document.querySelector('.book-page h1')).fontFamily"), /Fraunces/);
-  assert(await evaluate("document.querySelector('.book-mark.is-entries').getAttribute('aria-current')==='page' && document.querySelector('.book-mark.is-data').getAttribute('aria-current')==='page' && !document.querySelector('.book-mark.is-board').hasAttribute('aria-current')"));
+  // The register is cut into the outer page: the data page misses one step, the board shows through it.
+  assert.deepEqual(await evaluate("[...document.querySelectorAll('.book-cut-tab')].map(b => b.dataset.page)"), ['board']);
   await pause(300); await screenshot('journal-spread.png');
   // Turning moves the right page to the left: data | board, then board | the next day's entries (the app's day follows).
   await key('PageDown', 'PageDown', 2);
@@ -1096,11 +1100,11 @@ async function checkJournalTheme() {
   await until(`${pagesNow}===${JSON.stringify(`data:${today},board:${today}`)}`);
   await until(pickerDate(today));
   await pause(500);
-  // A bookmark jumps to its page of the shown day.
-  await evaluate("document.querySelector('.book-mark.is-entries').click()");
+  // Turning back once more shows the day from its entries page.
+  await evaluate("document.querySelector('.book-page.is-left .book-corner.is-prev').click()");
   await until(`${kindsNow}==='entries,data'`);
   await until("document.querySelectorAll('.entry').length===5");
-  // One page at a time: the switch in the toolbar; bookmarks and Alt+→ (a whole day, to its entries page).
+  // One page at a time: the switch in the toolbar; the register steps and Alt+→ (a whole day, to its entries page).
   await evaluate("document.querySelector('[data-book-view=single]').click()");
   await until("document.querySelectorAll('.book-page').length===1 && Boolean(document.querySelector('.book-stage.is-single'))");
   assert.equal(await evaluate("localStorage.getItem('journal.bookView')"), 'single');
@@ -1108,7 +1112,7 @@ async function checkJournalTheme() {
   await key('PageDown', 'PageDown', 2);
   await pause(190); await screenshot('journal-single-turning.png');
   await until(`${kindsNow}==='data' && document.querySelectorAll('.book-page').length===1`);
-  await evaluate("document.querySelector('.book-mark.is-board').click()");
+  await evaluate("document.querySelector('.book-cut-tab[data-page=board]').click()");
   await until(`${kindsNow}==='board'`);
   await until("Boolean(document.querySelector('.book-page .bulletin-board'))");
   await evaluate("document.querySelector('.board-actions button').click()");
@@ -1129,7 +1133,7 @@ async function checkJournalTheme() {
   await pause(250); await screenshot('journal-calendar-dropping.png');
   await pause(800);
   assert(await evaluate(`(() => { const sheet=document.querySelector('.calendar-drawer-sheet').getBoundingClientRect(), now=document.querySelector('.book-spread').getBoundingClientRect();
-    return now.left===${spread.left} && now.width===${spread.width} && sheet.left>=now.left+20 && sheet.left<now.left+50 && Math.abs(sheet.width-now.width/2)<60 && sheet.top>=now.top-2; })()`), 'The calendar lies over the left page.');
+    return now.left===${spread.left} && now.width===${spread.width} && sheet.left>=now.left+20 && sheet.left<now.left+50 && Math.abs(sheet.width-now.width/2)<60 && sheet.top>=now.top-24; })()`), 'The calendar lies over the left page (a little above its edge, see journal-layout).');
   assert.equal(await evaluate("localStorage.getItem('journal.calendarDrawer')"), '1');
   // The calendar's views are tabs on the right edge of its sheet.
   assert(await evaluate("(() => { const bar=document.querySelector('.calendar-drawer .cal-viewbar').getBoundingClientRect(), sheet=document.querySelector('.calendar-drawer-sheet').getBoundingClientRect(); const tools=document.querySelector('.calendar-drawer .cal-toolbar').getBoundingClientRect(); return bar.right<=sheet.left+8 && bar.height>200 && bar.width<40 && tools.right<=sheet.left+8 && tools.width<40 && getComputedStyle(document.querySelector('.calendar-drawer .cal-title')).display==='none'; })()"), 'Calendar views and filters are tabs on the left of the sheet.');
@@ -1145,7 +1149,7 @@ async function checkJournalTheme() {
   await key('h', 'KeyH', 1);
   await until(`${pickerDate(today)} && document.querySelectorAll('.entry').length===5`);
   await pause(500);
-  await evaluate("document.querySelector('.calendar-ribbon').click()");
+  await evaluate("document.querySelector('.calendar-tab').click()");
   await until("document.querySelector('.calendar-drawer').classList.contains('is-open')");
   await evaluate("document.querySelector('.calendar-drawer .cal').focus()");
   await key('Escape');
@@ -1267,7 +1271,8 @@ async function checkJournalTheme() {
   // The views are register tabs on the book's top edge (no bar of their own; turning and the date sit in the title bar).
   assert.equal(await evaluate("document.querySelector('.journal-tabs, .main > .toolbar')"), null);
   assert(await evaluate("(() => { const tabs=document.querySelector('.book-register').getBoundingClientRect(), book=document.querySelector('.book-spread').getBoundingClientRect(); return document.querySelectorAll('.book-register-tab').length===5 && tabs.bottom<=book.top+1 && tabs.top>=document.querySelector('.topbar').getBoundingClientRect().bottom; })()"), 'The register tabs sit on the top edge of the book.');
-  assert(await evaluate("Boolean(document.querySelector('.topbar .nav-cluster')) && Boolean(document.querySelector('.topbar .date-picker-button')) && Boolean(document.querySelector('.topbar .book-view-switch'))"));
+  // Turning days and the date are on the page; the title bar keeps the view switch.
+  assert(await evaluate("!document.querySelector('.topbar .nav-cluster') && !document.querySelector('.topbar .date-picker-button') && Boolean(document.querySelector('.book-page .book-nav .book-nav-date')) && Boolean(document.querySelector('.topbar .book-view-switch'))"));
   // Overviews have pages of their own: note with ratings, then activities.
   await evaluate("document.querySelector('[data-period-mode=month]').click()");
   await until(`${kindsNow}==='notes,activities' && document.querySelector('[data-period-mode=month]').getAttribute('aria-current')==='page'`);
@@ -1676,7 +1681,7 @@ async function checkCalendars() {
   assert(await evaluate("window.__uiTest.day().entries.some(entry=>entry.text==='Zahnarzt verschoben' && entry.description==='Raum 3\\nGeänderte Details')"), 'Edited descriptions survive saving.');
   // In the month (another day), the card edits in place and can remove the entry.
   await key('m', 'KeyM');
-  await until(`${side()}.dataset.view === 'month'`);
+  await until(`${side()}.dataset.view === 'month' && Boolean(${sideBlock('Früh los')})`);
   await rightClick(sideBlock('Früh los'));
   await until("document.querySelector('.cal-composer.is-editing.is-placed') && !document.querySelector('.cal-composer-time')");
   // The card selects its text once it settled; typing then goes to the end on purpose.
@@ -1850,7 +1855,7 @@ async function checkCalendars() {
   await until(`${timeOf(1)} === '1'`);
   assert.equal(await evaluate(`(() => { const item=[...${cell(tomorrow)}.querySelectorAll('.cal-item')][1], time=item.querySelector('.cal-item-time').getBoundingClientRect(), box=item.getBoundingClientRect(); return Math.abs(time.right - box.right) < 4 && Math.abs(time.bottom - box.bottom) < 4 && !item.querySelector('.cal-item-time').classList.contains('is-scrolling'); })()`), true, 'It sits in the bottom right corner and fits.');
   await evaluate(`[...${cell(tomorrow)}.querySelectorAll('.cal-item')][1].click()`);
-  assert.deepEqual(await evaluate('window.__uiTest.invoked.at(-1)'), ['show_day', { date:tomorrow, entry:'20000000-0000-4000-8000-000000000001' }], 'An entry opens in the journal.');
+  assert.deepEqual(await evaluate(lastCall), ['show_day', { date:tomorrow, entry:'20000000-0000-4000-8000-000000000001' }], 'An entry opens in the journal.');
 
   // The journal saving a day shows up at once.
   await evaluate(`window.__uiTest.store({ ...window.__uiTest.day('${today}'), entries:[...window.__uiTest.day('${today}').entries, { id:'30000000-0000-4000-8000-000000000001', kind:'event', text:'Spontan dazu', done:false, cancelled:false, priority:false, time:'20:00', reminder:false, plan:null }] })`);
@@ -1904,7 +1909,7 @@ async function checkCalendars() {
   // A day clicked in any view opens its note in the journal (the calendar goes there too); T shows that day's hours,
   // where overlapping entries share the width.
   await evaluate(`${yearDay(tomorrow)}.click()`);
-  assert.deepEqual(await evaluate('window.__uiTest.invoked.at(-1)'), ['show_day', { date:tomorrow, entry:null }]);
+  assert.deepEqual(await evaluate(lastCall), ['show_day', { date:tomorrow, entry:null }]);
   assert.equal(await evaluate("document.querySelector('.cal').dataset.view"), 'year');
   await key('t', 'KeyT');
   await until("document.querySelector('.cal').dataset.view === 'day' && document.querySelectorAll('.cal-time-column').length === 1");
@@ -1929,7 +1934,7 @@ async function checkCalendars() {
   }
   await command('Emulation.setDeviceMetricsOverride', { width:1120, height:760, deviceScaleFactor:1, mobile:false });
   await evaluate("document.querySelector('.cal-open').click()");
-  assert.deepEqual(await evaluate('window.__uiTest.invoked.at(-1)'), ['show_day', { date:tomorrow, entry:null }]);
+  assert.deepEqual(await evaluate(lastCall), ['show_day', { date:tomorrow, entry:null }]);
   await key('ArrowRight', 'ArrowRight');
   await until(`document.querySelector('.cal-day-side h2').textContent === ${longDate(later)}`);
   await evaluate('location.reload()');
@@ -1947,10 +1952,10 @@ async function checkCalendars() {
   await pause(350);
   await screenshot('calendar-mini.png');
   await evaluate("document.querySelector('.cal-compact-day.is-today').click()");
-  assert.deepEqual(await evaluate('window.__uiTest.invoked.at(-1)'), ['show_day', { date:today, entry:null }]);
+  assert.deepEqual(await evaluate(lastCall), ['show_day', { date:today, entry:null }]);
   await evaluate("document.querySelector('.mini-pin').click()");
   await until("document.querySelector('.mini-pin').getAttribute('aria-pressed') === 'true'");
-  assert.equal(await evaluate("window.__uiTest.invoked.at(-1)[0]"), 'plugin:window|set_always_on_top');
+  assert.equal(await evaluate(`${lastCall}[0]`), 'plugin:window|set_always_on_top');
   const month = await evaluate("document.querySelector('.mini .cal-title').textContent");
   await key('PageDown', 'PageDown');
   await until(`document.querySelector('.mini .cal-title').textContent !== ${JSON.stringify(month)}`);
@@ -2006,8 +2011,8 @@ try {
     assert.equal(await evaluate("document.querySelector('.statusbar')"),null);
     assert.equal(await evaluate("document.querySelector('.book-head-tools .tag-filter-button')"),null,'Book tags leave the title bar.');
     assert(await evaluate("Boolean(document.querySelector('.book-tag-register .tag-filter-button'))"));
-    const ribbon=await evaluate("(() => {const r=document.querySelector('.calendar-ribbon').getBoundingClientRect(),b=document.querySelector('.book').getBoundingClientRect();return {top:r.top-b.top,left:r.left-(b.left+b.width/2)};})()");
-    assert(Math.abs(ribbon.top)<1 && Math.abs(ribbon.left)<1,'Ribbon is tucked into the book edge with its left side on the fold.');
+    const tab=await evaluate("(() => {const r=document.querySelector('.calendar-tab').getBoundingClientRect(),b=document.querySelector('.book-spread').getBoundingClientRect();return {right:r.right-b.left,inside:r.left>=0};})()");
+    assert(tab.right<=8 && tab.inside,'The calendar tab hangs out of the book on the left, inside the window.');
     await evaluate("document.querySelector('.book-tag-register .tag-filter-button').click()");
     await until("Boolean(document.querySelector('.tag-filter-list'))");
     await evaluate("document.querySelector('.tag-filter-row').click()");
@@ -2030,6 +2035,59 @@ try {
     await until("document.querySelector('.book-page:not(.is-outgoing)').dataset.page!=="+JSON.stringify(page));
     await evaluate("document.querySelector('.titlebar-help').click()");await until("Boolean(document.querySelector('.shortcuts'))");
     console.log('Journal layout passed: no footer, F1 beside settings, overlay above page, titlebar controls fit from 360 to 1380px.');
+  } else if (process.env.JOURNAL_UI_SCOPE === 'journal-sheet') {
+    // The journal style's page: navigation on the sheet, register cut-outs at the top right, the ribbon to today.
+    await evaluate("localStorage.setItem('journal.settings',JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'),theme:'journal',colorTheme:'paper',calendarDock:'overlay'}));localStorage.setItem('journal.calendarDrawer','0');localStorage.setItem('journal.bookView','double')");
+    await command('Page.navigate',{url:`http://127.0.0.1:${server.address().port}/`});
+    await until("Boolean(document.querySelector('.book-page .book-nav'))"); await pause(700);
+    const sheetDate = "document.querySelector('.book-page:not(.is-outgoing)[data-page=entries]')?.dataset.date";
+    // The title bar keeps only the view switch and the window's controls; the day is turned on the page.
+    assert.equal(await evaluate("document.querySelectorAll('.topbar .nav-cluster, .topbar .date-picker-button, .topbar .mini-calendar-picker').length"),0);
+    assert.equal(await evaluate("document.querySelectorAll('.book-page .book-nav').length"),1,'One head with the navigation per spread.');
+    assert.equal(await evaluate("document.querySelectorAll('.book-page .eyebrow, .book-marks, .calendar-ribbon').length"),0);
+    assert.equal(await evaluate("[...document.querySelectorAll('.book-page:not(.is-outgoing) .book-page-foot')].every(f => f.children.length===1 && /^\\d+$/.test(f.textContent))"),true,'The footer is the page number.');
+    // Today: the ribbon lies over the pages (and does not catch clicks there).
+    assert.equal(await evaluate("document.querySelector('.book-ribbon').classList.contains('is-here')"),true);
+    assert.equal(await evaluate("getComputedStyle(document.querySelector('.book-ribbon')).pointerEvents"),'none');
+    assert.equal(await evaluate("getComputedStyle(document.querySelector('.book-ribbon')).opacity"),'1');
+    // Register: the data page (right) misses one step; through it the board shows and opens.
+    assert.equal(await evaluate("getComputedStyle(document.querySelector('.book-page.is-right')).getPropertyValue('--cut').trim()"),'1');
+    assert.deepEqual(await evaluate("[...document.querySelectorAll('.book-cut-tab')].map(b => b.dataset.page)"),['board']);
+    await screenshot('journal-sheet-today.png');
+    // A day on: the ribbon only hangs out below the book; pulling it opens today again.
+    const today = await evaluate('window.__uiTest.date');
+    await evaluate("document.querySelectorAll('.book-nav .book-nav-step')[1].click()");
+    await until(`${sheetDate}===${JSON.stringify(await evaluate('window.__uiTest.shift(1)'))}`); await pause(600);
+    assert.equal(await evaluate("document.querySelector('.book-ribbon').classList.contains('is-here')"),false);
+    assert(await evaluate("(() => { const r=document.querySelector('.book-ribbon').getBoundingClientRect(), b=document.querySelector('.book-spread').getBoundingClientRect(); return r.bottom>b.bottom+20 && r.bottom<=innerHeight; })()"),'The ribbon end shows below the book.');
+    await screenshot('journal-sheet-other-day.png');
+    await evaluate("document.querySelector('.book-ribbon').click()");
+    await until(`${sheetDate}===${JSON.stringify(today)}`); await pause(600);
+    // The date on the page opens the mini calendar.
+    await evaluate("document.querySelector('.book-nav-date').click()");
+    await until("Boolean(document.querySelector('.book-nav .mini-picker-panel'))");
+    await screenshot('journal-sheet-picker.png');
+    await key('Escape'); await until("!document.querySelector('.mini-picker-panel')");
+    // One page: the entries page misses two steps, data and board show through.
+    await command('Emulation.setDeviceMetricsOverride',{width:800,height:780,deviceScaleFactor:1,mobile:false}); await pause(500);
+    assert.deepEqual(await evaluate("[...document.querySelectorAll('.book-cut-tab')].map(b => b.dataset.page).sort()"),['board','data']);
+    await screenshot('journal-sheet-single.png');
+    await evaluate("document.querySelector('.book-cut-tab[data-page=data]').click()");
+    await until("document.querySelector('.book-page:not(.is-outgoing)').dataset.page==='data'"); await pause(500);
+    assert.deepEqual(await evaluate("[...document.querySelectorAll('.book-cut-tab')].map(b => b.dataset.page)"),['board']);
+    await command('Emulation.setDeviceMetricsOverride',{width:1180,height:780,deviceScaleFactor:1,mobile:false}); await pause(400);
+    // The calendar comes out of its tab on the left.
+    await evaluate("document.querySelector('.calendar-tab').click()");
+    await until("Boolean(document.querySelector('.calendar-drawer.is-open'))"); await pause(700);
+    await screenshot('journal-sheet-calendar.png');
+    await evaluate("document.querySelector('.calendar-tab').click()");
+    await until("!document.querySelector('.calendar-drawer.is-open')");
+    // A week: its head steps weeks; the activities page shows through the note page's cut.
+    await evaluate("document.querySelector('.book-register-tab[data-period-mode=week]').click()");
+    await until("document.querySelector('.book-page:not(.is-outgoing)')?.dataset.page==='notes'"); await pause(600);
+    await screenshot('journal-sheet-week.png');
+    assert.deepEqual(errors,[]);
+    console.log('Journal sheet passed: navigation on the page, decluttered heads, cut register, ribbon to today, calendar tab.');
   } else if (process.env.JOURNAL_UI_SCOPE === 'journal-grid') {
     await evaluate("localStorage.setItem('journal.settings',JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'),theme:'journal',colorTheme:'paper'}))");
     await command('Page.navigate',{url:`http://127.0.0.1:${server.address().port}/?window=calendar`});
@@ -3443,8 +3501,9 @@ try {
   assert.equal(await evaluate("document.querySelector('.reminder-when').textContent"), 'Erinnerung · 14:15');
   await pause(600);
   await screenshot('reminder.png');
-  const placement = await evaluate("(() => { const card=document.querySelector('.reminder').getBoundingClientRect(), bar=document.querySelector('.statusbar').getBoundingClientRect(); return { bottom:card.bottom, top:bar.top, right:card.right, width:innerWidth }; })()");
-  assert(placement.bottom <= placement.top && placement.right <= placement.width - 8, `The card sits above the status bar, inside the window (${JSON.stringify(placement)}).`);
+  // The app has no status bar any more: the card sits in the window's bottom right corner.
+  const placement = await evaluate("(() => { const card=document.querySelector('.reminder').getBoundingClientRect(); return { bottom:card.bottom, right:card.right, width:innerWidth, height:innerHeight }; })()");
+  assert(placement.bottom <= placement.height - 8 && placement.right <= placement.width - 8, `The card sits inside the window (${JSON.stringify(placement)}).`);
   await pause(600);
   await screenshot('reminder.png');
   await evaluate("document.querySelector('.reminder-done').click()");

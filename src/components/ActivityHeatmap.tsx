@@ -42,7 +42,7 @@ export function ActivityHeatmap({ activity, dates, data, calendar }: { activity:
         return inRange ? <button key={date} type="button" className="heatmap-cell" data-date={date} data-level={level} style={style} title={detail(date)} aria-label={detail(date)} tabIndex={(selected && selected >= first && selected <= last ? selected : first) === date ? 0 : -1} onMouseEnter={() => setSelected(date)} onFocus={() => setSelected(date)} onClick={() => setSelected(date)} onKeyDown={event => move(event,date)}>{calendar && <span style={{color:level ? lightness > 145 ? '#171717' : '#ffffff' : undefined}}>{Number(date.slice(8))}</span>}</button> : <span className="heatmap-padding" key={date} style={style} />;
       })}
     </div></div>
-    <p className="heatmap-detail" aria-live="polite">{selected && selected >= first && selected <= last ? detail(selected) : en ? 'Select a day for details' : 'Tag für Details auswählen'}</p>
+    <p className="heatmap-detail" aria-live="polite">{selected && selected >= first && selected <= last ? detail(selected) : <span className="page-hint">{en ? 'Select a day for details' : 'Tag für Details auswählen'}</span>}</p>
     {activity.trackTime ? <ActivityPalette color={activity.color} trackTime /> : <p className="heatmap-binary-legend"><i style={{backgroundColor:palette[0]}} />{en ? 'Done' : 'Erledigt'}</p>}
   </div>;
 }
