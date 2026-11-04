@@ -4,35 +4,37 @@ import type { useSidebarWidth } from './useSidebarWidth';
 import { t, useLanguage } from '../i18n';
 import { Icon } from './Icon';
 
-const openKey = 'journal.calendarDrawer';
-/** Whether the calendar lies next to the book, remembered on the device. `animated` stays off for the state at start. */
-export function useCalendarDrawer() {
-  const [open, setOpen] = useState(() => { try { return localStorage.getItem(openKey) === '1'; } catch { return false; } });
+/** Whether a sheet (the calendar, the notebook) is out, remembered on the device. `animated` stays off for the state at start. */
+export function useDrawer(key: string) {
+  const [open, setOpen] = useState(() => { try { return localStorage.getItem(key) === '1'; } catch { return false; } });
   const [animated, setAnimated] = useState(false);
   const change = (next: boolean | ((open: boolean) => boolean)) => setOpen(current => {
     const value = typeof next === 'function' ? next(current) : next;
-    try { localStorage.setItem(openKey, value ? '1' : '0'); } catch { /* keep it for this session */ }
+    try { localStorage.setItem(key, value ? '1' : '0'); } catch { /* keep it for this session */ }
     return value;
   });
   return { open, animated, setOpen: (next: boolean | ((open: boolean) => boolean)) => { setAnimated(true); change(next); } };
 }
+export const calendarDrawerKey = 'journal.calendarDrawer', notebookDrawerKey = 'journal.notebookDrawer';
 
 /**
- * The journal style's calendar: a sheet of paper pulled out at the book's left edge (its tab, CalendarTab). As an
- * `overlay` it lies over the left page of the book (inside JournalBook); otherwise it lies down left of the book, which
- * moves aside. Its width is dragged at its edge like the sidebar's (`resizable`; over a spread it covers the left page).
+ * A sheet of paper pulled out at the book's left edge (its tab: CalendarTab, NotebookTab). On the `left` it is the
+ * calendar; as an `overlay` it lies over the left page of the book (inside JournalBook), otherwise it lies down left of
+ * the book, which moves aside. Its width is dragged at its edge like the sidebar's (`resizable`; over a spread it covers
+ * the left page). On the `right` (the notebook) it lies over the right page; with both out the book is covered.
  */
-export function CalendarDrawer({ open, animated, width, resizer, resizable = true, overlay = false, disabled, onClose, children }: {
-  open: boolean; animated: boolean; width: number; resizer: ReturnType<typeof useSidebarWidth>['handle']; resizable?: boolean; overlay?: boolean; disabled?: boolean; onClose: () => void; children: ReactNode;
+export function CalendarDrawer({ open, animated, width, resizer, resizable = true, overlay = false, side = 'left', label, disabled, onClose, children }: {
+  open: boolean; animated: boolean; width: number; resizer?: ReturnType<typeof useSidebarWidth>['handle']; resizable?: boolean; overlay?: boolean; side?: 'left' | 'right'; label?: string; disabled?: boolean; onClose: () => void; children: ReactNode;
 }) {
   useLanguage();
-  return <aside className={`calendar-drawer${overlay ? ' is-overlay' : ''}${open ? ' is-open' : ''}${animated ? ' is-animated' : ''}`} style={{ '--drawer-width': `${width}px` } as CSSProperties}
-    aria-label={t('Kalender und Navigation')} aria-hidden={!open || undefined} inert={!open || disabled}
-    onKeyDown={event => { if (event.key === 'Escape' && !event.defaultPrevented && !(event.target as Element).closest('input, textarea, [contenteditable="true"], [role="dialog"]')) { event.preventDefault(); onClose(); } }}>
-    <div className="calendar-drawer-sheet">
+  const name = side === 'left' ? 'calendar-drawer' : 'notebook-drawer';
+  return <aside className={`${name}${overlay ? ' is-overlay' : ''}${open ? ' is-open' : ''}${animated ? ' is-animated' : ''}`} style={{ '--drawer-width': `${width}px` } as CSSProperties}
+    aria-label={label ?? t('Kalender und Navigation')} aria-hidden={!open || undefined} inert={!open || disabled}
+    onKeyDown={event => { if (event.key === 'Escape' && !event.defaultPrevented && !(event.target as Element).closest('input, textarea, select, [contenteditable="true"], [role="dialog"]')) { event.preventDefault(); onClose(); } }}>
+    <div className={`${name}-sheet`}>
       {children}
     </div>
-    {open && resizable && <div className="sidebar-resizer" {...resizer} />}
+    {open && resizable && resizer && <div className="sidebar-resizer" {...resizer} />}
   </aside>;
 }
 
@@ -42,5 +44,13 @@ export function CalendarTab({ open, onToggle }: { open: boolean; onToggle: () =>
   return <button type="button" className={`calendar-tab${open ? ' is-open' : ''}`} aria-expanded={open} aria-keyshortcuts="Control+K"
     title={open ? t('Kalender zurücklegen · Strg K') : t('Kalender herausziehen · Strg K')} onClick={onToggle}>
     <Icon name="calendar" /><span>{t('Kalender')}</span>
+  </button>;
+}
+/** The same kind of tab below it for the notebook (Ctrl+Shift+N). */
+export function NotebookTab({ open, onToggle }: { open: boolean; onToggle: () => void }) {
+  useLanguage();
+  return <button type="button" className={`notebook-tab${open ? ' is-open' : ''}`} aria-expanded={open} aria-keyshortcuts="Control+Shift+N"
+    title={open ? t('Notizen zurücklegen · Strg ⇧ N') : t('Notizen herausziehen · Strg ⇧ N')} onClick={onToggle}>
+    <Icon name="note" /><span>{t('Notizen')}</span>
   </button>;
 }

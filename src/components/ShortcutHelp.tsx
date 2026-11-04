@@ -12,7 +12,7 @@ import type { IconName } from './Icon';
 export const shortcutGroups = (): { id: string; title: string; icon: IconName; items: [keys: string, label: string][] }[] => ([
   { id: 'days', title: t("Tage"), icon: 'journal', items: [
     ['Alt+←', t("Vorheriger Tag")], ['Alt+→', t("Nächster Tag")], ['Alt+H', t("Heute")], ['Strg+G', t("Gehe zu Datum (Mini-Kalender)")], ['Strg+1–5', t("Tag · Woche · Monat · Quartal · Jahr")],
-    [t("~Wischen / ⇧+~Mausrad"), t("Tag zurück / weiter")], ['Strg+Z', t("Rückgängig")], ['Strg+Y / Strg+⇧+Z', t("Wiederherstellen")], ['Strg+,', t("Einstellungen")], ['F1 / ?', t("Diese Übersicht")],
+    [t("~Wischen / ⇧+~Mausrad"), t("Tag zurück / weiter")], ['Strg+Z', t("Rückgängig")], ['Strg+Y / Strg+⇧+Z', t("Wiederherstellen")], ['Strg+,', t("Einstellungen")], ['Strg+⇧+N', t("Notizen")], ['F1 / ?', t("Diese Übersicht")],
   ] },
   { id: 'book', title: t("Buch"), icon: 'journal', items: [
     ['Strg+Bild↓ / Strg+Bild↑', t("Umblättern / zurückblättern")], [t("~Eselsohr / ~Wischen / ⇧+~Mausrad"), t("Eine Seite weiter / zurück")],
@@ -45,6 +45,14 @@ export const shortcutGroups = (): { id: string; title: string; icon: IconName; i
     ['Strg+Alt+C', t("Codeblock")], ['Strg+Alt+T', t("Tabelle")], ['Tab / ⇧+Tab', t("Tabelle: nächste / vorige Zelle · Liste: ein- / ausrücken")],
     ['Enter', t("Liste fortsetzen · Tabelle: neue Zeile")], ['← / → / ↑ / ↓', t("Karte verschieben (⇧: weiter)")], ['Alt+⇧+← / Alt+⇧+→', t("Karte schmaler / breiter")], ['Alt+⇧+↑ / Alt+⇧+↓', t("Zettel kürzer / länger")],
     [t("~Ecke ziehen"), t("Größe ändern (Doppelklick: zurücksetzen)")], [t("~Klick aufs Bild"), t("Groß öffnen")],
+    [t("~Pin ziehen"), t("Faden zu einer anderen Karte: Bild/Link wird Anhang, Zettel wird Seite")], ['Alt+L', t("Faden per Tastatur (Pfeile wählen, Enter verbindet, Esc bricht ab)")],
+    [t("~Klick auf den Faden"), t("Faden lösen")],
+  ] },
+  { id: 'notebook', title: t("Notizen"), icon: 'note', items: [
+    ['Strg+⇧+N', t("Notizblock öffnen / schließen")], ['Esc', t("Notizblock schließen")],
+    ['Bild↑ / Bild↓', t("Vorige / nächste Seite (verbundene Zettel)")], ['Strg+Bild↑ / Strg+Bild↓', t("Seite wechseln, auch beim Schreiben")],
+    ['F2', t("Ordner umbenennen")], ['← / →', t("Ordner zu- / aufklappen")], [t("~Ziehen auf einen Ordner"), t("Zettel oder Ordner hineinlegen")],
+    [t("~Doppelklick auf einen Ordner"), t("Umbenennen")],
   ] },
   { id: 'text', title: t("Text"), icon: 'pencil', items: [
     ['Strg+B', '**Fett**'], ['Strg+I', '*Kursiv*'], ['Strg+⇧+X', '~~Durchgestrichen~~'], ['Strg+⇧+H', '==Markiert=='],

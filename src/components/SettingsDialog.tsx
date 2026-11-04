@@ -178,7 +178,8 @@ export function SettingsDialog({ settings, onChange, onClose, onImport, mailStat
         </div>
       </SettingRow>
     </section>
-    <section className="settings-section">
+    {/* How an entry's actions open follows the popup look above; only touch screens choose swiping here. */}
+    {swipeAvailable() && <section className="settings-section">
       <h3 id="settings-layout">{t("Aktionen am Eintrag")}</h3>
       <div className="settings-options" role="radiogroup" aria-labelledby="settings-layout" onKeyDown={event => {
         const next = arrowStep(event, layouts().map(layout => layout.value), settings.actionLayout);
@@ -193,7 +194,7 @@ export function SettingsDialog({ settings, onChange, onClose, onImport, mailStat
           <span>{layout.text}</span>
         </button>)}
       </div>
-    </section>
+    </section>}
   </>;
 
   const panels: Record<SettingsTab, ReactNode> = {

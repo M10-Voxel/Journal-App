@@ -9,13 +9,16 @@ import type { SwipeActions } from './useSwipe';
 import { formatShortDate, localDate } from '../dates';
 import { Schedule, canBeNote, canPlan, keepDuration, repeatChange, tomorrowChange } from '../planning';
 import type { RepeatRule } from '../repeat';
+import { ActionSheet } from './ActionSheet';
+import type { SheetGroup, SheetItem } from './ActionSheet';
+import { usePopupLook } from '../popupLook';
 import type { Tag } from '../tags';
 
 export type TaskStatus = 'open' | 'done' | 'cancelled';
 export type EntryPreview = TaskStatus | EntryKind | 'remove' | 'up' | 'down' | 'priority' | 'tomorrow' | 'unplan';
 export type PlanUpdate = Partial<Pick<Entry, 'time' | 'end' | 'reminder' | 'plan' | 'repeat'>>;
 /** How the actions appear: satellites around the symbol, words in the text flow, or gestures (setting, see SettingsDialog). */
-export type ActionLayout = 'orbit' | 'inline' | 'swipe';
+export type ActionLayout = 'orbit' | 'inline' | 'swipe' | 'sheet';
 /** One action as the inline layout lists it. */
 interface ActionItem {
   id: string; label: string; icon: IconName; preview?: EntryPreview; disabled?: boolean;
@@ -158,10 +161,23 @@ export function EntryActionDock({ layout, swipeActions, removeChoice, onClose, e
     { id: 'remove', label: trace || entry.origin ? removeTip.replace(t("Entfernen"), t("Löschen")).replace(' · Alt Entf', '') : t("Löschen"), icon: 'trash' as const, preview: 'remove' as const, run: onRemove },
   ];
 
+  // The other popup looks (ActionSheet): the same actions, grouped, with a command word and their keys.
+  const look = usePopupLook();
+  const sheetGroupOf: Record<string, SheetGroup> = { jump: 'status', unplan: 'status', open: 'status', done: 'status', cancelled: 'status', priority: 'entry', tag: 'entry', 'kind-event': 'entry', 'kind-task': 'entry', 'kind-note': 'entry', tomorrow: 'plan', plan: 'plan', days: 'plan', repeat: 'plan', up: 'order', down: 'order', remove: 'remove' };
+  const commands: Record<string, string> = { jump: 'goto', unplan: 'unplan', open: 'reopen', done: 'done', cancelled: 'cancel', priority: 'prio', tag: 'tag', 'kind-event': 'as-event', 'kind-task': 'as-task', 'kind-note': 'as-note', tomorrow: 'tomorrow', plan: 'plan', days: 'days', repeat: 'repeat', up: 'up', down: 'down', remove: 'rm' };
+  const keysOf: Record<string, string> = { jump: 'Alt T', done: 'Alt D', cancelled: 'Alt X', priority: 'Alt P', tag: 'Alt G', 'kind-event': 'Alt ⇧ E', 'kind-task': 'Alt ⇧ A', 'kind-note': 'Alt ⇧ N', tomorrow: 'Alt M', plan: 'Alt T', days: 'Alt ⇧ T', repeat: 'Alt W', up: 'Alt ↑', down: 'Alt ↓', remove: t('Alt Entf') };
+  const sheetItems = (): SheetItem[] => actionItems().map(item => ({
+    ...item, group: sheetGroupOf[item.id] ?? 'entry', command: commands[item.id] ?? item.id, keys: keysOf[item.id],
+    short: shortWords[item.id] || item.label, primary: (isTask && item.id === (status === 'open' ? 'done' : 'open')) || (trace !== null && trace !== undefined && item.id === 'jump'),
+    preview: item.preview ? previewing(item.preview) : undefined,
+    // Moving and planning keep the popup (the planner opens in it); everything else closes it once done.
+    run: () => { item.run(); if (!['plan', 'days', 'repeat', 'up', 'down', 'remove', 'tag'].includes(item.id)) onClose(); },
+  }));
+
   useLayoutEffect(() => {
     const dock = dockRef.current;
     if (!isOpen || !dock) return;
-    const primary = dock.querySelector<HTMLButtonElement>('[data-primary-action="true"]');
+    const primary = dock.querySelector<HTMLElement>('[data-primary-action="true"]');
     (primary ?? dock).focus({ preventScroll: true });
     dock.scrollIntoView({ block: 'nearest', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
   }, [isOpen]);
@@ -184,7 +200,8 @@ export function EntryActionDock({ layout, swipeActions, removeChoice, onClose, e
       : index + (event.key === 'ArrowUp' || event.key === 'ArrowLeft' ? -1 : 1);
     buttons[(next + buttons.length) % buttons.length]?.focus();
   }}>
-    {layout === 'swipe' ? <div className="entry-dock swipe-legend">
+    {layout === 'sheet' ? <ActionSheet look={look} title={entry.text.replace(/[*_~=\[\]{}]/g, '').slice(0, 60) || label} items={sheetItems()} onClose={onClose} />
+    : layout === 'swipe' ? <div className="entry-dock swipe-legend">
       {(['right', 'down', 'up', 'left'] as const).flatMap(towards => swipeActions[towards].map((action, stage) => <button key={action.id} type="button" className="legend-action" style={stagger({ '--tone': action.color } as CSSProperties)} aria-label={action.label}
         data-primary-action={towards === 'right' && stage === 0 ? 'true' : undefined} {...(action.preview ? previewing(action.preview) : {})} onClick={() => { action.run(); if (action.id !== 'plan' && action.id !== 'days') onClose(); }}>
         <span className="legend-arrow">{{ left: '←', right: '→'.repeat(stage + 1), up: '↑', down: '↓'.repeat(stage + 1) }[towards]}</span><Icon name={action.icon} /><span>{action.label}</span>

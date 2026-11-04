@@ -229,3 +229,43 @@
 
 /* CodeMirror's caret hit testing needs an axis-aligned writing surface. */
 .board-card.is-note { --tilt: 0deg !important; }
+/* Normal design: the board in the app's own surfaces – a dark sheet with a fine dot grid, framed like the panels. */
+:root[data-theme='classic'] .bulletin-board { --cork: color-mix(in srgb, var(--surface) 55%, var(--background)); --cork-fleck: color-mix(in srgb, var(--strong) 11%, transparent); --cork-hole: transparent; --cork-frame: var(--border); }
+:root[data-theme='classic'] .board-surface { border-radius: 12px; background-image: radial-gradient(var(--cork-fleck) 1px, transparent 1.4px); background-size: 18px 18px; background-position: 9px 9px;
+  box-shadow: inset 0 0 0 1px var(--divider), inset 0 1px 0 color-mix(in srgb, var(--strong) 6%, transparent), inset 0 14px 30px -18px #000c; }
+:root[data-theme='classic'][data-pixel] .board-surface { border-radius: 0; background-image: radial-gradient(var(--cork-fleck) 1px, transparent 1px); box-shadow: inset 0 0 0 2px var(--divider); }
+
+/* ── Threads (BulletinBoard: threadPath) ───────────────────────────────────────────────────────────────────────────
+   The pin is a handle: drawn to another card it ties both. Threads hang from pin to pin over the cards; only the line
+   takes the pointer. Normal: a thin thread in the accent; journal: red yarn; Nebula: violet, dashed; pixel: in steps. */
+.board-card .board-pin { z-index: 3; pointer-events: auto; cursor: crosshair; transition: transform 160ms var(--spring); }
+.board-card .board-pin::after { content: ''; position: absolute; inset: -7px; border-radius: 50%; }
+.board-card .board-pin:hover, .board-card.is-link-source .board-pin { transform: scale(1.18); }
+.board-surface.is-linking, .board-surface.is-linking .board-card { cursor: crosshair; }
+.board-threads { position: absolute; top: 0; left: 0; overflow: visible; pointer-events: none; }
+.board-thread { --thread-w: 1.5px; fill: none; stroke: var(--thread, var(--accent)); stroke-width: var(--thread-w); stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 2px 1.5px #0007); transition: stroke-width var(--fast) ease; }
+.board-thread.is-drawing { stroke-dasharray: 5 4; opacity: .9; }
+.board-thread-knot { fill: var(--thread, var(--accent)); }
+.board-thread-hit { fill: none; stroke: transparent; stroke-width: 12px; pointer-events: stroke; cursor: pointer; outline: none; }
+.board-surface.is-linking .board-thread-hit { pointer-events: none; }
+.board-thread-group:is(:hover, .is-open, :focus-within) .board-thread { stroke-width: calc(var(--thread-w) + 1px); }
+.board-thread-hit:focus-visible { stroke: color-mix(in srgb, var(--thread, var(--accent)) 30%, transparent); }
+.board-card.is-link-target { box-shadow: 0 0 0 2px var(--thread, var(--accent)), 0 14px 28px -8px #000c; }
+.board-thread-menu { min-width: 200px; }
+.board-thread-menu p { display: flex; flex-direction: column; gap: 2px; margin: 2px 6px 8px; color: var(--strong); font: 600 12.5px var(--sans); }
+.board-thread-menu small { color: var(--muted); font: 400 11.5px var(--sans); }
+.board-thread-cut { display: flex; align-items: center; gap: 7px; width: 100%; height: 30px; padding: 0 10px; border: 0; border-radius: 6px; background: var(--hover); color: var(--text); font: 500 12.5px var(--sans); cursor: pointer; }
+.board-thread-cut:hover { background: color-mix(in srgb, var(--error) 18%, var(--hover)); color: var(--strong); }
+.board-thread-cut .icon { width: 13px; height: 13px; color: var(--error); }
+.board-library-path { display: flex; align-items: center; gap: 4px; font-size: 10.5px; opacity: .75; }
+.board-library-path .icon { width: 10px; height: 10px; }
+:root[data-theme='classic'] .bulletin-board { --thread: var(--accent); }
+:root[data-theme='journal'] .bulletin-board { --thread: #a8322c; }
+:root[data-theme='journal'] .board-thread { --thread-w: 2.2px; stroke-dasharray: 7 1.2; filter: drop-shadow(0 2px 1px #2a1a0c66); }
+:root[data-theme='nebula'] .bulletin-board { --thread: #a66cf0; }
+:root[data-theme='nebula'] .board-thread { --thread-w: 2px; stroke-dasharray: 6 4; stroke-linecap: butt; filter: drop-shadow(2px 2px 0 #000); }
+:root[data-pixel] .board-thread { --thread-w: 2px; stroke-linecap: square; stroke-linejoin: miter; shape-rendering: crispEdges; filter: drop-shadow(2px 2px 0 #0009); transition: none; }
+:root[data-pixel] .board-thread.is-drawing { stroke-dasharray: 4 4; }
+:root[data-pixel] .board-thread-knot { shape-rendering: crispEdges; }
+:root[data-pixel] .board-card .board-pin { transition: none; }
+:root[data-pixel] .board-card .board-pin::after, :root[data-pixel] .board-thread-cut { border-radius: 0; }

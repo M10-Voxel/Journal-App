@@ -1,6 +1,8 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { PopupHead } from './PopupChrome';
+import { usePopupLook } from '../popupLook';
 
 /**
  * A small floating panel at an element (tag picker, tag filter, colour picker): below it when there is room, else above,
@@ -13,6 +15,7 @@ export function Popover({ anchor, onClose, className = '', label, children, alig
   align?: 'start' | 'end'; focus?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const look = usePopupLook();
   const [place, setPlace] = useState<{ left: number; top: number; above: boolean } | null>(null);
   const close = useRef(onClose);
   close.current = onClose;
@@ -56,5 +59,5 @@ export function Popover({ anchor, onClose, className = '', label, children, alig
       if (event.key === 'Escape' && !event.defaultPrevented) { event.preventDefault(); close.current(true); }
       // Nothing typed here reaches the views behind (their keys, the journal's Alt shortcuts).
       event.stopPropagation();
-    }}>{children}</div>, document.body);
+    }}><PopupHead look={look} title={label} command={className.split(' ')[0] || 'popup'} onClose={() => close.current(true)} />{children}</div>, document.body);
 }

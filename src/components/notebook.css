@@ -1,0 +1,271 @@
+/* The notebook (Notebook.tsx): the folder tree and the notes on the left, the note as a page on the right. Normal: panels
+   with a side bar; journal: a sheet of the book (ruled paper, a contents page for the tree); Nebula: a terminal with the
+   tree as `tree` output. Each with its pixel variant at the end. Where it lies (sheet, window, tab) is up to the design's
+   own stylesheet (journal-theme.css, nebula-theme.css, styles.css). */
+.notebook { --nbk-side: 236px; container: notebook / inline-size; display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; height: 100%; color: var(--text); font: 13px var(--sans); }
+.notebook button { font: inherit; }
+.notebook :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.notebook-head { flex: none; display: flex; align-items: center; gap: 10px; min-height: 46px; padding: 0 12px 0 16px; border-bottom: 1px solid var(--divider); }
+.notebook-head h2 { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--strong); font: 600 15px var(--sans); }
+.notebook-head h2 .icon { width: 15px; height: 15px; color: var(--accent); }
+.notebook-head-count { color: var(--muted); font-size: 12px; }
+.notebook-head-space { flex: 1; }
+.notebook-new { display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px 0 10px; border: 0; border-radius: 999px; background: var(--accent); color: var(--on-accent); font: 500 12px var(--sans) !important; cursor: pointer; transition: filter var(--fast) ease, transform 200ms var(--spring); }
+.notebook-new .icon { width: 13px; height: 13px; }
+.notebook-new:hover:not(:disabled) { filter: brightness(1.08); }
+.notebook-new:active:not(:disabled) { transform: scale(.95); }
+.notebook-close { display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; }
+.notebook-close:hover { background: var(--hover); color: var(--strong); }
+.notebook-close .icon { width: 15px; height: 15px; }
+
+.notebook-body { flex: 1; min-height: 0; display: grid; grid-template-columns: var(--nbk-side) minmax(0, 1fr); }
+.notebook-side { display: flex; flex-direction: column; gap: 14px; min-width: 0; min-height: 0; overflow: auto; padding: 12px 10px; border-right: 1px solid var(--divider); background: color-mix(in srgb, var(--surface) 55%, var(--background)); }
+.notebook-search { flex: none; display: flex; align-items: center; gap: 7px; height: 30px; padding: 0 9px; border-radius: 7px; background: var(--inset); box-shadow: inset 0 0 0 1px var(--edge); color: var(--muted); }
+.notebook-search .icon { flex: none; width: 13px; height: 13px; }
+.notebook-search input { flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; background: transparent; color: var(--strong); font: 12.5px var(--sans); outline: 0; }
+.notebook-search:focus-within { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 65%, transparent); }
+.notebook-tree-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 22px; padding: 0 4px 4px 6px; color: var(--muted); font: 600 10.5px var(--sans); letter-spacing: .08em; text-transform: uppercase; }
+.notebook-tree-head small { font: 500 11px var(--sans); letter-spacing: 0; }
+.notebook-add-folder, .notebook-folder-tools button { display: grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--muted); cursor: pointer; }
+.notebook-add-folder:hover, .notebook-folder-tools button:hover { background: var(--hover); color: var(--strong); }
+.notebook-add-folder .icon, .notebook-folder-tools .icon { width: 12px; height: 12px; }
+.notebook-tree ul { margin: 0; padding: 0; list-style: none; }
+.notebook-folder { position: relative; display: flex; align-items: center; border-radius: 6px; }
+.notebook-folder-name { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 8px 0 calc(6px + var(--depth, 0) * 14px); border: 0; border-radius: 6px; background: transparent; color: var(--text); font: 13px var(--sans) !important; text-align: left; cursor: pointer; }
+.notebook-folder-name > span:not(.notebook-branch, .notebook-twisty) { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.notebook-folder-name small { flex: none; color: var(--muted); font-size: 11px; }
+.notebook-folder-name .icon { flex: none; width: 13px; height: 13px; color: var(--muted); }
+.notebook-folder:hover .notebook-folder-name { background: var(--hover); }
+.notebook-folder.is-current .notebook-folder-name { background: var(--selected); color: var(--strong); font-weight: 600 !important; }
+.notebook-folder.is-current .notebook-folder-name .icon { color: var(--accent); }
+.notebook-folder.is-drop { box-shadow: inset 0 0 0 2px var(--accent); }
+.notebook-branch { display: none; flex: none; white-space: pre; }
+.notebook-twisty { flex: none; width: 10px; color: var(--muted); font-size: 10px; text-align: center; }
+.notebook-folder-tools { position: absolute; top: 3px; right: 4px; display: none; gap: 1px; padding-left: 6px; border-radius: 5px; background: inherit; }
+.notebook-folder:is(:hover, :focus-within) .notebook-folder-tools { display: flex; }
+.notebook-folder:is(:hover, :focus-within) .notebook-folder-name small { visibility: hidden; }
+.notebook-folder-tools button { background: var(--surface); box-shadow: 0 0 0 1px var(--edge); }
+.notebook-rename { flex: 1; min-width: 0; height: 26px; margin: 1px 4px 1px calc(6px + var(--depth, 0) * 14px); padding: 0 7px; border: 0; border-radius: 5px; background: var(--inset); box-shadow: inset 0 0 0 1px var(--accent); color: var(--strong); font: 13px var(--sans); outline: 0; }
+.notebook-rename ~ .notebook-folder-tools { display: none !important; }
+
+.notebook-notes { display: flex; flex-direction: column; gap: 3px; min-height: 0; }
+.notebook-note { --paper: #e9d98c; display: flex; flex-direction: column; gap: 2px; padding: 7px 9px 7px 12px; border: 0; border-radius: 6px; background: transparent; color: var(--text); text-align: left; cursor: pointer;
+  box-shadow: inset 3px 0 0 var(--paper); transition: background-color var(--fast) ease; }
+.notebook-note strong { overflow: hidden; color: var(--strong); font: 600 12.5px var(--sans); text-overflow: ellipsis; white-space: nowrap; }
+.notebook-note small { overflow: hidden; color: var(--muted); font: 11.5px var(--sans); text-overflow: ellipsis; white-space: nowrap; }
+.notebook-note-meta { display: flex; flex-wrap: wrap; gap: 3px 9px; color: var(--muted); font: 10.5px var(--sans); }
+.notebook-note-meta:empty { display: none; }
+.notebook-note-meta span { display: inline-flex; align-items: center; gap: 3px; }
+.notebook-note-meta .icon { width: 10px; height: 10px; }
+.notebook-note:hover { background: var(--hover); }
+.notebook-note.is-current { background: var(--selected); }
+.notebook-empty { margin: 6px 6px; color: var(--muted); font: 12px var(--sans); }
+
+/* The page: title, the switch, the text (as long as it is), the attachments, and the pager when there are pages. */
+.notebook-page { position: relative; display: flex; flex-direction: column; gap: 12px; min-width: 0; min-height: 0; overflow: auto; padding: 18px 24px 14px; }
+.notebook-page.is-empty { align-items: flex-start; justify-content: center; padding: 30px; color: var(--muted); }
+.notebook-page.is-empty p { max-width: 36ch; margin: 0; }
+.notebook-page-head { display: flex; align-items: center; gap: 10px; }
+.notebook-title { flex: 1; min-width: 0; padding: 2px 0 4px; border: 0; border-bottom: 1px solid transparent; background: transparent; color: var(--strong); font: 600 21px var(--sans); outline: 0; }
+.notebook-title:focus { border-bottom-color: color-mix(in srgb, var(--accent) 60%, transparent); }
+.notebook-title::placeholder { color: var(--placeholder); }
+.notebook-page-tools { flex: none; display: flex; align-items: center; gap: 6px; }
+.notebook-folder-pick { display: flex; align-items: center; gap: 5px; height: 28px; padding: 0 4px 0 8px; border-radius: 6px; background: var(--inset); box-shadow: inset 0 0 0 1px var(--edge); color: var(--muted); }
+.notebook-folder-pick .icon { flex: none; width: 12px; height: 12px; }
+.notebook-folder-pick select { max-width: 150px; height: 26px; border: 0; background: transparent; color: var(--text); font: 12px var(--sans); outline: 0; cursor: pointer; }
+.notebook-folder-pick select option { background: var(--surface); color: var(--text); }
+.notebook-delete { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; }
+.notebook-delete:hover { background: color-mix(in srgb, var(--error) 15%, transparent); color: var(--error); }
+.notebook-delete .icon { width: 14px; height: 14px; }
+.notebook-day { display: flex; align-items: center; gap: 9px; color: var(--text); font: 12.5px var(--sans); }
+.notebook-day small { color: var(--muted); font-size: 12px; }
+.notebook-day label { cursor: default; }
+.notebook .notebook-text { --paper-ink: var(--text); flex: 1 0 auto; min-height: 180px; color: var(--text); }
+.notebook .notebook-text .cm-content { min-height: 170px; }
+.notebook-attachments { flex: none; display: flex; flex-direction: column; gap: 8px; padding-top: 10px; border-top: 1px solid var(--divider); }
+.notebook-attachments-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.notebook-attachments h3 { display: flex; align-items: center; gap: 6px; margin: 0; color: var(--strong); font: 600 12.5px var(--sans); }
+.notebook-attachments h3 small { color: var(--muted); font-weight: 500; }
+.notebook-attach-actions { display: flex; gap: 4px; }
+.notebook-attach-actions button { display: flex; align-items: center; gap: 5px; height: 26px; padding: 0 10px 0 8px; border: 0; border-radius: 999px; background: var(--hover); color: var(--text); font: 500 12px var(--sans); cursor: pointer; }
+.notebook-attach-actions button .icon { width: 12px; height: 12px; color: var(--accent); }
+.notebook-attach-actions button:hover:not(:disabled), .notebook-attach-actions button[aria-expanded='true'] { background: var(--selected); color: var(--strong); }
+.notebook-link-form { margin: 0; }
+.notebook-strip { display: flex; gap: 10px; margin: 0; padding: 2px 2px 8px; overflow-x: auto; list-style: none; scroll-snap-type: x proximity; }
+.notebook-attachment { flex: none; display: flex; flex-direction: column; width: 168px; border-radius: 8px; background: var(--surface); box-shadow: 0 0 0 1px var(--edge), 0 6px 14px -8px #000a; overflow: hidden; scroll-snap-align: start; }
+.notebook-attachment .board-image { display: block; width: 100%; height: 112px; padding: 0; border: 0; background: var(--inset); cursor: zoom-in; }
+.notebook-attachment .board-image :is(img, canvas) { display: block; width: 100%; height: 100%; object-fit: cover; image-rendering: auto; }
+.notebook-attachment .board-image.is-pixel canvas { image-rendering: pixelated; }
+.notebook-attachment .board-image.is-loading { height: 112px; }
+.notebook-link { display: flex; flex-direction: column; gap: 3px; height: 112px; padding: 8px 10px; overflow: hidden; border: 0; background: transparent; color: var(--text); text-align: left; cursor: pointer; }
+.notebook-link img { width: calc(100% + 20px); height: 46px; margin: -8px -10px 4px; object-fit: cover; }
+.notebook-link strong { display: -webkit-box; overflow: hidden; -webkit-line-clamp: 2; -webkit-box-orient: vertical; color: var(--strong); font: 600 12px/1.3 var(--sans); }
+.notebook-link span { display: -webkit-box; overflow: hidden; -webkit-line-clamp: 2; -webkit-box-orient: vertical; color: var(--muted); font: 11px/1.35 var(--sans); }
+.notebook-link small, .notebook-attachment-foot small { display: flex; align-items: center; gap: 4px; overflow: hidden; color: var(--muted); font: 10.5px var(--sans); text-overflow: ellipsis; white-space: nowrap; }
+.notebook-link small { margin-top: auto; }
+.notebook-link small .icon { flex: none; width: 10px; height: 10px; }
+.notebook-attachment-foot { display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 28px; padding: 0 4px 0 9px; border-top: 1px solid var(--divider); }
+.notebook-attachment-foot button { display: grid; place-items: center; flex: none; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--muted); cursor: pointer; }
+.notebook-attachment-foot button:hover { background: color-mix(in srgb, var(--error) 15%, transparent); color: var(--error); }
+.notebook-attachment-foot .icon { width: 11px; height: 11px; }
+.notebook-pager { position: sticky; bottom: -14px; flex: none; display: flex; align-items: center; justify-content: center; gap: 10px; margin: 0 -24px -14px; padding: 8px 12px; border-top: 1px solid var(--divider); background: color-mix(in srgb, var(--background) 88%, transparent); backdrop-filter: blur(6px); }
+.notebook-turn { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 50%; background: var(--hover); color: var(--text); cursor: pointer; }
+.notebook-turn:hover:not(:disabled) { background: var(--selected); color: var(--strong); }
+.notebook-turn:disabled { opacity: .35; cursor: default; }
+.notebook-turn .icon { width: 14px; height: 14px; }
+.notebook-dots { display: flex; gap: 6px; }
+.notebook-dots button { width: 8px; height: 8px; padding: 0; border: 0; border-radius: 50%; background: var(--divider); cursor: pointer; transition: transform 200ms var(--spring), background-color var(--fast) ease; }
+.notebook-dots button[aria-current] { background: var(--accent); transform: scale(1.3); }
+.notebook-page-number { color: var(--muted); font: 11.5px var(--sans); }
+.notebook-status { margin: 0; color: var(--accent); font: 12px var(--sans); }
+.notebook-page-foot { color: var(--placeholder); font: 11px var(--sans); }
+.notebook-page.has-pages .notebook-page-foot { order: 1; }
+.notebook-page.has-pages .notebook-pager { order: 2; }
+/* Turning to another page brings it in from its side. */
+.notebook-page { animation: notebook-page-in 220ms var(--ease) both; }
+@keyframes notebook-page-in { from { opacity: 0; transform: translateX(10px); } }
+@media (prefers-reduced-motion: reduce) { .notebook-page { animation: none; } }
+
+/* Narrow: the tree and notes above the page. */
+@container notebook (max-width: 600px) {
+  .notebook-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(120px, auto) minmax(0, 1fr); }
+  .notebook-side { max-height: 34cqh; border-right: 0; border-bottom: 1px solid var(--divider); flex-direction: row; flex-wrap: wrap; align-content: flex-start; }
+  .notebook-search { flex: 1 1 100%; }
+  .notebook-tree, .notebook-notes { flex: 1 1 180px; min-width: 0; }
+  .notebook-page { padding: 14px 16px 12px; }
+  .notebook-pager { margin-inline: -16px; }
+  .notebook-head-count { display: none; }
+}
+
+/* ── Normal ─────────────────────────────────────────────────────────────────────────────────────────────────────── */
+:root[data-theme='classic'] .notebook-view { flex: 1; min-height: 0; display: flex; padding: 14px 18px 18px; }
+:root[data-theme='classic'] .notebook-view .notebook { border-radius: 12px; background: var(--surface); box-shadow: 0 0 0 1px var(--divider), 0 18px 40px -24px #000c; overflow: hidden; }
+:root[data-theme='classic'] .notebook-page { background: var(--background); }
+
+/* ── Journal: a sheet of the book. The tree is a contents page, the note ruled paper with a red margin. ───────── */
+:root[data-theme='journal'] .notebook { --nbk-side: 210px; background: var(--book-paper, var(--surface)); font-family: var(--serif); }
+:root[data-theme='journal'] .notebook-head { min-height: 54px; padding: 4px 12px 0 22px; border-bottom: 1px solid color-mix(in srgb, var(--strong) 18%, transparent); }
+:root[data-theme='journal'] .notebook-head h2 { font: 600 22px var(--display); letter-spacing: -.01em; }
+:root[data-theme='journal'] .notebook-head h2 .icon { color: #a8322c; }
+:root[data-theme='journal'] .notebook-head-count { font: italic 13px var(--serif); }
+:root[data-theme='journal'] .notebook-new { border-radius: 3px; background: var(--leather, #6b3a24); color: #fbeee0; box-shadow: 0 1px 2px #1d0f0655; }
+:root[data-theme='journal'] .notebook-side { background: color-mix(in srgb, var(--book-paper, var(--surface)) 92%, var(--leather, #6b3a24)); border-right: 1px solid color-mix(in srgb, var(--strong) 14%, transparent);
+  box-shadow: inset -10px 0 14px -12px #2a1a0c55; }
+:root[data-theme='journal'] .notebook-tree-head { font: italic 600 12px var(--display); letter-spacing: .02em; text-transform: none; color: color-mix(in srgb, var(--strong) 70%, transparent); }
+:root[data-theme='journal'] .notebook-search { border-radius: 3px; background: color-mix(in srgb, var(--book-paper, var(--surface)) 70%, #fff); }
+:root[data-theme='journal'] .notebook-folder-name { font: 14px var(--serif) !important; border-radius: 3px; }
+/* Contents: dotted leaders run from the folder's name to its count. */
+:root[data-theme='journal'] .notebook-folder-name > span:not(.notebook-branch, .notebook-twisty) { flex: 0 1 auto; }
+:root[data-theme='journal'] .notebook-folder-name small { flex: 1; min-width: 14px; text-align: right; font: italic 12px var(--serif);
+  background: radial-gradient(circle, color-mix(in srgb, var(--strong) 35%, transparent) .8px, transparent 1.2px) 0 calc(100% - 4px) / 5px 4px repeat-x; padding-left: 4px; }
+:root[data-theme='journal'] .notebook-folder.is-current .notebook-folder-name { background: color-mix(in srgb, #a8322c 12%, transparent); color: var(--strong); }
+:root[data-theme='journal'] .notebook-folder.is-current .notebook-folder-name .icon { color: #a8322c; }
+:root[data-theme='journal'] .notebook-note { border-radius: 2px; box-shadow: inset 3px 0 0 var(--paper), 0 1px 0 color-mix(in srgb, var(--strong) 8%, transparent); }
+:root[data-theme='journal'] .notebook-note strong { font: 600 13.5px var(--display); }
+:root[data-theme='journal'] .notebook-note small { font: italic 12px var(--serif); }
+:root[data-theme='journal'] .notebook-page { --rule: 26px; padding: 16px 26px 14px 46px;
+  background: linear-gradient(90deg, transparent 33px, color-mix(in srgb, #a8322c 45%, transparent) 33px 34px, transparent 34px),
+    repeating-linear-gradient(to bottom, transparent 0 calc(var(--rule) - 1px), color-mix(in srgb, #5a7fa8 22%, transparent) calc(var(--rule) - 1px) var(--rule)) 0 12px / 100% var(--rule),
+    var(--book-paper, var(--surface)); background-attachment: local; }
+:root[data-theme='journal'] .notebook-title { font: 600 26px var(--display); letter-spacing: -.01em; }
+:root[data-theme='journal'] .notebook-day, :root[data-theme='journal'] .notebook-page-foot { font: italic 13px var(--serif); }
+:root[data-theme='journal'] .notebook .notebook-text .cm-content { font: 15px/26px var(--write, var(--serif)); }
+:root[data-theme='journal'] .notebook-attachments { border-top: 1px dashed color-mix(in srgb, var(--strong) 25%, transparent); }
+:root[data-theme='journal'] .notebook-attachments h3 { font: italic 600 14px var(--display); }
+/* Attachments as polaroids and index cards clipped to the page. */
+:root[data-theme='journal'] .notebook-attachment { border-radius: 2px; background: #fbf7ee; color: #2c2714; box-shadow: 0 1px 1px #0004, 0 8px 16px -8px #2a1a0c99; }
+:root[data-theme='journal'] .notebook-attachment.is-image { padding: 7px 7px 0; }
+:root[data-theme='journal'] .notebook-attachment:nth-child(odd) { transform: rotate(-1deg); }
+:root[data-theme='journal'] .notebook-attachment:nth-child(even) { transform: rotate(.8deg); }
+:root[data-theme='journal'] .notebook-attachment :is(strong, span, small) { color: #2c2714; }
+:root[data-theme='journal'] .notebook-attachment-foot { border-top: 0; font-style: italic; }
+:root[data-theme='journal'] .notebook-pager { background: color-mix(in srgb, var(--book-paper, var(--surface)) 92%, transparent); border-top: 1px solid color-mix(in srgb, var(--strong) 14%, transparent); }
+:root[data-theme='journal'] .notebook-page-number { font: italic 13px var(--serif); }
+:root[data-theme='journal'] .notebook-dots button[aria-current] { background: #a8322c; }
+:root[data-theme='journal'] .notebook-close { color: var(--muted); }
+
+/* ── Nebula: a terminal. The tree is `tree` output, notes a listing; the current row is inverted. ─────────────── */
+:root[data-theme='nebula'] .notebook { --nbk-side: 270px; background: var(--surface); font-family: var(--mono); }
+:root[data-theme='nebula'] .notebook-head { min-height: 40px; border-bottom: 1px solid var(--nb-line, #e8e8e8); }
+:root[data-theme='nebula'] .notebook-head h2 { font: italic 400 24px var(--display); color: var(--strong); }
+:root[data-theme='nebula'] .notebook-head h2 .icon { display: none; }
+:root[data-theme='nebula'] .notebook-head-count { font: 11px var(--mono); }
+:root[data-theme='nebula'] .notebook-new { border-radius: 0; background: var(--nb-violet, #7b2cbf); color: #fff; font: 700 11px var(--mono) !important; text-transform: lowercase; box-shadow: 3px 3px 0 #000; }
+:root[data-theme='nebula'] .notebook-new .icon { display: none; }
+:root[data-theme='nebula'] .notebook-new::before { content: './'; }
+:root[data-theme='nebula'] .notebook-side { gap: 12px; padding: 12px; background: #08080a; border-right: 1px solid var(--edge); }
+:root[data-theme='nebula'] .notebook-search { border-radius: 0; background: transparent; box-shadow: inset 0 0 0 1px var(--edge); }
+:root[data-theme='nebula'] .notebook-search::before { content: '$ grep'; color: var(--accent); font: 11px var(--mono); }
+:root[data-theme='nebula'] .notebook-search .icon { display: none; }
+:root[data-theme='nebula'] .notebook-search input { font: 12px var(--mono); }
+:root[data-theme='nebula'] .notebook-tree-head { color: var(--accent); font: 700 10px var(--mono); letter-spacing: .12em; }
+:root[data-theme='nebula'] .notebook-tree-head > span::before { content: '$ '; color: var(--muted); }
+:root[data-theme='nebula'] .notebook-branch { display: inline; color: #ffffff55; }
+:root[data-theme='nebula'] .notebook-folder-name { gap: 0; height: 22px; padding-left: 4px; font: 12px var(--mono) !important; }
+:root[data-theme='nebula'] .notebook-folder-name .icon, :root[data-theme='nebula'] .notebook-twisty { display: none; }
+:root[data-theme='nebula'] .notebook-folder:not(.is-all, .is-none) .notebook-folder-label::after { content: '/'; color: var(--accent); }
+:root[data-theme='nebula'] .notebook-folder-name small { padding-left: 8px; font: 10.5px var(--mono); }
+:root[data-theme='nebula'] .notebook-folder-name small::before { content: '['; } :root[data-theme='nebula'] .notebook-folder-name small::after { content: ']'; }
+:root[data-theme='nebula'] .notebook-folder:hover .notebook-folder-name { background: var(--hover); }
+:root[data-theme='nebula'] .notebook-folder.is-current .notebook-folder-name { background: var(--nb-paper, #cfcfcf); color: var(--nb-ink, #111); }
+:root[data-theme='nebula'] .notebook-folder.is-current .notebook-branch { color: #11111188; }
+:root[data-theme='nebula'] .notebook-folder.is-current small { color: #111; }
+:root[data-theme='nebula'] .notebook-folder.is-drop { box-shadow: inset 0 0 0 1px var(--accent), 3px 3px 0 var(--nb-violet, #7b2cbf); }
+:root[data-theme='nebula'] .notebook-folder-tools { top: 0; background: #08080a; }
+:root[data-theme='nebula'] .notebook-folder-tools button { border-radius: 0; background: transparent; box-shadow: none; }
+:root[data-theme='nebula'] .notebook-rename { height: 22px; border-radius: 0; font: 12px var(--mono); }
+:root[data-theme='nebula'] .notebook-note { --paper: #cfcfcf; padding: 5px 8px 6px 12px; border-radius: 0; box-shadow: inset 2px 0 0 var(--paper); }
+:root[data-theme='nebula'] .notebook-note.paper-blue { --paper: #d5b8ff; } :root[data-theme='nebula'] .notebook-note.paper-green { --paper: #a6f2dc; } :root[data-theme='nebula'] .notebook-note.paper-pink { --paper: #ffd0b0; }
+:root[data-theme='nebula'] .notebook-note strong { font: 700 12px var(--mono); text-transform: lowercase; }
+:root[data-theme='nebula'] .notebook-note strong::after { content: '.md'; color: var(--muted); font-weight: 400; }
+:root[data-theme='nebula'] .notebook-note :is(small, .notebook-note-meta) { font: 10.5px var(--mono); }
+:root[data-theme='nebula'] .notebook-note.is-current { background: var(--event-background); box-shadow: inset 2px 0 0 var(--accent); }
+:root[data-theme='nebula'] .notebook-page { padding: 18px 24px 14px 28px; background: var(--surface); }
+:root[data-theme='nebula'] .notebook-title { font: italic 400 32px/1.1 var(--display); border-bottom: 1px dashed var(--edge); }
+:root[data-theme='nebula'] .notebook-folder-pick, :root[data-theme='nebula'] .notebook-delete { border-radius: 0; }
+:root[data-theme='nebula'] .notebook-folder-pick select { font: 11px var(--mono); }
+:root[data-theme='nebula'] .notebook-day { font: 11.5px var(--mono); }
+:root[data-theme='nebula'] .notebook-day small::before { content: '# '; color: var(--accent); }
+:root[data-theme='nebula'] .notebook .notebook-text .cm-content { font: 13px/24px var(--write); }
+:root[data-theme='nebula'] .notebook-attachments { border-top: 1px solid var(--edge); }
+:root[data-theme='nebula'] .notebook-attachments h3 { font: 700 11px var(--sans); letter-spacing: .16em; text-transform: uppercase; }
+:root[data-theme='nebula'] .notebook-attach-actions { gap: 0; }
+:root[data-theme='nebula'] .notebook-attach-actions button { margin-left: -1px; border: 1px solid var(--edge); border-radius: 0; background: transparent; font: 11px var(--mono); text-transform: lowercase; }
+:root[data-theme='nebula'] .notebook-attach-actions button:hover:not(:disabled), :root[data-theme='nebula'] .notebook-attach-actions button[aria-expanded='true'] { border-color: var(--accent); background: var(--event-background); }
+:root[data-theme='nebula'] .notebook-attachment { border-radius: 0; background: #050505; box-shadow: 0 0 0 1px var(--nb-line, #e8e8e8), 4px 4px 0 var(--nb-violet, #7b2cbf); }
+:root[data-theme='nebula'] .notebook-attachment.is-link { background: var(--nb-paper, #cfcfcf); }
+:root[data-theme='nebula'] .notebook-attachment.is-link :is(strong) { color: var(--nb-violet, #7b2cbf); font: italic 400 16px/1.1 var(--display); }
+:root[data-theme='nebula'] .notebook-attachment.is-link :is(span, small) { color: #111; font-family: var(--mono); }
+:root[data-theme='nebula'] .notebook-attachment.is-link .notebook-attachment-foot { border-top-color: #11111133; }
+:root[data-theme='nebula'] .notebook-attachment.is-link .notebook-attachment-foot button { color: #111; }
+:root[data-theme='nebula'] .notebook-attachment-foot small { font-family: var(--mono); }
+:root[data-theme='nebula'] .notebook-pager { background: #050505ee; backdrop-filter: none; border-top: 1px solid var(--edge); }
+:root[data-theme='nebula'] .notebook-turn { border-radius: 0; background: transparent; box-shadow: inset 0 0 0 1px var(--edge); }
+:root[data-theme='nebula'] .notebook-dots button { border-radius: 0; }
+:root[data-theme='nebula'] .notebook-page-number, :root[data-theme='nebula'] .notebook-page-foot { font: 11px var(--mono); }
+:root[data-theme='nebula'] .notebook-page-number::before { content: '['; } :root[data-theme='nebula'] .notebook-page-number::after { content: ']'; }
+:root[data-theme='nebula'] .notebook-close { border-radius: 0; }
+@keyframes notebook-page-in-nebula { from { opacity: 0; clip-path: inset(0 0 100% 0); } }
+:root[data-theme='nebula'] .notebook-page { animation-name: notebook-page-in-nebula; animation-timing-function: steps(6); }
+
+/* ── Pixel: square corners, hard shadows, stepped motion (the fonts come from the design's pixel variables). ──── */
+:root[data-pixel] .notebook :is(.notebook-new, .notebook-close, .notebook-search, .notebook-add-folder, .notebook-folder, .notebook-folder-name, .notebook-folder-tools, .notebook-folder-tools button,
+  .notebook-rename, .notebook-note, .notebook-folder-pick, .notebook-delete, .notebook-attach-actions button, .notebook-attachment, .notebook-turn, .notebook-dots button, .notebook-attachment-foot button) { border-radius: 0; }
+:root[data-pixel] .notebook-new { box-shadow: 3px 3px 0 #0009; transition: none; }
+:root[data-pixel] .notebook-attachment { box-shadow: 0 0 0 2px var(--edge), 4px 4px 0 #000a; transform: none !important; }
+:root[data-pixel] .notebook-note { box-shadow: inset 4px 0 0 var(--paper); }
+:root[data-pixel] .notebook-dots button { width: 8px; height: 8px; transition: none; }
+:root[data-pixel] .notebook-dots button[aria-current] { transform: none; box-shadow: 0 0 0 2px var(--accent); }
+:root[data-pixel] .notebook-pager { backdrop-filter: none; }
+:root[data-pixel] .notebook-page { animation-timing-function: steps(4); }
+:root[data-pixel] .notebook-title { font-size: 22px; }
+:root[data-pixel] .notebook .notebook-text .cm-content { font-size: 18px; line-height: 24px; }
+:root[data-pixel] :is(.notebook-folder-name, .notebook-note strong) { font-size: 14px !important; }
+:root[data-pixel] .notebook-note small, :root[data-pixel] .notebook-note-meta, :root[data-pixel] .notebook-day { font-size: 13px; }
+:root[data-theme='journal'][data-pixel] .notebook-page { --rule: 24px; }
+:root[data-theme='journal'][data-pixel] .notebook-head h2, :root[data-theme='journal'][data-pixel] .notebook-title { font-family: var(--display); letter-spacing: 0; }
+:root[data-theme='journal'][data-pixel] :is(.notebook-day, .notebook-page-foot, .notebook-note small, .notebook-head-count) { font-style: normal; }
+:root[data-theme='classic'][data-pixel] .notebook-view .notebook { border-radius: 0; box-shadow: 0 0 0 2px var(--divider), 6px 6px 0 #000a; }
+.notebook-add-folder b, .notebook-folder-tools b { font: 700 15px/1 var(--mono); }
+/* The normal design's tab, set apart from the views. */
+.journal-tab.is-notebook { margin-left: 8px; border-left: 1px solid var(--divider); }

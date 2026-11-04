@@ -111,6 +111,28 @@ const bootstrap = `
     }
     if (command === 'drive_validate') return null;
     if (command === 'board_list') return JSON.parse(sessionStorage.getItem('boardCards')||'[]');
+    if (command === 'board_folders') return JSON.parse(sessionStorage.getItem('boardFolders')||'[]');
+    if (command === 'board_folder_save') {
+      const folders=JSON.parse(sessionStorage.getItem('boardFolders')||'[]');
+      sessionStorage.setItem('boardFolders',JSON.stringify([...folders.filter(f=>f.id!==payload.folder.id),payload.folder]));
+      return payload.folder;
+    }
+    if (command === 'board_folder_remove') {
+      const folders=JSON.parse(sessionStorage.getItem('boardFolders')||'[]'), parent=folders.find(f=>f.id===payload.id)?.parent??null;
+      sessionStorage.setItem('boardFolders',JSON.stringify(folders.filter(f=>f.id!==payload.id).map(f=>f.parent===payload.id?{...f,parent}:f)));
+      const cards=JSON.parse(sessionStorage.getItem('boardCards')||'[]');
+      sessionStorage.setItem('boardCards',JSON.stringify(cards.map(c=>c.folder===payload.id?{...c,folder:parent}:c)));return null;
+    }
+    if (command === 'board_patch_many') {
+      const cards=JSON.parse(sessionStorage.getItem('boardCards')||'[]');
+      sessionStorage.setItem('boardCards',JSON.stringify(cards.map(c=>({...c,...payload.patches[c.id]}))));return null;
+    }
+    if (command === 'board_remove') {
+      const cards=JSON.parse(sessionStorage.getItem('boardCards')||'[]'), note=cards.find(c=>c.id===payload.id), removed=new Set([payload.id]);
+      if(note?.kind==='note')for(const card of cards)if(card.kind!=='note'&&card.notebook&&!card.dates.length&&note.links?.includes(card.id)&&(card.links??[]).every(id=>id===payload.id))removed.add(card.id);
+      sessionStorage.setItem('boardCards',JSON.stringify(cards.filter(c=>!removed.has(c.id)).map(c=>({...c,links:(c.links??[]).filter(id=>!removed.has(id))}))));
+      return null;
+    }
     if (command === 'board_patch') {const cards=JSON.parse(sessionStorage.getItem('boardCards')||'[]');const old=cards.find(c=>c.id===payload.id);const card={...old,...payload.patch,id:payload.id};sessionStorage.setItem('boardCards',JSON.stringify([...cards.filter(c=>c.id!==card.id),card]));return card;}
     if (command === 'board_image_save') {sessionStorage.setItem('boardImage:'+payload.id,payload.data);return null;}
     if (command === 'board_image_load') return 'data:image/avif;base64,'+sessionStorage.getItem('boardImage:'+payload.id);
@@ -2210,7 +2232,79 @@ try {
   await until("document.querySelectorAll('.entry').length === 5");
   await pause(250);
   await evaluate('document.fonts.ready.then(() => true)');
-  if (process.env.JOURNAL_UI_SCOPE === 'allday-columns') {
+  if (process.env.JOURNAL_UI_SCOPE === 'notebook') {
+    const fill = (label, value) => evaluate(`(() => {const input=[...document.querySelectorAll('.notebook input')].find(input=>input.getAttribute('aria-label')===${JSON.stringify(label)});Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,${JSON.stringify(value)});input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+    await evaluate(`(() => {
+      const card=(id,title,extra={})=>({id,kind:'note',title,text:'Notiz mit **Markdown**',dates:[],order:1,created:window.__uiTest.date,notebook:true,...extra});
+      sessionStorage.setItem('boardFolders',JSON.stringify([{id:'work',name:'Arbeit',parent:null,order:1},{id:'home',name:'Privat',parent:null,order:2}]));
+      sessionStorage.setItem('boardCards',JSON.stringify([card('work-note','Projektplan',{folder:'work',links:['page','image']}),card('home-note','Urlaubsplan',{folder:'home'}),card('page','Zweite Seite',{folder:'work',links:['work-note']}),card('image','Bild',{kind:'image',notebook:true,links:['work-note'],image:'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="green"/></svg>'})]));
+      localStorage.setItem('journal.notebookCollapsed','invalid JSON');
+      localStorage.setItem('journal.notebookNote','work-note');localStorage.setItem('journal.notebookDrawer','1');
+    })()`);
+    await command('Page.reload');
+    await until("document.querySelector('.notebook-title')?.value==='Projektplan'");
+    assert.equal(await evaluate("document.querySelectorAll('.notebook-attachment').length"),1);
+    await evaluate("document.querySelector('[data-folder=home] .notebook-folder-name').click()");
+    await until("document.querySelector('.notebook-title')?.value==='Urlaubsplan'");
+    await fill('Zettel suchen','Projektplan');
+    await until("document.querySelector('.notebook-title')?.value==='Projektplan'");
+    await fill('Zettel suchen','Nothing matches this');
+    await until("!document.querySelector('.notebook-title')");
+    await fill('Zettel suchen','');
+    await until("document.querySelector('.notebook-title')?.value==='Urlaubsplan'");
+    await evaluate("document.querySelector('[data-folder=work] .notebook-folder-name').click()");
+    await until("Boolean(document.querySelector('[data-note-id=work-note]'))");
+    await evaluate("document.querySelector('[data-note-id=work-note]').click()");
+    await evaluate("document.querySelector('.notebook-turn.is-next').click()");
+    await until("document.querySelector('.notebook-page').dataset.pageId==='page'");
+    await evaluate("document.querySelector('[data-folder=home] .notebook-folder-name').click()");
+    await until("document.querySelector('.notebook-page').dataset.pageId==='home-note'");
+    await evaluate("document.querySelector('.notebook-add-folder').click()");
+    await fill('Ordnername','Forschung');await key('Enter');
+    await until("JSON.parse(sessionStorage.boardFolders).some(f=>f.name==='Forschung')");
+    await evaluate("[...document.querySelectorAll('.notebook-folder-name')].find(b=>b.textContent.includes('Forschung')).click()");
+    await until("!document.querySelector('.notebook-title')");
+    await evaluate("document.querySelector('.notebook-head .notebook-new').click()");
+    await until("document.activeElement===document.querySelector('.notebook-title')");
+    await fill('Titel','Neue Forschung');
+    await evaluate("document.querySelector('.notebook-text .cm-content').focus()");
+    await command('Input.insertText',{text:'## Ergebnis\nEin bearbeitbarer Zettel.'});
+    await until("JSON.parse(sessionStorage.boardCards).some(c=>c.title==='Neue Forschung'&&c.text.includes('Ein bearbeitbarer Zettel.'))");
+    await evaluate("document.querySelector('.notebook-day [role=switch]').click()");
+    await until("JSON.parse(sessionStorage.boardCards).some(c=>c.title==='Neue Forschung'&&c.dates.length===1)");
+    await evaluate("document.querySelector('.notebook-attach-actions [aria-expanded]').click()");
+    await fill('URL','https://example.org/notebook');
+    await evaluate("document.querySelector('.notebook-link-form').requestSubmit()");
+    await until("document.querySelector('.notebook-attachment strong')?.textContent==='Board test page'");
+    await evaluate("document.querySelector('.notebook-attachment-foot button').click()");
+    await until("!document.querySelector('.notebook-attachment')");
+    const made=await evaluate("document.querySelector('.notebook-page').dataset.pageId");
+    await command('Page.reload');
+    await until("document.querySelector('.notebook-title')?.value==='Neue Forschung'");
+    await evaluate("document.querySelector('.notebook-delete').click()");
+    await until(`!JSON.parse(sessionStorage.boardCards).some(c=>c.id===${JSON.stringify(made)})`);
+    await evaluate("document.querySelector('[data-folder=work] .notebook-folder-name').click()");
+    await until("Boolean(document.querySelector('[data-note-id=work-note]'))");
+    await evaluate("document.querySelector('[data-note-id=work-note]').click()");
+    await until("document.querySelector('.notebook-page').dataset.pageId==='work-note'");
+    await evaluate("document.querySelector('.notebook-delete').click()");
+    await until("!JSON.parse(sessionStorage.boardCards).some(c=>c.id==='work-note'||c.id==='image')");
+    assert(await evaluate("JSON.parse(sessionStorage.boardCards).find(c=>c.id==='page').links.length===0"));
+    // Synthetic merged changes arrive without restarting the window.
+    await evaluate("(() => {const cards=JSON.parse(sessionStorage.boardCards);cards.find(c=>c.id==='page').title='Synchronisierte Seite';sessionStorage.boardCards=JSON.stringify(cards);window.__uiTest.emit('board:reset',null);})()");
+    await until("document.querySelector('.notebook-title')?.value==='Synchronisierte Seite'");
+    for (const theme of ['classic','journal','nebula']) for (const pixel of [false,true]) {
+      await evaluate(`localStorage.setItem('journal.settings',JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'),theme:'${theme}',pixel:${pixel},colorTheme:'${theme==='journal'?'paper':'original'}'}));localStorage.setItem('journal.calendarDrawer','0');localStorage.setItem('journal.notebookDrawer','1');localStorage.setItem('journal.notebookFolder','all');`);
+      await command('Emulation.setDeviceMetricsOverride',{width:1180,height:780,deviceScaleFactor:1,mobile:false});
+      await command('Page.reload');
+      await until("Boolean(document.querySelector('.notebook-title'))");await pause(600);
+      assert(await evaluate("(() => {const n=document.querySelector('.notebook').getBoundingClientRect();return n.width>200&&n.height>150&&n.left>=-2&&n.right<=innerWidth+5;})()"),'Notebook fits '+theme+' pixel='+pixel);
+      await screenshot(`notebook-${theme}-${pixel?'pixel':'normal'}.png`);
+      await command('Emulation.setDeviceMetricsOverride',{width:540,height:780,deviceScaleFactor:1,mobile:false});await pause(400);
+      assert(await evaluate("(() => {const p=document.querySelector('.notebook-page');return p.scrollWidth<=p.clientWidth+2;})()"),'Note has no horizontal overflow at 540: '+theme+' pixel='+pixel);
+    }
+    assert.deepEqual(errors,[]);console.log('Notebook UI passed: folders, filtering/search, pages, editing, day switch, attachments, deletion, reload, sync refresh and all three designs with pixel variants.');
+  } else if (process.env.JOURNAL_UI_SCOPE === 'allday-columns') {
     for (const viewIndex of [2,3,4]) {
       await evaluate(`document.querySelectorAll('.sidebar .cal-views [role=tab]')[${viewIndex}].click()`);
       await until("Boolean(document.querySelector('.sidebar .cal-time-allday-cell'))");
@@ -2394,6 +2488,54 @@ try {
     await until("document.querySelector('.cal-year-day[data-date=\""+next+"\"]').classList.contains('has-mark')");
 
     console.log('Mail view and calendar zoom passed: Ctrl-wheel scales only hours; HTML styles render in a sandbox without scripts.');
+  } else if (process.env.JOURNAL_UI_SCOPE === 'looks') {
+    // Each popup look builds an entry's actions its own way (ActionSheet); Normal · Karte keeps the orbit.
+    for (const [theme, popups] of [['classic','a'],['classic','b'],['journal','a'],['journal','b'],['nebula','a'],['nebula','b']]) {
+      await evaluate(`localStorage.setItem('journal.settings', JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'), theme:'${theme}', popupStyle:'${popups}', colorTheme:'${theme === 'journal' ? 'paper' : 'original'}'}))`);
+      await command('Page.reload');
+      await until("document.querySelectorAll('.entry').length>=5");
+      await pause(300);
+      await evaluate("document.querySelector('.entry[data-entry-kind=task][data-status=open] .entry-symbol').click()");
+      await until(`Boolean(document.querySelector('.entry-dock-shell.is-open ${theme === 'classic' ? popups === 'a' ? '.dock-orbit' : '.dock-word' : '.sheet'}'))`);
+      await pause(450);
+      await screenshot(`look-${theme}-${popups}.png`);
+      if (!(theme === 'classic' && popups === 'a')) {
+        const id = await evaluate("document.querySelector('.entry-dock-shell.is-open').closest('.entry').dataset.entryId");
+        if (theme === 'nebula' && popups === 'a') { await command('Input.insertText',{text:'done'}); await key('Enter','Enter'); }
+        else if (theme === 'journal' && popups === 'b') await evaluate("document.querySelector('.entry-dock-shell.is-open .sheet-tab.is-status').click(); document.querySelector('.entry-dock-shell.is-open .sheet-done').click()");
+        else if (theme === 'classic') await evaluate("document.querySelector('.entry-dock-shell.is-open .dock-done').click()");
+        else await evaluate("document.querySelector('.entry-dock-shell.is-open .sheet-done').click()");
+        await until(`document.querySelector('[data-entry-id="${id}"]').dataset.status==='done'`);
+        if (theme === 'classic') await key('Escape');
+      } else await key('Escape');
+      // The planner (Alt T) and the tag picker (Alt G) in the same look; views switch by tab where the look has them.
+      await evaluate("document.querySelector('.entry[data-entry-kind=task][data-status=open] .entry-text')?.focus() ?? document.querySelector('.entry[data-entry-kind=task] .entry-text').focus()");
+      await key('t','KeyT',1);
+      await until("Boolean(document.querySelector('.entry-dock-shell.is-open .planner'))");
+      if (!(theme === 'classic' && popups === 'a')) {
+        assert(await evaluate("Boolean(document.querySelector('.planner > .chrome-head')) && document.querySelectorAll('.planner .chrome-tabs [role=tab]').length===3"), `The ${theme}-${popups} planner has its own head and tabs.`);
+        await evaluate("document.querySelectorAll('.planner .chrome-tabs [role=tab]')[1].click()");
+        await until("document.querySelector('.planner').classList.contains('is-time')");
+      }
+      await pause(350); await screenshot(`look-${theme}-${popups}-planner.png`);
+      await key('Escape'); await key('Escape');
+      await until("!document.querySelector('.entry-dock-shell.is-open')");
+      await evaluate("document.querySelector('.entry .entry-text').focus()");
+      await key('g','KeyG',1);
+      await until("Boolean(document.querySelector('.tag-picker'))");
+      await pause(250); await screenshot(`look-${theme}-${popups}-tags.png`);
+      await key('Escape');
+      // The calendar's card (right click on an entry), where a calendar is on screen.
+      if (await evaluate("Boolean(document.querySelector('.cal-item'))")) {
+        await evaluate("document.querySelector('.cal-item').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true}))");
+        await until("Boolean(document.querySelector('.cal-composer.is-placed'))");
+        if (!(theme === 'classic' && popups === 'a')) assert(await evaluate("Boolean(document.querySelector('.cal-composer > .chrome-head')) && Boolean(document.querySelector('.cal-composer .chrome-submit'))"), 'The card has its head and worded buttons.');
+        await pause(300); await screenshot(`look-${theme}-${popups}-composer.png`);
+        await key('Escape');
+        await until("!document.querySelector('.cal-composer')");
+      }
+    }
+    console.log('Look checks passed.');
   } else if (process.env.JOURNAL_UI_SCOPE === 'multiday') {
     const points=await evaluate("(() => {const cells=[...document.querySelectorAll('.cal-month-day')];return [cells[9],cells[18]].map(e=>{const r=e.getBoundingClientRect();return {x:r.right-12,y:r.bottom-12,date:e.dataset.date};});})()");
     await command('Input.dispatchMouseEvent',{type:'mousePressed',x:points[0].x,y:points[0].y,button:'left',buttons:1,clickCount:1});
@@ -2567,8 +2709,18 @@ try {
     await pause(300); await screenshot('board-pixel-lightbox.png');
     await key('Escape');
     await until("!document.querySelector('.board-lightbox')");
+    // New notebook threads: both ends persist together, and the thread menu cuts both ends.
+    await evaluate("document.querySelector('.board-card.is-note').focus()");
+    await key('l','KeyL',1);
+    await until("Boolean(document.querySelector('.board-thread.is-drawing'))");
+    await key('Enter');
+    await until("JSON.parse(sessionStorage.boardCards).filter(c=>c.links?.length).length===2");
+    await evaluate("document.querySelector('.board-thread-hit').focus()");await key('Enter');
+    await until("Boolean(document.querySelector('.board-thread-cut'))");
+    await evaluate("document.querySelector('.board-thread-cut').click()");
+    await until("JSON.parse(sessionStorage.boardCards).every(c=>!c.links?.length)");
     // Dragged by its paper, a card stays where it is let go (and comes to the top).
-    const dragCard=await evaluate("(() => {const c=document.querySelector('.board-card.is-note'),r=c.getBoundingClientRect();return {id:c.dataset.boardId,left:c.offsetLeft,top:c.offsetTop,start:{x:r.left+r.width/2,y:r.top+6},end:{x:r.left+r.width/2+60,y:r.top+6+90}};})()");
+    const dragCard=await evaluate("(() => {const c=document.querySelector('.board-card.is-note'),r=c.getBoundingClientRect();return {id:c.dataset.boardId,left:c.offsetLeft,top:c.offsetTop,start:{x:r.left+18,y:r.top+6},end:{x:r.left+18+60,y:r.top+6+90}};})()");
     await command('Input.dispatchMouseEvent',{type:'mouseMoved',...dragCard.start});
     await command('Input.dispatchMouseEvent',{type:'mousePressed',...dragCard.start,button:'left',buttons:1,clickCount:1});
     await command('Input.dispatchMouseEvent',{type:'mouseMoved',...dragCard.end,button:'left',buttons:1});
@@ -2701,7 +2853,7 @@ try {
     const beforeLayout = await evaluate(checklistShape);
     await key(',', 'Comma', 2);
     await until("Boolean(document.querySelector('.settings'))");
-    await evaluate("document.querySelector('.settings-option[data-layout=inline]').click()");
+    await evaluate("document.querySelector('[data-popup-style=b]').click()");
     await key('Escape');
     await until("!document.querySelector('.settings')");
     await pause(200);
@@ -3528,15 +3680,15 @@ try {
   await key('ArrowRight', 'ArrowRight', 1);
   await until(`document.querySelector('.document-header h1').textContent === ${JSON.stringify(heading)} && document.querySelectorAll('.entry').length > 0`);
 
-  // Setting: the entry actions as an orbit (default), as words in the text or as gestures; the choice is remembered.
+  // The entry actions follow the popup look: Normal · Karte opens the orbit, Glas its own sheet (ActionSheet). The desktop
+  // has no layout setting of its own any more (swiping stays for touch screens); the choice of look is remembered.
   assert.equal(await evaluate("document.querySelector('.app').classList.contains('actions-orbit')"), true, 'The orbit is the default.');
   await key(',', 'Comma', 2);
-  // The settings open on the design, the first choice of the panel.
   await until("Boolean(document.querySelector('.settings')) && document.activeElement.dataset.themeChoice === 'classic'");
-  assert.deepEqual(await evaluate("[...document.querySelectorAll('.settings-option')].map(option => option.dataset.layout)"), ['orbit', 'inline'], 'Swiping is not offered on the desktop (kept for touch screens).');
+  assert.equal(await evaluate("document.querySelectorAll('.settings-option[data-layout]').length"), 0, 'No separate action layout on the desktop.');
   await pause(350);
   await screenshot('settings.png');
-  await evaluate("document.querySelector('.settings-option[data-layout=inline]').click()");
+  await evaluate("document.querySelector('[data-popup-style=b]').click()");
   await until("document.querySelector('.app').classList.contains('actions-inline')");
   await key('Escape');
   await until("!document.querySelector('.settings')");
@@ -3544,50 +3696,40 @@ try {
   await until("document.querySelector('.save-status').textContent === 'Gespeichert'");
   await command('Page.reload');
   await until("document.querySelectorAll('.entry').length > 0");
-  assert.equal(await evaluate("document.querySelector('.app').classList.contains('actions-inline')"), true, 'The layout is remembered.');
-  await evaluate("document.querySelector('.settings-button').click()");
-  await until("document.activeElement?.dataset.themeChoice === 'classic'");
-  await evaluate("document.querySelector('.settings-option[aria-checked=true]').focus()");
-  await until("document.activeElement?.dataset.layout === 'inline'");
-  await key('ArrowLeft');
-  await until("document.querySelector('.app').classList.contains('actions-orbit') && document.activeElement.dataset.layout === 'orbit'");
-  await key('Escape');
-
-  // Embedded in the text flow, no surface.
-  await key(',', 'Comma', 2);
-  await until("Boolean(document.querySelector('.settings'))");
-  await evaluate("document.querySelector('.settings-option[data-layout=inline]').click()");
-  await until("document.querySelector('.app').classList.contains('actions-inline')");
-  await key('Escape');
+  assert.equal(await evaluate("document.querySelector('.app').classList.contains('actions-inline')"), true, 'The look is remembered: Glas lays the actions as words under the entry.');
+  // The sheet: Alt+Enter opens it on the primary action, hovering previews, done finishes, planning opens in its place.
   await evaluate("document.querySelector('#title').focus()");
   await key('a', 'KeyA', 1);
   await until("document.activeElement.classList.contains('entry-text')");
-  const inlineTask = await focusedId();
-  await command('Input.insertText', { text:'Eingebettet testen' });
-  const inlineNextTop = () => evaluate(`${row(inlineTask)}.nextElementSibling?.getBoundingClientRect().top ?? ${row(inlineTask)}.getBoundingClientRect().bottom`);
-  const before = await inlineNextTop();
+  const sheetTask = await focusedId();
+  await command('Input.insertText', { text:'Blatt testen' });
   await key('Enter', 'Enter', 1);
   await until(`document.activeElement?.classList.contains('dock-done')`);
-  await pause(450);
-  assert(await inlineNextTop() > before + 15, 'The actions open in the flow and push the following rows down.');
-  assert.deepEqual(await evaluate(`(() => { const dock=${row(inlineTask)}.querySelector('.entry-dock'); const style=getComputedStyle(dock), shell=getComputedStyle(dock.parentElement); return [style.backgroundColor, style.boxShadow, shell.position, shell.backgroundColor]; })()`), ['rgba(0, 0, 0, 0)', 'none', 'relative', 'rgba(0, 0, 0, 0)'], 'No surface and no shadow: it is part of the page.');
-  assert.equal(await evaluate(`getComputedStyle(${row(inlineTask)}.querySelector('.dock-word')).fontFamily.split(',')[0].replace(/["']/g, '')`), 'Lilex', 'The actions are written in the writing font.');
-  assert.match(await evaluate(`${row(inlineTask)}.querySelector('.entry-dock').textContent`), /offen.*erledigt.*abbrechen.*priorität.*morgen.*planen.*löschen/);
-  await hover(`[data-entry-id="${inlineTask}"] .dock-cancelled`);
-  await until(`${row(inlineTask)}.dataset.preview === 'cancelled'`);
+  await hover(`[data-entry-id="${sheetTask}"] .dock-cancelled`);
+  await until(`${row(sheetTask)}.dataset.preview === 'cancelled'`);
   await pause(250);
-  await screenshot('inline.png');
-  await evaluate(`${row(inlineTask)}.querySelector('.dock-done').click()`);
-  await until(`${row(inlineTask)}.dataset.status === 'done' && ${row(inlineTask)}.querySelector('.dock-done').getAttribute('aria-pressed') === 'true' && Boolean(document.querySelector('.entry-dock-shell.is-open'))`);
-  await evaluate(`${row(inlineTask)}.querySelector('.dock-plan').click()`);
-  await until(`Boolean(${row(inlineTask)}.querySelector('.planner-grid'))`);
-  await pause(350);
-  assert.deepEqual(await evaluate(`(() => { const style=getComputedStyle(${row(inlineTask)}.querySelector('.planner')); return [style.backgroundColor, style.boxShadow, style.position]; })()`), ['rgba(0, 0, 0, 0)', 'none', 'relative'], 'The calendar is embedded as well.');
-  await screenshot('inline-planner.png');
+  await screenshot('sheet-glass.png');
+  await evaluate(`${row(sheetTask)}.querySelector('.dock-done').click()`);
+  await until(`${row(sheetTask)}.dataset.status === 'done'`);
   await key('Escape');
   await until("!document.querySelector('.entry-dock-shell.is-open')");
+  await evaluate(`${row(sheetTask)}.querySelector('.entry-text').focus()`);
+  await key('Enter', 'Enter', 1);
+  await until(`Boolean(${row(sheetTask)}.querySelector('.entry-dock-shell.is-open .dock-plan'))`);
+  await evaluate(`${row(sheetTask)}.querySelector('.dock-plan').click()`);
+  await until(`Boolean(${row(sheetTask)}.querySelector('.planner-grid')) && Boolean(${row(sheetTask)}.querySelector('.planner > .chrome-head'))`);
+  await pause(350);
+  await screenshot('sheet-planner.png');
+  await key('Escape');
+  await until("!document.querySelector('.entry-dock-shell.is-open')");
+  await evaluate(`${row(sheetTask)}.querySelector('.entry-text').focus()`);
   await key('Delete', 'Delete', 1);
-  await until(`!${row(inlineTask)}`);
+  await until(`!${row(sheetTask)}`);
+  await key(',', 'Comma', 2);
+  await until("Boolean(document.querySelector('[data-popup-style=a]'))");
+  await evaluate("document.querySelector('[data-popup-style=a]').click()");
+  await until("document.querySelector('.app').classList.contains('actions-orbit')");
+  await key('Escape');
   // Fifth layout: gestures instead of a menu.
   await evaluate("window.__journalSwipeLayout = true");
   await key(',', 'Comma', 2);
@@ -3831,10 +3973,12 @@ try {
   const repeated = await swipeTask('Sport');
   const panel = `${row(repeated)}.querySelector('.repeat')`, summary = () => evaluate(`${panel}.querySelector('.repeat-write').value`);
   // Closing discards the draft and its view: each action opens its own menu again, in either toolbar layout.
-  for (const layout of ['orbit', 'inline']) {
+  for (const [style, layout] of [['a', 'orbit'], ['b', 'inline']]) {
     await key(',', 'Comma', 2);
     await until("Boolean(document.querySelector('.settings'))");
-    await evaluate(`document.querySelector('.settings-option[data-layout=${layout}]').click()`);
+    await evaluate("document.querySelector('.settings-option[data-layout=orbit]')?.click()");
+    await pause(100);
+    await evaluate(`document.querySelector('[data-popup-style=${style}]').click()`);
     await until(`document.querySelector('.app').classList.contains('actions-${layout}')`);
     await key('Escape');
     const openAction = async action => {
@@ -3867,6 +4011,8 @@ try {
   await evaluate("window.__journalSwipeLayout = true");
   await key(',', 'Comma', 2);
   await until("Boolean(document.querySelector('.settings'))");
+  await evaluate("document.querySelector('[data-popup-style=a]').click()");
+  await pause(100);
   await evaluate("document.querySelector('.settings-option[data-layout=swipe]').click()");
   await until("document.querySelector('.app').classList.contains('actions-swipe')");
   await key('Escape');
@@ -4028,6 +4174,7 @@ try {
   console.log('UI checks passed: calendar window (month, week, work week, year, day; keys, swiping, filters, remembered, live updates, open in journal), compact month window, calendar in the resizable sidebar (creating entries by marking quarter hours, composer, editing by right click), changing kinds (keys, orbit cluster, preview), saving by itself (after a pause, before leaving the day), actions reaching linked entries (following / all, Escape cancels), calendar edits applied to this one / every weekday / all, editable traces passing edits to their copies, swiping days, settings (orbit/inline/swipe layout, remembered), swipe gestures (the icon stays at the symbol, a bar in each action’s own colour grows, full height sideways; right: tomorrow/plan/several days, left: remove, down: done/cancel, up: priority, tap, hold is a tap, keys, trackpad), planning several days (range by two clicks, right-click flips, copies per day, linked removal), embedded inline actions (in the flow, no surface, preview, calendar), IBM Plex Sans UI and bold Lilex title, live-preview Markdown (markers only at the cursor, hidden when not editing, click into hidden parts), format shortcuts with undo, colours, right-click format menu; shortcuts (F1, Alt+A/Enter/Backspace outliner, Alt+D/X/P/U/T/M/Enter/Entf, Ctrl+arrows, Alt+arrows/H), clock as large as the calendar with back button, Tab and typed digits; clock dial (tap on both rings, wheel, keys, quick times), calendar stays open on inner clicks, time after text, linked removal both ways; planning (calendar keyboard, time, reminder, traces >/</outlined <, undo, tomorrow, same-day time, copies on target days), asterisk/outlined event/thick note priority symbols, automatic priority order, drag and keyboard boundaries, toolbar focus, saved priority; action pill, previews, removal, grouping, caret, saving, cached navigation, wrapping and reduced motion.');
   console.log(`Screenshots: ${join(artifacts, 'journal.png')} and menu.png`);
 } catch (error) {
+  if (errors.length) console.error('Browser errors:', errors);
   if (socket?.readyState === WebSocket.OPEN) {
     try {
       await screenshot('failure.png');

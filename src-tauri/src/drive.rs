@@ -158,7 +158,7 @@ impl Store {
             } tables.insert(table.to_string(),Value::Object(records));
         }
         let mut settings=serde_json::Map::new();
-        let mut stmt=self.conn.prepare("SELECT key,value FROM settings WHERE key='period-data' OR key LIKE 'board:card:%'").map_err(|e|e.to_string())?;
+        let mut stmt=self.conn.prepare("SELECT key,value FROM settings WHERE key='period-data' OR key LIKE 'board:card:%' OR key LIKE 'board:folder:%'").map_err(|e|e.to_string())?;
         let rows=stmt.query_map([],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?))).map_err(|e|e.to_string())?;
         for row in rows {let (key,value)=row.map_err(|e|e.to_string())?;settings.insert(key,serde_json::from_str::<Value>(&value).map_err(|e|e.to_string())?);}
         Ok(json!({"schema":12,"tables":tables,"settings":settings}))
@@ -184,9 +184,9 @@ impl Store {
         }
         if snapshot["schema"]==json!(12) {
             let settings=snapshot["settings"].as_object().ok_or("Zusatzdaten fehlen")?;
-            tx.execute("DELETE FROM settings WHERE key='period-data' OR key LIKE 'board:card:%'",[]).map_err(|e|e.to_string())?;
+            tx.execute("DELETE FROM settings WHERE key='period-data' OR key LIKE 'board:card:%' OR key LIKE 'board:folder:%'",[]).map_err(|e|e.to_string())?;
             for (key,value) in settings {
-                if key!="period-data" && !key.starts_with("board:card:"){return Err("Ungültige Sync-Einstellung".into())}
+                if key!="period-data" && !key.starts_with("board:card:") && !key.starts_with("board:folder:"){return Err("Ungültige Sync-Einstellung".into())}
                 if !value.is_object(){return Err("Ungültige Zusatzdaten".into())}
                 tx.execute("INSERT INTO settings(key,value) VALUES(?1,?2)",rusqlite::params![key,value.to_string()]).map_err(|e|e.to_string())?;
             }
@@ -204,7 +204,7 @@ pub async fn drive_apply(app:tauri::AppHandle,store:tauri::State<'_,Mutex<Store>
     let mut dates:Vec<String>=expected["tables"]["days"].as_object().into_iter().flat_map(|v|v.keys().cloned()).collect();
     dates.extend(snapshot["tables"]["days"].as_object().into_iter().flat_map(|v|v.keys().cloned()));
     let tags={let mut db=store.lock().map_err(|e|e.to_string())?;db.sync_apply(expected,snapshot)?;db.tags().map_err(|e|e.to_string())?};
-    let _=app.emit("journal:changed",dates);let _=app.emit("journal:tags",tags);Ok(())
+    let _=app.emit("journal:changed",dates);let _=app.emit("journal:tags",tags);let _=app.emit("board:reset",());Ok(())
 }
 
 #[cfg(test)]
@@ -318,7 +318,8 @@ mod tests {
         db.conn.execute("INSERT INTO entries(id,day_date,kind,text,done,position,description) VALUES(?1,'2026-11-02','event','Arbeit',0,0,?2)",rusqlite::params![&id,mail]).unwrap();
         let before=db.sync_snapshot().unwrap();let mut next=before.clone();next["tables"]["days"]["2026-11-02"]["title"]=json!("Neu");
         next["settings"]["period-data"]=json!({"days":{"2026-11-02":{"rating":8}},"definitions":[]});
-        next["settings"]["board:card:test"]=json!({"text":"Pinnwand","dates":["2026-11-02"]});
+        next["settings"]["board:folder:test"]=json!({"id":"test","name":"Projekte","parent":null,"order":1});
+        next["settings"]["board:card:test"]=json!({"text":"Pinnwand","dates":["2026-11-02"],"folder":"test","links":["attachment"],"notebook":true,"created":"2026-11-02"});
         let mut invalid=next.clone();invalid["tables"]["entries"][&id]["day_date"]=json!("2099-01-01");
         assert!(db.sync_apply(before.clone(),invalid).is_err());assert_eq!(db.sync_snapshot().unwrap(),before);
         db.sync_apply(before.clone(),next.clone()).unwrap();assert_eq!(db.load("2026-11-02").unwrap().revision,8);
@@ -338,7 +339,7 @@ pub async fn drive_restore(app:tauri::AppHandle,store:tauri::State<'_,Mutex<Stor
     let backup:String=db.conn.query_row("SELECT value FROM settings WHERE key='sync-local-backup'",[],|r|r.get(0)).map_err(|_|"Noch kein lokaler Sync-Sicherungsstand vorhanden")?;
     let expected=db.sync_snapshot()?;let snapshot:Value=serde_json::from_str(&backup).map_err(|e|e.to_string())?;
     let mut dates:Vec<String>=expected["tables"]["days"].as_object().into_iter().flat_map(|v|v.keys().cloned()).collect();dates.extend(snapshot["tables"]["days"].as_object().into_iter().flat_map(|v|v.keys().cloned()));
-    db.sync_apply(expected,snapshot)?;dates};let _=app.emit("journal:changed",dates);Ok(())
+    db.sync_apply(expected,snapshot)?;dates};let _=app.emit("journal:changed",dates);let _=app.emit("board:reset",());Ok(())
 }
 
 #[tauri::command]

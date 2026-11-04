@@ -16,7 +16,7 @@ pub fn install(c:&Connection)->rusqlite::Result<()> {
   let row=|prefix:&str|format!("json_object({})",columns.iter().map(|col|format!("'{col}',{prefix}.{col}")).collect::<Vec<_>>().join(","));
   for (event,old,new,prefix) in [("INSERT","NULL".to_string(),row("NEW"),"NEW"),("UPDATE",row("OLD"),row("NEW"),"NEW"),("DELETE",row("OLD"),"NULL".to_string(),"OLD")] {
    let unchanged=if event=="UPDATE" {format!(" AND {old} IS NOT {new}")}else{String::new()};
-   let filter=if table=="settings" {format!(" AND ({prefix}.key='period-data' OR {prefix}.key LIKE 'board:card:%')")}else{String::new()};
+   let filter=if table=="settings" {format!(" AND ({prefix}.key='period-data' OR {prefix}.key LIKE 'board:card:%' OR {prefix}.key LIKE 'board:folder:%')")}else{String::new()};
    c.execute_batch(&format!("DROP TRIGGER IF EXISTS temp.undo_{table}_{event}; CREATE TEMP TRIGGER undo_{table}_{event} AFTER {event} ON {table} WHEN (SELECT replaying=0 FROM undo_state WHERE id=1){filter}{unchanged} BEGIN DELETE FROM undo_rows WHERE g>(SELECT cursor FROM undo_state) AND (SELECT started=0 FROM undo_action); DELETE FROM undo_groups WHERE id>(SELECT cursor FROM undo_state) AND (SELECT started=0 FROM undo_action); INSERT INTO undo_groups SELECT NULL WHERE (SELECT started=0 FROM undo_action); UPDATE undo_state SET cursor=last_insert_rowid() WHERE (SELECT started=0 FROM undo_action); DELETE FROM undo_rows WHERE (SELECT started=0 FROM undo_action) AND g IN (SELECT id FROM undo_groups ORDER BY id DESC LIMIT -1 OFFSET 100); DELETE FROM undo_groups WHERE (SELECT started=0 FROM undo_action) AND id NOT IN (SELECT id FROM undo_groups ORDER BY id DESC LIMIT 100); UPDATE undo_action SET started=1; INSERT INTO undo_rows(g,t,k,b,a) VALUES((SELECT cursor FROM undo_state WHERE id=1),'{table}',{prefix}.{key},{old},{new}) ON CONFLICT(g,t,k) DO UPDATE SET a=excluded.a; END;"))?;
   }
  }
@@ -51,7 +51,7 @@ fn undo_empty_entry(store: &mut Store, id: &str) -> rusqlite::Result<bool> {
  Ok(true)
 }
 
-fn step(store:&mut Store,redo:bool)->rusqlite::Result<bool>{
+pub(crate) fn step(store:&mut Store,redo:bool)->rusqlite::Result<bool>{
  use rusqlite::OptionalExtension;
  let tx=store.conn.transaction()?;
  let sql=if redo{"SELECT MIN(g) FROM undo_rows WHERE g>(SELECT cursor FROM undo_state) AND b IS NOT a"}else{"SELECT MAX(g) FROM undo_rows WHERE g<=(SELECT cursor FROM undo_state) AND b IS NOT a"};

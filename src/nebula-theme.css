@@ -397,3 +397,33 @@
 :root[data-theme='nebula'] .board-lightbox figcaption { color: #e8e8e8; font: 12px var(--mono); }
 :root[data-theme='nebula'] .board-lightbox figcaption button { background: #ffffff14; color: #e8e8e8; }
 :root[data-theme='nebula'] .floating-note { border-top: 7px solid var(--nb-ink); }
+/* The data terminal narrower, the board wider; tickets stretch over the row and show more of their text. */
+@container nebula-center (min-width: 900px) { .nebula-pair { grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); } }
+.nebula-ticket-row { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+.nebula-ticket-text { -webkit-line-clamp: 3; }
+.nebula-ticket-meta { flex-wrap: wrap; }
+
+/* ── The notebook: `./notizen` below `./kalender`, a window like the calendar's. With both open the calendar takes the
+   left half of the middle and the notebook the right one (one column: top and bottom). ────────────────────────── */
+.nebula-notebook-toggle { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin: 0; padding: 14px 12px 12px; border: 0; border-top: 2px solid var(--nb-paper); background: var(--nb-ink); color: #fff; text-align: left; cursor: pointer;
+  background-image: repeating-linear-gradient(0deg, #ffffff0c 0 1px, transparent 1px 4px); transition: background-color var(--fast) ease; }
+.nebula-notebook-toggle:hover, .nebula-notebook-toggle.is-open { background-color: var(--nb-violet-dark); }
+.nebula-notebook-toggle.is-open .nebula-calendar-command::after { content: ' _'; animation: nebula-blink 1.1s steps(1) infinite; }
+.nebula-notebook { --nb-half: calc((100% - var(--nb-rail-w) - var(--nb-gap) * 3) / 2); position: absolute; top: 18px; bottom: 26px; left: calc(var(--nb-rail-w) + var(--nb-gap) * 2); right: var(--nb-gap); z-index: 21; display: flex; flex-direction: column; min-width: 0;
+  border: 1px solid var(--nb-line); background: var(--surface); box-shadow: 9px 9px 0 var(--nb-violet-dark);
+  visibility: hidden; opacity: 0; transform: translateY(14px); transition: opacity 160ms ease, transform 220ms var(--ease), visibility 0s linear 220ms; }
+.nebula-notebook.is-open { visibility: visible; opacity: 1; transform: none; transition: opacity 160ms ease, transform 220ms var(--ease), visibility 0s; }
+.nebula-notebook .nebula-terminal-head { padding-right: 0; }
+.nebula-notebook-body { flex: 1; min-height: 0; display: flex; }
+.nebula-stage.is-calendar-open.is-notebook-open .nebula-calendar { right: calc(var(--nb-gap) * 1.5 + (100% - var(--nb-rail-w) - var(--nb-gap) * 3) / 2); }
+.nebula-stage.is-calendar-open.is-notebook-open .nebula-notebook { left: calc(var(--nb-rail-w) + var(--nb-gap) * 2.5 + var(--nb-half)); }
+@container journal (max-width: 900px) {
+  .nebula-notebook-toggle { grid-column: 1 / -1; flex-direction: row; align-items: center; justify-content: space-between; padding: 10px 12px; }
+  .nebula-notebook { top: 10px; left: var(--nb-gap); right: var(--nb-gap); bottom: 14px; }
+  .nebula-stage.is-calendar-open.is-notebook-open .nebula-calendar { right: var(--nb-gap); bottom: calc(50% + 4px); }
+  .nebula-stage.is-calendar-open.is-notebook-open .nebula-notebook { left: var(--nb-gap); top: calc(50% + 4px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .nebula-notebook { transition: none !important; }
+  .nebula-notebook-toggle .nebula-calendar-command::after { animation: none !important; }
+}

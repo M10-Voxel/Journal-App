@@ -1,0 +1,107 @@
+/* An entry's actions in the popup looks other than Normal · Karte (ActionSheet.tsx): a sheet under the entry's row,
+   built differently per look. The shell lies over the rows below (it does not push them), the planner opens in its place. */
+.actions-sheet .entry-dock-shell { position: absolute; left: 30px; top: calc(100% - 2px); z-index: 40; visibility: hidden; pointer-events: none; transition: visibility 0s 180ms; }
+.actions-sheet .entry-dock-shell.is-open { visibility: visible; pointer-events: auto; transition-delay: 0s; }
+.actions-sheet .entry-dock-shell:focus { outline: none; }
+.actions-sheet .entry-dock-shell > .sheet { opacity: 0; transform: translateY(-6px) scale(.98); transform-origin: 16px 0; transition: opacity 140ms ease, transform 200ms var(--ease); }
+.actions-sheet .entry-dock-shell.is-open > .sheet { opacity: 1; transform: none; transition: opacity 160ms ease, transform 320ms var(--spring); }
+.actions-sheet .entry-dock-shell > .planner { position: relative; pointer-events: auto; }
+.sheet { position: relative; box-sizing: border-box; max-width: min(560px, calc(100vw - 80px)); color: var(--text); font: 12px var(--sans); }
+.sheet button { border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.sheet button:disabled { opacity: .35; cursor: default; }
+.sheet .icon { flex: none; width: 14px; height: 14px; }
+.sheet kbd { margin-left: auto; padding: 0 5px; border-radius: 4px; background: var(--border); box-shadow: 0 0 0 1px var(--edge); color: var(--placeholder); font: 9.5px var(--mono); white-space: nowrap; }
+.sheet-action[aria-pressed='true'] { cursor: default; }
+
+/* ── Normal · Glas: a frosted strip of tiles, icon over word, the groups apart ── */
+.sheet-glass { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px; border-radius: 18px;
+  background: color-mix(in srgb, var(--surface) 62%, transparent); -webkit-backdrop-filter: blur(22px) saturate(1.6); backdrop-filter: blur(22px) saturate(1.6);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--strong) 22%, transparent), inset 0 0 0 1px color-mix(in srgb, var(--strong) 12%, transparent), 0 26px 50px -20px #000000f2; }
+.sheet-glass .sheet-group { display: flex; gap: 2px; padding: 2px; border-radius: 14px; background: color-mix(in srgb, var(--strong) 5%, transparent); }
+.sheet-glass .sheet-action { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-width: 56px; height: 52px; padding: 0 8px; border-radius: 12px; color: var(--muted); font-size: 10.5px; white-space: nowrap; transition: background-color var(--fast) ease, color var(--fast) ease, transform 200ms var(--spring); }
+.sheet-glass .sheet-action .icon { width: 16px; height: 16px; color: var(--text); }
+.sheet-glass .sheet-action:is(:hover, :focus-visible):not(:disabled) { background: color-mix(in srgb, var(--strong) 12%, transparent); color: var(--strong); outline: 0; }
+.sheet-glass .sheet-action:active:not(:disabled) { transform: scale(.92); }
+.sheet-glass .sheet-action[aria-pressed='true'] { color: var(--accent); box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 45%, transparent), inset 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent); }
+.sheet-glass .sheet-action[aria-pressed='true'] .icon { color: var(--accent); }
+.sheet-glass .sheet-remove:hover .icon { color: var(--error); }
+
+/* ── Journal · Karteikarte: an index card – the entry as its heading, the actions ticked off in columns ── */
+.sheet-card { width: max-content; padding: 0 0 10px; border-radius: 2px; background: var(--surface);
+  background-image: repeating-linear-gradient(transparent 0 25px, color-mix(in srgb, var(--accent) 16%, transparent) 25px 26px); background-position: 0 38px;
+  box-shadow: inset 0 3px 0 color-mix(in srgb, var(--error) 55%, transparent), 0 0 0 1px var(--edge), 0 18px 34px -14px color-mix(in srgb, #3b2a1a 60%, transparent); font-family: var(--serif, var(--sans)); }
+.sheet-card-head { height: 36px; padding: 0 14px; border-bottom: 1px solid color-mix(in srgb, var(--error) 40%, transparent); color: var(--strong); font: italic 600 14px/36px var(--display, var(--sans)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 520px; }
+.sheet-columns { display: flex; gap: 4px 18px; padding: 2px 14px 0; }
+.sheet-columns section { display: flex; flex-direction: column; min-width: 96px; }
+.sheet-columns h4 { margin: 0; height: 26px; color: color-mix(in srgb, var(--error) 75%, var(--text)); font: 600 10px/26px var(--sans); letter-spacing: .12em; text-transform: uppercase; }
+.sheet-card .sheet-action { display: flex; align-items: center; gap: 7px; height: 26px; padding: 0 4px 0 0; color: var(--text); font: 13.5px var(--write, var(--serif)); font-style: italic; text-align: left; white-space: nowrap; }
+.sheet-box { display: grid; place-items: center; width: 12px; height: 12px; border: 1.2px solid color-mix(in srgb, var(--text) 60%, transparent); border-radius: 2px 3px 2px 3px; color: var(--accent); font: 700 12px/1 var(--sans); }
+.sheet-card .sheet-action:is(:hover, :focus-visible):not(:disabled) { color: var(--accent); outline: 0; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+.sheet-card .sheet-action:is(:hover, :focus-visible):not(:disabled) .sheet-box { border-color: var(--accent); }
+.sheet-card .sheet-action[aria-pressed='true'] { color: var(--accent); }
+.sheet-card .sheet-remove:hover { color: var(--error) !important; }
+
+/* ── Journal · Notizblock: register tabs per group, the open tab's actions as a list with their keys ── */
+.sheet-tabs { width: 260px; }
+.sheet-tablist { display: flex; gap: 2px; padding-left: 8px; }
+.sheet-tab { position: relative; top: 1px; height: 24px; padding: 0 10px !important; border-radius: 6px 6px 0 0 !important; background: color-mix(in srgb, var(--tab) 55%, var(--surface)) !important; color: var(--text) !important; font: 600 11px var(--sans) !important; box-shadow: inset 0 0 0 1px var(--edge); }
+.sheet-tab[aria-selected='true'] { z-index: 1; height: 26px; top: 0; background: var(--tab-paper) !important; box-shadow: inset 1px 1px 0 var(--edge), inset -1px 0 0 var(--edge); }
+.sheet-tab.is-status { --tab: var(--success); } .sheet-tab.is-entry { --tab: var(--priority); } .sheet-tab.is-plan { --tab: var(--accent); } .sheet-tab.is-order { --tab: var(--md-purple); } .sheet-tab.is-remove { --tab: var(--error); }
+.sheet-tabs { --tab-paper: color-mix(in srgb, var(--priority) 26%, var(--book-paper, var(--surface))); }
+.sheet-tabpanel { display: flex; flex-direction: column; padding: 8px 6px; border-radius: 0 3px 3px 3px; background: var(--tab-paper);
+  background-image: radial-gradient(circle at 8px 50%, color-mix(in srgb, var(--text) 60%, transparent) 2.2px, transparent 2.8px); background-size: 16px 16px; background-repeat: repeat-y; background-position: 0 4px;
+  box-shadow: 0 0 0 1px var(--edge), 0 3px 0 -1px color-mix(in srgb, var(--tab-paper) 86%, #000), 0 18px 32px -14px color-mix(in srgb, #3b2a1a 60%, transparent); padding-left: 20px; }
+.sheet-tabpanel .sheet-action { display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 6px !important; border-radius: 3px !important; text-align: left; font: 13px var(--serif, var(--sans)) !important; }
+.sheet-tabpanel .sheet-action:is(:hover, :focus-visible):not(:disabled) { background: color-mix(in srgb, var(--priority) 55%, transparent) !important; outline: 0; transform: rotate(-.6deg); }
+.sheet-tabpanel .sheet-action[aria-pressed='true'] { box-shadow: inset 3px 0 0 var(--accent); }
+
+/* ── Nebula · Terminal: type a command (or pick one), Enter runs it ── */
+.sheet-terminal { width: 330px; padding: 0 0 6px; background: #0c0c0e; box-shadow: 0 0 0 1px var(--nb-line, #333), 6px 6px 0 var(--nb-violet, #7b2cbf); font-family: var(--mono); }
+.sheet-terminal::before { content: '[journal@~]$ ./entry.sh'; display: block; height: 22px; padding: 0 10px; background: var(--nb-paper, #d4d4d4); color: var(--nb-ink, #111); font: 700 10px/22px var(--mono); }
+.sheet-prompt { display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 10px; border-bottom: 1px dashed var(--edge); color: var(--nb-violet-light, #b388ff); font: 700 13px var(--mono); }
+.sheet-prompt input { flex: 1; min-width: 0; padding: 0; border: 0; outline: 0; background: transparent; color: #f2f2f2; caret-color: var(--nb-violet-light, #b388ff); font: 13px var(--mono); }
+.sheet-prompt input::placeholder { color: #6a6a72; }
+.sheet-commands { display: flex; flex-direction: column; max-height: 300px; overflow: auto; padding-top: 4px; }
+.sheet-terminal .sheet-action { display: flex; align-items: center; gap: 10px; height: 24px; padding: 0 10px; color: #d8d8d8; text-align: left; font: 12px var(--mono); }
+.sheet-command { min-width: 70px; color: var(--nb-violet-light, #b388ff); }
+.sheet-command::before { content: '$ '; color: #55555c; }
+.sheet-desc { flex: 1; min-width: 0; overflow: hidden; color: #9a9aa2; text-overflow: ellipsis; white-space: nowrap; }
+.sheet-terminal kbd { background: transparent; box-shadow: none; color: #6a6a72; font-size: 10.5px; }
+.sheet-terminal .sheet-action:is(:hover, :focus-visible):not(:disabled) { background: var(--nb-violet, #7b2cbf); color: #fff; outline: 0; }
+.sheet-terminal .sheet-action:is(:hover, :focus-visible):not(:disabled) :is(.sheet-command, .sheet-desc, kbd) { color: #fff; }
+.sheet-terminal .sheet-action[aria-pressed='true'] .sheet-command::after { content: ' *'; color: var(--now); }
+.sheet-empty { margin: 4px 10px; color: var(--error); font: 12px var(--mono); }
+
+/* ── Nebula · Holo-Papier: a Y2K window – title bar, menu, toolbar, status bar ── */
+.sheet-window { width: max-content; background: #cfcfcf; color: #111; box-shadow: 0 0 0 1px #000, 6px 6px 0 #000; font-family: var(--sans); }
+.sheet-titlebar { display: flex; align-items: center; height: 22px; padding: 0 3px 0 8px; background: linear-gradient(90deg, var(--nb-violet, #7b2cbf), #b388ff); color: #fff; font: 700 11px var(--sans); }
+.sheet-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 420px; }
+.sheet-close { display: grid; place-items: center; width: 17px; height: 15px; background: #cfcfcf !important; color: #111 !important; box-shadow: inset -1px -1px 0 #555, inset 1px 1px 0 #fff; }
+.sheet-close .icon { width: 9px; height: 9px; }
+.sheet-menubar { display: flex; gap: 12px; height: 20px; padding: 0 8px; border-bottom: 1px solid #9e9e9e; font: 11px/20px var(--sans); }
+.sheet-menubar u { text-underline-offset: 2px; }
+.sheet-toolbar { display: flex; flex-wrap: wrap; gap: 4px; padding: 5px; }
+.sheet-window .sheet-group { display: flex; gap: 1px; padding-right: 4px; border-right: 1px solid #9e9e9e; box-shadow: 1px 0 0 #eee; }
+.sheet-window .sheet-group:last-child { border-right: 0; box-shadow: none; }
+.sheet-window .sheet-action { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-width: 52px; height: 46px; padding: 0 6px; font: 10.5px var(--sans); white-space: nowrap; }
+.sheet-window .sheet-action .icon { width: 17px; height: 17px; }
+.sheet-window .sheet-action:is(:hover, :focus-visible):not(:disabled) { outline: 0; box-shadow: inset -1px -1px 0 #555, inset 1px 1px 0 #fff; }
+.sheet-window .sheet-action:active:not(:disabled), .sheet-window .sheet-action[aria-pressed='true'] { background: var(--holo) !important; box-shadow: inset 1px 1px 0 #555, inset -1px -1px 0 #fff; }
+.sheet-statusbar { display: flex; align-items: center; gap: 8px; height: 20px; margin: 0 3px 3px; padding: 0 6px; box-shadow: inset 1px 1px 0 #888, inset -1px -1px 0 #fff; font: 10.5px var(--mono); }
+.sheet-statusbar kbd { background: transparent; box-shadow: none; color: #444; }
+
+/* Pixel look over Normal and Journal: hard corners, offset shadows, the pixel faces a size up. */
+:root[data-pixel] .sheet, :root[data-pixel] .sheet * { border-radius: 0 !important; }
+:root[data-pixel] .sheet-glass, :root[data-pixel] .sheet-card, :root[data-pixel] .sheet-tabpanel { outline: 1px solid var(--edge); outline-offset: 1px; box-shadow: 3px 3px 0 var(--border), 5px 5px 0 #0008; -webkit-backdrop-filter: none; backdrop-filter: none; }
+:root[data-pixel] .sheet-card .sheet-action, :root[data-pixel] .sheet-tabpanel .sheet-action { font-size: 16px !important; font-style: normal; }
+:root[data-pixel] .sheet kbd { font-size: 14px; }
+:root[data-pixel] .sheet-glass .sheet-action, :root[data-pixel] .sheet-tabpanel .sheet-action:hover { transform: none; }
+@media (prefers-reduced-motion: reduce) { .actions-sheet .entry-dock-shell > .sheet { transition: none; } }
+/* The index card keeps to its page: columns wrap, boxes keep their size. */
+.sheet-box { flex: none; }
+.sheet-card { max-width: min(420px, calc(100vw - 80px)); }
+.sheet-columns { flex-wrap: wrap; }
+/* The notepad's tabs all fit next to each other. */
+.sheet-tabs { width: max-content; min-width: 300px; }
+.sheet-tablist { flex-wrap: nowrap; }
+.sheet-tab { white-space: nowrap; }

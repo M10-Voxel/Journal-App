@@ -26,7 +26,8 @@ import { MailImportToast } from './components/MailImportToast';
 import { PeriodNotes } from './components/PeriodNotes';
 import { BulletinBoard, FloatingNote } from './components/BulletinBoard';
 import type { Mode } from './components/PeriodNotes';
-import { Settings, applyTheme, loadSettings, saveSettings } from './settings';
+import { Settings, applyTheme, loadSettings, saveSettings, swipeAvailable } from './settings';
+import { usePopupLook } from './popupLook';
 import { ThemeSync } from './components/ThemeSync';
 import { adjacentText, focusText, titleInput } from './components/focus';
 import type { TextField } from './components/entryEditor';
@@ -41,7 +42,8 @@ import { WindowControls } from './components/WindowControls';
 import { NavCluster } from './components/NavCluster';
 import { JournalBook, pageHeading, useBookView } from './components/JournalBook';
 import type { BookControl } from './components/JournalBook';
-import { CalendarDrawer, CalendarTab, useCalendarDrawer } from './components/CalendarDrawer';
+import { CalendarDrawer, CalendarTab, NotebookTab, calendarDrawerKey, notebookDrawerKey, useDrawer } from './components/CalendarDrawer';
+import { Notebook } from './components/Notebook';
 import type { BookPage } from './book';
 import { NebulaDesk } from './components/NebulaDesk';
 import '@fontsource/ibm-plex-sans/400.css';
@@ -83,6 +85,8 @@ import './popups.css';
 import './journal-theme.css';
 import './nebula-theme.css';
 import './popup-styles.css';
+import './popup-sheets.css';
+import './popup-chrome.css';
 import { applyColors } from './colors';
 
 applyTheme(loadSettings());
@@ -127,6 +131,10 @@ function App() {
   const [moveAnnouncement, setMoveAnnouncement] = useState('');
   const [help, setHelp] = useState(false);
   const [settings, setSettings] = useState<Settings>(loadSettings);
+  // The popup look decides how an entry's actions open: Normal · Karte the orbit, Glas the words under the entry, the others their own sheet
+  // (ActionSheet). Swiping stays for touch screens.
+  const popupLook = usePopupLook();
+  const actionLayout = settings.actionLayout === 'swipe' && swipeAvailable() ? 'swipe' : popupLook === 'classic-a' ? 'orbit' : popupLook === 'classic-b' ? 'inline' : 'sheet';
   const driveWorking = useRef(false);
   const [driveBusy, setDriveBusy] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -147,7 +155,13 @@ function App() {
   const [bookView, setBookView] = useBookView();
   const [bookWide, setBookWide] = useState(true);
   const bookRef = useRef<BookControl>(null);
-  const drawer = useCalendarDrawer();
+  const drawer = useDrawer(calendarDrawerKey);
+  // The notebook: a sheet over the book's right page (journal), a window beside the calendar's (Nebula), a tab (normal).
+  const notebook = useDrawer(notebookDrawerKey);
+  const lastSheet = useRef<'calendar' | 'notebook'>('calendar');
+  // Both sheets fit on a spread; on one page (or in a narrow window) the one taken out last puts the other back.
+  const sheetsFit = bookView === 'double' && bookWide;
+  useEffect(() => { if (bookMode && drawer.open && notebook.open && !sheetsFit) (lastSheet.current === 'notebook' ? drawer : notebook).setOpen(false); }, [bookMode, drawer.open, notebook.open, sheetsFit]);
   // The window has no system title bar: its own bar (or, in the book, the cover) moves it; a double click maximizes.
   const dragWindow = (event: React.MouseEvent) => {
     if (event.button !== 0 || (event.target as Element).closest('button, input, [role="dialog"]')) return;
@@ -157,9 +171,18 @@ function App() {
   };
   const toggleDrawer = (focus = false) => {
     const opening = !drawer.open;
+    if (opening) lastSheet.current = 'calendar';
     drawer.setOpen(opening);
     if (focus) requestAnimationFrame(() => document.querySelector<HTMLElement>(opening ? '.calendar-drawer .cal, .nebula-calendar .cal' : '.calendar-tab, .nebula-calendar-toggle')?.focus({ preventScroll: true }));
   };
+  const toggleNotebook = (focus = false) => {
+    const opening = !notebook.open;
+    if (opening) lastSheet.current = 'notebook';
+    notebook.setOpen(opening);
+    if (focus) requestAnimationFrame(() => document.querySelector<HTMLElement>(opening ? '.notebook .notebook-search input' : '.notebook-tab, .nebula-notebook-toggle, .journal-tab.is-notebook')?.focus({ preventScroll: true }));
+  };
+  // Choosing a view (day … year) in the normal design leaves the notebook's tab.
+  const choosePeriod = (mode: Mode) => { setPeriodMode(mode); if (!ownLayout && notebook.open) notebook.setOpen(false); };
   const datePickerButtonRef = useRef<HTMLButtonElement>(null);
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const focusEntryId = useRef<string | null>(null);
@@ -473,10 +496,12 @@ function App() {
     const ctrl = event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey;
     const kinds: Record<string, EntryKind> = { KeyA: 'task', KeyE: 'event', KeyN: 'note' };
     if (event.key === 'F1' || (event.key === '?' && !typing && !event.ctrlKey && !event.altKey)) setHelp(open => !open);
+    // Ctrl+Shift+N: the notebook, from anywhere (also out of the shortcut overview).
+    else if (event.ctrlKey && event.shiftKey && !event.altKey && !event.metaKey && event.code === 'KeyN') { setHelp(false); toggleNotebook(true); }
     else if (ctrl && event.key === ',') { setSettingsTab('appearance'); setSettingsOpen(open => !open); }
     else if (ctrl && event.code === 'KeyG') setDatePickerOpen(open => !open);
     // Ctrl+1–5: day, week, month, quarter, year (the tabs in the title bar, or the book's register tabs).
-    else if (ctrl && /^Digit[1-5]$/.test(event.code)) setPeriodMode(periodModes[Number(event.code.slice(5)) - 1]);
+    else if (ctrl && /^Digit[1-5]$/.test(event.code)) choosePeriod(periodModes[Number(event.code.slice(5)) - 1]);
     // Ctrl + / − / 0: the interface larger, smaller, or by the screen again (see Settings → Größe).
     else if (event.ctrlKey && !event.altKey && (event.key === '+' || event.key === '=' || event.key === '-' || event.code === 'Digit0' || event.code === 'NumpadAdd' || event.code === 'NumpadSubtract' || event.code === 'Numpad0')) {
       const larger = event.key === '+' || event.key === '=' || event.code === 'NumpadAdd';
@@ -493,6 +518,7 @@ function App() {
     // The book: Ctrl+PageDown/PageUp turn a page, Ctrl+K brings the calendar down (Esc on the page takes it back up).
     else if (bookMode && ctrl && (event.key === 'PageDown' || event.key === 'PageUp')) bookRef.current?.turn(event.key === 'PageDown' ? 1 : -1);
     else if (ownLayout && ctrl && event.code === 'KeyK') toggleDrawer(true);
+    else if (ownLayout && notebook.open && (lastSheet.current === 'notebook' || !drawer.open) && event.key === 'Escape' && target === document.body) toggleNotebook(true);
     else if (ownLayout && drawer.open && event.key === 'Escape' && target === document.body) toggleDrawer(true);
     else return;
     event.preventDefault();
@@ -567,7 +593,7 @@ function App() {
             <span className="visually-hidden" id="entry-reorder-help">{t("Innerhalb desselben Typs und derselben Priorität ziehen oder mit Alt und den Pfeiltasten nach oben und unten verschieben. Das funktioniert auch direkt im Text.")}</span>
             <span className="visually-hidden" role="status">{moveAnnouncement}</span>
             {visibleEntries.length === 0 && <div className="empty"><Icon name="journal" /><p>{t("Ein neuer Tag. Platz für deine Gedanken.")}</p><span className="page-hint">{t("Füge oben eine Aufgabe, Notiz oder ein Ereignis hinzu.")}</span></div>}
-            {visibleEntries.map((entry, index) => <JournalEntry key={entry.id} layout={settings.actionLayout} entry={entry} day={day.date} tag={tagOf(tags, entry.tag)}
+            {visibleEntries.map((entry, index) => <JournalEntry key={entry.id} layout={actionLayout} entry={entry} day={day.date} tag={tagOf(tags, entry.tag)}
               tagFirst={index === 0 || visibleEntries[index - 1].kind !== entry.kind || filterKey(visibleEntries[index - 1].tag) !== filterKey(entry.tag)}
               tagLast={index === visibleEntries.length - 1 || visibleEntries[index + 1].kind !== entry.kind || filterKey(visibleEntries[index + 1].tag) !== filterKey(entry.tag)} onCreate={addEntry} traceSaved={savedTraces.has(entry.id)} onNavigate={navigate} isNew={entry.id === newEntryId} isOpen={entry.id === openEntryId} focusEntryId={focusEntryId} focusMoveEntryId={focusMoveEntryId}
               isGroupStart={index > 0 && visibleEntries[index - 1].kind !== entry.kind}
@@ -609,11 +635,12 @@ function App() {
       title={`${periodLabels[index]} · ${t('Strg')} ${index + 1}`} onClick={() => setPeriodMode(mode)}>{periodLabels[index]}{index === 0 && dirty && <span className="unsaved-dot" aria-label={t("Ungespeicherte Änderungen")} />}</button>)}
   </nav>;
   // Turning both pages at once, the sheet does not cover a page: the book shows one page beside it.
-  const besideCalendar = bookMode && drawer.open && settings.bookPaging === 'spread';
+  const besideCalendar = bookMode && drawer.open && settings.bookPaging === 'spread' && !notebook.open;
+  const notebookView = !ownLayout && notebook.open;
   const visibleOpen = visibleEntries.filter(entry => entry.kind === 'task' && !entry.done && !entry.cancelled).length;
   const nebulaStats = { entries: entryCount, open: visibleOpen, done: visibleEntries.filter(entry => entry.done).length, events: visibleEntries.filter(entry => entry.kind === 'event').length };
   const calendar = <Calendar embedded journalDate={date} onOpen={openFromCalendar} onCreate={createFromCalendar} onEdit={editFromCalendar} onRemove={removeFromCalendar} onExport={exportFromCalendar} onImport={importFromCalendar} />;
-  return <div className={`app actions-${settings.actionLayout}${sidebar.dragging ? ' is-resizing' : ''}${bookMode ? ' is-book' : ''}${nebulaMode ? ' is-nebula' : ''}`} onFocusCapture={event => {
+  return <div className={`app actions-${actionLayout}${sidebar.dragging ? ' is-resizing' : ''}${bookMode ? ' is-book' : ''}${nebulaMode ? ' is-nebula' : ''}`} onFocusCapture={event => {
     const target = event.target as HTMLElement;
     if (newEntryId && !target.closest('.popover') && target.closest<HTMLElement>('[data-entry-id]')?.dataset.entryId !== newEntryId) setNewEntryId(null);
   }}>
@@ -638,18 +665,20 @@ function App() {
         <button type="button" className="titlebar-button settings-button" data-mail-count={mailStatus.count || undefined} aria-label={t("Einstellungen")} aria-keyshortcuts="Control+," title={t("Einstellungen · Strg ,")} onClick={() => openSettings()}><Icon name="settings" /></button>
         <WindowControls onError={setError} />
       </div> : <header className="topbar" onMouseDown={dragWindow}>
-        <nav className="journal-tabs" aria-label={language === 'en' ? 'Journal views' : 'Journalansichten'}>{periodModes.map((mode, index) => <button type="button" key={mode} className="journal-tab" aria-current={periodMode === mode ? 'page' : undefined} onClick={() => setPeriodMode(mode)}><Icon name={({ day: 'journal', week: 'week', month: 'month', quarter: 'quarter', year: 'year' } as const)[mode]} /><span>{(language === 'en' ? ['Day', 'Week', 'Month', 'Quarter', 'Year'] : ['Tag', 'Woche', 'Monat', 'Quartal', 'Jahr'])[index]}</span>{index === 0 && dirty && <span className="unsaved-dot" aria-label={t("Ungespeicherte Änderungen")} />}</button>)}</nav>
+        <nav className="journal-tabs" aria-label={language === 'en' ? 'Journal views' : 'Journalansichten'}>{periodModes.map((mode, index) => <button type="button" key={mode} className="journal-tab" aria-current={!notebookView && periodMode === mode ? 'page' : undefined} onClick={() => choosePeriod(mode)}><Icon name={({ day: 'journal', week: 'week', month: 'month', quarter: 'quarter', year: 'year' } as const)[mode]} /><span>{(language === 'en' ? ['Day', 'Week', 'Month', 'Quarter', 'Year'] : ['Tag', 'Woche', 'Monat', 'Quartal', 'Jahr'])[index]}</span>{index === 0 && dirty && <span className="unsaved-dot" aria-label={t("Ungespeicherte Änderungen")} />}</button>)}
+          <button type="button" className="journal-tab is-notebook" aria-current={notebookView ? 'page' : undefined} aria-keyshortcuts="Control+Shift+N" title={t('Notizen · Strg ⇧ N')} onClick={() => toggleNotebook()}><Icon name="note" /><span>{t('Notizen')}</span></button></nav>
         <div className="titlebar-space" />
         {/* Settings sit with the window's own controls, where Zed and most apps keep them. */}
         <button type="button" className="titlebar-button settings-button" data-mail-count={mailStatus.count || undefined} aria-label={t("Einstellungen")} aria-keyshortcuts="Control+," title={t("Einstellungen · Strg ,")} onClick={() => openSettings()}><Icon name="settings" /></button>
         <WindowControls onError={setError} />
       </header>}
       {/* Like the calendar's toolbar (and Zed's under its tabs): turning the days first, then what is shown. */}
-      {!ownLayout && <div className="toolbar">{toolbarItems}</div>}
+      {!ownLayout && !notebookView && <div className="toolbar">{toolbarItems}</div>}
 
       {bookMode ? <JournalBook mode={periodMode} date={date} today={today} onToday={() => navigate(today)} renderNav={bookNav} view={bookView} paging={settings.bookPaging} beside={besideCalendar} sheetWidth={sidebar.width} onNavigate={navigate} renderPage={bookPage} entriesScrollRef={scrollRef} controlRef={bookRef} onWideChange={setBookWide}
-        calendarTab={<CalendarTab open={drawer.open} onToggle={() => toggleDrawer()} />} register={register}
-        overlay={<CalendarDrawer overlay open={drawer.open} animated={drawer.animated} width={sidebar.width} resizer={sidebar.handle} resizable={besideCalendar || !(bookView === 'double' && bookWide)} disabled={driveBusy} onClose={() => toggleDrawer(true)}>{calendar}</CalendarDrawer>} />
+        calendarTab={<><CalendarTab open={drawer.open} onToggle={() => toggleDrawer()} /><NotebookTab open={notebook.open} onToggle={() => toggleNotebook()} /></>} register={register}
+        overlay={<><CalendarDrawer overlay open={drawer.open} animated={drawer.animated} width={sidebar.width} resizer={sidebar.handle} resizable={besideCalendar || !(bookView === 'double' && bookWide)} disabled={driveBusy} onClose={() => toggleDrawer(true)}>{calendar}</CalendarDrawer>
+          <CalendarDrawer overlay side="right" label={t('Notizen')} open={notebook.open} animated={notebook.animated} width={sidebar.width} resizable={false} disabled={driveBusy} onClose={() => toggleNotebook(true)}><Notebook onClose={() => toggleNotebook(true)} /></CalendarDrawer></>} />
         : nebulaMode ? <NebulaDesk mode={periodMode} date={date} today={today} modes={periodModes} modeLabels={periodLabels} dirty={dirty} title={ready ? day.title : ''} stats={nebulaStats}
           onMode={setPeriodMode} onStep={stepPeriod} onToday={() => navigate(today)} stepLabels={stepLabels} disabled={driveBusy}
           datePicker={<MiniCalendarPicker date={date} open={datePickerOpen} onOpenChange={setDatePickerOpen} onPick={navigate} buttonRef={datePickerButtonRef} className="nebula-date">{pageHeading(date, periodMode)}</MiniCalendarPicker>}
@@ -657,8 +686,10 @@ function App() {
           entries={entriesPage()} data={<PeriodNotes date={date} mode="day" onManage={() => openSettings('activities')} onImport={importFromCalendar} />} board={<BulletinBoard key={date} date={date} />}
           notes={<PeriodNotes date={date} mode={periodMode} part="notes" onManage={() => openSettings('activities')} onImport={importFromCalendar} />}
           activities={<PeriodNotes date={date} mode={periodMode} part="activities" onManage={() => openSettings('activities')} onImport={importFromCalendar} />}
-          calendar={calendar} calendarOpen={drawer.open} onCalendarToggle={() => toggleDrawer()} onCalendarClose={() => toggleDrawer(true)} onOpenDay={(target, entry) => showFromCalendar(target, entry ?? null)} onNavigate={navigate} scrollRef={scrollRef}
+          calendar={calendar} calendarOpen={drawer.open} onCalendarToggle={() => toggleDrawer()} onCalendarClose={() => toggleDrawer(true)}
+          notebook={<Notebook />} notebookOpen={notebook.open} onNotebookToggle={() => toggleNotebook()} onNotebookClose={() => toggleNotebook(true)} onOpenDay={(target, entry) => showFromCalendar(target, entry ?? null)} onNavigate={navigate} scrollRef={scrollRef}
           dayCalendar={(showDate, onDateChange) => <Calendar embedded fixedView="day" journalDate={date} showDate={showDate} onDateChange={onDateChange} onOpen={openFromCalendar} onCreate={createFromCalendar} onEdit={editFromCalendar} onRemove={removeFromCalendar} />} />
+        : notebookView ? <div className="notebook-view"><Notebook /></div>
         : <div className="scroll" ref={scrollRef}>
           <div className="content">
             {periodMode === 'day' && entriesPage()}
@@ -674,7 +705,7 @@ function App() {
       onSnooze={reminder => { dismissReminder(reminder); journal.snoozeReminder(reminder).catch(reason => setError(t("Erinnerung: {0}", String(reason)))); }}
       onOpen={reminder => { dismissReminder(reminder); showFromCalendar(reminder.date, reminder.id); }} onDismiss={dismissReminder} />
     {help && <ShortcutHelp onClose={() => setHelp(false)} />}
-    {settingsOpen && <SettingsDialog key={settingsTab} bookView={bookView} onBookView={setBookView} initialTab={settingsTab} beforeSync={async () => { if (!await save()) throw new Error("Lokale ?nderungen konnten nicht gespeichert werden."); }} onDriveBusy={value => { driveWorking.current = value; setDriveBusy(value); }} settings={settings} mailStatus={mailStatus} onImport={importFromCalendar} onClose={() => { if (!driveWorking.current) setSettingsOpen(false); }} onChange={next => { setOpenEntryId(null); setSettings(next); saveSettings(next); }} />}
+    {settingsOpen && <SettingsDialog key={settingsTab} bookView={bookView} onBookView={setBookView} initialTab={settingsTab} beforeSync={async () => { if (!await save()) throw new Error("Lokale Änderungen konnten nicht gespeichert werden."); await flushHistoryWindows(); }} onDriveBusy={value => { driveWorking.current = value; setDriveBusy(value); }} settings={settings} mailStatus={mailStatus} onImport={importFromCalendar} onClose={() => { if (!driveWorking.current) setSettingsOpen(false); }} onChange={next => { setOpenEntryId(null); setSettings(next); saveSettings(next); }} />}
   </div>;
 }
 

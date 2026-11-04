@@ -1,0 +1,169 @@
+// The notebook's logic without the interface (tested in tests/notebook.test.mjs): folders as a tree, and the threads
+// between cards. A thread joins two cards symmetrically (each names the other in `links`): an image or a link tied to a
+// note is an attachment of that note, two notes tied together are pages of each other.
+
+export type Paper = 'yellow' | 'blue' | 'green' | 'pink';
+export type CardKind = 'note' | 'image' | 'link';
+export type Card = {
+  id: string; kind: CardKind; title: string; text: string; dates: string[]; order: number; url?: string; image?: string; pixel?: boolean; asset?: string; size?: number;
+  x?: number; y?: number; z?: number; paper?: Paper;
+  /** Chosen size: width of every card, height of a note (images keep their proportions, links their content). */
+  w?: number; h?: number;
+  /** The folder of a note (notebook), none for notes outside every folder. */
+  folder?: string | null;
+  /** The cards tied to this one by a thread (symmetric: the other card names this one too). */
+  links?: string[];
+  /** The day the card was made. */
+  created?: string;
+  /** Made in the notebook (not on a day's board). */
+  notebook?: boolean;
+  /** A notebook note shown on the day it was made. */
+  onDay?: boolean;
+};
+export type Folder = { id: string; name: string; parent: string | null; order: number };
+export type Patches = Record<string, Partial<Card>>;
+
+const byOrder = (a: { order: number; id: string }, b: { order: number; id: string }) => (a.order ?? 0) - (b.order ?? 0) || a.id.localeCompare(b.id);
+
+/** Folders whose parent is gone count as top level, so nothing is ever lost from the tree. */
+export function parentOf(folders: Folder[], folder: Folder): string | null {
+  return folder.parent && folders.some(other => other.id === folder.parent) ? folder.parent : null;
+}
+/** The tree in reading order with each folder's depth and whether it is the last of its siblings (for `tree` lines). */
+export function flatTree(folders: Folder[]): { folder: Folder; depth: number; last: boolean; lines: boolean[] }[] {
+  const rows: { folder: Folder; depth: number; last: boolean; lines: boolean[] }[] = [];
+  const seen = new Set<string>();
+  const walk = (parent: string | null, depth: number, lines: boolean[]) => {
+    const children = folders.filter(folder => parentOf(folders, folder) === parent).sort(byOrder);
+    children.forEach((folder, index) => {
+      if (seen.has(folder.id)) return;
+      seen.add(folder.id);
+      const last = index === children.length - 1;
+      rows.push({ folder, depth, last, lines });
+      walk(folder.id, depth + 1, [...lines, !last]);
+    });
+  };
+  walk(null, 0, []);
+  // Folders caught in a cycle (only an old or merged state can hold one) show at the top instead of vanishing.
+  for (const folder of [...folders].sort(byOrder)) {
+    if (seen.has(folder.id)) continue;
+    seen.add(folder.id);
+    rows.push({ folder, depth: 0, last: true, lines: [] });
+    walk(folder.id, 1, [false]);
+  }
+  return rows;
+}
+/** Follow only the displayed ancestry: even a cyclic state from a merge must remain navigable. */
+export function visibleTree(folders: Folder[], collapsed: Set<string>): ReturnType<typeof flatTree> {
+  const rows = flatTree(folders);
+  return rows.filter((row, index) => {
+    for (let at = index - 1, depth = row.depth; at >= 0 && depth > 0; at--) {
+      if (rows[at].depth < depth) {
+        if (collapsed.has(rows[at].folder.id)) return false;
+        depth = rows[at].depth;
+      }
+    }
+    return true;
+  });
+}
+/** The folder's path from the top, e.g. ['Projekte', 'Garten']. */
+export function folderPath(folders: Folder[], id: string | null | undefined): string[] {
+  const path: string[] = [];
+  const seen = new Set<string>();
+  let at = folders.find(folder => folder.id === id);
+  while (at && !seen.has(at.id)) { seen.add(at.id); path.unshift(at.name); at = folders.find(folder => folder.id === at!.parent); }
+  return path;
+}
+/** The folder and all folders inside it. */
+export function folderWithin(folders: Folder[], id: string): Set<string> {
+  const inside = new Set([id]);
+  for (let grown = true; grown;) {
+    grown = false;
+    for (const folder of folders) if (folder.parent && inside.has(folder.parent) && !inside.has(folder.id)) { inside.add(folder.id); grown = true; }
+  }
+  return inside;
+}
+/** Whether a folder may move into `parent`: never into itself or one of its own subfolders. */
+export function canMoveFolder(folders: Folder[], id: string, parent: string | null): boolean {
+  return parent === null || !folderWithin(folders, id).has(parent);
+}
+/** The folders directly in `parent` (null: at the top), in their order. */
+export function childFolders(folders: Folder[], parent: string | null): Folder[] {
+  return folders.filter(folder => parentOf(folders, folder) === parent).sort(byOrder);
+}
+/** The order for a folder put last into `parent`. */
+export function nextFolderOrder(folders: Folder[], parent: string | null): number {
+  return Math.max(0, ...childFolders(folders, parent).map(folder => folder.order ?? 0)) + 1;
+}
+
+/** What a thread between two cards makes: an attachment (image or link to a note), another page (two notes), or nothing. */
+export function threadKind(a: Pick<Card, 'kind'>, b: Pick<Card, 'kind'>): 'attachment' | 'page' | null {
+  if (a.kind === 'note' && b.kind === 'note') return 'page';
+  if (a.kind === 'note' || b.kind === 'note') return 'attachment';
+  return null;
+}
+const linksOf = (card: Card | undefined) => card?.links ?? [];
+/** The changes tying `a` and `b` together (both sides); none when they cannot be or already are. */
+export function connectPatches(cards: Card[], a: string, b: string): Patches {
+  const first = cards.find(card => card.id === a), second = cards.find(card => card.id === b);
+  if (!first || !second || a === b || !threadKind(first, second)) return {};
+  const patches: Patches = {};
+  if (!linksOf(first).includes(b)) patches[a] = { links: [...linksOf(first), b] };
+  if (!linksOf(second).includes(a)) patches[b] = { links: [...linksOf(second), a] };
+  return patches;
+}
+/** The changes cutting the thread between `a` and `b` (both sides). */
+export function disconnectPatches(cards: Card[], a: string, b: string): Patches {
+  const patches: Patches = {};
+  for (const [self, other] of [[a, b], [b, a]]) {
+    const card = cards.find(value => value.id === self);
+    if (card && linksOf(card).includes(other)) patches[self] = { links: linksOf(card).filter(id => id !== other) };
+  }
+  return patches;
+}
+/** The changes leaving no thread to a card that is removed for good. */
+export function removalPatches(cards: Card[], id: string): Patches {
+  const patches: Patches = {};
+  for (const card of cards) if (card.id !== id && linksOf(card).includes(id)) patches[card.id] = { links: linksOf(card).filter(other => other !== id) };
+  return patches;
+}
+/** Private notebook attachments disappear with their note; shared and day-board cards remain. */
+export function removalIds(cards: Card[], id: string): Set<string> {
+  const removed = new Set([id]), note = cards.find(card => card.id === id);
+  if (note?.kind === 'note') for (const card of cards) {
+    if (card.kind !== 'note' && card.notebook && !card.dates.length && linksOf(note).includes(card.id) && linksOf(card).every(other => other === id)) removed.add(card.id);
+  }
+  return removed;
+}
+/** Every thread once, between cards that both exist: [a, b] with a < b. */
+export function threads(cards: Card[]): [string, string][] {
+  const known = new Set(cards.map(card => card.id)), seen = new Set<string>(), list: [string, string][] = [];
+  for (const card of cards) for (const other of linksOf(card)) {
+    if (!known.has(other) || other === card.id) continue;
+    const pair: [string, string] = card.id < other ? [card.id, other] : [other, card.id];
+    const key = pair.join(':');
+    if (!seen.has(key)) { seen.add(key); list.push(pair); }
+  }
+  return list;
+}
+const linked = (cards: Card[], note: Card) => linksOf(note).map(id => cards.find(card => card.id === id)).filter((card): card is Card => Boolean(card));
+/** A note's attachments: the images and links tied to it. */
+export function attachmentsOf(cards: Card[], note: Card): Card[] { return linked(cards, note).filter(card => card.kind !== 'note'); }
+/** A note's pages: the note itself, then every note tied to it. One page without threads (it scrolls, nothing to turn). */
+export function pagesOf(cards: Card[], note: Card): Card[] { return [note, ...linked(cards, note).filter(card => card.kind === 'note')]; }
+
+/** Notes in a folder choice: all, those outside every folder (folders that are gone count as none), or one folder with its subfolders. */
+export function notesIn(cards: Card[], folders: Folder[], choice: 'all' | 'none' | string, query = ''): Card[] {
+  const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const known = new Set(folders.map(folder => folder.id));
+  const inside = choice === 'all' || choice === 'none' ? null : folderWithin(folders, choice);
+  return cards.filter(card => card.kind === 'note')
+    .filter(card => words.length ? true : choice === 'all' || (choice === 'none' ? !card.folder || !known.has(card.folder) : inside!.has(card.folder ?? '')))
+    .filter(card => words.every(word => `${card.title} ${card.text}`.toLowerCase().includes(word)))
+    .sort((a, b) => (b.order ?? 0) - (a.order ?? 0) || a.id.localeCompare(b.id));
+}
+/** The switch "show on the day": on puts the note on the day it was made, off takes it off every day. */
+export function onDayPatch(card: Card, on: boolean, today: string): Partial<Card> {
+  const day = card.created ?? card.dates[0] ?? today;
+  return on ? { onDay: true, created: day, dates: card.dates.length ? card.dates : [day] } : { onDay: false, created: day, dates: [] };
+}

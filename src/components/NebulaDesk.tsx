@@ -189,19 +189,33 @@ export function NebulaBackdrop() {
 }
 
 export function NebulaDesk({ mode, date, today, modes, modeLabels, dirty, title, stats, onMode, onStep, onToday, stepLabels, datePicker, tagFilter,
-  entries, data, board, notes, activities, calendar, calendarOpen, onCalendarToggle, onCalendarClose, onOpenDay, onNavigate, dayCalendar, scrollRef, disabled }: {
+  entries, data, board, notes, activities, calendar, calendarOpen, onCalendarToggle, onCalendarClose, notebook, notebookOpen = false, onNotebookToggle, onNotebookClose, onOpenDay, onNavigate, dayCalendar, scrollRef, disabled }: {
   mode: PeriodMode; date: string; today: string; modes: readonly PeriodMode[]; modeLabels: string[]; dirty: boolean; title: string; stats: NebulaStats;
   onMode: (mode: PeriodMode) => void; onStep: (step: 1 | -1) => void; onToday: () => void; stepLabels: { prev: { label: string; tip: string }; next: { label: string; tip: string } };
   /** The date as a button opening the mini calendar (Ctrl+G). */
   datePicker: ReactNode; tagFilter: ReactNode;
   entries: ReactNode; data: ReactNode; board: ReactNode; notes: ReactNode; activities: ReactNode;
   calendar: ReactNode; calendarOpen: boolean; onCalendarToggle: () => void; onCalendarClose: () => void;
+  /** The notebook: a window of its own like the calendar's; with both open each takes half of the middle. */
+  notebook?: ReactNode; notebookOpen?: boolean; onNotebookToggle?: () => void; onNotebookClose?: () => void;
   onOpenDay: (date: string, entry?: string) => void; onNavigate: (date: string) => void; dayCalendar: DayCalendar; scrollRef: React.RefObject<HTMLDivElement | null>; disabled?: boolean;
 }) {
   const language = useLanguage();
   const { data: periodData } = usePeriodData();
   const rating = mode === 'day' ? periodData?.days[date]?.rating : undefined;
-  const upcoming = useUpcoming(today, 3);
+  // Up to six tickets in one row, as many as fit (each at least 210 px wide).
+  const upcoming = useUpcoming(today, 6);
+  const ticketRow = useRef<HTMLDivElement>(null);
+  const [ticketCount, setTicketCount] = useState(3);
+  useEffect(() => {
+    const row = ticketRow.current;
+    if (!row) return;
+    const fit = () => setTicketCount(Math.max(1, Math.min(6, Math.floor((row.clientWidth + 14) / (210 + 14)))));
+    fit();
+    const observer = new ResizeObserver(fit);
+    observer.observe(row);
+    return () => observer.disconnect();
+  }, [upcoming.length > 0]);
   const { figure, caption } = posterFigure(date, mode);
   const [start, end] = periodBounds(date, mode);
   const isToday = mode === 'day' ? date === today : start <= today && today <= end;
@@ -228,8 +242,10 @@ export function NebulaDesk({ mode, date, today, modes, modeLabels, dirty, title,
   }, []);
   const calendarRef = useRef<HTMLElement>(null);
   useEffect(() => { if (!calendarOpen && calendarRef.current?.contains(document.activeElement)) document.querySelector<HTMLElement>('.nebula-calendar-toggle')?.focus({ preventScroll: true }); }, [calendarOpen]);
+  const notebookRef = useRef<HTMLElement>(null);
+  useEffect(() => { if (!notebookOpen && notebookRef.current?.contains(document.activeElement)) document.querySelector<HTMLElement>('.nebula-notebook-toggle')?.focus({ preventScroll: true }); }, [notebookOpen]);
 
-  return <div className={`nebula-stage${calendarOpen ? ' is-calendar-open' : ''}`} data-period-mode={mode}>
+  return <div className={`nebula-stage${calendarOpen ? ' is-calendar-open' : ''}${notebookOpen ? ' is-notebook-open' : ''}`} data-period-mode={mode}>
     <NebulaBackdrop />
     <div className="nebula-desk" ref={scrollRef} inert={disabled}>
       <aside className="nebula-rail nebula-paper" aria-label={t('Navigation')}>
@@ -258,6 +274,10 @@ export function NebulaDesk({ mode, date, today, modes, modeLabels, dirty, title,
           title={calendarOpen ? t('Kalender schließen · Strg K') : t('Kalender öffnen · Strg K')} onClick={onCalendarToggle}>
           <span className="nebula-calendar-command">./{t('kalender')}</span><span className="nebula-calendar-keys"><kbd>{t('Strg')}</kbd> <kbd>K</kbd></span>
         </button>
+        {onNotebookToggle && <button type="button" className={`nebula-notebook-toggle${notebookOpen ? ' is-open' : ''}`} aria-expanded={notebookOpen} aria-keyshortcuts="Control+Shift+N"
+          title={notebookOpen ? t('Notizen schließen · Strg ⇧ N') : t('Notizen öffnen · Strg ⇧ N')} onClick={onNotebookToggle}>
+          <span className="nebula-calendar-command">./{t('notizen')}</span><span className="nebula-calendar-keys"><kbd>{t('Strg')}</kbd> <kbd>⇧</kbd> <kbd>N</kbd></span>
+        </button>}
         <span className="nebula-rail-arrow" aria-hidden="true">×+ ───────→</span>
       </aside>
 
@@ -276,7 +296,7 @@ export function NebulaDesk({ mode, date, today, modes, modeLabels, dirty, title,
         </>}
         <section className="nebula-tickets" aria-label={t('Nächste Termine')}>
           <h2 className="nebula-label">{t('Nächste Termine')} <span aria-hidden="true">────→</span></h2>
-          {upcoming.length ? <div className="nebula-ticket-row">{upcoming.map((item, index) => <Ticket key={`${item.date}:${item.entry.id}`} item={item} index={index} onOpen={onOpenDay} />)}</div>
+          {upcoming.length ? <div ref={ticketRow} className="nebula-ticket-row" style={{ gridTemplateColumns: `repeat(${Math.min(ticketCount, upcoming.length)}, minmax(0, 1fr))` }}>{upcoming.slice(0, ticketCount).map((item, index) => <Ticket key={`${item.date}:${item.entry.id}`} item={item} index={index} onOpen={onOpenDay} />)}</div>
             : <p className="nebula-empty">[ {t('Keine Termine in Sicht.')} ]</p>}
         </section>
       </div>
@@ -305,5 +325,13 @@ export function NebulaDesk({ mode, date, today, modes, modeLabels, dirty, title,
       </header>
       <div className="nebula-calendar-body">{calendar}</div>
     </section>
+    {notebook && <section ref={notebookRef} className={`nebula-notebook${notebookOpen ? ' is-open' : ''}`} aria-label={t('Notizen')} aria-hidden={!notebookOpen || undefined} inert={!notebookOpen || disabled}
+      onKeyDown={event => { if (event.key === 'Escape' && !event.defaultPrevented && !(event.target as Element).closest('input, textarea, select, [contenteditable="true"], [role="dialog"]')) { event.preventDefault(); onNotebookClose?.(); } }}>
+      <header className="nebula-terminal-head">
+        <span className="nebula-prompt" aria-hidden="true"><b>[journal@~]$</b> ./notes.sh --tree</span>
+        <button type="button" className="nebula-calendar-close" aria-label={t('Notizen schließen')} title={t('Notizen schließen · Esc')} onClick={onNotebookClose}>×</button>
+      </header>
+      <div className="nebula-notebook-body">{notebook}</div>
+    </section>}
   </div>;
 }

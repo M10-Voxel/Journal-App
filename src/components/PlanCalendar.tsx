@@ -1,4 +1,6 @@
 import { t, useLanguage, getLanguage } from '../i18n';
+import { PopupHead, PopupKeys, PopupTabs } from './PopupChrome';
+import { usePopupLook } from '../popupLook';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { formatDate, formatMonth, formatShortDate, localDate, monthGrid, shiftDate, shiftMonth } from '../dates';
@@ -33,6 +35,7 @@ export function PlanCalendar({ day, initial, initialView = 'date', onPreview, on
   const [time, setTime] = useState(initial.time || (initialView === 'time' ? nextFullHour() : ''));
   const [reminder, setReminder] = useState(initial.reminder);
   const [rule, setRule] = useState<RepeatRule | null>(initial.repeat ?? (initialView === 'repeat' ? defaultRule(initial.date) : null));
+  const look = usePopupLook();
   const [view, setView] = useState<'date' | 'time' | 'repeat'>(initialView === 'time' || initialView === 'repeat' ? initialView : 'date');
   const [pickEnd, setPickEnd] = useState(false);
   const [endCursor, setEndCursor] = useState(initial.date);
@@ -174,6 +177,9 @@ export function PlanCalendar({ day, initial, initialView = 'date', onPreview, on
   // tabIndex -1: clicks on empty parts of the panel keep focus inside the entry instead of closing it.
   // The calendar stays rendered under the clock and the repeat view, so switching views never changes the panel's size.
   return <div className={`planner is-${view}${multi ? ' is-multi' : ''}${pickEnd ? ' is-picking-end' : ''}`} role="dialog" aria-label={t("Planen")} tabIndex={-1} onKeyDown={onKey}>
+    <PopupHead look={look} title={multi ? t("Mehrere Tage") : t("Planen")} command={multi ? 'days' : 'plan'} onClose={onCancel} />
+    <PopupTabs look={look} value={view} onChange={next => { if (next === 'date') showCalendar(); else if (next === 'time' && view !== 'time') toggleClock(); else if (next === 'repeat' && view !== 'repeat') toggleRepeat(); }}
+      views={[{ value: 'date' as const, label: multi ? t('Tage') : t('Datum') }, { value: 'time' as const, label: t('Uhrzeit') }, { value: 'repeat' as const, label: t('Wiederholen'), disabled: multi }]} />
     <div className="planner-body">
     <div className="planner-calendar" inert={view !== 'date'} aria-hidden={view !== 'date'}>
     {/* Picking the end looks like the calendar card's end picker: back on the left, the month, ↑ ↓ to turn months. */}
@@ -229,5 +235,7 @@ export function PlanCalendar({ day, initial, initialView = 'date', onPreview, on
         <span key={multi ? picked.length : selected}>{multi ? picked.length === 1 ? formatShortDate(picked[0]) : t("{0} Tage", picked.length) : moved ? formatShortDate(selected) : t("Hier")}</span>
       </button>
     </div>
+    <PopupKeys look={look} keys={[['Enter', t('übernehmen')], ['Esc', t('zurück')], ['U', t('uhr')], ['W', t('wiederholen')]]}
+      status={`${multi ? t("{0} Tage", picked.length) : formatShortDate(selected)}${time ? ` · ${time}` : ''}${shownRule ? ` · ${describe(shownRule)}` : ''}`} />
   </div>;
 }

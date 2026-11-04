@@ -19,6 +19,8 @@ import type { ScopeOption } from '../planning';
 import { ScopeChoice } from './ScopeChoice';
 import { Icon, priorityIcon } from './Icon';
 import { TagPicker } from './TagPicker';
+import { PopupHead, PopupKeys } from './PopupChrome';
+import { usePopupLook } from '../popupLook';
 import { tagOf } from '../tags';
 import { useTags } from '../tagStore';
 
@@ -51,6 +53,7 @@ export function CalendarComposer({ date, draft, entry, span, onSpanChange, tag: 
 }) {
   useLanguage();
   const editing = Boolean(entry);
+  const look = usePopupLook();
   const width = widths[editing ? 'edit' : 'create'];
   // A range marked in the calendar becomes a calendar entry unless chosen otherwise (it is the first choice, too).
   const [kind, setKind] = useState<EntryKind>(entry?.kind ?? 'event');
@@ -240,6 +243,7 @@ export function CalendarComposer({ date, draft, entry, span, onSpanChange, tag: 
 
   return createPortal(<div ref={cardRef} className={`cal-composer is-${place?.side ?? 'right'}${place ? ' is-placed' : ''}${editing ? ' is-editing' : ''}${tag ? ' has-tag' : ''}`} role="dialog" aria-label={t("{0} am {1}", title, formatShortDate(date))}
     style={{ left: place?.left ?? -9999, top: place?.top ?? 0, width, '--tag': tag?.color } as CSSProperties} onKeyDown={onKeyDown}>
+    <PopupHead look={look} title={title} command={editing ? 'entry --edit' : 'entry --new'} onClose={() => onCancel(false)} />
     <div className="cal-composer-head">
       <div className="cal-composer-kinds" role="radiogroup" aria-label={t("Art")}>
         {kinds.map(value => <button key={value} type="button" role="radio" className="cal-satellite" style={satellite()} aria-checked={selectedKind === value}
@@ -269,6 +273,14 @@ export function CalendarComposer({ date, draft, entry, span, onSpanChange, tag: 
       {editing && <button type="button" className="cal-satellite cal-composer-remove" style={satellite()} aria-label={t("{0} löschen", label)} data-tip={t("Löschen · Alt Entf")} disabled={busy} onClick={() => void remove()}><Icon name="trash" /></button>}
       <button type="button" className="cal-satellite cal-composer-create" style={satellite()} aria-label={editing ? t("Speichern") : t("{0} anlegen", label)} data-tip={editing ? t("Speichern · Enter") : t("Anlegen · Enter")} disabled={busy} onClick={() => void submit()}><Icon name="check" /></button>
     </div>
+    {/* The other looks name their buttons in words (the round satellites stay for the options). */}
+    {look !== 'classic-a' && <div className="chrome-actions">
+      <button type="button" className="chrome-cancel" onClick={() => onCancel(false)}>{t('Abbrechen')}</button>
+      {editing && <button type="button" className="chrome-remove" disabled={busy} onClick={() => void remove()}>{t('Löschen')}</button>}
+      <button type="button" className="chrome-submit" disabled={busy} onClick={() => void submit()}>{editing ? t('Speichern') : t('Anlegen')}</button>
+    </div>}
+    <PopupKeys look={look} keys={[['Enter', editing ? t('speichern') : t('anlegen')], ['Esc', t('abbrechen')], ['Alt G', t('tag')], ['Alt W', t('wiederholen')]]}
+      status={`${formatShortDate(date)}${draft ? ` · ${timeOfMinutes(draft.start)} – ${formatEnd(timeOfMinutes(draft.end))}` : ''}${tag ? ` · ${tag.name}` : ''}`} />
     {repeatView && shownRule && <div className="cal-composer-repeat-panel">
       {repeatView === 'rule'
         ? <RepeatPanel rule={shownRule} today={localDate()} onChange={setRule} onBack={() => { setRepeatView(null); inputRef.current?.focus(); }}
