@@ -43,6 +43,7 @@ export function Popover({ anchor, onClose, className = '', label, children, alig
     if (focus) ref.current?.querySelector<HTMLElement>('[data-autofocus], input, button:not(:disabled)')?.focus({ preventScroll: true });
     const outside = (event: PointerEvent) => {
       const target = event.target as Node;
+      if (document.querySelector('.shortcut-backdrop') && !anchor?.closest('.shortcut-backdrop')) return;
       if (!ref.current?.contains(target) && !anchor?.contains(target)) close.current(false);
     };
     window.addEventListener('pointerdown', outside, true);

@@ -7,6 +7,7 @@ import { latestMailCandidates, mailProviders, newMailAccount } from '../mail';
 import type { MailAccount, MailCandidate } from '../mail';
 import { mailApi } from '../mailApi';
 import { Icon } from './Icon';
+import { DateField, TimeField } from './FieldPickers';
 import { MailModelSetup } from './MailModelSetup';
 
 export function MailSettings({ onImport, importError }: { onImport: (entries: CalendarImport[]) => Promise<void>; importError: string }) {
@@ -149,7 +150,9 @@ export function MailSettings({ onImport, importError }: { onImport: (entries: Ca
         <p className="mail-source">{accounts.find(a => a.id === item.accountId)?.label} · {item.sender}</p><blockquote>{item.evidence}</blockquote>
         {editing?.id === item.id && <div className="mail-proposal-edit">
           <label>{t("Titel")}<input value={editing.entry.text} onChange={event => setEditing({ ...editing, entry: { ...editing.entry, text: event.target.value } })} /></label>
-          <div className="mail-fields"><label>{t("Datum")}<input type="date" value={editing.date} onChange={event => setEditing({ ...editing, date: event.target.value })} /></label><label>{t("Beginn")}<input type="time" value={editing.entry.time ?? ''} onChange={event => setEditing({ ...editing, entry: { ...editing.entry, time: event.target.value || null } })} /></label><label>{t("Ende")}<input type="time" value={editing.entry.end ?? ''} onChange={event => setEditing({ ...editing, entry: { ...editing.entry, end: event.target.value || null } })} /></label></div>
+          <div className="mail-fields"><span className="mail-field">{t("Datum")}<DateField label={t("Datum")} value={editing.date} onChange={date => setEditing({ ...editing, date })} /></span>
+            <span className="mail-field">{t("Beginn")}<TimeField label={t("Beginn")} value={editing.entry.time ?? ''} onChange={time => setEditing({ ...editing, entry: { ...editing.entry, time } })} onClear={() => setEditing({ ...editing, entry: { ...editing.entry, time: null } })} /></span>
+            <span className="mail-field">{t("Ende")}<TimeField label={t("Ende")} value={editing.entry.end ?? ''} onChange={end => setEditing({ ...editing, entry: { ...editing.entry, end } })} onClear={() => setEditing({ ...editing, entry: { ...editing.entry, end: null } })} /></span></div>
         </div>}
         <div className="mail-actions"><button type="button" className="mail-button is-primary" disabled={Boolean(busy)} onClick={() => void run(item.id, () => accept(editing?.id === item.id ? editing : item))}><Icon name="check" />{t("Übernehmen")}</button>
           <button type="button" className="mail-button" disabled={Boolean(busy)} onClick={() => setEditing(editing?.id === item.id ? null : { ...item, entry: { ...item.entry } })}>{editing?.id === item.id ? t("Bearbeitung schließen") : t("Bearbeiten")}</button>

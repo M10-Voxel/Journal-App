@@ -5,7 +5,8 @@ import { t, useLanguage } from '../i18n';
 import { formatDate, formatShortDate, localDate } from '../dates';
 import { BoardImage, Lightbox, Note, connectCards, disconnectCards, hostOf, httpsLink, linkPreview, nextOrder, removeCard, storeImage, useCards, useFolders } from '../boardCards';
 import type { Card, Folder } from '../boardCards';
-import { attachmentsOf, canMoveFolder, flatTree, folderPath, folderWithin, nextFolderOrder, notesIn, onDayPatch, pagesOf, visibleTree } from '../notebook';
+import { attachmentsOf, canMoveFolder, flatTree, folderPath, folderWithin, nextFolderOrder, noteSorts, notesIn, onDayPatch, pagesOf, sortNotes, visibleTree } from '../notebook';
+import type { NoteSort } from '../notebook';
 import { Icon } from './Icon';
 import './bulletinBoard.css';
 import './notebook.css';
@@ -18,7 +19,7 @@ import './notebook.css';
  * them it is one page that scrolls. Each design dresses it its own way (notebook.css).
  */
 type Choice = 'all' | 'none' | string;
-const choiceKey = 'journal.notebookFolder', noteKey = 'journal.notebookNote', collapsedKey = 'journal.notebookCollapsed';
+const choiceKey = 'journal.notebookFolder', noteKey = 'journal.notebookNote', collapsedKey = 'journal.notebookCollapsed', sortKey = 'journal.notebookSort';
 const read = (key: string) => { try { return localStorage.getItem(key); } catch { return null; } };
 const write = (key: string, value: string) => { try { localStorage.setItem(key, value); } catch { /* this session */ } };
 const readCollapsed = () => { try { const value: unknown = JSON.parse(read(collapsedKey) ?? '[]'); return new Set(Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : []); } catch { return new Set<string>(); } };
@@ -34,6 +35,8 @@ export function Notebook({ onClose }: { onClose?: () => void }) {
   const [query, setQuery] = useState('');
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
   const [collapsed, setCollapsed] = useState(readCollapsed);
+  const [sort, setSortState] = useState<NoteSort>(() => noteSorts.find(value => value === read(sortKey)) ?? 'created');
+  const setSort = (value: NoteSort) => { setSortState(value); write(sortKey, value); };
   const [dropOn, setDropOn] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState<Card | null>(null);
   const [link, setLink] = useState<string | null>(null);
@@ -45,7 +48,7 @@ export function Notebook({ onClose }: { onClose?: () => void }) {
   const shownChoice: Choice = choice === 'all' || choice === 'none' || known.has(choice) ? choice : 'all';
   const setChoice = (value: Choice) => { setChoiceState(value); write(choiceKey, value); };
   const select = (id: string | null) => { setSelectedState(id); setPageIndex(0); write(noteKey, id ?? ''); };
-  const notes = notesIn(cards, folders, shownChoice, query);
+  const notes = sortNotes(notesIn(cards, folders, shownChoice, query), sort);
   const current = notes.find(card => card.id === selected) ?? notes[0] ?? null;
   const pages = current ? pagesOf(cards, current) : [];
   const index = Math.min(pageIndex, Math.max(0, pages.length - 1));
@@ -187,6 +190,12 @@ export function Notebook({ onClose }: { onClose?: () => void }) {
         </nav>
         <div className="notebook-notes" role="list" aria-label={query ? t('Suchergebnisse') : t('Zettel')}>
           <div className="notebook-tree-head"><span>{query ? t('Suchergebnisse') : t('Zettel')}</span><small>{notes.length}</small></div>
+          {/* Sorting: by title, or newest first by when a note was made or last edited (remembered on the device). */}
+          <div className="notebook-sort" role="radiogroup" aria-label={t('Sortieren')}>
+            {noteSorts.map(value => <button type="button" key={value} role="radio" aria-checked={sort === value} data-sort={value} onClick={() => setSort(value)}
+              title={({ title: t('Nach Titel, A–Z'), created: t('Neueste zuerst, nach Erstelldatum'), updated: t('Zuletzt bearbeitete zuerst') })[value]}>
+              {({ title: t('Titel'), created: t('Erstellt'), updated: t('Bearbeitet') })[value]}</button>)}
+          </div>
           {notes.map(note => {
             const path = shownChoice === 'all' || query ? folderPath(folders, note.folder).join(' / ') : '';
             return <button type="button" role="listitem" key={note.id} data-note-id={note.id} className={`notebook-note paper-${note.paper ?? 'yellow'}${note.id === current?.id ? ' is-current' : ''}`}

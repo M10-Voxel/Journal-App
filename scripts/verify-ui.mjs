@@ -191,6 +191,17 @@ const bootstrap = `
     if (command === 'read_calendar_file') return window.__uiTest.icsInput ?? null;
     if (command === 'write_calendar_file') { window.__uiTest.icsOutput = payload.content; return true; }
     if (command === 'export_calendar') return [...days.values()].map(day => ({ date:day.date, title:day.title, entries:structuredClone(day.entries.filter(entry => !entry.plan && entry.kind !== 'note')) }));
+    if (command === 'move_calendar_entry') { invoked.push([command,payload]);
+      const old = days.get(payload.from), index = old?.entries.findIndex(entry => entry.id === payload.id) ?? -1;
+      if (index < 0) throw new Error('Missing calendar entry');
+      const [entry] = old.entries.splice(index,1);
+      const target = days.get(payload.to) ?? { date:payload.to,title:'',body:'',revision:0,entries:[] };
+      target.entries.push({...entry,time:payload.time,end:payload.end}); days.set(payload.to,target);
+      old.revision++;if(target!==old)target.revision++;
+      const touched=[...new Set([payload.from,payload.to])];
+      void window.__TAURI_INTERNALS__.invoke('plugin:event|emit',{event:'journal:changed',payload:touched});
+      return touched;
+    }
     if (command === 'import_calendar') {
       const touched = new Set();
       for (const { date, entry } of payload.entries) {
@@ -249,7 +260,7 @@ const bootstrap = `
     }
     if (command === 'plugin:window|is_maximized') return Boolean(window.__uiTest.maximized);
     if (command === 'plugin:window|toggle_maximize') { window.__uiTest.maximized = !window.__uiTest.maximized; invoked.push([command, payload]); return null; }
-    if (command === 'open_window' || command === 'show_day' || command.startsWith('plugin:window|')) { invoked.push([command, payload]); return null; }
+    if (command === 'open_window' || command === 'show_day' || command === 'panel_detach' || command.startsWith('plugin:window|')) { invoked.push([command, payload]); return null; }
     if (command === 'load_linked') {
       const where = id => { for (const [day, value] of days) { const found = value.entries.find(entry => entry.id === id); if (found) return [day, found]; } };
       const group = [payload.id], queue = [payload.id];
@@ -1381,9 +1392,9 @@ async function checkNebulaTheme() {
   assert.equal(await evaluate("document.querySelector('.nebula-today').disabled"), true);
   // Animated decoration (it stands still with reduced motion, below).
   assert(await evaluate("document.getAnimations().some(a => a.playState==='running' && a.effect?.getTiming().iterations===Infinity)"));
-  // The glitch boxes stand still (no blinking), and the marquee runs slowly.
+  // The glitch boxes stand still (no blinking); the running line is off for now (NebulaDesk: showMarquee).
   assert.equal(await evaluate("document.getAnimations().filter(a => a.effect?.target?.classList?.contains('nebula-glitch')).length"), 0);
-  assert(await evaluate("parseFloat(getComputedStyle(document.querySelector('.nebula-marquee-track')).animationDuration) >= 120"));
+  assert.equal(await evaluate("document.querySelector('.nebula-marquee')"), null);
   // The small calendar beside the poster: a month to pick days in.
   assert.equal(await evaluate("document.querySelectorAll('.nebula-side .nebula-cal-panel .cal-compact-day').length"), 42);
   assert.equal(await evaluate("document.querySelector('.nebula-side .cal-compact-day[aria-selected=true]')?.textContent"), String(Number(today.slice(8))));
@@ -1517,6 +1528,190 @@ async function checkNebulaTheme() {
   await pause(300); await screenshot('nebula-calendar-window.png');
   await command('Page.navigate',{url:origin});
   await until("document.documentElement.dataset.theme==='nebula' && Boolean(document.querySelector('.nebula-desk .entry'))");
+  // Floating windows: the calendar moves by its bar, resizes at its corner, lies over the desk (the day's note stays usable
+  // beside it), keeps its place after a reload; focus darkens the rest; a double click on the bar docks it again.
+  await command('Emulation.setDeviceMetricsOverride',{width:1380,height:860,deviceScaleFactor:1,mobile:false});
+  await evaluate("localStorage.removeItem('journal.nebulaWindow.calendar')");
+  await evaluate("document.activeElement?.blur()");
+  await key('k', 'KeyK', 2);
+  await until("Boolean(document.querySelector('.nebula-calendar.is-open'))"); await pause(400);
+  const drag = async (from, to) => {
+    await command('Input.dispatchMouseEvent',{type:'mouseMoved',x:from.x,y:from.y});
+    await command('Input.dispatchMouseEvent',{type:'mousePressed',x:from.x,y:from.y,button:'left',buttons:1,clickCount:1});
+    for (let step = 1; step <= 6; step++) await command('Input.dispatchMouseEvent',{type:'mouseMoved',x:from.x+(to.x-from.x)*step/6,y:from.y+(to.y-from.y)*step/6,button:'left',buttons:1});
+    await command('Input.dispatchMouseEvent',{type:'mouseReleased',x:to.x,y:to.y,button:'left',buttons:0,clickCount:1});
+  };
+  const box = () => evaluate("document.querySelector('.nebula-calendar').getBoundingClientRect().toJSON()");
+  const docked = await box();
+  // Smaller at its corner first (docked it fills the desk), then moved by its bar.
+  const corner = await evaluate("(() => { const r=document.querySelector('.nebula-calendar .nebula-grip.is-se').getBoundingClientRect(); return { x:r.left+r.width/2, y:r.top+r.height/2 }; })()");
+  await drag(corner, { x:corner.x-(docked.width-520), y:corner.y-(docked.height-420) });
+  await until("document.querySelector('.nebula-calendar').classList.contains('is-floating') && Math.abs(document.querySelector('.nebula-calendar').getBoundingClientRect().width-520)<4");
+  const resized = await box();
+  assert(Math.abs(resized.height-420)<4 && Math.abs(resized.left-docked.left)<2 && Math.abs(resized.top-docked.top)<2, 'The corner resizes, the opposite corner stays: '+JSON.stringify(resized));
+  const head = await evaluate("(() => { const r=document.querySelector('.nebula-calendar .nebula-prompt').getBoundingClientRect(); return { x:r.left+20, y:r.top+r.height/2 }; })()");
+  await drag(head, { x:head.x+300, y:head.y+140 });
+  await until(`Math.abs(document.querySelector('.nebula-calendar').getBoundingClientRect().left-${resized.left + 300})<3`);
+  const small = await box();
+  assert(Math.abs(small.top-resized.top-140)<3 && Math.abs(small.width-520)<2, 'The bar moves the window: '+JSON.stringify(small));
+  // Beside it the desk is still there: the day's note can be clicked where the window is not.
+  assert(await evaluate("(() => { const w=document.querySelector('.nebula-calendar').getBoundingClientRect(); const e=document.querySelector('.nebula-desk .entry .entry-text'); const r=e.getBoundingClientRect(); const x=r.left+10, y=r.top+r.height/2; return (x<w.left||x>w.right||y<w.top||y>w.bottom) && e.contains(document.elementFromPoint(x,y)); })()"), 'The day note stays usable beside the window.');
+  await pause(300); await screenshot('nebula-window-floating.png');
+  assert.deepEqual(JSON.parse(await evaluate("localStorage.getItem('journal.nebulaWindow.calendar')")), { x:Math.round(small.left-(await evaluate("document.querySelector('.nebula-stage').getBoundingClientRect().left"))), y:Math.round(small.top-(await evaluate("document.querySelector('.nebula-stage').getBoundingClientRect().top"))), w:Math.round(small.width), h:Math.round(small.height) }, 'The place is remembered.');
+  // Focus: the rest under a dark veil; a click on it ends the focus.
+  await evaluate("document.querySelector('.nebula-calendar .nebula-window-focus').click()");
+  await until("Boolean(document.querySelector('.nebula-dim')) && document.querySelector('.nebula-calendar').classList.contains('is-focused')");
+  assert.equal(await evaluate("Number(getComputedStyle(document.querySelector('.nebula-calendar')).zIndex) > Number(getComputedStyle(document.querySelector('.nebula-dim')).zIndex)"), true);
+  await pause(300); await screenshot('nebula-window-focus.png');
+  await evaluate("document.querySelector('.nebula-dim').dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}))");
+  await until("!document.querySelector('.nebula-dim')");
+  // Double click on the bar: back in its docked place.
+  await command('Input.dispatchMouseEvent',{type:'mousePressed',x:small.left+40,y:small.top+12,button:'left',buttons:1,clickCount:1});
+  await command('Input.dispatchMouseEvent',{type:'mouseReleased',x:small.left+40,y:small.top+12,button:'left',buttons:0,clickCount:1});
+  await command('Input.dispatchMouseEvent',{type:'mousePressed',x:small.left+40,y:small.top+12,button:'left',buttons:1,clickCount:2});
+  await command('Input.dispatchMouseEvent',{type:'mouseReleased',x:small.left+40,y:small.top+12,button:'left',buttons:0,clickCount:2});
+  await until("!document.querySelector('.nebula-calendar').classList.contains('is-floating') && localStorage.getItem('journal.nebulaWindow.calendar')===null");
+  await key('Escape'); await until("!document.querySelector('.nebula-calendar.is-open')");
+  // The grid: windows can be minimized to their bar, set to half or whole rows, moved by their bar, and the calendar and
+  // notebook can join it (button, or Shift while dragging) and leave it again.
+  await evaluate("localStorage.removeItem('journal.nebulaLayout.v1')");
+  await command('Page.reload');
+  await until("Boolean(document.querySelector('.nebula-grid .nebula-panel.is-entries .entry'))"); await pause(400);
+  const order = () => evaluate("[...document.querySelectorAll('.nebula-grid > .nebula-panel')].map(p => p.dataset.panel).join()");
+  assert.equal(await order(), 'entries,data,board');
+  await evaluate("document.querySelector('.nebula-panel.is-entries .nebula-panel-minimize').click()");
+  await until("document.querySelector('.nebula-panel.is-entries').classList.contains('is-minimized') && document.querySelector('.nebula-panel.is-entries .nebula-panel-body').hidden");
+  assert(await evaluate("document.querySelector('.nebula-panel.is-entries').getBoundingClientRect().height < 40"), 'Minimized: only the bar.');
+  await pause(200); await screenshot('nebula-grid-minimized.png');
+  await evaluate("document.querySelector('.nebula-panel.is-entries .nebula-panel-minimize').click()");
+  await until("!document.querySelector('.nebula-panel.is-entries').classList.contains('is-minimized')");
+  // The calendar into the grid by its button: it leaves the desk's air and sits after the board.
+  await evaluate("document.activeElement?.blur()"); await key('k', 'KeyK', 2);
+  await until("Boolean(document.querySelector('.nebula-calendar.is-open'))"); await pause(300);
+  await evaluate("document.querySelector('.nebula-calendar .nebula-window-grid').click()");
+  await until("Boolean(document.querySelector('.nebula-grid > .nebula-panel.is-calendar .cal')) && !document.querySelector('section.nebula-calendar')");
+  assert.equal(await order(), 'entries,data,board,calendar');
+  // Moving by the bar: the calendar dragged to the top lands before the entries.
+  const barOf = id => evaluate(`(() => { const r=document.querySelector('.nebula-panel.is-${id} .nebula-prompt').getBoundingClientRect(); return { x:r.left+30, y:r.top+r.height/2 }; })()`);
+  const pull = async (from, to, shift = false) => {
+    const modifiers = shift ? 8 : 0;
+    await command('Input.dispatchMouseEvent',{type:'mouseMoved',x:from.x,y:from.y,modifiers});
+    await command('Input.dispatchMouseEvent',{type:'mousePressed',x:from.x,y:from.y,button:'left',buttons:1,clickCount:1,modifiers});
+    for (let step = 1; step <= 8; step++) await command('Input.dispatchMouseEvent',{type:'mouseMoved',x:from.x+(to.x-from.x)*step/8,y:from.y+(to.y-from.y)*step/8,button:'left',buttons:1,modifiers});
+    await pause(120);
+  };
+  const release = (at, shift = false) => command('Input.dispatchMouseEvent',{type:'mouseReleased',x:at.x,y:at.y,button:'left',buttons:0,clickCount:1,modifiers:shift ? 8 : 0});
+  await evaluate("document.querySelector('.nebula-desk').scrollTop=0");
+  const top = await evaluate("(() => { const r=document.querySelector('.nebula-panel.is-entries').getBoundingClientRect(); return { x:r.left+r.width/2, y:r.top+20 }; })()");
+  // The data window dropped over the middle of the entries lands in a row of its own above them; the board fills the
+  // row the data window left.
+  const dataBar = await barOf('data');
+  await pull(dataBar, top);
+  assert(await evaluate("document.querySelector('.nebula-panel.is-entries').classList.contains('is-drop-top') && document.querySelector('.nebula-panel.is-data').classList.contains('is-held')"), 'A violet bar marks the landing place.');
+  assert(await evaluate(`(() => { const r=document.querySelector('.nebula-panel.is-data').getBoundingClientRect(); return Math.abs(r.top-(${top.y}-20)) < 60; })()`), 'The carried window follows the pointer.');
+  await screenshot('nebula-grid-moving.png');
+  await release(top);
+  await until("[...document.querySelectorAll('.nebula-grid > .nebula-panel')].map(p => p.dataset.panel).join()==='data,entries,board,calendar'");
+  assert.deepEqual(await evaluate("['data','board'].map(id => document.querySelector(`.nebula-panel.is-${id}`).dataset.span)"), ['12', '12'], 'A row of its own; the board takes the whole row it is left alone in.');
+  // The board dropped on the right edge of the entries: the two share that row (scrolled so both bars are in view).
+  await evaluate("(() => { const d=document.querySelector('.nebula-desk'); d.scrollTop += document.querySelector('.nebula-panel.is-entries').getBoundingClientRect().top - 80; })()"); await pause(250);
+  const boardFrom = await barOf('board');
+  const besideEntries = await evaluate("(() => { const r=document.querySelector('.nebula-panel.is-entries').getBoundingClientRect(); return { x:r.right-30, y:r.top+Math.min(120, r.height/2) }; })()");
+  await pull(boardFrom, besideEntries);
+  assert(await evaluate("document.querySelector('.nebula-panel.is-entries').classList.contains('is-drop-split-right')"), 'Beside a window: its right half is marked.');
+  await screenshot('nebula-grid-beside.png');
+  await release(besideEntries);
+  await until("[...document.querySelectorAll('.nebula-grid > .nebula-panel')].map(p => p.dataset.panel).join()==='data,entries,board,calendar' && document.querySelector('.nebula-panel.is-board').dataset.span==='6'");
+  assert(await evaluate("(() => { const a=document.querySelector('.nebula-panel.is-entries').getBoundingClientRect(), b=document.querySelector('.nebula-panel.is-board').getBoundingClientRect(); return document.querySelector('.nebula-panel.is-entries').dataset.span==='6' && Math.abs(a.top-b.top)<2 && a.right<b.left; })()"), 'Two windows share a row.');
+  // Half and whole rows by button: back to the whole row, the board moves to the next row.
+  await evaluate("document.querySelector('.nebula-panel.is-entries .nebula-panel-half').click()");
+  await until("document.querySelector('.nebula-panel.is-entries').dataset.span==='12'");
+  await evaluate("document.querySelector('.nebula-panel.is-entries .nebula-panel-half').click()");
+  await until("document.querySelector('.nebula-panel.is-entries').dataset.span==='6'");
+  await evaluate("document.querySelector('.nebula-panel.is-calendar').scrollIntoView({block:'end'})"); await pause(300);
+  await screenshot('nebula-grid-docked.png');
+  // Out of the grid: the calendar dragged out floats again where it was let go.
+  const calendarBar = await barOf('calendar');
+  // Beside the grid, inside the window (over the poster's column).
+  const outside = await evaluate(`(() => { const r=document.querySelector('.nebula-poster').getBoundingClientRect(); return { x:r.left+40, y:Math.min(innerHeight-40, Math.max(60, ${calendarBar.y})) }; })()`);
+  await pull(calendarBar, outside); await release(outside);
+  await until("Boolean(document.querySelector('section.nebula-calendar.is-open.is-floating')) && !document.querySelector('.nebula-grid > .nebula-panel.is-calendar')");
+  // Back in with Shift, before the board: the hint without Shift, the bar with it.
+  await evaluate("document.querySelector('.nebula-desk').scrollTop=0"); await pause(200);
+  const floatBar = await evaluate("(() => { const r=document.querySelector('section.nebula-calendar .nebula-prompt').getBoundingClientRect(); return { x:r.left+30, y:r.top+r.height/2 }; })()");
+  const board = await evaluate("(() => { const r=document.querySelector('.nebula-panel.is-board').getBoundingClientRect(); return { x:r.left+20, y:r.top+r.height/2 }; })()");
+  await pull(floatBar, board);
+  await until("Boolean(document.querySelector('.nebula-dock-hint'))");
+  await release(board);
+  await until("Boolean(document.querySelector('section.nebula-calendar.is-floating')) && !document.querySelector('.nebula-grid > .nebula-panel.is-calendar')");
+  const floatBar2 = await evaluate("(() => { const r=document.querySelector('section.nebula-calendar .nebula-prompt').getBoundingClientRect(); return { x:r.left+30, y:r.top+r.height/2 }; })()");
+  const board2 = await evaluate("(() => { const r=document.querySelector('.nebula-panel.is-board').getBoundingClientRect(); return { x:r.left+20, y:r.top+r.height/2 }; })()");
+  await pull(floatBar2, board2, true);
+  await until("Boolean(document.querySelector('.nebula-panel.is-board.is-drop-split-left, .nebula-panel.is-board.is-drop-top'))");
+  await release(board2, true);
+  await until("[...document.querySelectorAll('.nebula-grid > .nebula-panel')].map(p => p.dataset.panel).join()==='data,entries,calendar,board'");
+  // Remembered after a reload; then back to the first layout.
+  await command('Page.reload');
+  await until("[...document.querySelectorAll('.nebula-grid > .nebula-panel')].map(p => p.dataset.panel).join()==='data,entries,calendar,board'");
+  await evaluate("document.querySelector('.nebula-layout-reset').click()");
+  await until("[...document.querySelectorAll('.nebula-grid > .nebula-panel')].map(p => p.dataset.panel).join()==='entries,data,board' && Boolean(document.querySelector('section.nebula-calendar.is-open'))");
+  assert.equal(await evaluate("Boolean(document.querySelector('.nebula-layout-reset'))"), false);
+  // The running line is off (its code stays).
+  assert.equal(await evaluate("document.querySelector('.nebula-marquee')"), null);
+  // Width: the right edge sets the columns (it snaps); a double click there gives the whole row again. (A floating
+  // calendar would lie over the grid: closed first.)
+  await evaluate("document.querySelector('section.nebula-calendar.is-open .nebula-calendar-close')?.click()");
+  await until("!document.querySelector('section.nebula-calendar.is-open')");
+  await evaluate("document.querySelector('.nebula-desk').scrollTop=0"); await pause(200);
+  const edge = await evaluate("(() => { const r=document.querySelector('.nebula-panel.is-entries .nebula-panel-width').getBoundingClientRect(), g=document.querySelector('.nebula-grid').getBoundingClientRect(); return { x:r.left+r.width/2, y:r.top+20, column:(g.width-18*11)/12+18 }; })()");
+  await pull(edge, { x:edge.x - edge.column * 4, y:edge.y }); await release({ x:edge.x - edge.column * 4, y:edge.y });
+  await until("document.querySelector('.nebula-panel.is-entries').dataset.span==='8'");
+  await pause(200); await screenshot('nebula-grid-width.png');
+  // In a row of two the neighbour follows at once: the data window two columns wider, the board two narrower.
+  const dataEdge = await evaluate("(() => { const r=document.querySelector('.nebula-panel.is-data .nebula-panel-width').getBoundingClientRect(), g=document.querySelector('.nebula-grid').getBoundingClientRect(); return { x:r.left+r.width/2, y:r.top+20, column:(g.width-18*11)/12+18 }; })()");
+  await pull(dataEdge, { x:dataEdge.x + dataEdge.column * 2, y:dataEdge.y });
+  assert.equal(await evaluate("getComputedStyle(document.querySelector('.nebula-panel.is-board')).getPropertyValue('--span').trim()"), '4', 'The neighbour narrows while the edge is dragged.');
+  await release({ x:dataEdge.x + dataEdge.column * 2, y:dataEdge.y });
+  await until("document.querySelector('.nebula-panel.is-data').dataset.span==='8' && document.querySelector('.nebula-panel.is-board').dataset.span==='4'");
+  assert(await evaluate("(() => { const a=document.querySelector('.nebula-panel.is-data').getBoundingClientRect(), b=document.querySelector('.nebula-panel.is-board').getBoundingClientRect(); return Math.abs(a.top-b.top)<2; })()"), 'Still one row.');
+  // The column on the right: with the month open the poster stays while the desk scrolls (the month right below it);
+  // with the day open the poster scrolls away and the day grows into its room.
+  const posterTop = () => evaluate("document.querySelector('.nebula-poster').getBoundingClientRect().top");
+  await evaluate("document.querySelector('.nebula-cal-panel [data-cal-view=month]').click()");
+  await until("Boolean(document.querySelector('.nebula-cal-panel.is-month'))");
+  await evaluate("document.querySelector('.nebula-desk').scrollTop=0"); await pause(200);
+  const restingTop = await posterTop();
+  await evaluate("document.querySelector('.nebula-desk').scrollTop=600"); await pause(300);
+  assert(Math.abs(await posterTop() - restingTop) < 2, 'Month: the poster stays.');
+  assert(await evaluate("(() => { const p=document.querySelector('.nebula-poster').getBoundingClientRect(), c=document.querySelector('.nebula-cal-panel').getBoundingClientRect(); return c.top >= p.bottom && c.top - p.bottom < 30; })()"), 'Month: right below the poster.');
+  await screenshot('nebula-side-month.png');
+  await evaluate("document.querySelector('.nebula-cal-panel [data-cal-view=day]').click()");
+  await until("Boolean(document.querySelector('.nebula-cal-panel.is-day'))"); await pause(300);
+  assert(await posterTop() < restingTop - 100, 'Day: the poster scrolls away.');
+  await evaluate("document.querySelector('.nebula-cal-panel [data-cal-view=month]').click()");
+  await evaluate("document.querySelector('.nebula-desk').scrollTop=0");
+  // The day's own windows float too: the data window carried beside the grid floats there, ⊞ docks it again.
+  const dataHead = await barOf('data');
+  const beside = await evaluate("(() => { const r=document.querySelector('.nebula-poster').getBoundingClientRect(); return { x:r.left+30, y:r.top+40 }; })()");
+  await pull(dataHead, beside); await release(beside);
+  await until("Boolean(document.querySelector('section.nebula-floating.is-data .period-section')) && !document.querySelector('.nebula-grid > .nebula-panel.is-data')");
+  await pause(300); await screenshot('nebula-floating-data.png');
+  await evaluate("document.querySelector('section.nebula-floating.is-data .nebula-window-grid').click()");
+  await until("Boolean(document.querySelector('.nebula-grid > .nebula-panel.is-data')) && !document.querySelector('section.nebula-floating')");
+  // Out of the journal: the board carried past the window's edge becomes a window of its own (here: the command), and
+  // comes back into the grid when that window closes.
+  const boardHead = await barOf('board');
+  const away = { x:(await evaluate('innerWidth')) + 40, y:boardHead.y };
+  await pull(boardHead, { x:(await evaluate('innerWidth')) - 4, y:boardHead.y });
+  await command('Input.dispatchMouseEvent',{type:'mouseMoved',x:away.x,y:away.y,button:'left',buttons:1}); await pause(120);
+  assert(await evaluate("Boolean(document.querySelector('.nebula-detach-hint'))"), 'A hint while the pointer is outside.');
+  await release(away);
+  await until("window.__uiTest.invoked.some(call => call[0]==='panel_detach' && call[1].kind==='board') && !document.querySelector('.nebula-grid > .nebula-panel.is-board')");
+  await evaluate("window.__uiTest.emit('nebula:panel-closed','board')");
+  await until("Boolean(document.querySelector('.nebula-grid > .nebula-panel.is-board'))");
+  await evaluate("document.querySelector('.nebula-layout-reset')?.click()");
+  await key('Escape'); await until("!document.querySelector('.nebula-calendar.is-open')");
+  await command('Emulation.setDeviceMetricsOverride',{width:1180,height:780,deviceScaleFactor:1,mobile:false});
   // Back to the normal design: the pixel look chosen before returns with it; then off again.
   await key(',', 'Comma', 2);
   await until("Boolean(document.querySelector('[data-theme-choice=classic]'))");
@@ -1701,12 +1896,12 @@ async function checkCalendars() {
   const markRange = async (from, ...through) => {
     const start = await at(from);
     await command('Input.dispatchMouseEvent', { type:'mouseMoved', x:start.x, y:start.y });
-    await command('Input.dispatchMouseEvent', { type:'mousePressed', x:start.x, y:start.y, button:'left', buttons:1, clickCount:1 });
+    await command('Input.dispatchMouseEvent', { type:'mousePressed', x:start.x, y:start.y, button:'right', buttons:2, clickCount:1 });
     let point = start;
-    for (const minutes of through) { point = await at(minutes); await command('Input.dispatchMouseEvent', { type:'mouseMoved', x:point.x, y:point.y, button:'left', buttons:1 }); }
+    for (const minutes of through) { point = await at(minutes); await command('Input.dispatchMouseEvent', { type:'mouseMoved', x:point.x, y:point.y, button:'right', buttons:2 }); }
     return point;
   };
-  const release = point => command('Input.dispatchMouseEvent', { type:'mouseReleased', x:point.x, y:point.y, button:'left', buttons:0, clickCount:1 });
+  const release = point => command('Input.dispatchMouseEvent', { type:'mouseReleased', x:point.x, y:point.y, button:'right', buttons:0, clickCount:1 });
   const selection = "document.querySelector('.sidebar .cal-selection-time')?.textContent";
   let point = await markRange(9 * 60 + 5, 9 * 60 + 40, 10 * 60 + 20);
   assert.equal(await evaluate(selection), '09:00 – 10:30', 'The range snaps to quarter hours while dragging.');
@@ -1772,8 +1967,8 @@ async function checkCalendars() {
   // A click into the band on top makes an entry for the whole day, without a time.
   const allDay = await evaluate("(() => { const r=document.querySelector('.sidebar .cal-time-allday-cell').getBoundingClientRect(); return { x:r.right-8, y:r.top+r.height/2 }; })()");
   await command('Input.dispatchMouseEvent', { type:'mouseMoved', ...allDay });
-  await command('Input.dispatchMouseEvent', { type:'mousePressed', ...allDay, button:'left', buttons:1, clickCount:1 });
-  await command('Input.dispatchMouseEvent', { type:'mouseReleased', ...allDay, button:'left', buttons:0, clickCount:1 });
+  await command('Input.dispatchMouseEvent', { type:'mousePressed', ...allDay, button:'right', buttons:2, clickCount:1 });
+  await command('Input.dispatchMouseEvent', { type:'mouseReleased', ...allDay, button:'right', buttons:0, clickCount:1 });
   await until("document.querySelector('.cal-composer.is-placed') && document.querySelector('.cal-composer-untimed')?.textContent==='ohne Uhrzeit' && document.activeElement === document.querySelector('.cal-composer-text')");
   assert(await evaluate("document.querySelector('.sidebar .cal-time-allday-cell').classList.contains('is-composing') && !document.querySelector('.sidebar .cal-selection')"));
   await command('Input.insertText', { text:'Ganzer Tag' });
@@ -1786,7 +1981,7 @@ async function checkCalendars() {
   const scrollRoom = await evaluate("(() => { const grid=document.querySelector('.sidebar .cal-time'); return grid.scrollHeight-grid.clientHeight-grid.scrollTop; })()");
   const bottom = await evaluate("(() => { const r=document.querySelector('.sidebar .cal-time').getBoundingClientRect(); return r.bottom - 6; })()");
   const startDrag = await markRange(16 * 60);
-  await command('Input.dispatchMouseEvent', { type:'mouseMoved', x:startDrag.x, y:bottom, button:'left', buttons:1 });
+  await command('Input.dispatchMouseEvent', { type:'mouseMoved', x:startDrag.x, y:bottom, button:'right', buttons:2 });
   if (scrollRoom > 1) await until(`document.querySelector('.sidebar .cal-time').scrollTop > ${scrolled + Math.min(40, scrollRoom / 2)}`);
   await release({ x:startDrag.x, y:bottom });
   assert(await evaluate("Number(document.querySelector('.sidebar .cal-selection-time').textContent.slice(8, 10))") >= 18, 'The range follows the scrolling.');
@@ -1865,8 +2060,8 @@ async function checkCalendars() {
     // Marked a little above the bottom edge (dragging into it would run on into the next day), then moved by keys.
     const late = await at(22 * 60 + 5);
     await command('Input.dispatchMouseEvent', { type:'mouseMoved', x:late.x, y:late.y });
-    await command('Input.dispatchMouseEvent', { type:'mousePressed', x:late.x, y:late.y, button:'left', buttons:1, clickCount:1 });
-    await command('Input.dispatchMouseEvent', { type:'mouseMoved', x:late.x + 8, y:late.y, button:'left', buttons:1 });
+    await command('Input.dispatchMouseEvent', { type:'mousePressed', x:late.x, y:late.y, button:'right', buttons:2, clickCount:1 });
+    await command('Input.dispatchMouseEvent', { type:'mouseMoved', x:late.x + 8, y:late.y, button:'right', buttons:2 });
     await release({ x:late.x + 8, y:late.y });
     await until("document.querySelector('.cal-composer.is-placed') && document.activeElement === document.querySelector('.cal-composer-text')");
     await command('Input.insertText', { text:'Nachtschicht' });
@@ -2293,6 +2488,54 @@ try {
     // Synthetic merged changes arrive without restarting the window.
     await evaluate("(() => {const cards=JSON.parse(sessionStorage.boardCards);cards.find(c=>c.id==='page').title='Synchronisierte Seite';sessionStorage.boardCards=JSON.stringify(cards);window.__uiTest.emit('board:reset',null);})()");
     await until("document.querySelector('.notebook-title')?.value==='Synchronisierte Seite'");
+    // Sorting: by title (A–Z), by when a note was made or last edited (newest first), remembered on the device.
+    await evaluate("[...document.querySelectorAll('.notebook-folder-name')].find(b=>b.closest('[data-folder=all]')).click()");
+    const order = () => evaluate("[...document.querySelectorAll('.notebook-note')].map(n=>n.querySelector('strong').textContent)");
+    await evaluate("document.querySelector('.notebook-sort [data-sort=title]').click()");
+    await until("document.querySelector('.notebook-sort [data-sort=title]').getAttribute('aria-checked')==='true'");
+    const byTitle = await order();
+    assert.deepEqual(byTitle, [...byTitle].sort((a, b) => a.localeCompare(b, undefined, { numeric:true, sensitivity:'base' })), 'Titles A–Z: '+byTitle);
+    await evaluate("document.querySelector('[data-note-id=home-note]').click()");
+    await until("document.querySelector('.notebook-title')?.value==='Urlaubsplan'");
+    await fill('Titel','Urlaubsplan 2027');
+    await evaluate("document.querySelector('.notebook-sort [data-sort=updated]').click()");
+    await until("document.querySelector('.notebook-note strong')?.textContent==='Urlaubsplan 2027'");
+    assert(await evaluate("JSON.parse(sessionStorage.boardCards).find(c=>c.id==='home-note').updatedAt>0"), 'Editing a title stamps the note.');
+    assert.equal(await evaluate("localStorage.getItem('journal.notebookSort')"), 'updated');
+    // Dragging a note onto a folder files it there.
+    await evaluate(`(() => { const dt=new DataTransfer(); const note=document.querySelector('[data-note-id=home-note]'), folder=document.querySelector('[data-folder=work]');
+      note.dispatchEvent(new DragEvent('dragstart',{bubbles:true,cancelable:true,dataTransfer:dt}));
+      folder.dispatchEvent(new DragEvent('dragover',{bubbles:true,cancelable:true,dataTransfer:dt}));
+      folder.dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer:dt})); })()`);
+    await until("JSON.parse(sessionStorage.boardCards).find(c=>c.id==='home-note').folder==='work'");
+    // In the journal the notebook is a sheet on the left like the calendar's; only one of them is out at a time.
+    await evaluate(`localStorage.setItem('journal.settings',JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'),theme:'journal',pixel:false,colorTheme:'paper',bookPaging:'page'}));localStorage.setItem('journal.bookView','double');localStorage.setItem('journal.calendarDrawer','0');localStorage.setItem('journal.notebookDrawer','1')`);
+    await command('Page.reload');
+    await until("Boolean(document.querySelector('.calendar-drawer.is-notebook.is-open .notebook-title'))"); await pause(800);
+    const sheet = await evaluate("(() => { const s=document.querySelector('.calendar-drawer.is-notebook .calendar-drawer-sheet').getBoundingClientRect(), b=document.querySelector('.book-spread').getBoundingClientRect(); return { left:s.left-b.left, right:b.right-s.right, half:b.width/2, width:s.width }; })()");
+    assert(sheet.left < 60 && sheet.right > sheet.half - 40, 'The notebook lies on the left page: '+JSON.stringify(sheet));
+    await screenshot('notebook-journal-left.png');
+    // Both out on a spread: the calendar on the left page, the notebook moves to the right one.
+    await evaluate("document.querySelector('.calendar-tab').click()");
+    await until("Boolean(document.querySelector('.calendar-drawer.is-calendar.is-open') && document.querySelector('.calendar-drawer.is-notebook.is-open.is-right'))"); await pause(800);
+    assert(await evaluate("(() => { const c=document.querySelector('.calendar-drawer.is-calendar .calendar-drawer-sheet').getBoundingClientRect(), n=document.querySelector('.calendar-drawer.is-notebook .calendar-drawer-sheet').getBoundingClientRect(), b=document.querySelector('.book-spread').getBoundingClientRect(); return c.right <= n.left + 4 && n.left >= b.left + b.width/2 - 20; })()"), 'Calendar left, notebook right.');
+    await screenshot('notebook-journal-both.png');
+    // On one page there is room for one sheet: the one taken out last stays.
+    await evaluate("void localStorage.setItem('journal.bookView','single')");
+    await command('Emulation.setDeviceMetricsOverride',{width:800,height:780,deviceScaleFactor:1,mobile:false});
+    await until("document.querySelectorAll('.calendar-drawer.is-open').length===1 && Boolean(document.querySelector('.calendar-drawer.is-calendar.is-open'))");
+    await command('Emulation.setDeviceMetricsOverride',{width:1180,height:780,deviceScaleFactor:1,mobile:false});
+    await evaluate("document.querySelector('.calendar-tab').click()");
+    await until("!document.querySelector('.calendar-drawer.is-open')");
+    await evaluate("document.querySelector('.notebook-tab').click()");
+    await until("Boolean(document.querySelector('.calendar-drawer.is-notebook.is-open:not(.is-right)'))");
+    // Turning both pages at once, the book shows one page beside the notebook, as beside the calendar.
+    await evaluate(`localStorage.setItem('journal.settings',JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'),bookPaging:'spread'}))`);
+    await command('Page.reload');
+    await until("Boolean(document.querySelector('.calendar-drawer.is-notebook.is-open .notebook-title')) && Boolean(document.querySelector('.book-stage.is-beside'))"); await pause(800);
+    assert(await evaluate("(() => { const s=document.querySelector('.calendar-drawer.is-notebook .calendar-drawer-sheet').getBoundingClientRect(), p=document.querySelector('.book-page:not(.is-outgoing)').getBoundingClientRect(); return document.querySelectorAll('.book-page:not(.is-outgoing)').length===1 && p.left>=s.right-4; })()"), 'One page beside the notebook.');
+    await screenshot('notebook-journal-beside.png');
+    await evaluate(`localStorage.setItem('journal.settings',JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'),bookPaging:'page'}))`);
     for (const theme of ['classic','journal','nebula']) for (const pixel of [false,true]) {
       await evaluate(`localStorage.setItem('journal.settings',JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'),theme:'${theme}',pixel:${pixel},colorTheme:'${theme==='journal'?'paper':'original'}'}));localStorage.setItem('journal.calendarDrawer','0');localStorage.setItem('journal.notebookDrawer','1');localStorage.setItem('journal.notebookFolder','all');`);
       await command('Emulation.setDeviceMetricsOverride',{width:1180,height:780,deviceScaleFactor:1,mobile:false});
@@ -2304,6 +2547,156 @@ try {
       assert(await evaluate("(() => {const p=document.querySelector('.notebook-page');return p.scrollWidth<=p.clientWidth+2;})()"),'Note has no horizontal overflow at 540: '+theme+' pixel='+pixel);
     }
     assert.deepEqual(errors,[]);console.log('Notebook UI passed: folders, filtering/search, pages, editing, day switch, attachments, deletion, reload, sync refresh and all three designs with pixel variants.');
+  } else if (process.env.JOURNAL_UI_SCOPE === 'tag-popup-persistence') {
+    const tagId='dddddddd-dddd-4ddd-addd-dddddddddddd';
+    await evaluate(`window.__TAURI_INTERNALS__.invoke('save_tags',{tags:[...window.__uiTest.tags(),{id:'${tagId}',name:'PopupTag',color:'#569eff'}]})`);
+    const entryId=await evaluate(`(() => {const day=window.__uiTest.day();day.entries[0].tag='${tagId}';window.__uiTest.store(day);return day.entries[0].id;})()`);
+    await until("Boolean(document.querySelector('.sidebar .cal-item[data-tag=PopupTag]'))");
+    await evaluate("document.querySelector('.sidebar .cal-item[data-tag=PopupTag]').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true}))");
+    await until("Boolean(document.querySelector('.cal-composer-tag'))");
+    await evaluate("document.querySelector('.cal-composer-tag').click()");await until("Boolean(document.querySelector('.tag-picker-foot button'))");
+    await evaluate("document.querySelector('.tag-picker-foot button').click()");
+    await until("Boolean(document.querySelector('#settings-tags')) && Boolean(document.querySelector('.tag-picker')) && Boolean(document.querySelector('.cal-composer'))");
+    await evaluate("document.querySelector('[data-tag-row=PopupTag] .tag-name').focus();document.querySelector('[data-tag-row=PopupTag] .tag-name').select()");
+    await command('Input.insertText',{text:'PopupRenamed'});
+    await evaluate("document.querySelector('[data-tag-row=PopupTag] .tag-name').blur()");
+    await until("window.__uiTest.tags().some(t=>t.name==='PopupRenamed')");
+    await evaluate("document.querySelector('[data-tag-row=PopupRenamed] .color-well').click()");
+    await until("Boolean(document.querySelector('.color-picker-swatches'))");
+    await evaluate("document.querySelector('.color-picker-swatches button[aria-label=\"#e6a85c\"]').click()");
+    await until(`window.__uiTest.tags().some(t=>t.id==='${tagId}' && t.color==='#e6a85c')`);
+    assert(await evaluate("Boolean(document.querySelector('.tag-picker')) && Boolean(document.querySelector('.cal-composer'))"));
+    await key('Escape');await until("!document.querySelector('.color-picker-popover')");
+    await evaluate("document.querySelector('.settings-close').click()");await until("!document.querySelector('.settings') && Boolean(document.querySelector('.tag-picker')) && Boolean(document.querySelector('.cal-composer'))");
+    await evaluate("[...document.querySelectorAll('.tag-option')].find(e=>e.textContent.includes('PopupRenamed')).click()");
+    await until("!document.querySelector('.tag-picker') && Boolean(document.querySelector('.cal-composer'))");
+    await key('Enter','Enter');await until("!document.querySelector('.cal-composer')");
+    await evaluate("window.dispatchEvent(new Event('journal:save-now'))");
+    await until(`window.__uiTest.day().entries.some(e=>e.id==='${entryId}' && e.tag==='${tagId}')`);
+    assert.deepEqual(errors,[]);console.log('Tag editor, settings and stable identity checks passed.');
+  } else if (process.env.JOURNAL_UI_SCOPE === 'calendar-connected-spans') {
+    const month=await evaluate('window.__uiTest.date.slice(0,7)');
+    await evaluate(`(() => {const month='${month}';const entry=(id,end)=>({id,kind:'event',text:id,time:'00:00',end,done:false,cancelled:false,priority:false});return Promise.all([
+      window.__uiTest.store({date:month+'-02',title:'',revision:1,entries:[entry('connected-long','288:00')]}),
+      window.__uiTest.store({date:month+'-04',title:'',revision:1,entries:[entry('connected-overlap','96:00')]}),
+      window.__uiTest.store({date:month+'-09',title:'',revision:1,entries:[entry('connected-later','72:00')]})]);})()`);
+    await until("document.querySelectorAll('.sidebar .cal-month-span').length>=4");
+    const geometry=await evaluate("[...document.querySelectorAll('.sidebar .cal-month-span')].map(n=>({id:n.dataset.spanEntry,top:parseFloat(getComputedStyle(n).marginTop),width:n.getBoundingClientRect().width,cell:n.parentElement.querySelector('.cal-month-day').getBoundingClientRect().width}))");
+    assert(geometry.filter(n=>n.id==='connected-long').every(n=>n.top===geometry.find(n=>n.id==='connected-long').top),'A span stays in one lane across weeks.');
+    assert(geometry.some(n=>n.width>n.cell*2),'A connected bar crosses day boundaries.');
+    assert(geometry.find(n=>n.id==='connected-overlap').top>geometry.find(n=>n.id==='connected-long').top);
+    await screenshot('calendar-connected-month.png');
+    // Grab inside the middle of the bar: the shift is based on that day, preserving the complete interval.
+    const source=await evaluate(`(() => {const cell=document.querySelector('.sidebar .cal-month-day[data-date="${month}-05"]'),r=cell.getBoundingClientRect(),bar=[...cell.parentElement.querySelectorAll('.cal-month-span')].find(n=>n.dataset.spanEntry==='connected-long').getBoundingClientRect();return {x:r.left+r.width/2,y:bar.top+bar.height/2};})()`);
+    const target=await evaluate(`(() => {const r=document.querySelector('.sidebar .cal-month-day[data-date="${month}-06"]').getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+45};})()`);
+    await command('Input.dispatchMouseEvent',{type:'mouseMoved',...source});
+    await command('Input.dispatchMouseEvent',{type:'mousePressed',...source,button:'left',buttons:1,clickCount:1});
+    await command('Input.dispatchMouseEvent',{type:'mouseMoved',...target,button:'left',buttons:1});
+    await until(`document.querySelector('.cal-drag-preview')?.dataset.dropDate==='${month}-03'`);
+    await command('Input.dispatchMouseEvent',{type:'mouseReleased',...target,button:'left',buttons:0,clickCount:1});
+    await until("window.__uiTest.invoked.some(([cmd,p])=>cmd==='move_calendar_entry' && p.id==='connected-long')");
+    await evaluate("document.querySelector('.sidebar .cal-views [role=tab]').click()");
+    await until("document.querySelectorAll('.sidebar .cal-year-span').length>0");
+    assert(await evaluate("[...document.querySelectorAll('.sidebar .cal-year-span')].every(n=>{const s=getComputedStyle(n);return s.backgroundColor==='rgba(0, 0, 0, 0)' && s.backgroundImage==='none' && s.pointerEvents==='none' && parseFloat(s.borderTopWidth)>0})"),'Year ranges are transparent outlines and leave existing markings accessible.');
+    assert(await evaluate("document.querySelectorAll('.sidebar .cal-year-day.has-mark .cal-year-mark').length>0"));
+    for(const theme of ['classic','journal','nebula']) for(const pixel of [false,true]) {
+      await evaluate(`document.documentElement.dataset.theme='${theme}';if(${pixel})document.documentElement.dataset.pixel='';else delete document.documentElement.dataset.pixel`);
+      const radius=await evaluate("parseFloat(getComputedStyle(document.querySelector('.sidebar .cal-year-span.is-span-start')).borderTopLeftRadius)");
+      assert.equal(radius===0,pixel || theme==='nebula',`${theme} pixel=${pixel}: range end caps follow the theme.`);
+    }
+    await evaluate("document.documentElement.dataset.theme='classic';delete document.documentElement.dataset.pixel");
+    await evaluate(`document.querySelector('.sidebar .cal-year-day[data-date="${month}-05"]').closest('.cal-year-month').scrollIntoView({block:'center'})`);
+    await screenshot('calendar-connected-year.png');
+    assert.deepEqual(errors,[]);console.log('Connected calendar spans passed: lanes, week boundaries, dragging, year outlines and theme end caps.');
+  } else if (process.env.JOURNAL_UI_SCOPE === 'calendar-drag') {
+    const mouse=(type,point,button='left',buttons=1)=>command('Input.dispatchMouseEvent',{type,...point,button,buttons,clickCount:1});
+    const pos=expr=>evaluate(`(() => {const r=(${expr}).getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};})()`);
+    const today=await evaluate('window.__uiTest.date'), tomorrow=await evaluate('window.__uiTest.shift(1)');
+    const item=`document.querySelector('.sidebar [data-range-date="${today}"] .cal-item')`;
+    await until(`Boolean(${item})`);
+    const start=await pos(item), dest=await pos(`document.querySelector('.sidebar [data-range-date="${tomorrow}"]')`);
+    await mouse('mouseMoved',start,'none',0);await mouse('mousePressed',start);await mouse('mouseMoved',dest);
+    await until("Boolean(document.querySelector('.cal-drag-preview')) && Boolean(document.querySelector('.cal-drop-outline'))");
+    assert(await evaluate(`(() => { const source=${item},copy=document.querySelector('.cal-drag-preview'),a=source.getBoundingClientRect(),b=copy.getBoundingClientRect();return Math.abs(a.width-b.width)<1 && Math.abs(a.height-b.height)<1 && source.querySelector('.cal-item-text').textContent===copy.querySelector('.cal-item-text').textContent && getComputedStyle(source).backgroundColor===getComputedStyle(copy).backgroundColor; })()`),'The held entry retains its dimensions, text and background.');
+    await mouse('mouseReleased',dest,'left',0);
+    await until("!document.querySelector('.cal-drag-preview,.cal-drop-outline')");
+    await until("window.__uiTest.invoked.some(([cmd])=>cmd==='move_calendar_entry')");
+    const moved=await evaluate("window.__uiTest.invoked.filter(([cmd])=>cmd==='move_calendar_entry').at(-1)[1]");assert.equal(moved.from,today);assert.equal(moved.to,tomorrow);
+    const from=await evaluate(`(() => {const r=document.querySelector('.sidebar [data-range-date="${today}"]').getBoundingClientRect();return {x:r.left+8,y:r.bottom-8}})()`),to=await evaluate(`(() => {const r=document.querySelector('.sidebar [data-range-date="${tomorrow}"]').getBoundingClientRect();return {x:r.left+8,y:r.bottom-8}})()`);
+    await mouse('mouseMoved',from,'none',0);await mouse('mousePressed',from,'right',2);await mouse('mouseMoved',to,'right',2);await mouse('mouseReleased',to,'right',0);
+    await until("Boolean(document.querySelector('.cal-multi-form')) && document.querySelectorAll('.sidebar [data-range-selected]').length>=2");
+    await key('Escape');await evaluate("document.querySelectorAll('.sidebar .cal-views [role=tab]')[2].click()");await until("Boolean(document.querySelector('.sidebar .cal-time-column'))");
+    const col=await pos("document.querySelector('.sidebar .cal-time-column')");
+    await mouse('mouseMoved',col,'none',0);await mouse('mousePressed',col,'right',2);await mouse('mouseMoved',{x:col.x,y:col.y+50},'right',2);await mouse('mouseReleased',{x:col.x,y:col.y+50},'right',0);
+    await until("Boolean(document.querySelector('.cal-selection'))");await key('Escape');
+    await evaluate(`window.__uiTest.store({...window.__uiTest.day(),entries:[...window.__uiTest.day().entries,{id:'77777777-7777-4777-8777-777777777777',kind:'event',text:'Timed drag',time:'09:00',end:'10:00',done:false,cancelled:false,priority:false,reminder:false,plan:null},{id:'88888888-8888-4888-8888-888888888888',kind:'event',text:'Span drag',time:'09:00',end:'57:00',done:false,cancelled:false,priority:false,reminder:false,plan:null}]})`);
+    const timed=`document.querySelector('.sidebar .cal-time-column[data-date="${today}"] .cal-item[aria-label*="Timed drag"]')`;
+    await until(`Boolean(${timed})`);
+    await evaluate(`${timed}.scrollIntoView({block:'center'})`);
+    const timedStart=await pos(timed), nextCol=await pos(`document.querySelector('.sidebar .cal-time-column[data-date="${tomorrow}"]')`);
+    const hour=await evaluate("parseFloat(getComputedStyle(document.querySelector('.sidebar .cal-time')).getPropertyValue('--hour'))");
+    const timedEnd={x:nextCol.x,y:timedStart.y+hour};
+    await mouse('mouseMoved',timedStart,'none',0);await mouse('mousePressed',timedStart);await mouse('mouseMoved',timedEnd);
+    await until("document.querySelector('.cal-drag-preview')?.dataset.dropTime==='10:00'");
+    assert.match(await evaluate("document.querySelector('.cal-drag-label').textContent"), /10:00.*11:00/);
+    assert.equal(await evaluate("getComputedStyle(document.querySelector('.cal-drag-label')).opacity"),'1');
+    assert(await evaluate(`(() => {const mark=document.querySelector('.sidebar .cal-time-column[data-date="${tomorrow}"] .cal-drop-outline'),col=mark?.parentElement;return mark && Math.abs(parseFloat(mark.style.top)-10*${hour}-1)<1 && Math.abs(mark.clientHeight-(${hour}-5))<2;})()`),'Destination outline marks the actual snapped time and duration.');
+    assert(await evaluate("(() => {const b=document.querySelector('.cal-drag-label'),r=b.getBoundingClientRect();return b.clientWidth>=b.firstElementChild.scrollWidth && r.top>=0 && r.bottom<=innerHeight && getComputedStyle(b).overflow==='visible';})()"),'The entire live time label is readable without clipping.');
+    await screenshot('calendar-drag-time-preview.png');
+    await mouse('mouseReleased',timedEnd,'left',0);
+    await until("window.__uiTest.invoked.some(([cmd,p])=>cmd==='move_calendar_entry' && p.id==='77777777-7777-4777-8777-777777777777')");
+    const timedMove=await evaluate("window.__uiTest.invoked.find(([cmd,p])=>cmd==='move_calendar_entry' && p.id==='77777777-7777-4777-8777-777777777777')[1]");
+    assert.deepEqual([timedMove.from,timedMove.to,timedMove.time,timedMove.end],[today,tomorrow,'10:00','11:00']);
+    const span="document.querySelector('.sidebar .cal-multiday-bar .cal-item[aria-label*=\"Span drag\"]')";
+    await until(`Boolean(${span})`);
+    const barStart=await pos(`document.querySelector('.sidebar .cal-time-allday-cell[data-range-date="${today}"]')`);
+    const barNext=await pos(`document.querySelector('.sidebar .cal-time-allday-cell[data-range-date="${tomorrow}"]')`);
+    const spanRect=await evaluate(`(() => {const r=${span}.getBoundingClientRect();return {y:r.top+r.height/2}})()`);
+    const spanStart={x:barStart.x,y:spanRect.y},spanEnd={x:barNext.x,y:spanRect.y};
+    await mouse('mouseMoved',spanStart,'none',0);await mouse('mousePressed',spanStart);await mouse('mouseMoved',spanEnd);
+    const dateRange=await evaluate("document.querySelector('.cal-drag-label').textContent");
+    const shortDate=value=>value.slice(8,10)+'.'+value.slice(5,7)+'.';
+    assert.equal(dateRange,shortDate(tomorrow)+' \u2013 '+shortDate(await evaluate('window.__uiTest.shift(3)')));
+    await mouse('mouseReleased',spanEnd,'left',0);
+    await until("window.__uiTest.invoked.some(([cmd,p])=>cmd==='move_calendar_entry' && p.id==='88888888-8888-4888-8888-888888888888')");
+    const spanMove=await evaluate("window.__uiTest.invoked.find(([cmd,p])=>cmd==='move_calendar_entry' && p.id==='88888888-8888-4888-8888-888888888888')[1]");
+    assert.deepEqual([spanMove.from,spanMove.to,spanMove.time,spanMove.end],[today,tomorrow,'09:00','57:00']);
+    await pause(350);
+    const blank=await pos(`document.querySelector('.sidebar .cal-time-allday-cell[data-range-date="${today}"]')`);
+    await mouse('mouseMoved',blank,'none',0);await mouse('mousePressed',blank,'right',2);await mouse('mouseReleased',blank,'right',0);
+    await until("Boolean(document.querySelector('.cal-composer-text'))");
+    await key('Escape');await until("!document.querySelector('.cal-composer')");
+    await evaluate(`window.__uiTest.emit('calendar:request',{id:'remote-check',kind:'move',entry:{id:'88888888-8888-4888-8888-888888888888'},from:'${tomorrow}',to:'${today}',time:'09:00',end:'57:00'})`);
+    await until("window.__uiTest.invoked.filter(([cmd,p])=>cmd==='move_calendar_entry' && p.id==='88888888-8888-4888-8888-888888888888').length===2");
+    // A clipped overnight block must regain its full duration while moving back before midnight.
+    await evaluate(`window.__uiTest.store({...window.__uiTest.day(),entries:[...window.__uiTest.day().entries,{id:'99999999-9999-4999-8999-999999999999',kind:'event',text:'Night drag',time:'23:00',end:'25:00',done:false,cancelled:false,priority:false}]})`);
+    const night=`document.querySelector('.sidebar .cal-time-column[data-date="${today}"] .cal-item[aria-label*="Night drag"]')`;
+    await until(`Boolean(${night})`);await evaluate(`${night}.scrollIntoView({block:'center'})`);
+    const nightStart=await pos(night),early={x:nightStart.x,y:nightStart.y-hour*2};
+    await mouse('mouseMoved',nightStart,'none',0);await mouse('mousePressed',nightStart);await mouse('mouseMoved',early);
+    await until("document.querySelector('.cal-drag-preview')?.dataset.dropTime==='21:00'");
+    assert(Math.abs(await evaluate("document.querySelector('.cal-drag-preview').getBoundingClientRect().height")-(2*hour-3))<1,'Moving the clipped midnight block earlier restores its complete height.');
+    await mouse('mouseMoved',nightStart);
+    await until("document.querySelector('.cal-drag-preview')?.dataset.dropTime==='23:00'");
+    assert.equal(await evaluate("[...document.querySelectorAll('.cal-drag-preview')].filter(n=>getComputedStyle(n).display!=='none').length"),2);
+    await mouse('mouseMoved',early);
+    await until("document.querySelector('.cal-drag-preview')?.dataset.dropTime==='21:00'");
+    assert(Math.abs(await evaluate("document.querySelector('.cal-drag-preview').getBoundingClientRect().height")-(2*hour-3))<1);
+    await key('Escape');await mouse('mouseReleased',early,'left',0);
+    assert.equal(await evaluate("document.querySelector('.cal-drag-preview,.cal-drag-label,.cal-drop-outline')"),null);
+    const rest=`document.querySelector('.sidebar .cal-time-column[data-date="${tomorrow}"] .cal-item.is-night-rest[aria-label*="Night drag"]')`;
+    await evaluate(`${rest}.scrollIntoView({block:'center'})`);const restStart=await pos(rest),restEnd={x:restStart.x,y:restStart.y+hour};
+    await mouse('mouseMoved',restStart,'none',0);await mouse('mousePressed',restStart);await mouse('mouseMoved',restEnd);
+    await until("document.querySelector('.cal-drag-preview')?.dataset.dropTime==='00:00'");
+    assert.equal(await evaluate("document.querySelector('.cal-drag-preview').dataset.dropDate"),tomorrow,'Grabbing the continuation shifts the original start through midnight.');
+    await key('Escape');await mouse('mouseReleased',restEnd,'left',0);
+    const allDayItem=`document.querySelector('.sidebar .cal-time-allday-cell[data-range-date="${today}"] .cal-item')`;
+    const allDayStart=await pos(allDayItem),allDayEnd={x:barNext.x,y:allDayStart.y};
+    await mouse('mouseMoved',allDayStart,'none',0);await mouse('mousePressed',allDayStart);await mouse('mouseMoved',allDayEnd);
+    assert.equal(await evaluate("document.querySelector('.cal-drag-label').textContent"),shortDate(tomorrow),'All-day entries show a destination date without a time.');
+    await key('Escape');await mouse('mouseReleased',allDayEnd,'left',0);
+    assert.deepEqual(errors,[]);
+    console.log('Calendar drag checks passed.');
   } else if (process.env.JOURNAL_UI_SCOPE === 'allday-columns') {
     for (const viewIndex of [2,3,4]) {
       await evaluate(`document.querySelectorAll('.sidebar .cal-views [role=tab]')[${viewIndex}].click()`);
@@ -2477,6 +2870,18 @@ try {
     const computed=await command('Runtime.evaluate',{...(contextId?{contextId}:{}),expression:"(() => {const h=document.querySelector('h1');const style=getComputedStyle(h);return {color:style.color,background:style.backgroundColor,size:style.fontSize,body:getComputedStyle(document.body).backgroundColor};})()",returnByValue:true},mailSession);
     assert.deepEqual(computed.result.value,{color:'rgb(255, 0, 0)',background:'rgb(12, 34, 56)',size:'26px',body:'rgb(230, 240, 250)'},'Inline CSS and embedded styles apply under the real nonce-based CSP.');
     await key('Escape');
+    // A mail with a PDF: a long subject and sender, the attachment's notes in a box; the switch stays at the top right.
+    for (const subject of ['Kurz', 'Ihre Rechnung Nr. 2026-11-0042 für den Zeitraum Oktober bis November – bitte bis zum 20. November begleichen']) {
+      const mail = { subject, sender:'Buchhaltung Beispiel GmbH <rechnungen-und-mahnungen@buchhaltung.example.org>', html:'<p>Siehe Anhang.</p>', text:'Siehe Anhang.', notes:'Rechnung.pdf · Betrag 42,00 € · fällig am 20.11.2026\nKundennummer 4711 · IBAN DE00 1234 5678 9000' };
+      await evaluate(`(() => {const d=window.__uiTest.day();d.entries[0].description=${JSON.stringify('journal-mail:v1\n' + JSON.stringify(mail))};return window.__uiTest.store(d);})()`);
+      await pause(300);
+      await evaluate("[...document.querySelectorAll('.cal-item')].find(e=>e.textContent.includes('Eine Runde')).click()");
+      await until("Boolean(document.querySelector('.mail-content-remote')) && Boolean(document.querySelector('.mail-content-notes pre'))");
+      const place = await evaluate("(() => { const h=document.querySelector('.mail-content-head').getBoundingClientRect(), b=document.querySelector('.mail-content-remote').getBoundingClientRect(); return { right:h.right-b.right, top:b.top-h.top }; })()");
+      assert(place.right < 2 && place.top < 2, 'The switch sits at the top right whatever the subject: '+JSON.stringify(place));
+      if (subject !== 'Kurz') { await pause(200); await screenshot('mail-content-pdf.png'); }
+      await key('Escape'); await until("!document.querySelector('.mail-content')");
+    }
     const origin=await evaluate('window.__uiTest.shift(-1)');const next=await evaluate('window.__uiTest.date');
     await evaluate("(() => {const d=window.__uiTest.day();const e={...d.entries[0],id:'40000000-0000-4000-8000-000000000001',text:'Two-day delivery',time:'00:00',end:'47:59',description:''};window.__uiTest.store({date:window.__uiTest.shift(-1),title:'',revision:1,entries:[e]});window.__uiTest.emit('history:restored',null);})()");
     await until("[...document.querySelectorAll('.cal-month-day[data-date=\""+next+"\"] .cal-item')].some(e=>e.textContent.includes('Two-day delivery'))");
@@ -2538,22 +2943,36 @@ try {
     console.log('Look checks passed.');
   } else if (process.env.JOURNAL_UI_SCOPE === 'multiday') {
     const points=await evaluate("(() => {const cells=[...document.querySelectorAll('.cal-month-day')];return [cells[9],cells[18]].map(e=>{const r=e.getBoundingClientRect();return {x:r.right-12,y:r.bottom-12,date:e.dataset.date};});})()");
-    await command('Input.dispatchMouseEvent',{type:'mousePressed',x:points[0].x,y:points[0].y,button:'left',buttons:1,clickCount:1});
-    await command('Input.dispatchMouseEvent',{type:'mouseMoved',x:points[1].x,y:points[1].y,button:'left',buttons:1});
-    await command('Input.dispatchMouseEvent',{type:'mouseReleased',x:points[1].x,y:points[1].y,button:'left',buttons:0,clickCount:1});
+    await command('Input.dispatchMouseEvent',{type:'mousePressed',x:points[0].x,y:points[0].y,button:'right',buttons:2,clickCount:1});
+    await command('Input.dispatchMouseEvent',{type:'mouseMoved',x:points[1].x,y:points[1].y,button:'right',buttons:2});
+    await command('Input.dispatchMouseEvent',{type:'mouseReleased',x:points[1].x,y:points[1].y,button:'right',buttons:0,clickCount:1});
     // The normal card opens, with the span's end and everything else (kinds, tag, repeating, reminder).
     await until("Boolean(document.querySelector('.cal-composer.is-placed .cal-multi-form')) && document.activeElement===document.querySelector('.cal-composer-text')");
-    assert.equal(await evaluate("document.querySelector('.cal-multi-input.is-end').value"),points[1].date);
+    assert.equal(await evaluate("document.querySelector('.cal-multi-input.is-end').dataset.value"),points[1].date);
     assert(await evaluate("['.cal-composer-kinds','.cal-composer-repeat','.cal-composer-tag','.cal-composer-reminder','.cal-composer-priority'].every(s=>document.querySelector('.cal-composer '+s))"), 'The span uses the normal calendar card.');
     assert(await evaluate(`document.querySelector('[data-range-date="${points[0].date}"]').hasAttribute('data-range-selected')`),'The draft stays highlighted while the popup is open.');
     const later = new Date(Date.parse(points[0].date)+86400000).toISOString().slice(0,10);
-    const setStart = value => evaluate(`(() => {const f=document.querySelector('.cal-multi-input.is-start');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(f,${JSON.stringify(value)});f.dispatchEvent(new Event('input',{bubbles:true}));f.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+    // Start and end are the app's own fields: a month popup for the day, two scrolling columns for the time.
+    const setStart = async value => { await evaluate("document.querySelector('.cal-multi-input.is-start').click()"); await until(`Boolean(document.querySelector('.field-picker [data-date="${value}"]'))`); await evaluate(`document.querySelector('.field-picker [data-date="${value}"]').click()`); await until("!document.querySelector('.field-picker')"); };
     await setStart(later);
-    await until(`document.querySelector('.cal-multi-input.is-start').value===${JSON.stringify(later)} && !document.querySelector('[data-range-date="${points[0].date}"]').hasAttribute('data-range-selected')`);
+    await until(`document.querySelector('.cal-multi-input.is-start').dataset.value===${JSON.stringify(later)} && !document.querySelector('[data-range-date="${points[0].date}"]').hasAttribute('data-range-selected')`);
     await setStart(points[0].date);
     await until(`document.querySelector('[data-range-date="${points[0].date}"]').hasAttribute('data-range-selected')`);
+    // The start time in its two columns: an hour, then a minute (which closes the popup).
+    await evaluate("document.querySelectorAll('.cal-multi-form .field-trigger.is-time')[0].click()");
+    await until("document.querySelectorAll('.field-picker .time-column').length===2");
+    assert.equal(await evaluate("document.activeElement?.closest('.time-column.is-hour') ? document.activeElement.dataset.value : null"),'00','The chosen hour has the focus.');
+    await pause(250); await screenshot('multi-time-columns.png');
+    await evaluate("document.querySelector('.field-picker .time-column.is-hour [data-value=\"09\"]').click()");
+    await evaluate("document.querySelector('.field-picker .time-column.is-minute [data-value=\"30\"]').click()");
+    await until("!document.querySelector('.field-picker') && document.querySelectorAll('.cal-multi-form .field-trigger.is-time')[0].dataset.value==='09:30'");
     await evaluate("document.querySelector('.cal-composer-text').focus()");
     await pause(300); await screenshot('multi-composer.png');
+    // The same fields in Holo-Papier: room between the type and the black frame.
+    await evaluate("document.documentElement.dataset.theme='nebula';document.documentElement.dataset.popups='b'");
+    await pause(250); await screenshot('multi-composer-holo.png');
+    assert(await evaluate("[...document.querySelectorAll('.cal-multi-form .field-trigger')].every(b => { const r=b.getBoundingClientRect(), t=b.querySelector('span').getBoundingClientRect(); return t.top-r.top>=4 && r.bottom-t.bottom>=4 && t.left-r.left>=6; })"), 'Holo fields leave room around their text.');
+    await evaluate("document.documentElement.dataset.theme='classic';document.documentElement.dataset.popups='a'");
     await command('Input.insertText',{text:'Multiple days'});
     await key('Enter','Enter');
     await until("!document.querySelector('.cal-composer')");
@@ -2567,13 +2986,13 @@ try {
     assert(await evaluate("![...document.querySelectorAll('.cal-time-body .cal-item')].some(e=>e.textContent.includes('Multiple days'))"));
     const band=await evaluate("(() => {const cells=[...document.querySelectorAll('.cal-time-allday-cell')],r=cells[0].getBoundingClientRect(),root=document.querySelector('.cal').getBoundingClientRect();return {x:r.left+10,y:r.top+10,right:root.right-5};})()");
     const oldTitle=await evaluate("document.querySelector('.cal-title').textContent");
-    await command('Input.dispatchMouseEvent',{type:'mousePressed',x:band.x,y:band.y,button:'left',buttons:1,clickCount:1});
-    await command('Input.dispatchMouseEvent',{type:'mouseMoved',x:band.right,y:band.y,button:'left',buttons:1});
+    await command('Input.dispatchMouseEvent',{type:'mousePressed',x:band.x,y:band.y,button:'right',buttons:2,clickCount:1});
+    await command('Input.dispatchMouseEvent',{type:'mouseMoved',x:band.right,y:band.y,button:'right',buttons:2});
     await until("document.querySelector('.cal-title').textContent!=="+JSON.stringify(oldTitle));
     await pause(150);
-    await command('Input.dispatchMouseEvent',{type:'mouseReleased',x:band.right,y:band.y,button:'left',buttons:0,clickCount:1});
+    await command('Input.dispatchMouseEvent',{type:'mouseReleased',x:band.right,y:band.y,button:'right',buttons:0,clickCount:1});
     await until("Boolean(document.querySelector('.cal-composer .cal-multi-form'))");
-    const range=await evaluate("[document.querySelector('.cal-composer').getAttribute('aria-label'),document.querySelector('.cal-multi-input.is-end').value]");
+    const range=await evaluate("[document.querySelector('.cal-composer').getAttribute('aria-label'),document.querySelector('.cal-multi-input.is-end').dataset.value]");
     assert(Date.parse(range[1])-Date.now()>5*86400000,'Drag continues into the next week: '+JSON.stringify(range));
     console.log('Multiday UI passed: ten-day entry, top-band rendering and dragging into the next week.');
   } else if (process.env.JOURNAL_UI_SCOPE === 'calendar-actions') {
@@ -2842,7 +3261,7 @@ try {
     console.log('Timer UI checks passed: checkbox, reorder, pause/resume, calendar import and retry without duplicate minutes or events.');
   } else if (process.env.JOURNAL_UI_SCOPE === 'periods') {
     await until("Boolean(document.querySelector('#daily-rating'))");
-    assert.equal(await evaluate("document.querySelectorAll('.journal-tab .icon').length"),5);
+    assert.equal(await evaluate("document.querySelectorAll('.journal-tab .icon').length"),6,'Five views and the notebook.');
     await evaluate("document.querySelector('#daily-rating').focus()");
     await key('End','End');
     await until("window.__uiTest.periodData?.days[window.__uiTest.date]?.rating===10");
@@ -2963,6 +3382,19 @@ try {
       await pause(450); await screenshot(`popups-${theme}-${style}-planner.png`);
       assert(await evaluate("(() => { const r=document.querySelector('.planner').getBoundingClientRect(); return r.width>200 && r.top>=0 && r.bottom<=innerHeight; })()"), `The planner is on screen (${theme} ${style}).`);
       if (theme === 'nebula' && style === 'a') assert.match(await evaluate("getComputedStyle(document.querySelector('.planner'), '::before').content"), /plan\.sh/);
+      await key('Escape'); await until("!document.querySelector('.planner-grid')");
+      // Several days (Alt ⇧ T): a range of days in the look's own band, its ends as handles.
+      await evaluate("[...document.querySelectorAll('.entry')].find(e => e.dataset.entryKind==='task' && e.dataset.status==='open').querySelector('.entry-text').focus()");
+      await key('T', 'KeyT', 9);
+      await until("Boolean(document.querySelector('.planner.is-multi .planner-grid'))");
+      await pause(300);
+      const rangeDays = await evaluate("[...document.querySelectorAll('.planner.is-multi .planner-day:not(.is-outside):not(.is-past)')].slice(1, 6).map(d => d.getAttribute('aria-label'))");
+      for (const label of [rangeDays[0], rangeDays[4]]) { await evaluate(`document.querySelector('.planner-day[aria-label=${JSON.stringify(label)}]').click()`); await pause(120); }
+      await until("document.querySelectorAll('.planner.is-multi .planner-day.in-range').length===5");
+      const look = selector => evaluate(`(() => { const c=getComputedStyle(document.querySelector('${selector}')); return c.backgroundColor + ' ' + c.boxShadow; })()`);
+      const ends = await look('.planner.is-multi .planner-day.range-end'), middle = await look('.planner.is-multi .planner-day.in-range:not(.range-start):not(.range-end)');
+      assert.notEqual(ends, middle, `The range's ends stand out from its band (${theme} ${style}).`);
+      await pause(300); await screenshot(`popups-${theme}-${style}-range.png`);
       await key('Escape'); await until("!document.querySelector('.planner-grid')");
       if (theme !== 'classic') { await evaluate("document.activeElement?.blur()"); await key('k', 'KeyK', 2); }
       const host = theme === 'classic' ? '.sidebar' : theme === 'journal' ? '.calendar-drawer' : '.nebula-calendar';

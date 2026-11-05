@@ -77,6 +77,6 @@ export function TagPicker({ anchor, value, onPick, onClose }: {
       })}
     </div>
     {error && <p className="tag-picker-error" role="alert">{error}</p>}
-    <div className="tag-picker-foot"><span>{t('↑ ↓ · Enter · 0–9')}</span>{manageTags.available() && <button type="button" onClick={() => { onClose(false); manageTags(); }}>{t('Verwalten …')}</button>}</div>
+    <div className="tag-picker-foot"><span>{t('↑ ↓ · Enter · 0–9')}</span>{manageTags.available() && <button type="button" onClick={() => manageTags()}>{t('Verwalten …')}</button>}</div>
   </Popover>;
 }

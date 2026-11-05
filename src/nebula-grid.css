@@ -1,0 +1,96 @@
+/* Nebula's grid of windows in the middle (NebulaDesk: Panel, nebulaLayout.ts). Twelve columns: a window takes some of
+   them (`--span`, set at its right edge); narrow, every window takes the whole row. A minimized window keeps only its
+   bar; a window's lower edge sets its height. A carried window follows the pointer; a violet bar marks where it lands. */
+.nebula-grid { position: relative; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 18px; align-items: start; }
+.nebula-grid > * { grid-column: 1 / -1; min-width: 0; }
+.nebula-grid > .nebula-panel { grid-column: span var(--span, 12); }
+@container nebula-center (max-width: 760px) { .nebula-grid > .nebula-panel { grid-column: 1 / -1; } }
+.nebula-panel { position: relative; }
+
+/* The bar: the prompt, then the window's buttons. Grabbing it moves the window. */
+.nebula-panel-head { padding-right: 0; cursor: grab; user-select: none; touch-action: none; }
+.nebula-grid.is-dragging .nebula-panel-head { cursor: grabbing; }
+.nebula-panel-head .nebula-prompt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nebula-panel-state { flex: none; color: var(--nb-violet); font: 700 10px var(--mono); letter-spacing: .06em; }
+.nebula-panel .nebula-window-tools :is(.nebula-panel-half, .nebula-panel-minimize, .nebula-panel-float) { width: 30px; height: 100%; min-height: 26px; padding: 0; border: 0; border-left: 1px solid var(--nb-ink);
+  background: transparent; color: var(--nb-ink); font: 700 13px/1 var(--mono); cursor: pointer; }
+.nebula-panel .nebula-window-tools :is(.nebula-panel-half, .nebula-panel-minimize, .nebula-panel-float):hover { background: var(--nb-ink); color: var(--nb-paper); }
+.nebula-panel .nebula-window-tools .nebula-calendar-close { width: 34px; height: 100%; min-height: 26px; }
+.nebula-panel-minimize { font-size: 14px !important; }
+
+/* Minimized: only the bar, a little quieter. */
+.nebula-panel.is-minimized { box-shadow: 4px 4px 0 #ffffff12 !important; }
+.nebula-panel.is-minimized .nebula-panel-head { border-bottom: 0; }
+.nebula-panel-body[hidden] { display: none !important; }
+
+/* Height: set at the lower edge; the content scrolls inside. Calendar and notebook fill their body. */
+.nebula-panel-body.has-height { overflow: auto; overscroll-behavior: contain; }
+.nebula-panel-resize { position: absolute; left: 0; right: 0; bottom: -6px; z-index: 2; height: 10px; cursor: ns-resize; touch-action: none; }
+.nebula-panel-resize::after { content: ''; position: absolute; left: 50%; bottom: 4px; width: 34px; height: 3px; margin-left: -17px; background: repeating-linear-gradient(90deg, var(--nb-line) 0 3px, transparent 3px 6px); opacity: 0; transition: opacity 120ms ease; }
+.nebula-panel:hover > .nebula-panel-resize::after { opacity: .7; }
+.nebula-panel:is(.is-calendar, .is-notebook) .nebula-panel-body { display: flex; flex-direction: column; padding: 0; }
+.nebula-panel:is(.is-calendar, .is-notebook) .nebula-panel-body > * { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.nebula-panel:is(.is-calendar, .is-notebook) .nebula-panel-body > * > :is(.cal, .notebook) { flex: 1; min-height: 0; }
+.nebula-panel.is-calendar { box-shadow: 7px 7px 0 var(--nb-violet); }
+
+/* Dragging: the moved window fades, a violet bar marks its landing place (above a wide window, left of a half one, or
+   at the end); a floating window over the grid only docks with Shift (a hint says so). */
+/* Carried: the window itself in the hand, lifted over the others, a little tilted, with a heavier shadow; where it came
+   from a dashed outline waits until it lands. */
+.nebula-panel.is-held { z-index: 40; cursor: grabbing; transition: none; box-shadow: 12px 14px 0 var(--nb-violet), 0 28px 60px #000000d9 !important; pointer-events: none; }
+.nebula-panel.is-held .nebula-panel-head { pointer-events: auto; }
+.nebula-grid.is-dragging .nebula-panel:not(.is-held) { transition: transform 160ms var(--ease); }
+/* The width: a grip along the right edge; while it is dragged the window shows its new width in columns. */
+.nebula-panel-width { position: absolute; top: 10px; bottom: 10px; right: -6px; z-index: 2; width: 10px; cursor: ew-resize; touch-action: none; }
+.nebula-panel-width::after { content: ''; position: absolute; top: 50%; right: 4px; width: 3px; height: 34px; margin-top: -17px; background: repeating-linear-gradient(var(--nb-line) 0 3px, transparent 3px 6px); opacity: 0; transition: opacity 120ms ease; }
+.nebula-panel:hover > .nebula-panel-width::after, .nebula-panel.is-sizing > .nebula-panel-width::after { opacity: .7; }
+.nebula-panel.is-sizing { outline: 1px dashed var(--nb-violet-light); outline-offset: 3px; }
+@container nebula-center (max-width: 760px) { .nebula-panel-width { display: none; } }
+.nebula-panel:is(.is-drop-top, .is-drop-split-left, .is-drop-split-right)::before { content: ''; position: absolute; z-index: 5; background: var(--nb-violet-light); box-shadow: 0 0 14px var(--nb-violet); pointer-events: none; }
+.nebula-panel.is-drop-top::before { left: 0; right: 0; top: -12px; height: 4px; }
+/* Beside a window: a bar on that side, and the half the dropped window would take tinted (the two share the width). */
+.nebula-panel.is-drop-split-left::before { top: 0; bottom: 0; left: -12px; width: 4px; }
+.nebula-panel.is-drop-split-right::before { top: 0; bottom: 0; right: -12px; width: 4px; }
+.nebula-panel:is(.is-drop-split-left, .is-drop-split-right)::after { content: ''; position: absolute; top: 0; bottom: 0; z-index: 4; width: 50%; pointer-events: none;
+  background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--nb-violet) 22%, transparent) 0 8px, color-mix(in srgb, var(--nb-violet) 12%, transparent) 8px 16px); box-shadow: inset 0 0 0 1px var(--nb-violet-light); }
+.nebula-panel.is-drop-split-left::after { left: 0; }
+.nebula-panel.is-drop-split-right::after { right: 0; }
+.nebula-grid.is-drop-end::after { content: ''; grid-column: 1 / -1; height: 4px; margin-top: -10px; background: var(--nb-violet-light); box-shadow: 0 0 14px var(--nb-violet); }
+.nebula-dock-hint { position: absolute; left: 50%; top: 10px; z-index: 6; margin: 0; padding: 6px 12px; transform: translateX(-50%); border: 1px solid var(--nb-violet-light); background: #0c0c0e;
+  color: #fff; font: 11px var(--mono); white-space: nowrap; box-shadow: 4px 4px 0 var(--nb-violet); pointer-events: none; }
+
+/* Back to the first layout (only while it differs). */
+.nebula-layout-reset { align-self: flex-end; margin-top: -6px; padding: 4px 10px; border: 1px solid var(--nb-line); background: transparent; color: var(--muted); font: 11px var(--mono); cursor: pointer; }
+.nebula-layout-reset:hover { border-color: var(--nb-violet-light); color: #fff; }
+
+/* The floating window's own new button (into the grid). */
+.nebula-window-tools .nebula-window-grid { width: 30px; height: 100%; min-height: 26px; padding: 0; border: 0; border-left: 1px solid var(--nb-ink); background: transparent; color: var(--nb-ink); font: 700 14px var(--mono); cursor: pointer; }
+.nebula-window-tools .nebula-window-grid:hover { background: var(--nb-ink); color: var(--nb-paper); }
+@media (prefers-reduced-motion: reduce) { .nebula-panel-resize::after { transition: none; } }
+
+/* The day's own windows floating over the desk (taken out of the grid): a window like the calendar's, in the middle until
+   it is moved. */
+.nebula-floating { position: absolute; top: 60px; left: calc(var(--nb-rail-w) + var(--nb-gap) * 2 + 40px); z-index: 20; display: flex; flex-direction: column; width: min(680px, 55%); height: min(620px, 75%);
+  min-width: 0; box-shadow: 9px 9px 0 var(--nb-violet); }
+.nebula-floating .nebula-window-head { flex: none; padding-right: 0; }
+.nebula-floating-body { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; }
+.nebula-floating.is-dragging { transition: none !important; }
+
+/* Leaving the journal: a hint while the pointer is outside its window. */
+.nebula-detach-hint { position: fixed; left: 50%; bottom: 18px; z-index: 60; margin: 0; padding: 7px 14px; transform: translateX(-50%); border: 1px solid var(--nb-violet-light); background: #0c0c0e;
+  color: #fff; font: 11px var(--mono); box-shadow: 4px 4px 0 var(--nb-violet); pointer-events: none; }
+
+/* A window pulled out of the journal (DetachedPanel): the page draws the frame exactly as in the app on a transparent
+   window (no system frame, shadow or rounded corners); the violet offset shadow stays inside the window. */
+:root.is-panel-window, :root.is-panel-window body, :root.is-panel-window #root { height: 100%; margin: 0; background: transparent !important; overflow: hidden; }
+.nebula-detached { position: fixed; inset: 0 10px 10px 0; display: flex; }
+.nebula-panel.is-detached { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; box-shadow: 9px 9px 0 var(--nb-violet); }
+.nebula-panel.is-detached .nebula-panel-head { flex: none; cursor: default; }
+.nebula-detached-body { flex: 1; min-height: 0; overflow: auto; }
+.nebula-panel.is-detached:is(.is-calendar, .is-notebook) .nebula-detached-body { display: flex; flex-direction: column; padding: 0; }
+.nebula-panel.is-detached:is(.is-calendar, .is-notebook) .nebula-detached-body > :is(.cal, .notebook) { flex: 1; min-height: 0; }
+.nebula-panel.is-detached .nebula-grip:is(.is-n, .is-nw, .is-ne) { top: 0; } .nebula-panel.is-detached .nebula-grip:is(.is-w, .is-nw, .is-sw) { left: 0; }
+.nebula-panel.is-detached .nebula-grip:is(.is-e, .is-ne, .is-se) { right: -9px; } .nebula-panel.is-detached .nebula-grip:is(.is-s, .is-sw, .is-se) { bottom: -9px; }
+.nebula-panel .nebula-window-tools .nebula-panel-return { width: 30px; height: 100%; min-height: 26px; padding: 0; border: 0; border-left: 1px solid var(--nb-ink); background: transparent; color: var(--nb-ink); font: 700 14px var(--mono); cursor: pointer; }
+.nebula-panel .nebula-window-tools .nebula-panel-return:hover { background: var(--nb-ink); color: var(--nb-paper); }
+

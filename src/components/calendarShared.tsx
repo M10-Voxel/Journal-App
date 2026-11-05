@@ -23,6 +23,9 @@ import { entryLabels } from './JournalEntry';
 import { tagOf } from '../tags';
 import { useTags } from '../tagStore';
 import { Popover } from './Popover';
+import { beginCalendarDrag } from '../calendarDrag';
+import { minutesOf } from '../calendar';
+import { timeOfMinutes } from '../planning';
 import '../calendar.css';
 
 // Shared by the calendar (in the journal's sidebar or its own window) and the compact month window. They only read the
@@ -75,7 +78,7 @@ export function useNow(): Date {
 export const openInJournal = (date: string, entry?: string) => { void invoke('show_day', { date, entry: entry ?? null }).catch(() => {}); };
 export const OpenInJournal = createContext<(date: string, entry?: string) => void>(openInJournal);
 /** Right-clicking an entry edits it in place (in the sidebar, where the calendar may change the journal). */
-export const EditInCalendar = createContext<{ edit: ((entry: Entry, date: string, element: HTMLElement) => void) | null; editingId: string | null; remove?: (entry: Entry, date: string, others: ScopeOption['others']) => Promise<void> }>({ edit: null, editingId: null });
+export const EditInCalendar = createContext<{ edit: ((entry: Entry, date: string, element: HTMLElement) => void) | null; editingId: string | null; move?: (entry: Entry, from: string, to: string, time: string | null, end: string | null) => Promise<void>; remove?: (entry: Entry, date: string, others: ScopeOption['others']) => Promise<void> }>({ edit: null, editingId: null });
 
 export function entrySymbol(entry: Entry): IconName {
   if (entry.done) return 'done';
@@ -109,9 +112,23 @@ function measureTime(item: HTMLElement) {
 /** `night`: a block past midnight – `start` on its own day (cut at 24:00), `rest` its continuation on the next. */
 export function CalendarItem({ entry, date, variant = 'line', short = false, style, night }: { entry: Entry; date: string; variant?: 'line' | 'block'; short?: boolean; style?: CSSProperties; night?: 'start' | 'rest' }) {
   useLanguage();
+  const shownDate = night === 'rest' ? shiftDate(date, 1) : date;
   date=(entry as SpanEntry).spanOrigin ?? date;
   const open = useContext(OpenInJournal);
-  const { edit, editingId, remove } = useContext(EditInCalendar);
+  const { edit, editingId, remove, move } = useContext(EditInCalendar);
+  const suppressDragClick = useRef(false);
+  const dragCleanup = useRef<(() => void) | null>(null);
+  useEffect(() => () => dragCleanup.current?.(), []);
+  const beginMove = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (!move || event.button !== 0 || !event.isPrimary) return;
+    const element = event.currentTarget;
+    if (!element.closest('.cal')) return;
+    dragCleanup.current?.();
+    dragCleanup.current = beginCalendarDrag({ element, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, entry, date, shownDate,
+      onDragEnd: () => { suppressDragClick.current = true; window.setTimeout(() => { suppressDragClick.current = false; }, 500); },
+      onDrop: target => { void move(entry, date, target.date, target.time, target.end).catch(reason => setError(String(reason))); },
+    });
+  };
   // A tagged entry takes its tag's colour: the block (or bar) is tinted with it and edged in it.
   const tag = tagOf(useTags(), entry.tag);
   // The small field at an entry with a description opens it in a card of its own.
@@ -137,11 +154,13 @@ export function CalendarItem({ entry, date, variant = 'line', short = false, sty
   const state = entry.done ? ' is-done' : entry.cancelled ? ' is-cancelled' : '';
   return <button type="button" className={`cal-item is-${entry.kind} is-${variant}${short ? ' is-short' : ''}${spanning ? ' is-multiday' : ''}${state}${entry.priority ? ' is-priority' : ''}${tag ? ' has-tag' : ''}${editingId === entry.id ? ' is-editing' : ''}${night ? ` is-night-${night}` : ''}`}
     ref={noteRef} style={tag ? { ...style, '--tag': tag.color } as CSSProperties : style} data-tag={tag?.name}
+    data-calendar-entry={entry.id} data-calendar-time={night === 'rest' ? '00:00' : entry.time ?? undefined}
+    data-calendar-end={night === 'start' ? '24:00' : night === 'rest' && entry.end ? timeOfMinutes(minutesOf(entry.end) - 1440) : entry.end ?? undefined}
     title={t("{0}{1} · Im Journal zeigen{2}", entryTitle(entry, tag?.name), !mail && entry.description ? `\n${entry.description}` : '', edit ? t(" · Rechtsklick: bearbeiten") : '')} aria-label={entryTitle(entry, tag?.name)}
     onContextMenu={event => { if (!edit) return; event.preventDefault(); event.stopPropagation(); edit(entry, date, event.currentTarget); }}
     onKeyDown={event => { if (edit && (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10'))) { event.preventDefault(); edit(entry, date, event.currentTarget); } }}
     onPointerEnter={event => { hovered.current=true; measureTime(event.currentTarget); }} onPointerLeave={() => {hovered.current=false;}} onFocus={event => measureTime(event.currentTarget)}
-    onClick={event => { event.stopPropagation(); setDetails(value=>!value); }} onDoubleClick={event => event.stopPropagation()}>
+    onPointerDown={beginMove} onClick={event => { event.stopPropagation(); if(suppressDragClick.current){suppressDragClick.current=false;return;} setDetails(value=>!value); }} onDoubleClick={event => event.stopPropagation()}>
     <Icon name={entrySymbol(entry)} />
     <span className="cal-item-text">{plainText(entry.text) || t("ohne Text")}</span>
     {entry.time && <time className="cal-item-time" aria-hidden="true"><span>{formatSpan(entry.time, entry.end)}</span></time>}
@@ -161,7 +180,7 @@ export function CalendarItem({ entry, date, variant = 'line', short = false, sty
         <div className="tag-picker-foot"><button type="button" onClick={() => copyCalendarEntry(entry)}><Icon name="copy" />{t("Kopieren")}<kbd>{t("Strg")} C</kbd></button><button type="button" onClick={() => {setDetails(false);if(noteRef.current)edit?.(entry,date,noteRef.current);}}>{t("Bearbeiten")}</button><span>Esc</span><button type="button" onClick={() => { setDetails(false); open(date, entry.id); }}>{t("Im Journal zeigen")}</button></div>
       </div>
     </Popover>}
-  </button>;
+    </button>;
 }
 
 const weekdayInitials = () => getLanguage() === 'en' ? ['M','T','W','T','F','S','S'] : ['M','D','M','D','F','S','S'];
@@ -215,7 +234,7 @@ export function CompactMonth({ month, days, today, selected, onPick, onMonth }: 
       {monthGrid(month).map((date, index) => {
         const outside = !date.startsWith(month);
         const classes = `cal-compact-day${hasJournalContent(days.get(date)) ? ' has-journal-content' : ''}${outside ? ' is-outside' : ''}${date === today ? ' is-today' : ''}${index % 7 === 5 ? ' is-saturday' : index % 7 === 6 ? ' is-sunday' : ''}`;
-        return <button key={date} type="button" className={classes} aria-selected={date === selected} aria-current={date === today ? 'date' : undefined}
+        return <button key={date} type="button" className={classes} data-date={date} aria-selected={date === selected} aria-current={date === today ? 'date' : undefined}
           tabIndex={date === current ? 0 : -1} title={dayLabel(date, days.get(date))} onClick={() => { setFocus(date); onPick(date); }}>
           <span>{Number(date.slice(8))}</span>
           <DayDots day={days.get(date)} />

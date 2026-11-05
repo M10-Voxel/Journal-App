@@ -495,19 +495,19 @@
 .notebook-tab:hover { transform: translateX(2px); }
 .notebook-tab.is-open { transform: none; filter: brightness(.82); }
 .notebook-tab:focus-visible { outline: 2px solid #fbeee0; outline-offset: -4px; }
-.notebook-drawer { --sheet-w: calc(100cqw - 40px); position: absolute; top: 0; bottom: 0; right: 0; z-index: 10; width: calc(var(--sheet-w) + 8px); pointer-events: none; }
-.book-stage.is-double .notebook-drawer { --sheet-w: calc(50cqw - 16px); }
-.notebook-drawer-sheet { position: absolute; top: -20px; bottom: 8px; right: 8px; width: var(--sheet-w); display: flex; flex-direction: column; min-width: 0; overflow: hidden; border-radius: 2px;
-  background: var(--book-paper); box-shadow: 0 0 0 1px var(--edge), -7px 12px 28px -8px #1d0f06b3, -1px 2px 3px #1d0f0640; transform-origin: 50% 0; will-change: transform;
-  visibility: hidden; transform: translateX(calc(100% + 40px)) rotate(1.5deg); }
-.notebook-drawer.is-open .notebook-drawer-sheet { visibility: visible; pointer-events: auto; transform: rotate(.35deg); }
-.notebook-drawer.is-open.is-animated .notebook-drawer-sheet { animation: notebook-sheet-in 520ms cubic-bezier(.3, .7, .3, 1) both; }
-.notebook-drawer.is-animated:not(.is-open) .notebook-drawer-sheet { animation: notebook-sheet-out 340ms cubic-bezier(.5, 0, .75, .3) both; }
-@keyframes notebook-sheet-in { from { transform: translateX(calc(100% + 40px)) rotate(1.5deg); } to { transform: rotate(.35deg); } }
-@keyframes notebook-sheet-out { from { visibility: visible; transform: rotate(.35deg); } to { visibility: hidden; transform: translateX(calc(100% + 40px)) rotate(1.5deg); } }
-@media (prefers-reduced-motion: reduce) {
-  .notebook-drawer.is-open.is-animated .notebook-drawer-sheet { animation: book-fade-in 160ms ease both; }
-  .notebook-drawer.is-animated:not(.is-open) .notebook-drawer-sheet { animation: book-fade-out 160ms ease both; }
-}
-:root[data-theme='journal'][data-pixel] .notebook-drawer.is-open.is-animated .notebook-drawer-sheet { animation-timing-function: steps(6); }
-:root[data-theme='journal'][data-pixel] :is(.notebook-drawer-sheet, .notebook-tab) { border-radius: 0; }
+:root[data-theme='journal'][data-pixel] .notebook-tab { border-radius: 0; }
+/* The notebook is a sheet like the calendar's (same place, width and resizing); it scrolls inside itself and has no
+   side tabs, so it keeps its edges. */
+.calendar-drawer.is-notebook .calendar-drawer-sheet, :root[data-theme='journal'] .calendar-drawer.is-notebook .calendar-drawer-sheet { overflow: hidden; }
+.calendar-drawer.is-notebook .calendar-drawer-sheet > .notebook { flex: 1; min-height: 0; }
+/* With the calendar out too, the notebook lies on the right page: the mirror of the left sheet, sliding in from the
+   right edge. */
+.calendar-drawer.is-overlay.is-right { left: auto; right: 0; width: calc(var(--sheet-w) + 16px); }
+.book-stage.is-double .calendar-drawer.is-overlay.is-right { --sheet-w: calc(50cqw - 24px); }
+/* It stays below the register tabs on the book's top edge (they stand over the right page). */
+.calendar-drawer.is-overlay.is-right .calendar-drawer-sheet { top: 6px; left: auto; right: 8px; transform: translateX(calc(100% + 40px)) rotate(1.5deg); }
+.calendar-drawer.is-overlay.is-right.is-open .calendar-drawer-sheet { transform: rotate(.35deg); }
+.calendar-drawer.is-overlay.is-right.is-open.is-animated .calendar-drawer-sheet { animation-name: sheet-slide-right; }
+.calendar-drawer.is-overlay.is-right.is-animated:not(.is-open) .calendar-drawer-sheet { animation-name: sheet-slide-right-out; }
+@keyframes sheet-slide-right { from { transform: translateX(calc(100% + 40px)) rotate(1.5deg); } to { transform: rotate(.35deg); } }
+@keyframes sheet-slide-right-out { from { visibility: visible; transform: rotate(.35deg); } to { visibility: hidden; transform: translateX(calc(100% + 40px)) rotate(1.5deg); } }

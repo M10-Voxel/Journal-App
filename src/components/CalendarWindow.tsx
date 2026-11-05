@@ -1,4 +1,4 @@
-import { calendarDaysWithSpans } from '../calendarSpans';
+import { calendarDaysWithSpans, calendarSpanLanes, calendarSpanSegment } from '../calendarSpans';
 import { readCalendarEntry } from '../calendarClipboard';
 import { withStart, occurrences, seriesHorizon } from '../repeat';
 import { Popover } from './Popover';
@@ -21,7 +21,8 @@ import type { CalendarImport } from '../journal';
 import { useWheelSwipe } from './useWheelSwipe';
 import { TagFilter } from './TagFilter';
 import { useHiddenTags, useTags } from '../tagStore';
-import { filterTagDays, isShown } from '../tags';
+import { filterTagDays, isShown, tagOf } from '../tags';
+import { requestCalendarCreate, requestCalendarMove } from '../calendarRequests';
 
 // The calendar: in the journal's sidebar, or in a window of its own (currently not offered). Year and month like
 // Apple's and Samsung's calendars, week, work week and day as a time grid with a band for entries without time
@@ -47,13 +48,13 @@ const weekendClass = (date: string, index?: number) => {
 /** The calendar as a window of its own: it hears the journal's day through events and asks the journal window to show days. */
 export function CalendarWindow() {
   useLanguage();
-  return <Calendar journalDate={useJournalDate()} onOpen={openInJournal} autoFocus />;
+  return <Calendar journalDate={useJournalDate()} onOpen={openInJournal} onCreate={requestCalendarCreate} onMove={requestCalendarMove} autoFocus />;
 }
 
 // Memoized: in the sidebar it must not re-render while the journal is being typed in (`onOpen` is stable).
 /** An entry being edited (right click): its day and the element the card is placed at. */
 type Editing = { entry: Entry; date: string; element: HTMLElement };
-export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, onEdit, onRemove, onExport, onImport, embedded = false, autoFocus = false, fixedView, showDate, onDateChange }: {
+export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, onEdit, onMove, onRemove, onExport, onImport, embedded = false, autoFocus = false, fixedView, showDate, onDateChange }: {
   onExport?: () => Promise<CalendarDay[]>; onImport?: (entries: CalendarImport[]) => Promise<void>;
   journalDate: string | null; onOpen: (date: string, entry?: string) => void; embedded?: boolean; autoFocus?: boolean;
   /** Always this view, without the view tabs (Nebula's day beside the overview); the stored view stays the other calendars'. */
@@ -63,6 +64,7 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
   /** Hears the day the calendar shows. */
   onDateChange?: (date: string) => void;
   onCreate?: (date: string, entry: NewEntry) => Promise<void>; onEdit?: (date: string, id: string, change: EntryEdit, scope?: ScopeOption) => Promise<void>; onRemove?: (date: string, id: string, others: { id: string; date: string }[]) => Promise<void>;
+  onMove?: (entry: Entry, from: string, to: string, time: string | null, end: string | null) => Promise<void>;
 }) {
   useLanguage();
   const [prefs, setPrefs] = useState(loadPrefs);
@@ -115,7 +117,7 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
   const inGrid = editing?.entry.time && !(editing.entry.end && durationOf({time:editing.entry.time,end:editing.entry.end})>1440) && gridDates.includes(editing.date) ? editing : null;
   const save = async (change: EntryEdit, scope?: ScopeOption) => { if (editing) { await onEdit!(editing.date, editing.entry.id, change, scope); setEditing(null); refocus(); } };
   const remove = async (others: { id: string; date: string }[]) => { if (editing) { await onRemove!(editing.date, editing.entry.id, others); setEditing(null); refocus(); } };
-  const editContext = { remove: onRemove ? (entry:Entry, value:string, others:ScopeOption['others'])=>onRemove(value,entry.id,others) : undefined, edit: onEdit ? (entry: Entry, value: string, element: HTMLElement) => setEditing({ entry, date: value, element }) : null, editingId: editing?.entry.id ?? null };
+  const editContext = { move:onMove, remove: onRemove ? (entry:Entry, value:string, others:ScopeOption['others'])=>onRemove(value,entry.id,others) : undefined, edit: onEdit ? (entry: Entry, value: string, element: HTMLElement) => setEditing({ entry, date: value, element }) : null, editingId: editing?.entry.id ?? null };
 
   const setView = (next: CalendarView) => { if (!fixedView) setPrefs(current => ({ ...current, view: next })); };
   // Going somewhere directly shows it in place; stepping slides the next page in from that side.
@@ -139,16 +141,17 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
   const [multi,setMulti]=useState<{start:string;end:string}|null>(null);
   const [rangeDraw,setRangeDraw]=useState<{start:string;end:string}|null>(null);
   const suppressClick=useRef(false);
+  const suppressContext=useRef(false);
   const rangePage=useRef(date);rangePage.current=date;
   useEffect(()=>{rootRef.current?.querySelectorAll<HTMLElement>('[data-range-date]').forEach(cell=>{const date=cell.dataset.rangeDate!, shown=rangeDraw ?? multi;cell.toggleAttribute('data-range-selected',Boolean(shown && date>=shown.start && date<=shown.end));});},[rangeDraw,multi,date,view]);
 
   const beginMulti=(event:ReactPointerEvent<HTMLDivElement>)=>{
-   if(!onCreate || event.button!==0 || (event.target as Element).closest('.cal-item,input,button:not(.cal-year-day)'))return;
+   if(!onCreate || event.button!==2 || (event.target as Element).closest('.cal-item,input,button:not(.cal-year-day):not(.cal-month-number)'))return;
    const cell=(event.target as Element).closest<HTMLElement>('[data-range-date]');if(!cell)return;event.preventDefault();
    const start=cell.dataset.rangeDate!;let end=start,moved=false,x=event.clientX,y=event.clientY,lastFlip=0;
    const follow=(e:globalThis.PointerEvent)=>{x=e.clientX;y=e.clientY;moved ||= Math.hypot(x-event.clientX,y-event.clientY)>5;const target=document.elementFromPoint(x,y)?.closest<HTMLElement>('[data-range-date]')?.dataset.rangeDate;if(target)end=target;if(moved)setRangeDraw({start:start<end?start:end,end:start<end?end:start});};
    const timer=setInterval(()=>{if(!moved || !rootRef.current)return;const r=rootRef.current.getBoundingClientRect();const direction=x>r.right-24 || y>Math.min(r.bottom,innerHeight)-24?1:x<r.left+24?-1:0;if(direction && Date.now()-lastFlip>900){lastFlip=Date.now();const next=shiftView(view,rangePage.current,direction as 1|-1);rangePage.current=next;setDate(next);const nextDays=viewDates(view,next);end=direction>0?nextDays[nextDays.length-1]:nextDays[0];setRangeDraw({start:start<end?start:end,end:start<end?end:start});}},150);
-   const finish=()=>{clearInterval(timer);window.removeEventListener('pointermove',follow);window.removeEventListener('pointerup',finish);window.removeEventListener('pointercancel',cancel);if(moved){suppressClick.current=true;setMulti({start:start<end?start:end,end:start<end?end:start});}setRangeDraw(null);};
+   const finish=()=>{clearInterval(timer);window.removeEventListener('pointermove',follow);window.removeEventListener('pointerup',finish);window.removeEventListener('pointercancel',cancel);if(moved){suppressContext.current=true;window.setTimeout(()=>{suppressContext.current=false;},250);setMulti({start:start<end?start:end,end:start<end?end:start});}setRangeDraw(null);};
    const cancel=()=>{moved=false;finish();};window.addEventListener('pointermove',follow);window.addEventListener('pointerup',finish);window.addEventListener('pointercancel',cancel);
   };
   const pasteTarget = useRef<string | null>(null);
@@ -178,7 +181,7 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
   },[date,onCreate]);
   const selectedIndex = calendarViews().findIndex(item => item.view === view);
   return <OpenInJournal.Provider value={onOpen}><EditInCalendar.Provider value={editContext}>
-    <div ref={rootRef} className={`cal${embedded ? ' is-embedded' : ''}${fixedView ? ' is-fixed' : ''}`} data-view={view} tabIndex={-1} aria-label={t("Kalender")} onKeyDown={onKeyDown} onPointerDown={beginMulti} onClickCapture={event=>{if(suppressClick.current){event.preventDefault();event.stopPropagation();suppressClick.current=false;}}} onPointerMove={event=>{const day=(event.target as Element).closest<HTMLElement>('[data-date]')?.dataset.date;pasteTarget.current=day ?? date;}}>
+    <div ref={rootRef} className={`cal${embedded ? ' is-embedded' : ''}${fixedView ? ' is-fixed' : ''}`} data-view={view} tabIndex={-1} aria-label={t("Kalender")} onKeyDown={onKeyDown} onPointerDown={beginMulti} onContextMenuCapture={event=>{const target=event.target as Element;if(target.closest('.cal-item,.cal-composer,.popover'))return;if(suppressContext.current){suppressContext.current=false;event.preventDefault();event.stopPropagation();return;}if(target.closest('.cal-time-column')){event.preventDefault();return;}const cell=target.closest<HTMLElement>('[data-range-date]');if(onCreate && cell && !cell.classList.contains('cal-time-allday-cell')){event.preventDefault();const selected=cell.dataset.rangeDate!;setMulti({start:selected,end:selected});}}} onClickCapture={event=>{if(suppressClick.current){event.preventDefault();event.stopPropagation();suppressClick.current=false;}}} onPointerMove={event=>{const day=(event.target as Element).closest<HTMLElement>('[data-date]')?.dataset.date;pasteTarget.current=day ?? date;}}>
       {/* Drawn over several days: the normal card, with the span's start and end (and repeating, tags, priority …). */}
       {multi && onCreate && <CalendarComposer key="multi" date={multi.start} draft={null} span={{ end: multi.end }} onSpanChange={setMulti} tag={newTag}
         anchor={() => (rootRef.current?.querySelector(`[data-range-date="${multi.end}"]`) ?? rootRef.current?.querySelector(`[data-range-date="${multi.start}"]`) ?? rootRef.current)?.getBoundingClientRect() ?? null}
@@ -234,20 +237,35 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
 function YearView({ date, today, journalDate, days, entriesOn, onDay, onMonth }: { date: string; today: string; journalDate: string | null; days: Map<string, CalendarDay>; entriesOn: (date: string) => Entry[]; onDay: (date: string) => void; onMonth: (date: string) => void }) {
   useLanguage();
   const year = date.slice(0, 4);
+  const tags = useTags();
+  const spans = calendarSpanLanes(viewDates('year', date), entriesOn);
   return <div className="cal-year">
     {Array.from({ length: 12 }, (_, index) => `${year}-${String(index + 1).padStart(2, '0')}`).map(month => <section key={month} className={`cal-year-month${today.startsWith(month) ? ' is-current' : ''}`} aria-label={formatMonthName(`${month}-01`)}>
       <button type="button" className="cal-year-name" onClick={() => onMonth(date.startsWith(month) ? date : `${month}-01`)}>{formatMonthName(`${month}-01`)}</button>
       <div className="cal-year-weekdays" aria-hidden="true">{weekdayNames().map((name, index) => <span key={name} className={weekendClass('', index)}>{name[0]}</span>)}</div>
       <div className="cal-year-grid">
         {monthGrid(month).map((value, index) => {
-          if (!value.startsWith(month)) return <span key={value} />;
+          if (!value.startsWith(month)) return <span key={value} style={{ gridRow: Math.floor(index / 7) + 1, gridColumn: index % 7 + 1 }} />;
           const entries = entriesOn(value);
           const task = entries.some(entry => entry.kind === 'task'), event = entries.some(entry => entry.kind === 'event');
           const mark = task || event ? `${task ? ' is-task' : ''}${event ? ' is-event' : ''}` : entries.length ? ' is-note' : '';
           return <button key={value} type="button" data-range-date={value} data-date={value} className={`cal-year-day${hasJournalContent(days.get(value)) ? ' has-journal-content' : ''}${weekendClass(value, index % 7)}${value === today ? ' is-today' : ''}${value === journalDate ? ' is-journal' : ''}${mark ? ' has-mark' : ''}`}
+            style={{ gridRow: Math.floor(index / 7) + 1, gridColumn: index % 7 + 1 }}
             aria-current={value === today ? 'date' : undefined} title={dayLabel(value, days.get(value))} onClick={() => onDay(value)}>
             <span>{Number(value.slice(8))}</span>{mark && <i className={`cal-year-mark${mark}`} aria-hidden="true" />}
           </button>;
+        })}
+        {Array.from({ length: 6 }, (_, week) => {
+          const dates = monthGrid(month).slice(week * 7, week * 7 + 7);
+          return spans.map(span => {
+            const segment = calendarSpanSegment(span, dates.filter(value => value.startsWith(month)));
+            if (!segment) return null;
+            const monthDates = dates.filter(value => value.startsWith(month));
+            const first = dates.indexOf(monthDates[segment.start]), last = dates.indexOf(monthDates[segment.end]);
+            return <div key={`${week}/${span.entry.id}`} aria-hidden="true" data-span-entry={span.entry.id}
+              className={`cal-year-span${segment.starts ? ' is-span-start' : ''}${segment.ends ? ' is-span-end' : ''}`}
+              style={{ gridRow: week + 1, gridColumn: `${first + 1} / ${last + 2}`, '--span-inset': `${1 + Math.min(span.lane, 3) * 2}px`, '--span-color': tagOf(tags, span.entry.tag)?.color ?? 'var(--event)' } as CSSProperties} />;
+          });
         })}
       </div>
     </section>)}
@@ -261,6 +279,7 @@ function MonthView({ date, today, journalDate, days, entriesOn, onDay, onMore, o
   useLanguage();
   const month = date.slice(0, 7);
   const grid = monthGrid(month);
+  const spans = calendarSpanLanes(grid, entriesOn);
   const gridRef = useRef<HTMLDivElement>(null);
   const [lines, setLines] = useState(3);
   // The grid is a new element for every month (its key); the old one, once removed, would measure 0 and hide all entries.
@@ -274,13 +293,25 @@ function MonthView({ date, today, journalDate, days, entriesOn, onDay, onMore, o
   return <div className="cal-month">
     <div className="cal-month-head" aria-hidden="true"><span>{t("KW")}</span>{weekdayNames().map((name, index) => <span key={name} className={weekendClass('', index)}>{name}</span>)}</div>
     <div className="cal-month-grid" ref={gridRef} key={month}>
-      {Array.from({ length: 6 }, (_, week) => <div key={week} className="cal-month-week">
+      {Array.from({ length: 6 }, (_, week) => {
+        const dates = grid.slice(week * 7, week * 7 + 7);
+        const segments = spans.flatMap(span => { const segment = calendarSpanSegment(span, dates); return segment ? [{ span, segment }] : []; });
+        const required = Math.max(0, ...segments.map(({ span }) => span.lane + 1));
+        const overflow = dates.some(value => required + entriesOn(value).filter(entry => !spans.some(span => span.entry.id === entry.id)).length > lines);
+        const spanLines = Math.min(Math.max(0, lines - (overflow ? 1 : 0)), required);
+        return <div key={week} className="cal-month-week">
         <button type="button" className="cal-month-kw" title={t("Woche zeigen")} onClick={() => onWeek(grid[week * 7])}>{isoWeek(grid[week * 7])}</button>
         {grid.slice(week * 7, week * 7 + 7).map((value, index) => {
-          const entries = entriesOn(value);
-          const visible = entries.length > lines ? entries.slice(0, Math.max(0, lines - 1)) : entries;
+          const all = entriesOn(value);
+          const entries = all.filter(entry => !spans.some(span => span.entry.id === entry.id));
+          const displayedSpans = segments.filter(({ span, segment }) => span.lane < spanLines && index >= segment.start && index <= segment.end).length;
+          const room = Math.max(0, lines - spanLines);
+          const needsMore = all.length > displayedSpans + room;
+          const visible = entries.slice(0, Math.max(0, room - (needsMore ? 1 : 0)));
+          const hidden = all.length - displayedSpans - visible.length;
           const title = days.get(value)?.title;
           return <div key={value} data-range-date={value} data-date={value} className={`cal-month-day${hasJournalContent(days.get(value)) ? ' has-journal-content' : ''}${weekendClass(value, index)}${value.startsWith(month) ? '' : ' is-outside'}${value === today ? ' is-today' : ''}${value === journalDate ? ' is-journal' : ''}`}
+            style={{ gridColumn: index + 2, gridRow: 1 }}
             onClick={() => onDay(value)}>
             <div className="cal-month-day-head">
               <button type="button" className="cal-month-number" aria-label={t("{0} im Journal öffnen", formatDate(value))} aria-current={value === today ? 'date' : undefined} onClick={event => { event.stopPropagation(); onDay(value); }}>
@@ -288,11 +319,17 @@ function MonthView({ date, today, journalDate, days, entriesOn, onDay, onMore, o
               </button>
               {title && <span className="cal-month-title" title={title}>{title}</span>}
             </div>
+            {spanLines > 0 && <div className="cal-month-span-space" style={{ height: `calc(${spanLines} * var(--month-entry-step))` }} aria-hidden="true" />}
             {visible.map(entry => <CalendarItem key={entry.id} entry={entry} date={value} />)}
-            {entries.length > visible.length && <button type="button" className="cal-more" title={t("Alle in der Tagesansicht")} onClick={event => { event.stopPropagation(); onMore(value); }}>+{entries.length - visible.length}{t(" weitere")}</button>}
+            {hidden > 0 && <button type="button" className="cal-more" title={t("Alle in der Tagesansicht")} onClick={event => { event.stopPropagation(); onMore(value); }}>+{hidden}{t(" weitere")}</button>}
           </div>;
         })}
-      </div>)}
+        {segments.filter(({ span }) => span.lane < spanLines).map(({ span, segment }) => <div key={span.entry.id}
+          className={`cal-month-span${segment.starts ? ' is-span-start' : ''}${segment.ends ? ' is-span-end' : ''}`}
+          data-span-entry={span.entry.id} style={{ gridRow: 1, gridColumn: `${segment.start + 2} / ${segment.end + 3}`, marginTop: `calc(var(--month-entry-top) + ${span.lane} * var(--month-entry-step))` }}>
+          <CalendarItem entry={span.entry} date={dates[segment.start]} />
+        </div>)}
+      </div>; })}
     </div>
   </div>;
 }
@@ -487,7 +524,7 @@ function TimeGrid({ journalDays, dates, today, now, journalDate, entriesOn, onDa
     frame.current = requestAnimationFrame(autoScroll);
   }
   function begin(event: ReactPointerEvent<HTMLElement>, mode: Gesture['mode'], date: string) {
-    if (!onCreate || event.button !== 0) return;
+    if (!onCreate || event.button !== (mode === 'new' ? 2 : 0)) return;
     // Marking anew leaves the entry being edited.
     if (mode === 'new' && editing) { editDraft.current = false; onEditEnd(false); }
     const column = (event.currentTarget.closest('.cal-time-column') as HTMLElement | null) ?? event.currentTarget;
@@ -531,8 +568,8 @@ function TimeGrid({ journalDays, dates, today, now, journalDate, entriesOn, onDa
       <div className={`cal-time-allday${columns.some(column => column.untimed.length) ? '' : ' is-empty'}`}>
         <span className="cal-time-corner">{t("ohne Zeit")}</span>{spans.map((item,index)=><div key={item.entry.id} className="cal-multiday-bar" style={{gridColumn:`${Math.max(0,dates.indexOf(item.date))+2} / ${item.end>=dates[dates.length-1]?dates.length+2:dates.indexOf(item.end)+3}`,gridRow:index+2}}><CalendarItem entry={item.entry} date={item.date}/></div>)}
         {columns.map((column,index) => <div key={column.date} data-range-date={column.date} style={{gridColumn:index+2}} className={`cal-time-allday-cell${weekendClass(column.date)}${allDay?.date === column.date ? ' is-composing' : ''}`}
-          title={onCreate ? t("Klicken: Eintrag für den ganzen Tag") : undefined}
-          onClick={event => { if (!onCreate || event.button !== 0 || (event.target as Element).closest('.cal-item')) return; setDraft(null); if (editing) onEditEnd(false); setAllDay({ date: column.date, element: event.currentTarget }); }}>
+          title={onCreate ? t("Rechtsklick: Eintrag für den ganzen Tag") : undefined}
+          onContextMenu={event => { if (!onCreate || (event.target as Element).closest('.cal-item')) return; event.preventDefault(); event.stopPropagation(); setDraft(null); if (editing) onEditEnd(false); setAllDay({ date: column.date, element: event.currentTarget }); }}>
           {column.untimed.map(entry => <CalendarItem key={entry.id} entry={entry} date={column.date} />)}
         </div>)}
       </div>

@@ -94,3 +94,19 @@ test('notes by folder, outside every folder, and by search; the day switch', () 
   // A note from a day's board keeps its days and knows the first as the day it was made.
   assert.deepEqual(onDayPatch(card('old', 'note', { dates: ['2026-10-01', '2026-10-02'] }), true, '2026-11-09').dates, ['2026-10-01', '2026-10-02']);
 });
+
+test('notes sort by title, by when they were made and by when they were last edited', async () => {
+  const { sortNotes } = await import('../src/notebook.ts');
+  const note = (id, extra) => ({ id, kind: 'note', title: '', text: '', dates: [], order: 0, ...extra });
+  const notes = [
+    note('a', { title: 'Zebra', createdAt: 100, updatedAt: 900, order: 1 }),
+    note('b', { title: 'apfel', createdAt: 300, updatedAt: 300, order: 3 }),
+    note('c', { title: 'Notiz 10', created: '2026-11-04', order: 2 }),
+    note('d', { title: 'Notiz 2', createdAt: 200, order: 4 }),
+    note('e', { title: '', createdAt: 50, order: 5 }),
+  ];
+  assert.deepEqual(sortNotes(notes, 'title').map(c => c.id), ['b', 'd', 'c', 'a', 'e'], 'A to Z, numbers in order, untitled last.');
+  assert.deepEqual(sortNotes(notes, 'created').map(c => c.id), ['c', 'b', 'd', 'a', 'e'], 'Newest first; an old note counts from its day.');
+  assert.deepEqual(sortNotes(notes, 'updated').map(c => c.id), ['c', 'a', 'b', 'd', 'e'], 'Last edited first; never edited counts from when it was made.');
+  assert.deepEqual(notes.map(c => c.id), ['a', 'b', 'c', 'd', 'e'], 'The list itself stays as it was.');
+});

@@ -95,6 +95,10 @@
   .nebula-side { align-self: stretch; }
   .nebula-side .nebula-poster { flex: none; }
   .nebula-side .nebula-cal-panel:is(.is-day, .is-month) { position: sticky; top: 0; height: calc(100dvh - 32px - 36px - var(--nb-poster-shown, 0px)); min-height: 0; }
+  /* With the month open the poster stays: it sticks to the top and the month (at its own height) right below it. Only
+     the day view lets the poster scroll away and grows into its room. */
+  .nebula-side:has(.nebula-cal-panel.is-month) .nebula-poster { position: sticky; top: 0; z-index: 1; }
+  .nebula-side .nebula-cal-panel.is-month { top: calc(var(--nb-poster-h, 0px) + 18px); height: auto; max-height: calc(100dvh - 32px - 36px - var(--nb-poster-h, 0px) - 18px); }
 }
 .nebula-poster { position: relative; }
 
@@ -427,3 +431,37 @@
   .nebula-notebook { transition: none !important; }
   .nebula-notebook-toggle .nebula-calendar-command::after { animation: none !important; }
 }
+
+/* ── Floating windows (the calendar and the notebook, NebulaDesk's DeskWindow) ──────────────────────────────────────
+   The head moves a window (a double click docks it again), its edges and corners resize it; a moved window keeps its
+   place (inline style) and lies over the desk like an overlay, so the day's note stays usable beside it. The window
+   clicked last lies on top; focus darkens everything else. */
+.nebula-window-head { cursor: grab; user-select: none; touch-action: none; }
+:is(.nebula-calendar, .nebula-notebook).is-dragging { transition: none !important; }
+:is(.nebula-calendar, .nebula-notebook).is-dragging .nebula-window-head { cursor: grabbing; }
+:is(.nebula-calendar, .nebula-notebook).is-dragging :is(iframe, .cal, .notebook) { pointer-events: none; }
+.nebula-window-tools { display: flex; align-self: stretch; margin-left: auto; }
+.nebula-window-tools :is(.nebula-window-dock, .nebula-window-focus) { width: 30px; height: 100%; min-height: 26px; padding: 0; border: 0; border-left: 1px solid var(--nb-ink); background: transparent; color: var(--nb-ink); font: 700 14px var(--mono); cursor: pointer; }
+.nebula-window-tools :is(.nebula-window-dock, .nebula-window-focus):hover { background: var(--nb-ink); color: var(--nb-paper); }
+.nebula-window-focus[aria-pressed='true'] { background: var(--nb-violet) !important; color: #fff !important; }
+.nebula-window-tools .nebula-calendar-close { height: 100%; min-height: 26px; }
+/* Grips: a few pixels wide along the edges, larger at the corners; invisible, the pointer shows what they do. */
+.nebula-grip { position: absolute; z-index: 3; touch-action: none; }
+.nebula-grip:is(.is-n, .is-s) { left: 10px; right: 10px; height: 8px; cursor: ns-resize; }
+.nebula-grip.is-n { top: -4px; } .nebula-grip.is-s { bottom: -4px; }
+.nebula-grip:is(.is-w, .is-e) { top: 10px; bottom: 10px; width: 8px; cursor: ew-resize; }
+.nebula-grip.is-w { left: -4px; } .nebula-grip.is-e { right: -4px; }
+.nebula-grip:is(.is-nw, .is-ne, .is-sw, .is-se) { width: 14px; height: 14px; }
+.nebula-grip.is-nw { top: -5px; left: -5px; cursor: nwse-resize; } .nebula-grip.is-se { bottom: -5px; right: -5px; cursor: nwse-resize; }
+.nebula-grip.is-ne { top: -5px; right: -5px; cursor: nesw-resize; } .nebula-grip.is-sw { bottom: -5px; left: -5px; cursor: nesw-resize; }
+/* The corner a floating window is resized by shows as a small stepped notch. */
+:is(.nebula-calendar, .nebula-notebook).is-floating .nebula-grip.is-se::after { content: ''; position: absolute; right: 7px; bottom: 7px; width: 8px; height: 8px;
+  background: linear-gradient(135deg, transparent 0 50%, var(--nb-line) 50% 62%, transparent 62% 75%, var(--nb-line) 75% 87%, transparent 87%); pointer-events: none; }
+/* Order: the window clicked last on top; the focused one over the veil. */
+:is(.nebula-calendar, .nebula-notebook).is-front { z-index: 23; }
+.nebula-dim { position: absolute; inset: 0; z-index: 26; background: color-mix(in srgb, #000 66%, transparent); -webkit-backdrop-filter: blur(2px) grayscale(.4); backdrop-filter: blur(2px) grayscale(.4);
+  animation: nebula-dim-in 220ms ease both; cursor: zoom-out; }
+:is(.nebula-calendar, .nebula-notebook).is-focused { z-index: 27; box-shadow: 9px 9px 0 var(--nb-violet), 0 0 0 1px var(--nb-violet-light), 0 0 60px color-mix(in srgb, var(--nb-violet) 45%, transparent); }
+@keyframes nebula-dim-in { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .nebula-dim { animation: none; } }
+

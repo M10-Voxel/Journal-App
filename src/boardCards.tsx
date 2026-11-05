@@ -57,6 +57,10 @@ const cardsNow = () => cardStore.value, foldersNow = () => folderStore.value;
 
 /** Changes a card (or makes it): at once here, saved in order per card. */
 export function patchCard(id: string, changes: Partial<Card>) {
+  // A new card remembers when it was made; a change of title or text when it was last edited (notebook sorting).
+  const now = Date.now(), isNew = !cardStore.value.some(c => c.id === id);
+  if (isNew && changes.createdAt == null) changes = { ...changes, createdAt: now, updatedAt: now };
+  else if ('title' in changes || 'text' in changes) changes = { ...changes, updatedAt: now };
   set(cardStore, old => old.some(c => c.id === id) ? old.map(c => c.id === id ? { ...c, ...changes } : c) : [...old, { ...changes, id } as Card]);
   const pending = enqueue([id, 'folders'], () => invoke('board_patch', { id, patch: changes, source }));
   void pending.catch(e => fail(cardStore, e)); return pending;

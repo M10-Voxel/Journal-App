@@ -19,6 +19,8 @@ export type Card = {
   notebook?: boolean;
   /** A notebook note shown on the day it was made. */
   onDay?: boolean;
+  /** When the card was made and when its title or text last changed (ms; set by patchCard, missing on old cards). */
+  createdAt?: number; updatedAt?: number;
 };
 export type Folder = { id: string; name: string; parent: string | null; order: number };
 export type Patches = Record<string, Partial<Card>>;
@@ -162,6 +164,27 @@ export function notesIn(cards: Card[], folders: Folder[], choice: 'all' | 'none'
     .filter(card => words.every(word => `${card.title} ${card.text}`.toLowerCase().includes(word)))
     .sort((a, b) => (b.order ?? 0) - (a.order ?? 0) || a.id.localeCompare(b.id));
 }
+export type NoteSort = 'title' | 'created' | 'updated';
+export const noteSorts: readonly NoteSort[] = ['title', 'created', 'updated'];
+/** When a note was made: its time, else its day (old notes), else nothing (their order decides). */
+const madeAt = (card: Card) => card.createdAt ?? (card.created ? Date.parse(`${card.created}T00:00:00`) : NaN);
+/**
+ * Notes in the chosen order: by title (A to Z, untitled last), or newest first by when they were made or last edited.
+ * Old notes without times fall back to their day and their order on the board, edits to when they were made.
+ */
+export function sortNotes(notes: readonly Card[], by: NoteSort): Card[] {
+  const newest = (a: number, b: number) => (Number.isNaN(b) ? -Infinity : b) - (Number.isNaN(a) ? -Infinity : a);
+  return [...notes].sort((a, b) => {
+    if (by === 'title') {
+      const x = a.title.trim(), y = b.title.trim();
+      if (!x !== !y) return x ? -1 : 1;
+      return x.localeCompare(y, undefined, { numeric: true, sensitivity: 'base' }) || (b.order ?? 0) - (a.order ?? 0);
+    }
+    const time = by === 'updated' ? (card: Card) => card.updatedAt ?? madeAt(card) : madeAt;
+    return newest(time(a), time(b)) || (b.order ?? 0) - (a.order ?? 0) || a.id.localeCompare(b.id);
+  });
+}
+
 /** The switch "show on the day": on puts the note on the day it was made, off takes it off every day. */
 export function onDayPatch(card: Card, on: boolean, today: string): Partial<Card> {
   const day = card.created ?? card.dates[0] ?? today;

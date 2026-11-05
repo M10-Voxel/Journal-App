@@ -19,6 +19,7 @@ import type { ScopeOption } from '../planning';
 import { ScopeChoice } from './ScopeChoice';
 import { Icon, priorityIcon } from './Icon';
 import { TagPicker } from './TagPicker';
+import { DateField, TimeField } from './FieldPickers';
 import { PopupHead, PopupKeys } from './PopupChrome';
 import { usePopupLook } from '../popupLook';
 import { tagOf } from '../tags';
@@ -123,7 +124,7 @@ export function CalendarComposer({ date, draft, entry, span, onSpanChange, tag: 
   useEffect(() => {
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Element;
-      if (!target.closest('.cal-composer, .cal-time-column, .popover')) latest.current.onCancel(false);
+      if (!target.closest('.cal-composer, .cal-time-column, .popover, .shortcut-backdrop')) latest.current.onCancel(false);
     };
     // Escape also discards while the focus is still elsewhere (right after marking).
     const onKey = (event: globalThis.KeyboardEvent) => { if (event.key === 'Escape' && !cardRef.current?.contains(event.target as Node)) { event.preventDefault(); latest.current.onCancel(true); } };
@@ -172,13 +173,13 @@ export function CalendarComposer({ date, draft, entry, span, onSpanChange, tag: 
       if (longSpan && (longEnd <= minutesOf(longStartTime) || longEnd - minutesOf(longStartTime) > 366 * 1440)) { setError(t('Bitte den Zeitraum prüfen.')); setBusy(false); return; }
       if (!entry) {
         const times = longSpan ? { time: longStartTime, end: timeOfMinutes(longEnd) } : { time: draft ? timeOfMinutes(draft.start) : null, end: draft ? timeOfMinutes(draft.end) : null };
-        const made = { kind: kind === 'note' ? 'event' as const : kind, text: text.trim(), description: description.trim(), tag: tag?.id ?? null, ...times, priority, reminder, showInJournal };
+        const made = { kind: kind === 'note' ? 'event' as const : kind, text: text.trim(), description: description.trim(), tag: tagId, ...times, priority, reminder, showInJournal };
         await onCreate?.({ ...made, repeat: repeatOf({ id: '', done: false, cancelled: false, plan: null, ...made }) });
       } else {
         // An entry without an end keeps having none, unless its length changed.
         const times = longSpan ? {time:longStartTime,end:timeOfMinutes((Date.parse(longEndDate)-Date.parse(date))/86400000*1440+minutesOf(longEndTime))} : draft ? { time: timeOfMinutes(draft.start), end: entry.end || length !== slotMinutes ? timeOfMinutes(draft.end) : null } : {};
         const repeat = repeatOf(entry);
-        const change: EntryEdit = { kind, text: text.trim(), description: description.trim(), tag: tag?.id ?? null, priority, showInJournal, reminder: kind === 'note' ? false : reminder, ...times, ...kind === 'task' ? {} : { done: false, cancelled: false }, ...repeat ? { repeat } : {} };
+        const change: EntryEdit = { kind, text: text.trim(), description: description.trim(), tag: tagId, priority, showInJournal, reminder: kind === 'note' ? false : reminder, ...times, ...kind === 'task' ? {} : { done: false, cancelled: false }, ...repeat ? { repeat } : {} };
         // A changed rule makes a new series anyway; otherwise the group decides whether there is anything to ask.
         const options = repeat ? [] : editScopes(await journal.linked(entry.id).catch(() => []), entry.id, date);
         if (options.length > 1) { setApplying({ change, options }); setBusy(false); return; }
@@ -254,8 +255,8 @@ export function CalendarComposer({ date, draft, entry, span, onSpanChange, tag: 
     </div>
     {entry && <button type="button" className="cal-composer-copy" onClick={() => copyCalendarEntry({...entry,text,description,priority,tag:tagId,reminder,showInJournal,kind,repeat:rule ? {...entry.repeat!,rule} : null})}><Icon name="copy" />{t("Kopieren")}<kbd>{t("Strg")} C</kbd></button>}
     {longSpan && <div className="cal-multi-form" role="group" aria-label={t('Zeitraum')}>
-      <div className="cal-multi-row"><span className="cal-multi-label">{t('Beginn')}</span>{onSpanChange ? <input className="cal-multi-input is-date is-start" type="date" aria-label={t('Beginn')} value={date} onChange={e => { const start=e.target.value; if (!start) return; const end=longEndDate < start ? start : longEndDate; setLongEndDate(end); onSpanChange({start,end}); }} /> : <span className="cal-composer-day">{formatShortDate(date)}</span>}<input className="cal-multi-input is-time" type="time" aria-label={t('Beginn')} value={longStartTime} onChange={e=>setLongStartTime(e.target.value)}/></div>
-      <div className="cal-multi-row"><span className="cal-multi-label">{t('Ende')}</span><input className="cal-multi-input is-date is-end" type="date" aria-label={t('Ende')} min={date} value={longEndDate} onChange={e=>{ const end=e.target.value; setLongEndDate(end); if (end && end>=date) onSpanChange?.({start:date,end}); }}/><input className="cal-multi-input is-time" type="time" aria-label={t('Ende')} value={longEndTime} onChange={e=>setLongEndTime(e.target.value)}/></div>
+      <div className="cal-multi-row"><span className="cal-multi-label">{t('Beginn')}</span>{onSpanChange ? <DateField className="cal-multi-input is-start" label={t('Beginn')} value={date} onChange={start => { const end=longEndDate < start ? start : longEndDate; setLongEndDate(end); onSpanChange({start,end}); }} /> : <span className="cal-composer-day">{formatShortDate(date)}</span>}<TimeField className="cal-multi-input" label={t('Beginn')} value={longStartTime} onChange={setLongStartTime} /></div>
+      <div className="cal-multi-row"><span className="cal-multi-label">{t('Ende')}</span><DateField className="cal-multi-input is-end" label={t('Ende')} min={date} value={longEndDate} onChange={end => { setLongEndDate(end); onSpanChange?.({start:date,end}); }} /><TimeField className="cal-multi-input" label={t('Ende')} value={longEndTime} onChange={setLongEndTime} /></div>
     </div>}
     {decodeMailContent(description) ? <MailContent mail={decodeMailContent(description)!}/> : <textarea className="cal-composer-description" aria-label={t("Beschreibung")} placeholder={t("Beschreibung hinzufügen …")} value={description} onChange={event => setDescription(event.target.value)} disabled={busy} rows={2} maxLength={100000} />}
     <div className="cal-composer-foot">
@@ -296,7 +297,7 @@ export function CalendarComposer({ date, draft, entry, span, onSpanChange, tag: 
             onPick={until => { setRule({ ...shownRule, end: { until: until < shownRule.start ? shownRule.start : until } }); setRepeatView('rule'); }} />
         </div>}
     </div>}
-    {tagging && <TagPicker anchor={tagButton.current} value={tag?.id ?? null} onPick={setTagId} onClose={() => { setTagging(false); requestAnimationFrame(() => inputRef.current?.focus({ preventScroll: true })); }} />}
+    {tagging && <TagPicker anchor={tagButton.current} value={tagId} onPick={setTagId} onClose={byKey => { setTagging(false); if (byKey) requestAnimationFrame(() => inputRef.current?.focus({ preventScroll: true })); }} />}
     {applying && <ScopeChoice className="in-composer" action="edit" options={applying.options} onCancel={() => { setApplying(null); inputRef.current?.focus(); }}
       onChoose={option => { const { change } = applying; setApplying(null); setBusy(true); void onSave?.(change, option).catch(reason => { setError(String(reason)); setBusy(false); }); }} />}
     {removing && <ScopeChoice className="in-composer" action="remove" options={removing} onChoose={option => void remove(option)} onCancel={() => { setRemoving(null); inputRef.current?.focus(); }} />}

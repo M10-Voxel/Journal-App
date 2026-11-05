@@ -18,17 +18,20 @@ export function useDrawer(key: string) {
 export const calendarDrawerKey = 'journal.calendarDrawer', notebookDrawerKey = 'journal.notebookDrawer';
 
 /**
- * A sheet of paper pulled out at the book's left edge (its tab: CalendarTab, NotebookTab). On the `left` it is the
- * calendar; as an `overlay` it lies over the left page of the book (inside JournalBook), otherwise it lies down left of
- * the book, which moves aside. Its width is dragged at its edge like the sidebar's (`resizable`; over a spread it covers
- * the left page). On the `right` (the notebook) it lies over the right page; with both out the book is covered.
+ * A sheet of paper pulled out at the book's left edge (its tab: CalendarTab, NotebookTab): the calendar or the notebook
+ * (`kind`). As an `overlay` it lies over the left page of the book (inside JournalBook), otherwise it lies
+ * down left of the book, which moves aside. Its width is dragged at its edge like the sidebar's (`resizable`; over a
+ * spread it covers the left page). Both sheets behave alike, so the book beside them does too. With both out on a spread
+ * the notebook lies on the right page (`right`).
  */
-export function CalendarDrawer({ open, animated, width, resizer, resizable = true, overlay = false, side = 'left', label, disabled, onClose, children }: {
-  open: boolean; animated: boolean; width: number; resizer?: ReturnType<typeof useSidebarWidth>['handle']; resizable?: boolean; overlay?: boolean; side?: 'left' | 'right'; label?: string; disabled?: boolean; onClose: () => void; children: ReactNode;
+export function CalendarDrawer({ open, animated, width, resizer, resizable = true, overlay = false, kind = 'calendar', right = false, label, disabled, onClose, children }: {
+  open: boolean; animated: boolean; width: number; resizer?: ReturnType<typeof useSidebarWidth>['handle']; resizable?: boolean; overlay?: boolean; kind?: 'calendar' | 'notebook';
+  /** On the right page instead (the notebook while the calendar is out too). */
+  right?: boolean; label?: string; disabled?: boolean; onClose: () => void; children: ReactNode;
 }) {
   useLanguage();
-  const name = side === 'left' ? 'calendar-drawer' : 'notebook-drawer';
-  return <aside className={`${name}${overlay ? ' is-overlay' : ''}${open ? ' is-open' : ''}${animated ? ' is-animated' : ''}`} style={{ '--drawer-width': `${width}px` } as CSSProperties}
+  const name = 'calendar-drawer';
+  return <aside className={`${name} is-${kind}${right ? ' is-right' : ''}${overlay ? ' is-overlay' : ''}${open ? ' is-open' : ''}${animated ? ' is-animated' : ''}`} style={{ '--drawer-width': `${width}px` } as CSSProperties}
     aria-label={label ?? t('Kalender und Navigation')} aria-hidden={!open || undefined} inert={!open || disabled}
     onKeyDown={event => { if (event.key === 'Escape' && !event.defaultPrevented && !(event.target as Element).closest('input, textarea, select, [contenteditable="true"], [role="dialog"]')) { event.preventDefault(); onClose(); } }}>
     <div className={`${name}-sheet`}>

@@ -75,6 +75,11 @@ export const journal = {
   load: fetchDay,
   invalidate() { cache.clear(); settled.clear(); },
   cached: (date: string): Day | undefined => settled.get(date),
+  async moveCalendarEntry(id: string, from: string, to: string, time: string | null, end: string | null): Promise<string[]> {
+    const touched = await invoke<string[]>('move_calendar_entry', { id, from, to, time, end });
+    for (const date of touched) { cache.delete(date); settled.delete(date); }
+    return touched;
+  },
   prefetch(dates: readonly string[]) { for (const date of dates) fetchDay(date).catch(() => {}); },
   /** Shows a reminder again ten minutes from now. */
   snoozeReminder: (reminder: Pick<Reminder, 'id' | 'due'>) => invoke<void>('snooze_reminder', { id: reminder.id, due: reminder.due }),

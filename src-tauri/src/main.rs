@@ -20,6 +20,12 @@ pub fn browser_args() -> String { std::env::var("JOURNAL_BROWSER_ARGS").map_or_e
 static QUITTING: AtomicBool = AtomicBool::new(false);
 
 #[tauri::command]
+async fn move_calendar_entry(app: tauri::AppHandle, store: tauri::State<'_, Mutex<Store>>, id: String, from: String, to: String, time: Option<String>, end: Option<String>) -> Result<Vec<String>, String> {
+    let touched=store.lock().map_err(|e|e.to_string())?.move_calendar_entry(&id,&from,&to,time,end).map_err(|e|e.to_string())?;
+    let _=app.emit("journal:changed", &touched); Ok(touched)
+}
+
+#[tauri::command]
 fn load_period_data(store: tauri::State<'_, Mutex<Store>>) -> Result<String, String> {
     store.lock().map_err(|e| e.to_string())?.period_data().map_err(|e| e.to_string())
 }
@@ -186,6 +192,25 @@ async fn open_window(app: tauri::AppHandle, kind: String) -> Result<(), String> 
         .build().map(|_| ()).map_err(|e| e.to_string())
 }
 
+/// A window of Nebula's desk pulled out of the journal (calendar, notebook, board) as a window of its own, where the
+/// pointer let go of it. It draws its own frame exactly as in the app: no system frame, transparent, and no shadow, which
+/// on Windows also takes away the rounded corners. Closing it tells the journal (`nebula:panel-closed`), which takes the
+/// board back into its grid.
+#[tauri::command]
+async fn panel_detach(app: tauri::AppHandle, kind: String, x: f64, y: f64, width: f64, height: f64) -> Result<(), String> {
+    if !matches!(kind.as_str(), "calendar" | "notebook" | "board") { return Err("Unbekanntes Fenster".into()); }
+    let label = format!("panel-{kind}");
+    if let Some(window) = app.get_webview_window(&label) { let _ = window.unminimize(); return window.set_focus().map_err(|e| e.to_string()); }
+    let (width, height) = (width.clamp(320.0, 2400.0), height.clamp(240.0, 1600.0));
+    let window = WebviewWindowBuilder::new(&app, &label, WebviewUrl::App("index.html".into()))
+        .title("Journal").position(x, y).inner_size(width, height).min_inner_size(320.0, 240.0)
+        .decorations(false).transparent(true).shadow(false).resizable(true).additional_browser_args(&browser_args())
+        .theme(Some(tauri::Theme::Dark)).build().map_err(|e| e.to_string())?;
+    let handle = app.clone();
+    window.on_window_event(move |event| if let tauri::WindowEvent::Destroyed = event { let _ = handle.emit_to("main", "nebula:panel-closed", kind.clone()); });
+    Ok(())
+}
+
 /// Shows a day (and optionally one of its entries) in the journal window and brings that window to the front.
 #[tauri::command]
 async fn show_day(app: tauri::AppHandle, date: String, entry: Option<String>) -> Result<(), String> {
@@ -229,6 +254,6 @@ fn main() {
         .on_window_event(|window, event| {
             if window.label() == "main" && matches!(event, tauri::WindowEvent::Destroyed) { window.app_handle().exit(0); }
         })
-        .invoke_handler(tauri::generate_handler![history::history_step,board::board_list, board::board_patch, board::board_patch_many, board::board_image_save, board::board_image_load, board::board_link_preview, board::board_open_link, board::board_detach, board::board_remove, board::board_folders, board::board_folder_save, board::board_folder_remove,drive::drive_help, drive::drive_validate, drive::drive_restore, drive::drive_status, drive::drive_connect, drive::drive_cancel, drive::drive_disconnect, drive::drive_read, drive::drive_write, drive::drive_snapshot, drive::drive_apply,load_period_data, save_period_data, ui_language::set_ui_language, load_day, load_range, save_day, load_linked, change_linked, edit_linked, load_series, extend_series, load_tags, save_tags, snooze_reminder, quit_app, popup_reminders, fit_popup, reminder_action, background_hint, open_window, show_day, export_calendar, import_calendar, read_calendar_file, write_calendar_file, mail::mail_drive_snapshot, mail::mail_drive_validate, mail::mail_drive_apply, mail::mail_accounts, mail::mail_save, mail::mail_cancel, mail::mail_sync, mail::mail_remove, mail::mail_pending, mail::mail_stage, mail::mail_candidates, mail::mail_resolve, mail::mail_enabled, mail::mail_notices, mail::mail_help, mail::ml::mail_ml_status, mail::ml::mail_ml_enabled, mail::ml::mail_ml_install, mail::ml::mail_ml_analyze])
+        .invoke_handler(tauri::generate_handler![move_calendar_entry, panel_detach, history::history_step,board::board_list, board::board_patch, board::board_patch_many, board::board_image_save, board::board_image_load, board::board_link_preview, board::board_open_link, board::board_detach, board::board_remove, board::board_folders, board::board_folder_save, board::board_folder_remove,drive::drive_help, drive::drive_validate, drive::drive_restore, drive::drive_status, drive::drive_connect, drive::drive_cancel, drive::drive_disconnect, drive::drive_read, drive::drive_write, drive::drive_snapshot, drive::drive_apply,load_period_data, save_period_data, ui_language::set_ui_language, load_day, load_range, save_day, load_linked, change_linked, edit_linked, load_series, extend_series, load_tags, save_tags, snooze_reminder, quit_app, popup_reminders, fit_popup, reminder_action, background_hint, open_window, show_day, export_calendar, import_calendar, read_calendar_file, write_calendar_file, mail::mail_drive_snapshot, mail::mail_drive_validate, mail::mail_drive_apply, mail::mail_accounts, mail::mail_save, mail::mail_cancel, mail::mail_sync, mail::mail_remove, mail::mail_pending, mail::mail_stage, mail::mail_candidates, mail::mail_resolve, mail::mail_enabled, mail::mail_notices, mail::mail_help, mail::ml::mail_ml_status, mail::ml::mail_ml_enabled, mail::ml::mail_ml_install, mail::ml::mail_ml_analyze])
         .run(tauri::generate_context!()).expect("Journal konnte nicht gestartet werden");
 }

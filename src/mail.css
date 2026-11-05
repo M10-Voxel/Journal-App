@@ -44,6 +44,8 @@
 .mail-form label, .mail-proposal-edit label { display: flex; flex-direction: column; gap: 5px; font-size: 11px; }
 .mail-fields { display: flex; flex-wrap: wrap; gap: 10px; }
 .mail-fields > label { flex: 1 1 130px; min-width: 0; }
+.mail-field { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; flex: 1 1 110px; min-width: 0; color: var(--muted); font: 11px var(--sans); }
+.mail-field > span { display: flex; align-items: center; gap: 4px; }
 .mail-server { display: grid; grid-template-columns: minmax(0, 1fr) 88px; gap: 10px; }
 .mail-settings input, .mail-settings select { box-sizing: border-box; width: 100%; min-width: 0; height: 32px; padding: 5px 9px; border: 1px solid var(--edge); border-radius: 7px; background: var(--background); color: var(--text); color-scheme: dark; font: 12px var(--sans); }
 .mail-settings input:focus, .mail-settings select:focus { outline: none; border-color: var(--accent); }

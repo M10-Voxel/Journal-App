@@ -8,6 +8,7 @@ import { emit, listen } from '@tauri-apps/api/event';
 import { Day, Entry, EntryKind, formatDate, journal, localDate, shiftDate, weekDates } from './journal';
 import type { CalendarImport, LinkedAction, LinkedEdit, Reminder } from './journal';
 import type { ScopeOption } from './planning';
+import type { CalendarRequest } from './calendarRequests';
 import { ReminderPopup, ReminderToasts, chime } from './components/ReminderToasts';
 import { Icon } from './components/Icon';
 import { EntryChange, JournalEntry, entryLabels } from './components/JournalEntry';
@@ -44,6 +45,8 @@ import { JournalBook, pageHeading, useBookView } from './components/JournalBook'
 import type { BookControl } from './components/JournalBook';
 import { CalendarDrawer, CalendarTab, NotebookTab, calendarDrawerKey, notebookDrawerKey, useDrawer } from './components/CalendarDrawer';
 import { Notebook } from './components/Notebook';
+import { DetachedPanel, detachable } from './components/DetachedPanel';
+import type { DetachedKind } from './components/DetachedPanel';
 import type { BookPage } from './book';
 import { NebulaDesk } from './components/NebulaDesk';
 import '@fontsource/ibm-plex-sans/400.css';
@@ -84,7 +87,9 @@ import './tags.css';
 import './popups.css';
 import './journal-theme.css';
 import './nebula-theme.css';
+import './nebula-grid.css';
 import './popup-styles.css';
+import './popup-fields.css';
 import './popup-sheets.css';
 import './popup-chrome.css';
 import { applyColors } from './colors';
@@ -156,11 +161,14 @@ function App() {
   const [bookWide, setBookWide] = useState(true);
   const bookRef = useRef<BookControl>(null);
   const drawer = useDrawer(calendarDrawerKey);
-  // The notebook: a sheet over the book's right page (journal), a window beside the calendar's (Nebula), a tab (normal).
+  // The notebook: a sheet pulled out on the left like the calendar's (journal), a window beside the calendar's (Nebula),
+  // a tab (normal).
   const notebook = useDrawer(notebookDrawerKey);
   const lastSheet = useRef<'calendar' | 'notebook'>('calendar');
-  // Both sheets fit on a spread; on one page (or in a narrow window) the one taken out last puts the other back.
+  // In the book a sheet lies on the left page; with both out the notebook moves to the right page. That needs a spread:
+  // on one page (or in a narrow window) the sheet taken out last puts the other back.
   const sheetsFit = bookView === 'double' && bookWide;
+  const bothSheets = bookMode && drawer.open && notebook.open && sheetsFit;
   useEffect(() => { if (bookMode && drawer.open && notebook.open && !sheetsFit) (lastSheet.current === 'notebook' ? drawer : notebook).setOpen(false); }, [bookMode, drawer.open, notebook.open, sheetsFit]);
   // The window has no system title bar: its own bar (or, in the book, the cover) moves it; a double click maximizes.
   const dragWindow = (event: React.MouseEvent) => {
@@ -422,6 +430,30 @@ function App() {
 
   const mailStatus = useMailImport(importFromCalendar);
 
+  const moveFromCalendar = useStableCallback(async (entry: Entry, from: string, to: string, time: string | null, end: string | null) => {
+    if (!await save()) throw new Error(t("Bitte laufende Änderungen zuerst speichern und erneut versuchen."));
+    const target = date, before = journal.cached(target);
+    busyRef.current = true; setBusy(true);
+    try {
+      const touched = await journal.moveCalendarEntry(entry.id, from, to, time, end);
+      if (touched.includes(target)) {
+        const refreshed = await journal.load(target);
+        setDay(current => current?.date === target ? mergeCalendarImport(current, before, refreshed) : current);
+      }
+    } finally { busyRef.current = false; setBusy(false); }
+  });
+  useEffect(() => {
+    const stop=listen<CalendarRequest>('calendar:request', async event => {
+      const request=event.payload;
+      try {
+        if(request.kind==='move') await moveFromCalendar(request.entry,request.from,request.to,request.time,request.end);
+        else await createFromCalendar(request.date,request.entry);
+        await emit('calendar:request-result',{id:request.id});
+      } catch(error) { await emit('calendar:request-result',{id:request.id,error:String(error)}); }
+    });
+    return () => { void stop.then(unlisten=>unlisten()); };
+  }, []);
+
   // Editing or removing an entry from the calendar works the same way: on the day shown here through the editor, elsewhere in the store.
   // With a scope (ScopeChoice "only this / every Tuesday / all"), the edit stays with this entry when saved and reaches
   // exactly the chosen others; without one (an entry with no linked ones), saving passes text and kind on as usual.
@@ -634,12 +666,12 @@ function App() {
     {periodModes.map((mode, index) => <button type="button" key={mode} className="book-register-tab" data-period-mode={mode} aria-current={periodMode === mode ? 'page' : undefined}
       title={`${periodLabels[index]} · ${t('Strg')} ${index + 1}`} onClick={() => setPeriodMode(mode)}>{periodLabels[index]}{index === 0 && dirty && <span className="unsaved-dot" aria-label={t("Ungespeicherte Änderungen")} />}</button>)}
   </nav>;
-  // Turning both pages at once, the sheet does not cover a page: the book shows one page beside it.
-  const besideCalendar = bookMode && drawer.open && settings.bookPaging === 'spread' && !notebook.open;
+  // Turning both pages at once, a sheet (calendar or notebook) does not cover a page: the book shows one page beside it.
+  const besideCalendar = bookMode && (drawer.open || notebook.open) && !bothSheets && settings.bookPaging === 'spread';
   const notebookView = !ownLayout && notebook.open;
   const visibleOpen = visibleEntries.filter(entry => entry.kind === 'task' && !entry.done && !entry.cancelled).length;
   const nebulaStats = { entries: entryCount, open: visibleOpen, done: visibleEntries.filter(entry => entry.done).length, events: visibleEntries.filter(entry => entry.kind === 'event').length };
-  const calendar = <Calendar embedded journalDate={date} onOpen={openFromCalendar} onCreate={createFromCalendar} onEdit={editFromCalendar} onRemove={removeFromCalendar} onExport={exportFromCalendar} onImport={importFromCalendar} />;
+  const calendar = <Calendar embedded journalDate={date} onOpen={openFromCalendar} onCreate={createFromCalendar} onEdit={editFromCalendar} onMove={moveFromCalendar} onRemove={removeFromCalendar} onExport={exportFromCalendar} onImport={importFromCalendar} />;
   return <div className={`app actions-${actionLayout}${sidebar.dragging ? ' is-resizing' : ''}${bookMode ? ' is-book' : ''}${nebulaMode ? ' is-nebula' : ''}`} onFocusCapture={event => {
     const target = event.target as HTMLElement;
     if (newEntryId && !target.closest('.popover') && target.closest<HTMLElement>('[data-entry-id]')?.dataset.entryId !== newEntryId) setNewEntryId(null);
@@ -678,7 +710,7 @@ function App() {
       {bookMode ? <JournalBook mode={periodMode} date={date} today={today} onToday={() => navigate(today)} renderNav={bookNav} view={bookView} paging={settings.bookPaging} beside={besideCalendar} sheetWidth={sidebar.width} onNavigate={navigate} renderPage={bookPage} entriesScrollRef={scrollRef} controlRef={bookRef} onWideChange={setBookWide}
         calendarTab={<><CalendarTab open={drawer.open} onToggle={() => toggleDrawer()} /><NotebookTab open={notebook.open} onToggle={() => toggleNotebook()} /></>} register={register}
         overlay={<><CalendarDrawer overlay open={drawer.open} animated={drawer.animated} width={sidebar.width} resizer={sidebar.handle} resizable={besideCalendar || !(bookView === 'double' && bookWide)} disabled={driveBusy} onClose={() => toggleDrawer(true)}>{calendar}</CalendarDrawer>
-          <CalendarDrawer overlay side="right" label={t('Notizen')} open={notebook.open} animated={notebook.animated} width={sidebar.width} resizable={false} disabled={driveBusy} onClose={() => toggleNotebook(true)}><Notebook onClose={() => toggleNotebook(true)} /></CalendarDrawer></>} />
+          <CalendarDrawer overlay kind="notebook" right={bothSheets} label={t('Notizen')} open={notebook.open} animated={notebook.animated} width={sidebar.width} resizer={sidebar.handle} resizable={besideCalendar || !(bookView === 'double' && bookWide)} disabled={driveBusy} onClose={() => toggleNotebook(true)}><Notebook onClose={() => toggleNotebook(true)} /></CalendarDrawer></>} />
         : nebulaMode ? <NebulaDesk mode={periodMode} date={date} today={today} modes={periodModes} modeLabels={periodLabels} dirty={dirty} title={ready ? day.title : ''} stats={nebulaStats}
           onMode={setPeriodMode} onStep={stepPeriod} onToday={() => navigate(today)} stepLabels={stepLabels} disabled={driveBusy}
           datePicker={<MiniCalendarPicker date={date} open={datePickerOpen} onOpenChange={setDatePickerOpen} onPick={navigate} buttonRef={datePickerButtonRef} className="nebula-date">{pageHeading(date, periodMode)}</MiniCalendarPicker>}
@@ -688,7 +720,7 @@ function App() {
           activities={<PeriodNotes date={date} mode={periodMode} part="activities" onManage={() => openSettings('activities')} onImport={importFromCalendar} />}
           calendar={calendar} calendarOpen={drawer.open} onCalendarToggle={() => toggleDrawer()} onCalendarClose={() => toggleDrawer(true)}
           notebook={<Notebook />} notebookOpen={notebook.open} onNotebookToggle={() => toggleNotebook()} onNotebookClose={() => toggleNotebook(true)} onOpenDay={(target, entry) => showFromCalendar(target, entry ?? null)} onNavigate={navigate} scrollRef={scrollRef}
-          dayCalendar={(showDate, onDateChange) => <Calendar embedded fixedView="day" journalDate={date} showDate={showDate} onDateChange={onDateChange} onOpen={openFromCalendar} onCreate={createFromCalendar} onEdit={editFromCalendar} onRemove={removeFromCalendar} />} />
+          dayCalendar={(showDate, onDateChange) => <Calendar embedded fixedView="day" journalDate={date} showDate={showDate} onDateChange={onDateChange} onOpen={openFromCalendar} onCreate={createFromCalendar} onEdit={editFromCalendar} onMove={moveFromCalendar} onRemove={removeFromCalendar} />} />
         : notebookView ? <div className="notebook-view"><Notebook /></div>
         : <div className="scroll" ref={scrollRef}>
           <div className="content">
@@ -705,11 +737,13 @@ function App() {
       onSnooze={reminder => { dismissReminder(reminder); journal.snoozeReminder(reminder).catch(reason => setError(t("Erinnerung: {0}", String(reason)))); }}
       onOpen={reminder => { dismissReminder(reminder); showFromCalendar(reminder.date, reminder.id); }} onDismiss={dismissReminder} />
     {help && <ShortcutHelp onClose={() => setHelp(false)} />}
-    {settingsOpen && <SettingsDialog key={settingsTab} bookView={bookView} onBookView={setBookView} initialTab={settingsTab} beforeSync={async () => { if (!await save()) throw new Error("Lokale Änderungen konnten nicht gespeichert werden."); await flushHistoryWindows(); }} onDriveBusy={value => { driveWorking.current = value; setDriveBusy(value); }} settings={settings} mailStatus={mailStatus} onImport={importFromCalendar} onClose={() => { if (!driveWorking.current) setSettingsOpen(false); }} onChange={next => { setOpenEntryId(null); setSettings(next); saveSettings(next); }} />}
+    {settingsOpen && <SettingsDialog key={settingsTab} bookView={bookView} onBookView={setBookView} initialTab={settingsTab} beforeSync={async () => { if (!await save()) throw new Error("Lokale Änderungen konnten nicht gespeichert werden."); await flushHistoryWindows(); }} onDriveBusy={value => { driveWorking.current = value; setDriveBusy(value); }} settings={settings} mailStatus={mailStatus} onImport={importFromCalendar} onClose={() => { if (!driveWorking.current) setSettingsOpen(false); }} onChange={next => { setSettings(next); saveSettings(next); }} />}
   </div>;
 }
 
 // One bundle for all windows; the window's label decides what it shows.
 const windowLabel = getCurrentWindow().label;
 if (windowLabel === 'reminder') document.documentElement.classList.add('is-popup');
-createRoot(document.getElementById('root')!).render(<><ThemeSync /><UndoShortcuts />{windowLabel.startsWith('board-') ? <FloatingNote /> : windowLabel === 'calendar' ? <CalendarWindow /> : windowLabel === 'mini' ? <MiniCalendar /> : windowLabel === 'reminder' ? <ReminderPopup /> : <App />}{!windowLabel.startsWith('board-') && !['mini', 'reminder'].includes(windowLabel) && <MailImportToast />}</>);
+// A window of Nebula's desk pulled out of the journal draws its own frame on a transparent window.
+if (windowLabel.startsWith('panel-')) document.documentElement.classList.add('is-panel-window');
+createRoot(document.getElementById('root')!).render(<><ThemeSync /><UndoShortcuts />{windowLabel.startsWith('board-') ? <FloatingNote /> : windowLabel.startsWith('panel-') && detachable.includes(windowLabel.slice(6) as DetachedKind) ? <DetachedPanel kind={windowLabel.slice(6) as DetachedKind} /> : windowLabel === 'calendar' ? <CalendarWindow /> : windowLabel === 'mini' ? <MiniCalendar /> : windowLabel === 'reminder' ? <ReminderPopup /> : <App />}{!windowLabel.startsWith('board-') && !['mini', 'reminder'].includes(windowLabel) && <MailImportToast />}</>);

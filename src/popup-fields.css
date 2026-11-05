@@ -1,0 +1,65 @@
+/* Date and time fields, the time columns and the range of several days, in every popup look (after popup-styles.css).
+   The fields' popups are popovers (FieldPickers.tsx): their sheet comes from popup-styles.css; here the days in them,
+   the two time columns (hours | minutes, scrolling like the native picker) and the band a range of days makes in the
+   planner take each look's shapes. The fields in a form (.field-trigger) look like the look's other small fields. */
+
+/* Normal · Glas: round, glowing. */
+:root[data-theme='classic'][data-popups='b'] :is(.field-picker .cal-compact-day, .field-trigger, .popover .time-option) { border-radius: 999px; }
+:root[data-theme='classic'][data-popups='b'] :is(.field-picker .cal-compact-day[aria-selected='true'], .popover .time-option[aria-selected='true']) { box-shadow: 0 0 16px color-mix(in srgb, var(--accent) 65%, transparent); }
+:root[data-theme='classic'][data-popups='b'] .time-column { border-radius: 14px; background: color-mix(in srgb, var(--strong) 6%, transparent); }
+:root[data-theme='classic'][data-popups='b'] .planner.is-multi .planner-day.in-range { border-radius: 0; }
+:root[data-theme='classic'][data-popups='b'] .planner.is-multi .planner-day:is(.range-start, .range-end):not(.is-excluded) { border-radius: 999px; box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 55%, transparent); }
+
+/* Journal · Karteikarte: fields underlined, the choice circled in ink, the range underlined like a line of text. */
+:root[data-theme='journal'][data-popups='a'] .field-trigger { border-radius: 0; background: transparent; box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--text) 40%, transparent); font-family: var(--serif); }
+:root[data-theme='journal'][data-popups='a'] :is(.field-picker .cal-compact-day, .popover .time-option) { border-radius: 50% 45% 55% 42% / 48% 55% 45% 52%; font-family: var(--serif); }
+:root[data-theme='journal'][data-popups='a'] :is(.field-picker .cal-compact-day[aria-selected='true'], .popover .time-option[aria-selected='true']) {
+  background: transparent !important; color: var(--accent) !important; box-shadow: inset 0 0 0 1.5px var(--accent); }
+:root[data-theme='journal'][data-popups='a'] .time-column { border-radius: 0; background: transparent; box-shadow: inset 1px 0 0 color-mix(in srgb, var(--error) 30%, transparent); }
+:root[data-theme='journal'][data-popups='a'] .popover .time-option { font-size: 14px; }
+:root[data-theme='journal'][data-popups='a'] .planner.is-multi .planner-day.in-range { border-radius: 0; background: transparent; box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--accent) 55%, transparent); }
+:root[data-theme='journal'][data-popups='a'] .planner.is-multi .planner-day:is(.range-start, .range-end):not(.is-excluded) {
+  border-radius: 50% 45% 55% 42% / 48% 55% 45% 52%; background: transparent; color: var(--accent); box-shadow: inset 0 0 0 1.5px var(--accent); }
+:root[data-theme='journal'][data-popups='a'] .planner.is-multi .planner-day.is-added { border-radius: 50% 45% 55% 42% / 48% 55% 45% 52%; background: transparent; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 60%, transparent); }
+
+/* Journal · Notizblock: the range a stroke of highlighter, its ends a heavier one, the choice tilted. */
+:root[data-theme='journal'][data-popups='b'] .field-trigger { border-radius: 2px; background: color-mix(in srgb, var(--surface) 70%, #fff 30%); box-shadow: 0 1px 0 color-mix(in srgb, #3b2a1a 25%, transparent); font-family: var(--serif); }
+:root[data-theme='journal'][data-popups='b'] :is(.field-picker .cal-compact-day, .popover .time-option) { border-radius: 2px 6px 3px 5px; font-family: var(--serif); }
+:root[data-theme='journal'][data-popups='b'] :is(.field-picker .cal-compact-day[aria-selected='true'], .popover .time-option[aria-selected='true']) {
+  background: color-mix(in srgb, var(--priority) 60%, transparent) !important; color: var(--strong) !important; transform: rotate(-2deg); }
+:root[data-theme='journal'][data-popups='b'] .time-column { border-radius: 2px; background: color-mix(in srgb, var(--surface) 75%, #fff 25%); }
+:root[data-theme='journal'][data-popups='b'] .popover .time-option { font-size: 14px; }
+:root[data-theme='journal'][data-popups='b'] .planner.is-multi .planner-day.in-range { border-radius: 0; background: color-mix(in srgb, var(--priority) 32%, transparent); }
+:root[data-theme='journal'][data-popups='b'] .planner.is-multi .planner-day:is(.range-start, .range-end):not(.is-excluded) { border-radius: 2px 6px 3px 5px; background: color-mix(in srgb, var(--priority) 70%, transparent); color: var(--strong); }
+:root[data-theme='journal'][data-popups='b'] .planner.is-multi .planner-day.is-added { border-radius: 2px 6px 3px 5px; background: color-mix(in srgb, var(--priority) 45%, transparent); }
+
+/* Nebula · Terminal: square, mono, violet; the columns are two framed listings. */
+:root[data-theme='nebula'][data-popups='a'] :is(.field-trigger, .field-picker .cal-compact-day, .time-column, .popover .time-option, .field-clear) { border-radius: 0; font-family: var(--mono); }
+:root[data-theme='nebula'][data-popups='a'] :is(.field-trigger, .time-column) { background: #050505; box-shadow: inset 0 0 0 1px var(--edge); }
+:root[data-theme='nebula'][data-popups='a'] :is(.field-picker .cal-compact-day[aria-selected='true'], .popover .time-option[aria-selected='true']) { background: var(--nb-violet) !important; color: #fff !important; }
+:root[data-theme='nebula'][data-popups='a'] .planner.is-multi .planner-day.in-range { border-radius: 0; background: color-mix(in srgb, var(--nb-violet) 28%, transparent); }
+:root[data-theme='nebula'][data-popups='a'] .planner.is-multi .planner-day:is(.range-start, .range-end):not(.is-excluded) { border-radius: 0; background: var(--nb-violet); color: #fff; }
+:root[data-theme='nebula'][data-popups='a'] .planner.is-multi .planner-day.is-added { border-radius: 0; background: color-mix(in srgb, var(--nb-violet) 45%, transparent); }
+
+/* Nebula · Holo-Papier: black outlines on grey paper, the choice holographic. The time keeps its two scrolling strips:
+   sunken light fields with a black frame, like the list boxes of an old window. */
+:root[data-theme='nebula'][data-popups='b'] :is(.field-trigger, .field-picker .cal-compact-day, .time-column, .popover .time-option, .field-clear) { border-radius: 0; }
+:root[data-theme='nebula'][data-popups='b'] .field-trigger { background: #e2e2e2; box-shadow: inset 0 0 0 1px #111; color: #111; font-family: var(--mono); }
+:root[data-theme='nebula'][data-popups='b'] .field-trigger .icon { color: #111; }
+/* Square frames need air: the mono type sits clear of the black line on every side. */
+:root[data-theme='nebula'] .field-trigger { height: auto; min-height: 30px; padding: 4px 12px; gap: 9px; line-height: 1.2; }
+:root[data-theme='nebula'] .field-trigger .icon { width: 13px; height: 13px; }
+:root[data-theme='nebula'] .cal-multi-row { gap: 8px; }
+:root[data-theme='nebula'] .cal-multi-form { gap: 8px; padding: 10px 12px; }
+:root[data-theme='nebula'][data-popups='b'] :is(.field-picker .cal-compact-day, .popover .time-option) { font-family: var(--mono); }
+:root[data-theme='nebula'][data-popups='b'] :is(.field-picker .cal-compact-day[aria-selected='true'], .popover .time-option[aria-selected='true']) {
+  background: var(--holo) !important; color: #111 !important; box-shadow: inset 0 0 0 1px #111; }
+:root[data-theme='nebula'][data-popups='b'] .time-columns { gap: 6px; }
+:root[data-theme='nebula'][data-popups='b'] .time-column { width: 58px; background: #f2f2f2; box-shadow: inset 1px 1px 0 #111, inset -1px -1px 0 #fff, inset 2px 2px 0 #7a7a7a; }
+:root[data-theme='nebula'][data-popups='b'] .popover .time-option { color: #3e3e44; }
+:root[data-theme='nebula'][data-popups='b'] .popover .time-option:hover { background: #d8d0e8; color: #111; }
+:root[data-theme='nebula'][data-popups='b'] .time-colon { color: #111; font-weight: 700; }
+:root[data-theme='nebula'][data-popups='b'] .planner.is-multi .planner-day.in-range { border-radius: 0; background: color-mix(in srgb, #b9a5d8 70%, transparent); }
+:root[data-theme='nebula'][data-popups='b'] .planner.is-multi .planner-day:is(.range-start, .range-end):not(.is-excluded) { border-radius: 0; background: var(--holo); color: #111; box-shadow: inset 0 0 0 1px #111; }
+:root[data-theme='nebula'][data-popups='b'] .planner.is-multi .planner-day.is-added { border-radius: 0; background: var(--holo); color: #111; box-shadow: inset 0 0 0 1px #111; opacity: .8; }
+:root[data-theme='nebula'][data-popups='b'] .planner.is-multi .planner-day.is-excluded { color: #85858b; text-decoration-color: #111; }

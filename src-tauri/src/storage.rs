@@ -176,6 +176,28 @@ impl Store {
         tx.commit()?;
         Ok(touched.into_iter().collect())
     }
+    /// Move one calendar occurrence, preserving its identity, tags and links.
+    pub fn move_calendar_entry(&mut self, id: &str, from: &str, to: &str, time: Option<String>, end: Option<String>) -> Result<Vec<String>> {
+        validate_date(from)?; validate_date(to)?;
+        if !valid_time(&time) || !valid_span(&time, &end) { return Err("Ungültige Uhrzeit".into()); }
+        let tx = self.conn.transaction()?;
+        let actual: Option<String> = tx.query_row("SELECT day_date FROM entries WHERE id=?1", [id], |r| r.get(0)).optional()?;
+        if actual.as_deref() != Some(from) { return Err("Der Eintrag wurde inzwischen geändert. Bitte erneut versuchen.".into()); }
+        crate::history::begin(&tx)?;
+        tx.execute("INSERT INTO days(date,title,body,revision) VALUES(?1,'','',1) ON CONFLICT(date) DO NOTHING", [to])?;
+        let position: i64 = tx.query_row("SELECT COALESCE(MAX(position)+1,0) FROM entries WHERE day_date=?1", [to], |r| r.get(0))?;
+        tx.execute("UPDATE entries SET day_date=?2,time=?3,end_time=?4,position=CASE WHEN day_date=?2 THEN position ELSE ?5 END WHERE id=?1", params![id,to,time,end,position])?;
+        let mut touched = BTreeSet::from([from.to_string(), to.to_string()]);
+        let plans = tx.prepare("SELECT id,day_date,plan FROM entries WHERE plan IS NOT NULL")?.query_map([], |r| Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?)))?.collect::<rusqlite::Result<Vec<_>>>()?;
+        for (plan_id, date, raw) in plans {
+            let mut plan: Plan = serde_json::from_str(&raw)?;
+            let mut changed = false;
+            for target in &mut plan.targets { if target.id == id && target.date != to { target.date=to.to_string(); changed=true; } }
+            if changed { tx.execute("UPDATE entries SET plan=?2 WHERE id=?1", params![plan_id,serde_json::to_string(&plan)?])?; touched.insert(date); }
+        }
+        for date in &touched { tx.execute("UPDATE days SET revision=revision+1 WHERE date=?1", [date])?; }
+        tx.commit()?; Ok(touched.into_iter().collect())
+    }
     pub fn open(path: &Path) -> Result<Self> { Self::from_connection(Connection::open(path)?) }
     fn from_connection(mut conn: Connection) -> Result<Self> {
         conn.execute_batch("PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;")?;
@@ -759,6 +781,19 @@ mod tests {
     fn repeat(rule: serde_json::Value, dates: &[&str], horizon: &str) -> Repeat {
         Repeat { series: Uuid::new_v4().to_string(), rule: Some(rule), horizon: horizon.into(), dates: dates.iter().map(|date| (*date).into()).collect() }
     }
+    #[test] fn moving_calendar_entry_preserves_tag_span_and_plan_references() {
+        let mut db=store(); let work=tag("Arbeit", "#569eff"); db.save_tags(&[work.clone()]).unwrap();
+        let mut day=db.load("2026-11-01").unwrap(); let mut item=entry("task");
+        let planned=plan("date", &["2026-11-02"], None, false); let id=planned.targets[0].id.clone(); item.plan=Some(planned); day.entries.push(item); db.save(day).unwrap();
+        let mut copy=db.load("2026-11-02").unwrap(); copy.entries[0].tag=Some(work.id.clone()); db.save(copy).unwrap();
+        let touched=db.move_calendar_entry(&id,"2026-11-02","2026-11-04",Some("10:00".into()),Some("58:00".into())).unwrap();
+        assert!(touched.contains(&"2026-11-01".into()));
+        let moved=db.load("2026-11-04").unwrap().entries.remove(0);
+        assert_eq!((moved.id.as_str(),moved.tag.as_deref(),moved.time.as_deref(),moved.end.as_deref()),(id.as_str(),Some(work.id.as_str()),Some("10:00"),Some("58:00")));
+        assert_eq!(db.load("2026-11-01").unwrap().entries[0].plan.as_ref().unwrap().targets[0].date,"2026-11-04");
+        assert!(db.move_calendar_entry(&id,"2026-11-02","2026-11-05",None,None).is_err());
+        assert_eq!(db.load("2026-11-04").unwrap().entries[0].id,id);
+    }
     /// A task "Sport" at 18:00 every Monday from 2 November, created up to the 29th; returns the series.
     fn weekly(db: &mut Store) -> String {
         let mut day = db.load("2026-11-02").unwrap();
@@ -1223,6 +1258,9 @@ mod tests {
         let loaded = db.load("2026-11-02").unwrap();
         assert_eq!(loaded.entries[0].tag.as_deref(), Some(work.id.as_str()));
         assert_eq!(loaded.entries[1].tag, None, "An unknown tag is dropped instead of failing the save.");
+        let mut renamed=work.clone(); renamed.name="Beruf".into(); renamed.color="#ff9944".into();
+        db.save_tags(&[uni.clone(),renamed]).unwrap();
+        assert_eq!(db.load("2026-11-02").unwrap().entries[0].tag.as_deref(),Some(work.id.as_str()),"Renaming and recolouring keep the same tag identity.");
         assert_eq!(db.save_tags(&[uni.clone()]).unwrap(), ["2026-11-02"]);
         let after = db.load("2026-11-02").unwrap();
         assert_eq!(after.entries[0].tag, None);
