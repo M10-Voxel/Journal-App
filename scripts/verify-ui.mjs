@@ -1437,12 +1437,12 @@ async function checkNebulaTheme() {
   await evaluate(`document.querySelector('.nebula-cal-strip [data-strip-date="${otherDay}"]').click()`);
   await until(`document.querySelector('.nebula-cal-strip [data-strip-date="${otherDay}"]').getAttribute('aria-pressed')==='true'`);
   assert.equal(await evaluate("document.querySelector('.nebula-tab[aria-current=page]').dataset.periodMode"), 'week');
-  // Entries are made in it like in the calendar: dragging over the hours opens the composer.
+  // Entries are made in it like in the calendar: dragging over the hours with the right button opens the composer.
   const column = await evaluate(`(() => { const r=document.querySelector('${panelCal} .cal-time-column').getBoundingClientRect(), b=document.querySelector('${panelCal} .cal-body').getBoundingClientRect(); const allday=document.querySelector('${panelCal} .cal-time-allday').getBoundingClientRect(); const top=Math.max(r.top,b.top,allday.bottom)+30; return {x:r.left+r.width/2, y:top}; })()`);
   await command('Input.dispatchMouseEvent', { type:'mouseMoved', x:column.x, y:column.y });
-  await command('Input.dispatchMouseEvent', { type:'mousePressed', x:column.x, y:column.y, button:'left', clickCount:1 });
-  for (let step = 1; step <= 6; step++) await command('Input.dispatchMouseEvent', { type:'mouseMoved', x:column.x, y:column.y + step * 12, button:'left', buttons:1 });
-  await command('Input.dispatchMouseEvent', { type:'mouseReleased', x:column.x, y:column.y + 72, button:'left', clickCount:1 });
+  await command('Input.dispatchMouseEvent', { type:'mousePressed', x:column.x, y:column.y, button:'right', buttons:2, clickCount:1 });
+  for (let step = 1; step <= 6; step++) await command('Input.dispatchMouseEvent', { type:'mouseMoved', x:column.x, y:column.y + step * 12, button:'right', buttons:2 });
+  await command('Input.dispatchMouseEvent', { type:'mouseReleased', x:column.x, y:column.y + 72, button:'right', buttons:0, clickCount:1 });
   await until("Boolean(document.querySelector('.cal-composer'))");
   assert(await evaluate(`Boolean(document.querySelector('${panelCal} .cal-selection'))`), 'The dragged hours are marked in the day view (not the whole day).');
   assert(await evaluate(`[...document.querySelectorAll('${panelCal} .cal-toolbar :is(.cal-nav, .cal-actions)')].every(e => { const r=e.getBoundingClientRect(), p=document.querySelector('.nebula-cal-panel').getBoundingClientRect(); return r.width>0 && r.left>=p.left-1 && r.right<=p.right+1; })`), 'Turning and filters fit the panel.');
@@ -2439,6 +2439,19 @@ try {
     await command('Page.reload');
     await until("document.querySelector('.notebook-title')?.value==='Projektplan'");
     assert.equal(await evaluate("document.querySelectorAll('.notebook-attachment').length"),1);
+    await evaluate("window.__notebookBeforeMove=sessionStorage.boardCards;document.querySelectorAll('.notebook-note')[0].click()");
+    await evaluate("document.querySelectorAll('.notebook-note')[1].dispatchEvent(new MouseEvent('click',{bubbles:true,ctrlKey:true}))");
+    await until("document.querySelectorAll('.notebook-note.is-chosen').length===2");
+    await evaluate("document.querySelectorAll('.notebook-note')[0].click()");
+    await evaluate("document.querySelectorAll('.notebook-note')[2].dispatchEvent(new MouseEvent('click',{bubbles:true,shiftKey:true}))");
+    await until("document.querySelectorAll('.notebook-note.is-chosen').length===3");
+    await evaluate("document.querySelector('.notebook-chosen .notebook-folder-pick').click()");
+    await until("Boolean(document.querySelector('.folder-pick-option'))");
+    await evaluate("[...document.querySelectorAll('.folder-pick-option')].find(b=>b.textContent.includes('Privat')).click()");
+    await until("JSON.parse(sessionStorage.boardCards).filter(c=>c.kind==='note').every(c=>c.folder==='home')");
+    await evaluate("sessionStorage.boardCards=window.__notebookBeforeMove;window.__uiTest.emit('board:reset',null)");
+    await until("!document.querySelector('.notebook-chosen')");
+
     await evaluate("document.querySelector('[data-folder=home] .notebook-folder-name').click()");
     await until("document.querySelector('.notebook-title')?.value==='Urlaubsplan'");
     await fill('Zettel suchen','Projektplan');
@@ -2508,6 +2521,21 @@ try {
       folder.dispatchEvent(new DragEvent('dragover',{bubbles:true,cancelable:true,dataTransfer:dt}));
       folder.dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer:dt})); })()`);
     await until("JSON.parse(sessionStorage.boardCards).find(c=>c.id==='home-note').folder==='work'");
+    // Several notes at once: Ctrl+click and Shift+click choose, the bar moves them all into a folder.
+    await evaluate("(() => {const cards=JSON.parse(sessionStorage.boardCards);cards.push({...cards.find(c=>c.kind==='note'),id:'range-test-note',title:'Dritter Testzettel',links:[]});sessionStorage.boardCards=JSON.stringify(cards);window.__uiTest.emit('board:reset',null);})()");
+    await evaluate("[...document.querySelectorAll('.notebook-folder-name')].find(b=>b.closest('[data-folder=all]')).click()");
+    await until("document.querySelectorAll('.notebook-note').length>=3");
+    const ids = await evaluate("[...document.querySelectorAll('.notebook-note')].slice(0,3).map(n=>n.dataset.noteId)");
+    await evaluate(`document.querySelector('[data-note-id="${ids[0]}"]').click()`);
+    await evaluate(`document.querySelector('[data-note-id="${ids[2]}"]').dispatchEvent(new MouseEvent('click',{bubbles:true,shiftKey:true}))`);
+    await until("document.querySelectorAll('.notebook-note.is-chosen').length===3 && Boolean(document.querySelector('.notebook-chosen'))");
+    await evaluate(`document.querySelector('[data-note-id="${ids[1]}"]').dispatchEvent(new MouseEvent('click',{bubbles:true,ctrlKey:true}))`);
+    await until("document.querySelectorAll('.notebook-note.is-chosen').length===2");
+    await pause(150); await screenshot('notebook-multi.png');
+    await evaluate("document.querySelector('.notebook-chosen .notebook-folder-pick').click()");
+    await until("Boolean(document.querySelector('.folder-pick'))");
+    await evaluate("[...document.querySelectorAll('.folder-pick-option')].find(o=>!o.classList.contains('is-none')).click()");
+    await until(`(() => { const cards=JSON.parse(sessionStorage.boardCards); const a=cards.find(c=>c.id===${JSON.stringify(ids[0])}), b=cards.find(c=>c.id===${JSON.stringify(ids[2])}); return a.folder && a.folder===b.folder && !document.querySelector('.notebook-chosen'); })()`);
     // In the journal the notebook is a sheet on the left like the calendar's; only one of them is out at a time.
     await evaluate(`localStorage.setItem('journal.settings',JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'),theme:'journal',pixel:false,colorTheme:'paper',bookPaging:'page'}));localStorage.setItem('journal.bookView','double');localStorage.setItem('journal.calendarDrawer','0');localStorage.setItem('journal.notebookDrawer','1')`);
     await command('Page.reload');
@@ -2893,6 +2921,88 @@ try {
     await until("document.querySelector('.cal-year-day[data-date=\""+next+"\"]').classList.contains('has-mark')");
 
     console.log('Mail view and calendar zoom passed: Ctrl-wheel scales only hours; HTML styles render in a sandbox without scripts.');
+  } else if (process.env.JOURNAL_UI_SCOPE === 'search') {
+    // The search in each design: Ctrl+F, words and filters with suggestions, a result opens where it was made.
+    for (const theme of ['classic', 'journal', 'nebula']) {
+      await evaluate(`localStorage.setItem('journal.settings', JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'), theme:'${theme}', popupStyle:'a', colorTheme:'${theme === 'journal' ? 'paper' : 'original'}'}))`);
+      await command('Page.reload');
+      await until("document.querySelectorAll('.entry').length>=5");
+      await pause(300);
+      await key('f', 'KeyF', 2);
+      await until("document.activeElement?.classList.contains('search-input')");
+      await command('Input.insertText', { text:'@Auf' });
+      await until("[...document.querySelectorAll('.search-suggestion')].some(item => item.textContent.includes('Aufgabe'))");
+      await pause(200); await screenshot(`search-${theme}-suggest.png`);
+      await key('Enter', 'Enter');
+      await until("document.querySelector('.search-input').value.startsWith('@Aufgabe ')");
+      await command('Input.insertText', { text:'Park' });
+      await until("[...document.querySelectorAll('.search-result')].some(item => item.textContent.includes('Park'))");
+      await pause(200); await screenshot(`search-${theme}-results.png`);
+      await key('Enter', 'Enter');
+      await until("document.activeElement?.closest('.entry')?.textContent.includes('Park') && !document.querySelector('.search-panel')");
+    }
+    console.log('Search checks passed.');
+  } else if (process.env.JOURNAL_UI_SCOPE === 'review') {
+    // Screenshots for a look: a multi-day entry in the year view, an entry edited in the hours, the folder pick.
+    await evaluate("(() => { const day = window.__uiTest.day(); day.entries.push({ id:'30000000-0000-4000-8000-000000000001', kind:'event', text:'Reise', done:false, cancelled:false, priority:false, time:'09:00', end:'57:00', showInJournal:false }, { id:'30000000-0000-4000-8000-000000000002', kind:'event', text:'Besprechung', done:false, cancelled:false, priority:false, time:'10:00', end:'11:30' }); return window.__uiTest.store(day); })()");
+    await evaluate("document.querySelector('.sidebar .cal').focus()"); await key('j','KeyJ');
+    await until("Boolean(document.querySelector('.cal-year-span'))");
+    await evaluate("document.querySelector('.cal-year-span').scrollIntoView({block:'center'})");
+    await pause(300); await screenshot('review-year-span.png');
+    await evaluate("document.querySelector('.sidebar .cal').focus()"); await key('t','KeyT');
+    await until("[...document.querySelectorAll('.sidebar .cal-item.is-block')].some(item => item.textContent.includes('Besprechung'))");
+    await evaluate("[...document.querySelectorAll('.sidebar .cal-item.is-block')].find(item => item.textContent.includes('Besprechung')).dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true}))");
+    await until("Boolean(document.querySelector('.cal-selection.is-edit')) && Boolean(document.querySelector('.cal-composer.is-placed'))");
+    assert.equal(await evaluate("getComputedStyle(document.querySelector('.cal-selection.is-edit')).outlineStyle"), 'dashed');
+    await pause(300); await screenshot('review-edit.png');
+    // A left click elsewhere discards the card.
+    const elsewhere = await evaluate("(() => { const r=document.querySelector('.sidebar .cal-time-column').getBoundingClientRect(); return { x:r.left+r.width/2, y:r.top+40 }; })()");
+    await command('Input.dispatchMouseEvent',{type:'mousePressed',...elsewhere,button:'left',buttons:1,clickCount:1});
+    await command('Input.dispatchMouseEvent',{type:'mouseReleased',...elsewhere,button:'left',buttons:0,clickCount:1});
+    await until("!document.querySelector('.cal-composer') && !document.querySelector('.cal-selection')");
+    // A frame drawn around the block chooses it; Delete removes it.
+    const block = await evaluate("(() => { const r=[...document.querySelectorAll('.sidebar .cal-item.is-block')].find(item => item.textContent.includes('Besprechung')).getBoundingClientRect(); return { x1:r.left-12, y1:r.top-12, x2:r.right+6, y2:r.bottom+12 }; })()");
+    await command('Input.dispatchMouseEvent',{type:'mouseMoved',x:block.x1,y:block.y1});
+    await command('Input.dispatchMouseEvent',{type:'mousePressed',x:block.x1,y:block.y1,button:'left',buttons:1,clickCount:1});
+    await command('Input.dispatchMouseEvent',{type:'mouseMoved',x:(block.x1+block.x2)/2,y:(block.y1+block.y2)/2,button:'left',buttons:1});
+    await command('Input.dispatchMouseEvent',{type:'mouseMoved',x:block.x2,y:block.y2,button:'left',buttons:1});
+    await until("Boolean(document.querySelector('.cal-frame')) && [...document.querySelectorAll('.sidebar .cal-item.is-selected')].some(item => item.textContent.includes('Besprechung'))");
+    await pause(150); await screenshot('review-frame.png');
+    await command('Input.dispatchMouseEvent',{type:'mouseReleased',x:block.x2,y:block.y2,button:'left',buttons:0,clickCount:1});
+    await until("!document.querySelector('.cal-frame') && document.querySelectorAll('.sidebar .cal-item.is-selected').length===1");
+    await key('Delete','Delete');
+    await until("!window.__uiTest.day().entries.some(entry => entry.text === 'Besprechung')");
+    // Two chosen entries move together (both shown moving) and stay chosen afterwards.
+    await evaluate("(() => { const day = window.__uiTest.day(); day.entries.push({ id:'30000000-0000-4000-8000-000000000004', kind:'event', text:'Eins', done:false, cancelled:false, priority:false, time:'12:00', end:'13:00' }, { id:'30000000-0000-4000-8000-000000000005', kind:'event', text:'Zwei', done:false, cancelled:false, priority:false, time:'14:00', end:'15:00' }); return window.__uiTest.store(day); })()");
+    await until("['Eins','Zwei'].every(text => [...document.querySelectorAll('.sidebar .cal-item.is-block')].some(item => item.textContent.includes(text)))");
+    const pair = await evaluate("(() => { const find = text => [...document.querySelectorAll('.sidebar .cal-item.is-block')].find(item => item.textContent.includes(text)).getBoundingClientRect(); const a=find('Eins'), b=find('Zwei'); return { x1:a.left-10, y1:a.top-10, x2:b.right+6, y2:b.bottom+10, gx:a.left+a.width/2, gy:a.top+a.height/2 }; })()");
+    await command('Input.dispatchMouseEvent',{type:'mouseMoved',x:pair.x1,y:pair.y1});
+    await command('Input.dispatchMouseEvent',{type:'mousePressed',x:pair.x1,y:pair.y1,button:'left',buttons:1,clickCount:1});
+    await command('Input.dispatchMouseEvent',{type:'mouseMoved',x:pair.x2,y:pair.y2,button:'left',buttons:1});
+    await command('Input.dispatchMouseEvent',{type:'mouseReleased',x:pair.x2,y:pair.y2,button:'left',buttons:0,clickCount:1});
+    await until("document.querySelectorAll('.sidebar .cal-item.is-selected').length===2");
+    const hour = await evaluate("parseFloat(getComputedStyle(document.querySelector('.sidebar .cal-time')).getPropertyValue('--hour'))");
+    await command('Input.dispatchMouseEvent',{type:'mouseMoved',x:pair.gx,y:pair.gy});
+    await command('Input.dispatchMouseEvent',{type:'mousePressed',x:pair.gx,y:pair.gy,button:'left',buttons:1,clickCount:1});
+    await command('Input.dispatchMouseEvent',{type:'mouseMoved',x:pair.gx,y:pair.gy+hour/2,button:'left',buttons:1});
+    await command('Input.dispatchMouseEvent',{type:'mouseMoved',x:pair.gx,y:pair.gy+hour,button:'left',buttons:1});
+    await until("document.querySelectorAll('.cal-drag-preview').length===2");
+    await pause(150); await screenshot('review-group-drag.png');
+    await command('Input.dispatchMouseEvent',{type:'mouseReleased',x:pair.gx,y:pair.gy+hour,button:'left',buttons:0,clickCount:1});
+    await until("(() => { const entries = window.__uiTest.day().entries; return entries.find(e => e.text==='Eins')?.time==='13:00' && entries.find(e => e.text==='Zwei')?.time==='15:00'; })()");
+    await until("document.querySelectorAll('.sidebar .cal-item.is-selected').length===2");
+    await key('Escape');
+    await until("!document.querySelector('.sidebar .cal-item.is-selected')");
+    // An entry past midnight: both its parts wear the dashed edge while edited.
+    await evaluate("(() => { const day = window.__uiTest.day(); day.entries.push({ id:'30000000-0000-4000-8000-000000000003', kind:'event', text:'Nachtfahrt', done:false, cancelled:false, priority:false, time:'21:00', end:'27:00' }); return window.__uiTest.store(day); })()");
+    await evaluate("document.querySelector('.sidebar .cal').focus()"); await key('w','KeyW');
+    await until("[...document.querySelectorAll('.sidebar .cal-item.is-block')].filter(item => item.textContent.includes('Nachtfahrt')).length===2");
+    await evaluate("[...document.querySelectorAll('.sidebar .cal-item.is-block')].find(item => item.textContent.includes('Nachtfahrt')).dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true}))");
+    await until("document.querySelectorAll('.cal-selection.is-edit').length===2 && Boolean(document.querySelector('.cal-composer.is-placed'))");
+    assert(await evaluate("[...document.querySelectorAll('.cal-selection.is-edit')].every(part => getComputedStyle(part).outlineStyle==='dashed')"), 'Both parts of an overnight entry wear the dashed edge.');
+    await pause(300); await screenshot('review-night-edit.png');
+    await key('Escape');
+    console.log('Review screenshots taken.');
   } else if (process.env.JOURNAL_UI_SCOPE === 'looks') {
     // Each popup look builds an entry's actions its own way (ActionSheet); Normal · Karte keeps the orbit.
     for (const [theme, popups] of [['classic','a'],['classic','b'],['journal','a'],['journal','b'],['nebula','a'],['nebula','b']]) {
@@ -3365,6 +3475,21 @@ try {
     await checkJournalTheme();
   } else if (process.env.JOURNAL_UI_SCOPE === 'pixel') {
     await checkPixelTheme();
+  } else if (process.env.JOURNAL_UI_SCOPE === 'nebula-sizing') {
+    await evaluate("localStorage.setItem('journal.settings',JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'),theme:'nebula'}));localStorage.removeItem('journal.nebulaLayout');localStorage.setItem('journal.calendarDrawer','1');localStorage.setItem('journal.notebookDrawer','1');localStorage.removeItem('journal.nebulaWindow.calendar');localStorage.removeItem('journal.nebulaWindow.notebook');");
+    await command('Emulation.setDeviceMetricsOverride',{width:1800,height:900,deviceScaleFactor:1,mobile:false});
+    await command('Page.reload');
+    await until("Boolean(document.querySelector('.nebula-notebook.is-open'))");await pause(500);
+    assert(await evaluate("Math.abs(document.querySelector('.nebula-calendar').getBoundingClientRect().right-document.querySelector('.nebula-notebook').getBoundingClientRect().left)<1"),'Windows share a seam');
+    assert(await evaluate("Math.abs(document.querySelector('[data-panel=data]').getBoundingClientRect().height-document.querySelector('[data-panel=board]').getBoundingClientRect().height)<1"),'Default data and board heights match');
+    await screenshot('nebula-adjacent.png');
+    await evaluate("document.querySelector('.nebula-calendar-close').click();document.querySelector('.nebula-notebook .nebula-calendar-close').click()");
+    const resize = async delta => { await evaluate(`(() => {const grip=document.querySelector('[data-panel=data] .nebula-panel-resize');grip.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,button:0,clientY:0}));window.dispatchEvent(new PointerEvent('pointermove',{clientY:${delta}}));window.dispatchEvent(new PointerEvent('pointerup'));})()`);await pause(150); };
+    await resize(1000);
+    assert.equal(await evaluate("getComputedStyle(document.querySelector('[data-panel=data] .nebula-panel-body')).overscrollBehaviorY"),'auto','A resized panel without overflow lets the desk scroll');
+    await resize(-2000);
+    assert.equal(await evaluate("getComputedStyle(document.querySelector('[data-panel=data] .nebula-panel-body')).overscrollBehaviorY"),'contain','Overflowing panel keeps scrolling inside');
+    assert.deepEqual(errors,[]);console.log('Nebula sizing passed: adjacent windows, equal default heights and overflow-dependent scroll containment.');
   } else if (process.env.JOURNAL_UI_SCOPE === 'nebula') {
     await checkNebulaTheme();
   } else if (process.env.JOURNAL_UI_SCOPE === 'popups') {

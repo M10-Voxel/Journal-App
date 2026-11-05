@@ -53,3 +53,14 @@ test('the colour picker converts losslessly between hex and hue, saturation, bri
   assert.equal(hsvaOf('#808080', 200).h, 200, 'Grey keeps the hue the picker was at.');
   assert.equal(hexOf({ h:0, s:1, v:1, a:.5 }, false), '#ff0000', 'Without opacity the alpha is left out.');
 });
+
+test('tag kinds: own first, then the checklist, then the mail import; moving stays within a kind', async () => {
+  const { groupTags, moveWithinKind, orderedTags } = await import('../src/tagKinds.ts');
+  const mail = { id:'f4c8191a-2d70-4b01-9d00-000000000001', name:'Lieferung', color:'#e6a85c' };
+  const list = [mail, { id:'a1', name:'Sport', color:'#fff' }, { id:'o1', name:'Arbeit', color:'#fff' }, { id:'o2', name:'Uni', color:'#fff' }];
+  const activities = new Set(['a1']);
+  assert.deepEqual(groupTags(list, activities).map(group => group.kind), ['own', 'activity', 'mail']);
+  assert.deepEqual(orderedTags(list, activities).map(tag => tag.id), ['o1', 'o2', 'a1', mail.id]);
+  assert.deepEqual(moveWithinKind(list, 'o2', -1, activities).map(tag => tag.id), ['o2', 'o1', 'a1', mail.id]);
+  assert.deepEqual(moveWithinKind(list, 'a1', -1, activities).map(tag => tag.id), ['o1', 'o2', 'a1', mail.id], 'A tag never leaves its kind.');
+});

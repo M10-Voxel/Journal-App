@@ -6,6 +6,8 @@ import type { Tag } from '../tags';
 import { saveTags, useTags } from '../tagStore';
 import { ColorButton } from './ColorPicker';
 import { Icon } from './Icon';
+import { groupTags, moveWithinKind, orderedTags, tagKindLabel } from '../tagKinds';
+import { useActivityTagIds } from '../tagGroups';
 
 /** A name edited in place: saved on Enter or when leaving the field, Escape takes the change back. */
 function NameField({ tag, onRename }: { tag: Tag; onRename: (name: string) => Promise<boolean> }) {
@@ -34,7 +36,9 @@ export function TagSettings() {
   const latest = useRef({ colors });
   latest.current = { colors };
   const listRef = useRef<HTMLDivElement>(null);
-  const shown = tags.map(tag => colors[tag.id] ? { ...tag, color: colors[tag.id] } : tag);
+  const activityIds = useActivityTagIds();
+  const shown = orderedTags(tags, activityIds).map(tag => colors[tag.id] ? { ...tag, color: colors[tag.id] } : tag);
+  const groups = groupTags(shown, activityIds);
   async function store(edit: (current: Tag[]) => Tag[]): Promise<boolean> {
     window.clearTimeout(pending.current);
     pending.current = undefined;
@@ -66,15 +70,11 @@ export function TagSettings() {
       if (pending.current !== undefined || Object.keys(latest.current.colors).length) void store(current => current);
     };
   }, []);
+  // Tags move only among those of their kind (own, checklist, mail); the stored list keeps the kinds together.
   const move = (index: number, step: -1 | 1) => {
     const id = shown[index].id;
-    void store(current => {
-      const next = [...current], at = next.findIndex(tag => tag.id === id);
-      if (at < 0) return next;
-      const [tag] = next.splice(at, 1);
-      next.splice(Math.max(0, Math.min(next.length, at + step)), 0, tag);
-      return next;
-    }).then(() => requestAnimationFrame(() => listRef.current?.querySelectorAll<HTMLButtonElement>(step < 0 ? '.tag-up' : '.tag-down')[index + step]?.focus()));
+    void store(current => moveWithinKind(current, id, step, activityIds))
+      .then(() => requestAnimationFrame(() => listRef.current?.querySelector<HTMLElement>(`[data-tag-id="${id}"] ${step < 0 ? '.tag-up' : '.tag-down'}`)?.focus()));
   };
   const newColor = color ?? nextTagColor(tags);
   async function add() {
@@ -88,16 +88,19 @@ export function TagSettings() {
     <h3 id="settings-tags-title">{t('Tags')}</h3>
     <p className="settings-hint">{t('Tags wie Arbeit, Privat oder Uni gruppieren Einträge im Journal und färben sie im Kalender. Zuweisen mit ')}<kbd>Alt</kbd> <kbd>G</kbd>{t(' am Eintrag oder im Kalender-Popup; ein- und ausblenden über das Tag-Symbol in der Leiste.')}</p>
     <div ref={listRef} className="tag-list" role="list" aria-labelledby="settings-tags-title">
-      {shown.map((tag, index) => <div key={tag.id} className="tag-row" role="listitem" style={{ '--tag': tag.color } as CSSProperties} data-tag-row={tag.name}>
+      {groups.map(group => <div key={group.kind} className={`tag-group is-${group.kind}`} role="group" aria-label={tagKindLabel(group.kind)}>
+      <h4 className="tag-group-label">{tagKindLabel(group.kind)}</h4>
+      {group.tags.map((tag, place) => { const index = shown.indexOf(tag); return <div key={tag.id} className="tag-row" role="listitem" style={{ '--tag': tag.color } as CSSProperties} data-tag-row={tag.name} data-tag-id={tag.id}>
         <ColorButton value={tag.color} label={tag.name} swatches={tagSwatches} onChange={value => recolor(tag.id, value)} />
         <NameField tag={tag} onRename={value => store(current => current.map(other => other.id === tag.id ? { ...other, name: value } : other))} />
         <span className="tag-row-sample" aria-hidden="true"><i />{tag.name}</span>
         <kbd className="tag-row-key" title={t('Taste in Auswahl und Filter')}>{index < 9 ? index + 1 : ''}</kbd>
-        <button type="button" className="cal-icon-button tag-up" aria-label={t('{0} nach oben', tag.name)} data-tip={t('Nach oben')} disabled={index === 0} onClick={() => move(index, -1)}><Icon name="up" /></button>
-        <button type="button" className="cal-icon-button tag-down" aria-label={t('{0} nach unten', tag.name)} data-tip={t('Nach unten')} disabled={index === shown.length - 1} onClick={() => move(index, 1)}><Icon name="down" /></button>
+        <button type="button" className="cal-icon-button tag-up" aria-label={t('{0} nach oben', tag.name)} data-tip={t('Nach oben')} disabled={place === 0} onClick={() => move(index, -1)}><Icon name="up" /></button>
+        <button type="button" className="cal-icon-button tag-down" aria-label={t('{0} nach unten', tag.name)} data-tip={t('Nach unten')} disabled={place === group.tags.length - 1} onClick={() => move(index, 1)}><Icon name="down" /></button>
         {removing === tag.id
           ? <button type="button" className="tag-remove is-asking" data-autofocus onBlur={() => setRemoving(null)} onClick={() => { setRemoving(null); void store(current => current.filter(other => other.id !== tag.id)); }}>{t('Löschen?')}</button>
           : <button type="button" className="cal-icon-button tag-remove" aria-label={t('{0} löschen', tag.name)} data-tip={t('Löschen · Einträge behalten, ohne Tag')} onClick={event => { const row = event.currentTarget.closest('.tag-row'); setRemoving(tag.id); requestAnimationFrame(() => row?.querySelector<HTMLButtonElement>('.tag-remove')?.focus()); }}><Icon name="trash" /></button>}
+      </div>; })}
       </div>)}
       {!tags.length && <p className="tag-empty">{t('Noch keine Tags.')}</p>}
     </div>

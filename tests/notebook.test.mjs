@@ -83,8 +83,11 @@ test('notes by folder, outside every folder, and by search; the day switch', () 
     card('d', 'note', { folder: 'gone', order: 4 }), card('img', 'image')];
   assert.deepEqual(notesIn(cards, folders, 'all').map(c => c.id), ['d', 'b', 'c', 'a']);
   assert.deepEqual(notesIn(cards, folders, 'none').map(c => c.id), ['d', 'c']);
-  assert.deepEqual(notesIn(cards, folders, 'garden').map(c => c.id), ['a']);
-  assert.deepEqual(notesIn(cards, folders, 'top').map(c => c.id), ['b', 'a']);
+  // A folder shows only its own notes, none of its subfolders'.
+  assert.deepEqual(notesIn(cards, folders, 'garden').map(c => c.id), []);
+  assert.deepEqual(notesIn(cards, folders, 'beds').map(c => c.id), ['a']);
+  assert.deepEqual(notesIn(cards, folders, 'top').map(c => c.id), []);
+  assert.deepEqual(notesIn(cards, folders, 'shop').map(c => c.id), ['b']);
   // Searching looks through every note, title and text.
   assert.deepEqual(notesIn(cards, folders, 'shop', 'tomaten').map(c => c.id), ['a']);
   // Made in the notebook it is on no day; switched on it lies on the day it was made, off on none.

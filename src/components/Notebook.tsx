@@ -3,11 +3,12 @@ import type { CSSProperties, DragEvent, KeyboardEvent } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { t, useLanguage } from '../i18n';
 import { formatDate, formatShortDate, localDate } from '../dates';
-import { BoardImage, Lightbox, Note, connectCards, disconnectCards, hostOf, httpsLink, linkPreview, nextOrder, removeCard, storeImage, useCards, useFolders } from '../boardCards';
+import { BoardImage, Lightbox, Note, connectCards, disconnectCards, hostOf, httpsLink, linkPreview, nextOrder, patchCards, removeCard, storeImage, useCards, useFolders } from '../boardCards';
 import type { Card, Folder } from '../boardCards';
-import { attachmentsOf, canMoveFolder, flatTree, folderPath, folderWithin, nextFolderOrder, noteSorts, notesIn, onDayPatch, pagesOf, sortNotes, visibleTree } from '../notebook';
+import { attachmentsOf, canMoveFolder, flatTree, folderPath, nextFolderOrder, noteSorts, notesIn, onDayPatch, pagesOf, sortNotes, visibleTree } from '../notebook';
 import type { NoteSort } from '../notebook';
 import { Icon } from './Icon';
+import { Popover } from './Popover';
 import './bulletinBoard.css';
 import './notebook.css';
 
@@ -48,15 +49,22 @@ export function Notebook({ onClose }: { onClose?: () => void }) {
   const shownChoice: Choice = choice === 'all' || choice === 'none' || known.has(choice) ? choice : 'all';
   const setChoice = (value: Choice) => { setChoiceState(value); write(choiceKey, value); };
   const select = (id: string | null) => { setSelectedState(id); setPageIndex(0); write(noteKey, id ?? ''); };
+  // A search result opens its note here (all notes shown, so it is in the list).
+  useEffect(() => {
+    const open = (event: Event) => { const id = (event as CustomEvent<string>).detail; setChoice('all'); setQuery(''); select(id); };
+    window.addEventListener('journal:open-note', open);
+    return () => window.removeEventListener('journal:open-note', open);
+  }, []);
   const notes = sortNotes(notesIn(cards, folders, shownChoice, query), sort);
   const current = notes.find(card => card.id === selected) ?? notes[0] ?? null;
+  const currentId = current?.id ?? null;
   const pages = current ? pagesOf(cards, current) : [];
   const index = Math.min(pageIndex, Math.max(0, pages.length - 1));
   const page = pages[index] ?? null;
   const attachments = page ? attachmentsOf(cards, page) : [];
   const tree = flatTree(folders);
   const visibleRows = visibleTree(folders, collapsed);
-  const counts = (id: string) => { const inside = folderWithin(folders, id); return cards.filter(card => card.kind === 'note' && inside.has(card.folder ?? '')).length; };
+  const counts = (id: string) => cards.filter(card => card.kind === 'note' && card.folder === id).length;
 
   useEffect(() => { if (focusTitle.current && page) { focusTitle.current = false; titleRef.current?.focus(); titleRef.current?.select(); } }, [page?.id]);
   useEffect(() => { setPageIndex(0); }, [current?.id]);
@@ -91,6 +99,26 @@ export function Notebook({ onClose }: { onClose?: () => void }) {
     void run(() => save({ ...folder, parent, order: nextFolderOrder(folders, parent) }));
   }
   const moveNote = (id: string, folder: string | null) => void run(() => patch(id, { folder }));
+  // Several notes at once: Ctrl+click adds or takes one, Shift+click the run from the last one clicked. Dragged or moved,
+  // the chosen ones go together.
+  const [chosen, setChosen] = useState<string[]>([]);
+  const anchor = useRef<string | null>(null);
+  const moveNotes = (ids: string[], folder: string | null) => void run(async () => { await patchCards(Object.fromEntries(ids.map(id => [id, { folder }]))); setChosen([]); });
+  const noteIds = notes.map(note => note.id).join(',');
+  useEffect(() => { setChosen(old => old.filter(id => notes.some(note => note.id === id))); if (anchor.current && !notes.some(note => note.id === anchor.current)) anchor.current = null; }, [noteIds]);
+  useEffect(() => { setChosen([]); anchor.current = null; }, [shownChoice, query]);
+  const clickNote = (event: { ctrlKey: boolean; metaKey: boolean; shiftKey: boolean }, id: string) => {
+    if (event.shiftKey && (anchor.current || currentId)) {
+      const ids = notes.map(note => note.id), from = ids.indexOf(anchor.current ?? currentId!), to = ids.indexOf(id);
+      if (from >= 0 && to >= 0) { anchor.current ??= currentId; setChosen(ids.slice(Math.min(from, to), Math.max(from, to) + 1)); return; }
+    }
+    if (event.ctrlKey || event.metaKey) {
+      setChosen(current => { const base = current.length ? current : current.concat(currentId ? [currentId] : []); return base.includes(id) ? base.filter(other => other !== id) : [...base, id]; });
+      anchor.current = id;
+      return;
+    }
+    setChosen([]); anchor.current = id; select(id);
+  };
   // Dropping a note (or a folder) on a folder row puts it there; on "Ohne Ordner" out of every folder.
   const dropHandlers = (target: string | null) => ({
     onDragOver: (e: DragEvent) => { if (e.dataTransfer.types.includes(noteType) || e.dataTransfer.types.includes(folderType)) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDropOn(target ?? 'none'); } },
@@ -98,7 +126,7 @@ export function Notebook({ onClose }: { onClose?: () => void }) {
     onDrop: (e: DragEvent) => {
       e.preventDefault(); setDropOn(null);
       const note = e.dataTransfer.getData(noteType), folder = e.dataTransfer.getData(folderType);
-      if (note) moveNote(note, target); else if (folder) moveFolder(folder, target);
+      if (note) { const ids = note.split(','); if (ids.length > 1 || chosen.includes(note)) moveNotes(ids, target); else moveNote(note, target); } else if (folder) moveFolder(folder, target);
     },
   });
 
@@ -188,8 +216,13 @@ export function Notebook({ onClose }: { onClose?: () => void }) {
             })}
           </ul>
         </nav>
-        <div className="notebook-notes" role="list" aria-label={query ? t('Suchergebnisse') : t('Zettel')}>
+        <div className="notebook-notes" role="list" aria-label={query ? t('Suchergebnisse') : t('Zettel')} onKeyDown={e => { if (e.key === 'Escape' && chosen.length) { e.preventDefault(); e.stopPropagation(); setChosen([]); } }}>
           <div className="notebook-tree-head"><span>{query ? t('Suchergebnisse') : t('Zettel')}</span><small>{notes.length}</small></div>
+          {chosen.length > 1 && <div className="notebook-chosen" role="group" aria-label={t('Ausgewählte Zettel')}>
+            <span>{t('{0} ausgewählt', chosen.length)}</span>
+            <FolderPick value={null} tree={tree} label={t('Verschieben nach …')} onPick={folder => moveNotes(chosen, folder)} />
+            <button type="button" className="notebook-chosen-clear" aria-label={t('Auswahl aufheben')} title={t('Auswahl aufheben · Esc')} onClick={() => setChosen([])}><Icon name="done" /></button>
+          </div>}
           {/* Sorting: by title, or newest first by when a note was made or last edited (remembered on the device). */}
           <div className="notebook-sort" role="radiogroup" aria-label={t('Sortieren')}>
             {noteSorts.map(value => <button type="button" key={value} role="radio" aria-checked={sort === value} data-sort={value} onClick={() => setSort(value)}
@@ -198,8 +231,10 @@ export function Notebook({ onClose }: { onClose?: () => void }) {
           </div>
           {notes.map(note => {
             const path = shownChoice === 'all' || query ? folderPath(folders, note.folder).join(' / ') : '';
-            return <button type="button" role="listitem" key={note.id} data-note-id={note.id} className={`notebook-note paper-${note.paper ?? 'yellow'}${note.id === current?.id ? ' is-current' : ''}`}
-              aria-current={note.id === current?.id || undefined} draggable onDragStart={e => { e.dataTransfer.setData(noteType, note.id); e.dataTransfer.effectAllowed = 'move'; }} onClick={() => select(note.id)}>
+            return <button type="button" role="listitem" key={note.id} data-note-id={note.id} className={`notebook-note paper-${note.paper ?? 'yellow'}${note.id === current?.id ? ' is-current' : ''}${chosen.includes(note.id) ? ' is-chosen' : ''}`}
+              aria-current={note.id === current?.id || undefined} aria-pressed={chosen.length ? chosen.includes(note.id) : undefined} draggable
+              onDragStart={e => { e.dataTransfer.setData(noteType, chosen.includes(note.id) && chosen.length > 1 ? chosen.join(',') : note.id); e.dataTransfer.effectAllowed = 'move'; }}
+              onClick={e => clickNote(e, note.id)}>
               <strong>{noteTitle(note)}</strong>
               <small>{note.text.replace(/[#*_`>|[\]-]+/g, ' ').trim().slice(0, 70) || t('leer')}</small>
               <span className="notebook-note-meta">{path && <span>{path}</span>}{(note.links ?? []).length > 0 && <span title={t('Verbunden')}><Icon name="jump" />{(note.links ?? []).length}</span>}{note.dates.length > 0 && <span title={t('Auf dem Tag')}><Icon name="calendar" /></span>}</span>
@@ -213,12 +248,7 @@ export function Notebook({ onClose }: { onClose?: () => void }) {
         <header className="notebook-page-head">
           <input ref={titleRef} className="notebook-title" aria-label={t('Titel')} placeholder={t('Titel')} value={page.title} onChange={e => void patch(page.id, { title: e.target.value })} />
           <div className="notebook-page-tools">
-            <label className="notebook-folder-pick" title={t('Ordner')}><Icon name="layout" />
-              <select aria-label={t('Ordner')} value={page.folder && known.has(page.folder) ? page.folder : ''} onChange={e => moveNote(page.id, e.target.value || null)}>
-                <option value="">{t('Ohne Ordner')}</option>
-                {tree.map(({ folder, depth }) => <option key={folder.id} value={folder.id}>{`${'  '.repeat(depth)}${folder.name}`}</option>)}
-              </select>
-            </label>
+            <FolderPick value={page.folder && known.has(page.folder) ? page.folder : null} tree={tree} onPick={folder => moveNote(page.id, folder)} />
             <button type="button" className="notebook-delete" title={t('Zettel endgültig löschen')} aria-label={t('Zettel endgültig löschen')} onClick={() => void run(() => deleteNote(page))}><Icon name="trash" /></button>
           </div>
         </header>
@@ -268,4 +298,37 @@ export function Notebook({ onClose }: { onClose?: () => void }) {
     </div>
     {lightbox && <Lightbox card={lightbox} onClose={() => setLightbox(null)} />}
   </section>;
+}
+
+/**
+ * Choosing a note's folder: a button with the folder's name that opens the list in the popup look of the design
+ * (instead of the system's dropdown, which no style reaches). ↑ ↓ and Enter, or a click; subfolders indented.
+ */
+function FolderPick({ value, tree, onPick, label }: { value: string | null; tree: { folder: Folder; depth: number }[]; onPick: (folder: string | null) => void; label?: string }) {
+  useLanguage();
+  const [open, setOpen] = useState(false);
+  const button = useRef<HTMLButtonElement>(null);
+  const options = [{ id: null as string | null, name: t('Ohne Ordner'), depth: 0 }, ...tree.map(({ folder, depth }) => ({ id: folder.id as string | null, name: folder.name, depth }))];
+  const current = options.find(option => option.id === value) ?? options[0];
+  const [active, setActive] = useState(0);
+  const choose = (id: string | null) => { setOpen(false); button.current?.focus(); if (id !== value || label) onPick(id); };
+  return <>
+    <button ref={button} type="button" className="notebook-folder-pick" aria-haspopup="listbox" aria-expanded={open} aria-label={t('Ordner: {0}', current.name)} title={t('Ordner')}
+      onClick={() => { setActive(Math.max(0, options.indexOf(current))); setOpen(value => !value); }}>
+      <Icon name="layout" /><span>{label ?? current.name}</span><Icon name="down" />
+    </button>
+    {open && <Popover anchor={button.current} className="folder-pick" label={t('Ordner')} onClose={byKey => { setOpen(false); if (byKey) button.current?.focus(); }}>
+      <div className="folder-pick-list" role="listbox" aria-label={t('Ordner')} tabIndex={-1} data-autofocus
+        onKeyDown={event => {
+          if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); setActive(index => (index + (event.key === 'ArrowDown' ? 1 : -1) + options.length) % options.length); }
+          else if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); choose(options[active].id); }
+        }}>
+        {options.map((option, index) => <button key={option.id ?? '-'} type="button" role="option" tabIndex={-1} aria-selected={index === active}
+          className={`folder-pick-option${option.id === value ? ' is-current' : ''}${option.id === null ? ' is-none' : ''}`} style={{ '--depth': option.depth } as CSSProperties}
+          onPointerMove={() => setActive(index)} onClick={() => choose(option.id)}>
+          <Icon name={option.id === null ? 'note' : 'layout'} /><span>{option.name}</span>{option.id === value && <Icon name="check" />}
+        </button>)}
+      </div>
+    </Popover>}
+  </>;
 }

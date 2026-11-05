@@ -24,6 +24,7 @@ import { tagOf } from '../tags';
 import { useTags } from '../tagStore';
 import { Popover } from './Popover';
 import { beginCalendarDrag } from '../calendarDrag';
+import { calendarSelection, chosenElements, registerCalendarItem, rememberMoved, unregisterCalendarItem, useCalendarSelected } from '../calendarSelection';
 import { minutesOf } from '../calendar';
 import { timeOfMinutes } from '../planning';
 import '../calendar.css';
@@ -124,9 +125,24 @@ export function CalendarItem({ entry, date, variant = 'line', short = false, sty
     const element = event.currentTarget;
     if (!element.closest('.cal')) return;
     dragCleanup.current?.();
-    dragCleanup.current = beginCalendarDrag({ element, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, entry, date, shownDate,
+    dragCleanup.current = beginCalendarDrag({ element, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, entry, date, shownDate, companions: chosenElements(entry.id),
       onDragEnd: () => { suppressDragClick.current = true; window.setTimeout(() => { suppressDragClick.current = false; }, 500); },
-      onDrop: target => { void move(entry, date, target.date, target.time, target.end).catch(reason => setError(String(reason))); },
+      onDrop: target => {
+        // A chosen entry takes the other chosen ones along: the same days, and the same minutes where both have a time.
+        const others = calendarSelection().has(entry.id) ? [...calendarSelection().values()].filter(item => item.entry.id !== entry.id) : [];
+        const days = Math.round((Date.parse(target.date) - Date.parse(date)) / 86400000);
+        const minutes = entry.time && target.time ? minutesOf(target.time) - minutesOf(entry.time) : 0;
+        const places = [{ entry, from: date, to: target.date, time: target.time, end: target.end }, ...others.map(({ entry: other, date: from }) => {
+          if (!other.time || !minutes) return { entry: other, from, to: shiftDate(from, days), time: other.time ?? null, end: other.end ?? null };
+          const start = minutesOf(other.time) + minutes, carry = Math.floor(start / 1440), inDay = start - carry * 1440;
+          const end = other.end ? timeOfMinutes(inDay + minutesOf(other.end) - minutesOf(other.time)) : null;
+          return { entry: other, from, to: shiftDate(from, days + carry), time: timeOfMinutes(inDay), end };
+        })];
+        // They stay chosen at their new places until a press elsewhere.
+        rememberMoved(places.map(place => ({ entry: { ...place.entry, time: place.time, end: place.end }, date: place.to })));
+        // One after another: each move saves the day it touches, so parallel ones could race on the same day.
+        void places.reduce((done, place) => done.then(() => move(place.entry, place.from, place.to, place.time, place.end)), Promise.resolve()).catch(reason => setError(String(reason)));
+      },
     });
   };
   // A tagged entry takes its tag's colour: the block (or bar) is tinted with it and edged in it.
@@ -134,6 +150,8 @@ export function CalendarItem({ entry, date, variant = 'line', short = false, sty
   // The small field at an entry with a description opens it in a card of its own.
   const [details, setDetails] = useState(false);
   const noteRef = useRef<HTMLButtonElement>(null);
+  const chosen = useCalendarSelected(entry.id);
+  useEffect(() => { const element = noteRef.current; if (!element) return; registerCalendarItem(element, { entry, date }); return () => unregisterCalendarItem(element); }, [entry, date]);
   const hovered = useRef(false);
   const [options, setOptions] = useState<ScopeOption[] | null>(null);
   const [error, setError] = useState('');
@@ -142,7 +160,7 @@ export function CalendarItem({ entry, date, variant = 'line', short = false, sty
     const key = async (event: globalThis.KeyboardEvent) => {
       if (!(hovered.current || details) || (event.target instanceof Element && event.target.closest('input,textarea,[contenteditable=true]'))) return;
       if (event.ctrlKey && event.key.toLowerCase()==='c') { event.preventDefault(); copyCalendarEntry(entry); }
-      if (event.key!=='Delete' || !remove || deleting || options) return;
+      if (event.key!=='Delete' || !remove || deleting || options || calendarSelection().size) return;
       event.preventDefault(); setDeleting(true);
       try { const choices=linkedScopes(await journal.linked(entry.id),entry.id,'remove'); if(choices.length>1)setOptions(choices);else await remove(entry,date,[]); }
       catch(reason){setError(String(reason));}finally{setDeleting(false);}
@@ -152,7 +170,7 @@ export function CalendarItem({ entry, date, variant = 'line', short = false, sty
   const mail=decodeMailContent(entry.description);
   const spanning=Boolean(entry.end && Number(entry.end.split(':')[0])>=24);
   const state = entry.done ? ' is-done' : entry.cancelled ? ' is-cancelled' : '';
-  return <button type="button" className={`cal-item is-${entry.kind} is-${variant}${short ? ' is-short' : ''}${spanning ? ' is-multiday' : ''}${state}${entry.priority ? ' is-priority' : ''}${tag ? ' has-tag' : ''}${editingId === entry.id ? ' is-editing' : ''}${night ? ` is-night-${night}` : ''}`}
+  return <button type="button" className={`cal-item is-${entry.kind} is-${variant}${short ? ' is-short' : ''}${spanning ? ' is-multiday' : ''}${state}${entry.priority ? ' is-priority' : ''}${tag ? ' has-tag' : ''}${editingId === entry.id ? ' is-editing' : ''}${chosen ? ' is-selected' : ''}${night ? ` is-night-${night}` : ''}`}
     ref={noteRef} style={tag ? { ...style, '--tag': tag.color } as CSSProperties : style} data-tag={tag?.name}
     data-calendar-entry={entry.id} data-calendar-time={night === 'rest' ? '00:00' : entry.time ?? undefined}
     data-calendar-end={night === 'start' ? '24:00' : night === 'rest' && entry.end ? timeOfMinutes(minutesOf(entry.end) - 1440) : entry.end ?? undefined}

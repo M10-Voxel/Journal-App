@@ -86,7 +86,7 @@
 :root[data-theme='nebula'][data-popups='a'] :is(.planner, .cal-composer, .popover) {
   --background: #050505; --inset: #050505; --border: #141417; --hover: #1d1d23;
   border-radius: 0; background: #0c0c0e;
-  box-shadow: 0 0 0 1px var(--nb-line), 6px 6px 0 var(--nb-violet);
+  box-shadow: 0 0 0 1px var(--nb-line), 4px 4px 0 var(--nb-offset);
   font-family: var(--mono);
 }
 :root[data-theme='nebula'][data-popups='a'] .planner { padding-top: 34px; }
@@ -100,7 +100,7 @@
 :root[data-theme='nebula'][data-popups='a'] .planner::before { content: '[journal@~]$ ./plan.sh'; }
 :root[data-theme='nebula'][data-popups='a'] .cal-composer::before { content: '[journal@~]$ ./entry.sh --new'; }
 :root[data-theme='nebula'][data-popups='a'] .cal-composer.is-editing::before { content: '[journal@~]$ ./entry.sh --edit'; }
-:root[data-theme='nebula'][data-popups='a'] .cal-composer.has-tag { box-shadow: inset 4px 0 0 var(--tag), 0 0 0 1px var(--nb-line), 6px 6px 0 var(--nb-violet); }
+:root[data-theme='nebula'][data-popups='a'] .cal-composer.has-tag { box-shadow: inset 4px 0 0 var(--tag), 0 0 0 1px var(--nb-line), 4px 4px 0 var(--nb-offset); }
 :root[data-theme='nebula'][data-popups='a'] :is(.cal-composer-text, .cal-composer-description, .tag-picker-search) { border-radius: 0; background: #050505; box-shadow: inset 0 0 0 1px var(--edge); font-family: var(--mono); caret-color: var(--nb-violet-light); }
 :root[data-theme='nebula'][data-popups='a'] :is(.cal-composer-text, .cal-composer-description):focus { box-shadow: inset 0 0 0 1px var(--nb-violet-light); }
 :root[data-theme='nebula'][data-popups='a'] :is(.cal-composer-when, .planner-time, .planner-reminder, .planner-confirm, .repeat-chip) { border-radius: 0; background: transparent; box-shadow: inset 0 0 0 1px var(--edge); }

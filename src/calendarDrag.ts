@@ -25,7 +25,9 @@ function copyAppearance(source: HTMLElement): HTMLElement {
   return copy;
 }
 
-export function beginCalendarDrag({ element, pointerId, startX, startY, entry, date, shownDate, onDrop, onDragEnd }: {
+export function beginCalendarDrag({ element, pointerId, startX, startY, entry, date, shownDate, onDrop, onDragEnd, companions = [] }: {
+  /** Other chosen entries: shown moving by the same distance while dragging. */
+  companions?: HTMLElement[];
   element: HTMLElement; pointerId: number; startX: number; startY: number;
   entry: Entry; date: string; shownDate: string;
   onDrop: (destination: Destination) => void; onDragEnd: () => void;
@@ -41,6 +43,16 @@ export function beginCalendarDrag({ element, pointerId, startX, startY, entry, d
   let moved = false, preview: HTMLElement | null = null, markers: HTMLElement[] = [], destination: Destination | null = null;
   let continuations: HTMLElement[] = [], floatingLabel: HTMLElement | null = null;
   let x = startX, y = startY;
+  // The other chosen entries move along as copies, the originals dim like the grabbed one.
+  let followers: { copy: HTMLElement; rect: DOMRect; source: HTMLElement }[] = [];
+  // They follow the grabbed one where it lands (snapped to quarter hours and days), not the pointer itself.
+  const moveFollowers = () => {
+    const at = preview?.getBoundingClientRect();
+    const dx = at && destination ? at.left - rect.left : x - startX, dy = at && destination ? at.top - rect.top : y - startY;
+    followers.forEach(({ copy, rect: from }) => setStyles(copy, { left: `${from.left + dx}px`, top: `${from.top + dy}px` }));
+  };
+  // Entries moving along do not make room for each other: they leave their places together.
+  const movingIds = new Set(companions.map(node => node.dataset.calendarEntry).filter(Boolean));
   const makePreview = () => {
     const copy = copyAppearance(element); copy.classList.add('cal-drag-preview');
     setStyles(copy, { position: 'fixed', 'z-index': '1000', margin: '0', right: 'auto', bottom: 'auto', width: `${rect.width}px`, height: `${rect.height}px`, transform: 'none', opacity: '1' });
@@ -92,7 +104,7 @@ export function beginCalendarDrag({ element, pointerId, startX, startY, entry, d
           const from = Math.max(0, minute - delta), until = Math.min(1440, minute + length - delta);
           if (until > from) {
             const existing = [...column.querySelectorAll<HTMLElement>('.cal-item.is-block')]
-              .filter(node => node.dataset.calendarEntry !== entry.id && node.dataset.calendarTime)
+              .filter(node => node.dataset.calendarEntry !== entry.id && !movingIds.has(node.dataset.calendarEntry) && node.dataset.calendarTime)
               .map(node => ({ id: node.dataset.calendarEntry!, time: node.dataset.calendarTime!, end: node.dataset.calendarEnd }));
             const candidate = { id: entry.id, time: timeOfMinutes(from), end: timeOfMinutes(until) };
             const placed = layoutTimed([...existing, candidate]).find(item => item.item === candidate)!;
@@ -161,13 +173,21 @@ export function beginCalendarDrag({ element, pointerId, startX, startY, entry, d
     x = event.clientX; y = event.clientY;
     if (!moved && Math.hypot(x - startX, y - startY) > 5) {
       moved = true; preview = makePreview(); element.classList.add('is-drag-source');
+      followers = companions.filter(node => node.isConnected).map(source => {
+        const from = source.getBoundingClientRect(), copy = copyAppearance(source);
+        copy.classList.add('cal-drag-preview');
+        setStyles(copy, { position: 'fixed', 'z-index': '999', margin: '0', right: 'auto', bottom: 'auto', width: `${from.width}px`, height: `${from.height}px`, transform: 'none', opacity: '1' });
+        document.body.append(copy); source.classList.add('is-drag-source');
+        return { copy, rect: from, source };
+      });
     }
-    if (moved) { event.preventDefault(); update(); }
+    if (moved) { event.preventDefault(); update(); moveFollowers(); }
   };
   const cleanup = () => {
     window.removeEventListener('pointermove', follow); window.removeEventListener('pointerup', finish);
     window.removeEventListener('pointercancel', cancel); window.removeEventListener('keydown', key); window.removeEventListener('blur', cancel);
     root.removeEventListener('scroll', update, true);
+    followers.forEach(({ copy, source }) => { copy.remove(); source.classList.remove('is-drag-source'); }); followers = [];
     preview?.remove(); continuations.forEach(node => node.remove()); floatingLabel?.remove(); markers.forEach(node => node.remove()); element.classList.remove('is-drag-source');
   };
   const cancel = () => { cleanup(); if (moved) onDragEnd(); };

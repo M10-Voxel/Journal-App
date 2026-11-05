@@ -45,6 +45,8 @@ import { JournalBook, pageHeading, useBookView } from './components/JournalBook'
 import type { BookControl } from './components/JournalBook';
 import { CalendarDrawer, CalendarTab, NotebookTab, calendarDrawerKey, notebookDrawerKey, useDrawer } from './components/CalendarDrawer';
 import { Notebook } from './components/Notebook';
+import { SearchBox, SearchTab } from './components/Search';
+import type { SearchResult } from './search';
 import { DetachedPanel, detachable } from './components/DetachedPanel';
 import type { DetachedKind } from './components/DetachedPanel';
 import type { BookPage } from './book';
@@ -92,6 +94,7 @@ import './popup-styles.css';
 import './popup-fields.css';
 import './popup-sheets.css';
 import './popup-chrome.css';
+import './search.css';
 import { applyColors } from './colors';
 
 applyTheme(loadSettings());
@@ -172,7 +175,7 @@ function App() {
   useEffect(() => { if (bookMode && drawer.open && notebook.open && !sheetsFit) (lastSheet.current === 'notebook' ? drawer : notebook).setOpen(false); }, [bookMode, drawer.open, notebook.open, sheetsFit]);
   // The window has no system title bar: its own bar (or, in the book, the cover) moves it; a double click maximizes.
   const dragWindow = (event: React.MouseEvent) => {
-    if (event.button !== 0 || (event.target as Element).closest('button, input, [role="dialog"]')) return;
+    if (event.button !== 0 || (event.target as Element).closest('button, input, [role="dialog"], .search')) return;
     event.preventDefault();
     const window = getCurrentWindow();
     void (event.detail === 2 ? window.toggleMaximize() : window.startDragging()).catch(reason => setError(t("Fensteraktion fehlgeschlagen: {0}", String(reason))));
@@ -532,6 +535,8 @@ function App() {
     else if (event.ctrlKey && event.shiftKey && !event.altKey && !event.metaKey && event.code === 'KeyN') { setHelp(false); toggleNotebook(true); }
     else if (ctrl && event.key === ',') { setSettingsTab('appearance'); setSettingsOpen(open => !open); }
     else if (ctrl && event.code === 'KeyG') setDatePickerOpen(open => !open);
+    // Ctrl+F: the search (the field in the title bar, the journal's tab at the book's edge).
+    else if (ctrl && event.code === 'KeyF') { const tab = document.querySelector<HTMLElement>('.search-tab:not(.is-open)'); if (tab) tab.click(); else document.querySelector<HTMLInputElement>('.search-input')?.focus(); }
     // Ctrl+1–5: day, week, month, quarter, year (the tabs in the title bar, or the book's register tabs).
     else if (ctrl && /^Digit[1-5]$/.test(event.code)) choosePeriod(periodModes[Number(event.code.slice(5)) - 1]);
     // Ctrl + / − / 0: the interface larger, smaller, or by the screen again (see Settings → Größe).
@@ -669,6 +674,34 @@ function App() {
   // Turning both pages at once, a sheet (calendar or notebook) does not cover a page: the book shows one page beside it.
   const besideCalendar = bookMode && (drawer.open || notebook.open) && !bothSheets && settings.bookPaging === 'spread';
   const notebookView = !ownLayout && notebook.open;
+  // A search result opens where it was made: the entry in its day (focused), a calendar entry with the calendar out,
+  // a day by its title, a board card on its day's board, a notebook note in the notebook.
+  const openResult = useStableCallback((result: SearchResult) => {
+    const target = result.target;
+    if (target.kind === 'title') { navigate(target.date); bookRef.current?.open('entries'); return; }
+    if (target.kind === 'entry') {
+      if (target.calendar) { navigate(target.date); if (ownLayout && !drawer.open) toggleDrawer(); return; }
+      bookRef.current?.open('entries');
+      showFromCalendar(target.date, target.id);
+      return;
+    }
+    if (target.notebook || !target.date) {
+      if (!notebook.open) toggleNotebook();
+      requestAnimationFrame(() => window.dispatchEvent(new CustomEvent('journal:open-note', { detail: target.id })));
+      return;
+    }
+    if (notebookView) notebook.setOpen(false);
+    navigate(target.date);
+    bookRef.current?.open('board');
+    // The card blinks once it is on screen.
+    let tries = 0;
+    const flash = () => {
+      const card = document.querySelector<HTMLElement>(`[data-board-id="${target.id}"]`);
+      if (card) { card.scrollIntoView({ block: 'center', behavior: 'smooth' }); card.classList.remove('is-found'); void card.offsetWidth; card.classList.add('is-found'); card.focus({ preventScroll: true }); }
+      else if (++tries < 20) window.setTimeout(flash, 100);
+    };
+    window.setTimeout(flash, 120);
+  });
   const visibleOpen = visibleEntries.filter(entry => entry.kind === 'task' && !entry.done && !entry.cancelled).length;
   const nebulaStats = { entries: entryCount, open: visibleOpen, done: visibleEntries.filter(entry => entry.done).length, events: visibleEntries.filter(entry => entry.kind === 'event').length };
   const calendar = <Calendar embedded journalDate={date} onOpen={openFromCalendar} onCreate={createFromCalendar} onEdit={editFromCalendar} onMove={moveFromCalendar} onRemove={removeFromCalendar} onExport={exportFromCalendar} onImport={importFromCalendar} />;
@@ -689,7 +722,7 @@ function App() {
       {/* In the book there is no title bar: the cover around the book moves the window; settings and the window's
           controls sit on it in the top right corner, beside the register tabs. */}
       {nebulaMode ? <div className="nebula-window-bar" onMouseDown={dragWindow}>
-        <span className="nebula-window-title" aria-hidden="true"><b>journal</b>@desk:~ <span className="nebula-cursor">▍</span></span>
+        <SearchBox variant="nebula" onOpen={openResult} />
         <span className="nebula-window-space" />
         <button type="button" className="titlebar-button settings-button" data-mail-count={mailStatus.count || undefined} aria-label={t("Einstellungen")} aria-keyshortcuts="Control+," title={t("Einstellungen · Strg ,")} onClick={() => openSettings()}><Icon name="settings" /></button>
         <WindowControls onError={setError} />
@@ -699,6 +732,7 @@ function App() {
       </div> : <header className="topbar" onMouseDown={dragWindow}>
         <nav className="journal-tabs" aria-label={language === 'en' ? 'Journal views' : 'Journalansichten'}>{periodModes.map((mode, index) => <button type="button" key={mode} className="journal-tab" aria-current={!notebookView && periodMode === mode ? 'page' : undefined} onClick={() => choosePeriod(mode)}><Icon name={({ day: 'journal', week: 'week', month: 'month', quarter: 'quarter', year: 'year' } as const)[mode]} /><span>{(language === 'en' ? ['Day', 'Week', 'Month', 'Quarter', 'Year'] : ['Tag', 'Woche', 'Monat', 'Quartal', 'Jahr'])[index]}</span>{index === 0 && dirty && <span className="unsaved-dot" aria-label={t("Ungespeicherte Änderungen")} />}</button>)}
           <button type="button" className="journal-tab is-notebook" aria-current={notebookView ? 'page' : undefined} aria-keyshortcuts="Control+Shift+N" title={t('Notizen · Strg ⇧ N')} onClick={() => toggleNotebook()}><Icon name="note" /><span>{t('Notizen')}</span></button></nav>
+        <SearchBox variant="classic" onOpen={openResult} />
         <div className="titlebar-space" />
         {/* Settings sit with the window's own controls, where Zed and most apps keep them. */}
         <button type="button" className="titlebar-button settings-button" data-mail-count={mailStatus.count || undefined} aria-label={t("Einstellungen")} aria-keyshortcuts="Control+," title={t("Einstellungen · Strg ,")} onClick={() => openSettings()}><Icon name="settings" /></button>
@@ -708,7 +742,7 @@ function App() {
       {!ownLayout && !notebookView && <div className="toolbar">{toolbarItems}</div>}
 
       {bookMode ? <JournalBook mode={periodMode} date={date} today={today} onToday={() => navigate(today)} renderNav={bookNav} view={bookView} paging={settings.bookPaging} beside={besideCalendar} sheetWidth={sidebar.width} onNavigate={navigate} renderPage={bookPage} entriesScrollRef={scrollRef} controlRef={bookRef} onWideChange={setBookWide}
-        calendarTab={<><CalendarTab open={drawer.open} onToggle={() => toggleDrawer()} /><NotebookTab open={notebook.open} onToggle={() => toggleNotebook()} /></>} register={register}
+        calendarTab={<><CalendarTab open={drawer.open} onToggle={() => toggleDrawer()} /><NotebookTab open={notebook.open} onToggle={() => toggleNotebook()} /><SearchTab onOpen={openResult} /></>} register={register}
         overlay={<><CalendarDrawer overlay open={drawer.open} animated={drawer.animated} width={sidebar.width} resizer={sidebar.handle} resizable={besideCalendar || !(bookView === 'double' && bookWide)} disabled={driveBusy} onClose={() => toggleDrawer(true)}>{calendar}</CalendarDrawer>
           <CalendarDrawer overlay kind="notebook" right={bothSheets} label={t('Notizen')} open={notebook.open} animated={notebook.animated} width={sidebar.width} resizer={sidebar.handle} resizable={besideCalendar || !(bookView === 'double' && bookWide)} disabled={driveBusy} onClose={() => toggleNotebook(true)}><Notebook onClose={() => toggleNotebook(true)} /></CalendarDrawer></>} />
         : nebulaMode ? <NebulaDesk mode={periodMode} date={date} today={today} modes={periodModes} modeLabels={periodLabels} dirty={dirty} title={ready ? day.title : ''} stats={nebulaStats}

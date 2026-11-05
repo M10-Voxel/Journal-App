@@ -19,6 +19,7 @@ import type { ScopeOption } from '../planning';
 import { ScopeChoice } from './ScopeChoice';
 import { Icon, priorityIcon } from './Icon';
 import { TagPicker } from './TagPicker';
+import { contrastRatio } from '../colors';
 import { DateField, TimeField } from './FieldPickers';
 import { PopupHead, PopupKeys } from './PopupChrome';
 import { usePopupLook } from '../popupLook';
@@ -124,13 +125,14 @@ export function CalendarComposer({ date, draft, entry, span, onSpanChange, tag: 
   useEffect(() => {
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Element;
-      if (!target.closest('.cal-composer, .cal-time-column, .popover, .shortcut-backdrop')) latest.current.onCancel(false);
+      // A press anywhere else discards the card (left or right); only the range's own handles keep it.
+      if (!target.closest('.cal-composer, .cal-selection, .popover, .shortcut-backdrop')) latest.current.onCancel(false);
     };
     // Escape also discards while the focus is still elsewhere (right after marking).
     const onKey = (event: globalThis.KeyboardEvent) => { if (event.key === 'Escape' && !cardRef.current?.contains(event.target as Node)) { event.preventDefault(); latest.current.onCancel(true); } };
-    window.addEventListener('pointerdown', onPointerDown);
+    window.addEventListener('pointerdown', onPointerDown, true);
     window.addEventListener('keydown', onKey);
-    return () => { window.removeEventListener('pointerdown', onPointerDown); window.removeEventListener('keydown', onKey); };
+    return () => { window.removeEventListener('pointerdown', onPointerDown, true); window.removeEventListener('keydown', onKey); };
   }, []);
 
   const length = draft ? draft.end - draft.start : 0;
@@ -243,7 +245,7 @@ export function CalendarComposer({ date, draft, entry, span, onSpanChange, tag: 
   const title = editing ? t("{0} bearbeiten", label) : selectedKind === 'calendar' ? t("Neuer Kalendereintrag") : kind === 'event' ? t("Neues Ereignis") : t("Neue Aufgabe");
 
   return createPortal(<div ref={cardRef} className={`cal-composer is-${place?.side ?? 'right'}${place ? ' is-placed' : ''}${editing ? ' is-editing' : ''}${tag ? ' has-tag' : ''}`} role="dialog" aria-label={t("{0} am {1}", title, formatShortDate(date))}
-    style={{ left: place?.left ?? -9999, top: place?.top ?? 0, width, '--tag': tag?.color } as CSSProperties} onKeyDown={onKeyDown}>
+    style={{ left: place?.left ?? -9999, top: place?.top ?? 0, width, '--tag': tag?.color, ...tag ? { '--accent': tag.color, '--on-accent': contrastRatio('#ffffff', tag.color) > contrastRatio('#06101f', tag.color) ? '#ffffff' : '#06101f' } : {} } as CSSProperties} onKeyDown={onKeyDown}>
     <PopupHead look={look} title={title} command={editing ? 'entry --edit' : 'entry --new'} onClose={() => onCancel(false)} />
     <div className="cal-composer-head">
       <div className="cal-composer-kinds" role="radiogroup" aria-label={t("Art")}>

@@ -56,7 +56,7 @@
 .sheet-tabpanel .sheet-action[aria-pressed='true'] { box-shadow: inset 3px 0 0 var(--accent); }
 
 /* ── Nebula · Terminal: type a command (or pick one), Enter runs it ── */
-.sheet-terminal { width: 330px; padding: 0 0 6px; background: #0c0c0e; box-shadow: 0 0 0 1px var(--nb-line, #333), 6px 6px 0 var(--nb-violet, #7b2cbf); font-family: var(--mono); }
+.sheet-terminal { width: 330px; padding: 0 0 6px; background: #0c0c0e; box-shadow: 0 0 0 1px var(--nb-line, #333), 4px 4px 0 var(--nb-offset, #2e2340); font-family: var(--mono); }
 .sheet-terminal::before { content: '[journal@~]$ ./entry.sh'; display: block; height: 22px; padding: 0 10px; background: var(--nb-paper, #d4d4d4); color: var(--nb-ink, #111); font: 700 10px/22px var(--mono); }
 .sheet-prompt { display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 10px; border-bottom: 1px dashed var(--edge); color: var(--nb-violet-light, #b388ff); font: 700 13px var(--mono); }
 .sheet-prompt input { flex: 1; min-width: 0; padding: 0; border: 0; outline: 0; background: transparent; color: #f2f2f2; caret-color: var(--nb-violet-light, #b388ff); font: 13px var(--mono); }

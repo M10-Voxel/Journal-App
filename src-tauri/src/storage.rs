@@ -85,6 +85,9 @@ pub struct SeriesInfo { pub series: String, pub rule: serde_json::Value, pub hor
 pub struct SeriesExtension { pub series: String, pub from: String, pub to: String, pub dates: Vec<String> }
 #[derive(Clone, Debug, Deserialize)]
 pub struct CalendarImport { pub date: String, pub entry: Entry, #[serde(default)] pub tag: Option<Tag> }
+/// A search hit: an entry on its day, or a day by its title.
+#[derive(Clone, Debug, Serialize)]
+pub struct SearchHit { pub date: String, #[serde(skip_serializing_if = "Option::is_none")] pub title: Option<String>, #[serde(skip_serializing_if = "Option::is_none")] pub entry: Option<Entry> }
 /// A tag like "Arbeit" or "Uni" with its colour (`#rrggbb`); entries are grouped and coloured by it. The list is ordered.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Tag { pub id: String, pub name: String, pub color: String }
@@ -316,6 +319,54 @@ impl Store {
         }
         crate::history::install(&conn)?;
         Ok(Self { conn })
+    }
+    /// The search over every day (see src/search.ts): entries whose text or description holds all `words` (case and
+    /// accents aside, as SQLite's LIKE does for ASCII; the app checks the rest), and day titles. Traces are left out.
+    /// `kinds` are task, event, note and `calendar` (calendar-only entries); `tags` limit to entries with one of them.
+    pub fn search(&self, words: &[String], kinds: &[String], tags: &[String], limit: usize) -> Result<Vec<SearchHit>> {
+        let limit = limit.clamp(1, 500) as i64;
+        let like = |word: &String| format!("%{}%", word.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_"));
+        let mut hits = Vec::new();
+        let want_titles = kinds.is_empty() || kinds.iter().any(|kind| kind == "title");
+        let entry_kinds: Vec<&String> = kinds.iter().filter(|kind| kind.as_str() != "title").collect();
+        if kinds.is_empty() || !entry_kinds.is_empty() {
+            let mut sql = String::from("SELECT day_date, id FROM entries WHERE plan IS NULL");
+            let mut values: Vec<String> = Vec::new();
+            for word in words { sql += " AND (text LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\')"; values.push(like(word)); values.push(like(word)); }
+            if !entry_kinds.is_empty() {
+                let mut parts = Vec::new();
+                for kind in &entry_kinds {
+                    match kind.as_str() {
+                        "calendar" => parts.push("show_in_journal = 0".to_string()),
+                        "task" | "event" | "note" => { parts.push("(kind = ? AND show_in_journal = 1)".to_string()); values.push(kind.to_string()); }
+                        _ => {}
+                    }
+                }
+                if parts.is_empty() { sql += " AND 0"; } else { sql += &format!(" AND ({})", parts.join(" OR ")); }
+            }
+            if !tags.is_empty() { sql += &format!(" AND tag IN ({})", vec!["?"; tags.len()].join(",")); values.extend(tags.iter().cloned()); }
+            sql += " ORDER BY day_date DESC, position LIMIT ?";
+            let mut stmt = self.conn.prepare(&sql)?;
+            let mut params: Vec<&dyn rusqlite::ToSql> = values.iter().map(|value| value as &dyn rusqlite::ToSql).collect();
+            params.push(&limit);
+            let found = stmt.query_map(params.as_slice(), |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?.collect::<rusqlite::Result<Vec<_>>>()?;
+            let mut days: HashMap<String, Day> = HashMap::new();
+            for (date, id) in found {
+                if !days.contains_key(&date) { days.insert(date.clone(), self.load(&date)?); }
+                if let Some(entry) = days[&date].entries.iter().find(|entry| entry.id == id) { hits.push(SearchHit { date: date.clone(), title: None, entry: Some(entry.clone()) }); }
+            }
+        }
+        if want_titles && tags.is_empty() {
+            let mut sql = String::from("SELECT date, title FROM days WHERE title <> ''");
+            let mut values: Vec<String> = Vec::new();
+            for word in words { sql += " AND title LIKE ? ESCAPE '\\'"; values.push(like(word)); }
+            sql += " ORDER BY date DESC LIMIT ?";
+            let mut stmt = self.conn.prepare(&sql)?;
+            let mut params: Vec<&dyn rusqlite::ToSql> = values.iter().map(|value| value as &dyn rusqlite::ToSql).collect();
+            params.push(&limit);
+            for row in stmt.query_map(params.as_slice(), |r| Ok(SearchHit { date: r.get(0)?, title: Some(r.get(1)?), entry: None }))? { hits.push(row?); }
+        }
+        Ok(hits)
     }
     pub fn tags(&self) -> Result<Vec<Tag>> {
         let mut stmt = self.conn.prepare_cached("SELECT id, name, color FROM tags ORDER BY position")?;
@@ -1240,6 +1291,21 @@ mod tests {
         let mut day = db.load("2026-10-31").unwrap(); day.entries[0].plan = Some(plan("date", &["2026-11-01"], Some("23:00"), false)); db.save(day).unwrap();
         assert_eq!(db.load("2026-11-01").unwrap().entries[0].text, "Nachtschicht");
         assert!(db.conn.query_row("SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name IN ('entries_day_order','entries_calendar_uid','entries_series')", [], |r| r.get::<_, i64>(0)).unwrap() == 3);
+    }
+    #[test] fn search_finds_words_kinds_tags_and_titles_on_every_day() {
+        let mut db = store();
+        let work = Tag { id: Uuid::new_v4().to_string(), name: "Arbeit".into(), color: "#569eff".into() };
+        db.save_tags(&[work.clone()]).unwrap();
+        let mut day = db.load("2020-01-02").unwrap(); day.title = "Umzug geplant".into();
+        let mut task = entry("task"); task.text = "Kisten **packen**".into(); task.tag = Some(work.id.clone());
+        let mut event = entry("event"); event.text = "Arzt".into(); event.description = "Kisten mitbringen".into(); event.show_in_journal = false;
+        day.entries = vec![task.clone(), event.clone()]; db.save(day).unwrap();
+        let ids = |hits: Vec<SearchHit>| hits.into_iter().map(|hit| hit.entry.map(|entry| entry.id).or(hit.title).unwrap()).collect::<Vec<_>>();
+        assert_eq!(ids(db.search(&["kisten".into()], &[], &[], 50).unwrap()), [task.id.clone(), event.id.clone()], "Text and description, years back.");
+        assert_eq!(ids(db.search(&["kisten".into()], &["calendar".into()], &[], 50).unwrap()), [event.id.clone()]);
+        assert_eq!(ids(db.search(&[], &[], &[work.id.clone()], 50).unwrap()), [task.id.clone()]);
+        assert_eq!(ids(db.search(&["umzug".into()], &["title".into()], &[], 50).unwrap()), ["Umzug geplant".to_string()]);
+        assert!(db.search(&["100%".into()], &[], &[], 50).unwrap().is_empty(), "Wildcards are taken literally.");
     }
     fn tag(name: &str, color: &str) -> Tag { Tag { id: Uuid::new_v4().to_string(), name: name.into(), color: color.into() } }
     #[test] fn tags_are_ordered_validated_and_removing_one_untags_its_entries() {

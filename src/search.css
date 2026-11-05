@@ -1,0 +1,118 @@
+/* The search (Search.tsx) in each design: Normal a field in the title bar with a palette under it, Journal an index
+   card out of a tab at the book's edge, Nebula the prompt in the window bar with grep output. */
+.search { position: relative; min-width: 0; }
+.search-input { min-width: 0; flex: 1; padding: 0; border: 0; outline: 0; background: transparent; color: var(--strong); font: inherit; }
+.search-input::placeholder { color: var(--placeholder); }
+.search mark { padding: 0 1px; border-radius: 2px; background: color-mix(in srgb, var(--accent) 28%, transparent); color: var(--strong); }
+.search-panel { position: absolute; z-index: 1500; box-sizing: border-box; max-height: min(520px, calc(100vh - 90px)); overflow: auto; color: var(--text); font: 12.5px var(--sans); animation: popover-in 150ms var(--spring) both; }
+.search-panel button { border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.search-section { display: flex; flex-direction: column; }
+.search-section-title { margin: 8px 10px 3px; color: var(--placeholder); font: 600 9.5px var(--sans); letter-spacing: .1em; text-transform: uppercase; }
+.search-empty { margin: 14px 12px; color: var(--muted); }
+.search-result { display: flex; align-items: center; gap: 10px; min-height: 32px; padding: 4px 10px; text-align: left; }
+.search-result[aria-selected='true'] { background: var(--hover); }
+.search-result .icon { flex: none; width: 13px; height: 13px; color: var(--tag, var(--accent)); }
+.search-result-text { display: flex; flex: 1; flex-direction: column; min-width: 0; }
+.search-result-title { min-width: 0; overflow: hidden; color: var(--strong); text-overflow: ellipsis; white-space: nowrap; }
+.search-result-snippet { min-width: 0; overflow: hidden; color: var(--muted); font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
+.search-result-tag { display: flex; flex: none; align-items: center; gap: 5px; color: var(--muted); font-size: 11px; }
+.search-result-date { flex: none; color: var(--placeholder); font: 11px var(--mono); font-variant-numeric: tabular-nums; }
+.search-suggest { display: flex; flex-direction: column; padding: 4px 0; border-bottom: 1px solid var(--divider); }
+.search-suggestion { display: flex; align-items: center; justify-content: space-between; gap: 18px; min-height: 26px; padding: 0 10px; text-align: left; font: 12.5px var(--mono) !important; }
+.search-suggestion[aria-selected='true'] { background: var(--selected); }
+.search-suggestion-word { display: flex; align-items: center; gap: 6px; color: var(--text); white-space: nowrap; }
+.search-suggestion-word b { color: var(--accent); font-weight: 700; }
+.search-sigil { color: var(--placeholder); }
+.search-suggestion-role { color: var(--placeholder); font: 11px var(--sans); white-space: nowrap; }
+.search-foot { position: sticky; bottom: 0; display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 7px 10px; border-top: 1px solid var(--divider); background: inherit; color: var(--placeholder); font-size: 10.5px; }
+.search-foot kbd { margin-right: 3px; padding: 0 4px; border-radius: 3px; background: var(--border); box-shadow: 0 0 0 1px var(--edge); font: 9.5px var(--mono); }
+
+/* ── Normal: a field in the title bar (like Zed's), the palette drops from it ── */
+.search.is-classic { align-self: center; width: min(360px, 34vw); margin: 0 10px; }
+.search.is-classic .search-field { display: flex; align-items: center; gap: 7px; height: 26px; padding: 0 6px 0 9px; border-radius: 7px; background: var(--inset); box-shadow: inset 0 0 0 1px var(--edge); color: var(--placeholder); font: 12px var(--sans); cursor: text; transition: box-shadow var(--fast) ease; }
+.search.is-classic .search-field .icon { flex: none; width: 13px; height: 13px; }
+.search.is-classic.is-focused .search-field { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 70%, transparent); }
+.search-keys { display: flex; gap: 2px; }
+.search-keys kbd { padding: 0 4px; border-radius: 3px; background: var(--border); box-shadow: 0 0 0 1px var(--edge); color: var(--placeholder); font: 9.5px var(--mono); }
+.search-panel.is-classic { top: calc(100% + 6px); left: 50%; width: min(560px, 90vw); transform: translateX(-50%); padding: 4px 0 0; border-radius: var(--popup-radius, 12px); background: var(--surface); box-shadow: var(--popup-shadow); animation: none; }
+
+/* ── Journal: a tab at the book's edge; the index card ("Register") beside it ── */
+.search-tab { position: absolute; top: 312px; left: -30px; z-index: 9; display: flex; flex-direction: column; align-items: center; gap: 8px; width: 30px; padding: 12px 0 14px; border: 0; border-radius: 5px 0 0 5px;
+  background: linear-gradient(90deg, #8a6a2c, #a8843c 70%, color-mix(in srgb, #000 22%, #a8843c)); color: #fbeee0; box-shadow: -2px 2px 4px -1px #1d0f0688; cursor: pointer; transform: translateX(6px); transition: transform 180ms var(--ease), filter 160ms ease; }
+.search-tab .icon { flex: none; width: 15px; height: 15px; }
+.search-tab span { writing-mode: vertical-rl; transform: rotate(180deg); font: 600 10.5px var(--sans); letter-spacing: .08em; text-transform: uppercase; }
+.search-tab:hover { transform: translateX(2px); }
+.search-tab.is-open { transform: none; filter: brightness(.85); }
+.search-card { position: absolute; top: 300px; left: 10px; z-index: 60; width: min(470px, calc(100% - 40px)); padding: 14px 16px 10px; border-radius: 2px;
+  background-color: var(--book-paper, var(--surface)); background-image: repeating-linear-gradient(transparent 0 27px, color-mix(in srgb, var(--accent) 14%, transparent) 27px 28px); background-position: 0 62px;
+  box-shadow: inset 0 3px 0 color-mix(in srgb, #a8843c 80%, transparent), 0 0 0 1px var(--edge), 0 22px 40px -16px color-mix(in srgb, #3b2a1a 70%, transparent); animation: popover-in 180ms var(--spring) both; }
+.search.is-journal .search-field { display: flex; align-items: center; gap: 8px; height: 34px; border-bottom: 1.5px solid color-mix(in srgb, var(--text) 35%, transparent); color: var(--muted); }
+.search.is-journal .search-field .icon { flex: none; width: 15px; height: 15px; }
+.search.is-journal .search-input { font: italic 16px var(--write, var(--serif)); }
+.search.is-journal.is-focused .search-field { border-bottom-color: var(--accent); }
+.search-panel.is-journal { position: relative; max-height: 420px; margin-top: 10px; animation: none; font-family: var(--serif, var(--sans)); }
+.search-index-head { display: flex; align-items: baseline; justify-content: space-between; margin: 0 2px 4px; }
+.search-index-head strong { font: italic 600 18px var(--display, var(--serif)); color: var(--strong); }
+.search-index-head span { color: var(--muted); font: italic 12px var(--serif, var(--sans)); }
+.search-panel.is-journal .search-section-title { margin: 10px 2px 2px; font: 600 10px var(--sans); color: color-mix(in srgb, var(--error) 70%, var(--text)); }
+.search-panel.is-journal .search-result { display: grid; grid-template-columns: auto minmax(20px, 1fr) auto; column-gap: 6px; align-items: baseline; min-height: 28px; padding: 2px 4px; border-radius: 2px; }
+.search-panel.is-journal .search-result-title { color: var(--text); font: 14px var(--serif, var(--sans)); white-space: normal; }
+.search-leader { align-self: end; margin-bottom: 6px; border-bottom: 1.5px dotted color-mix(in srgb, var(--text) 35%, transparent); }
+.search-panel.is-journal .search-result-date { font: italic 12.5px var(--serif, var(--sans)); color: var(--muted); }
+.search-panel.is-journal .search-result-snippet { grid-column: 1 / -1; font: italic 12px var(--serif, var(--sans)); white-space: normal; }
+.search-panel.is-journal .search-result[aria-selected='true'] { background: color-mix(in srgb, var(--priority) 26%, transparent); }
+.search-panel.is-journal mark { background: color-mix(in srgb, var(--priority) 55%, transparent); color: inherit; }
+.search-panel.is-journal .search-foot { background: transparent; border-top-style: dashed; }
+.search-panel.is-journal .search-suggest { border-bottom-style: dashed; }
+
+/* ── Nebula: the prompt in the window bar, grep output under it ── */
+.search.is-nebula { display: flex; flex: 1; align-items: center; min-width: 0; height: 100%; }
+.search-prompt { display: flex; flex: 1; align-items: center; gap: 0; min-width: 0; height: 100%; color: #cfcfcf; font: 12px var(--mono); cursor: text; white-space: pre; }
+.search-prompt b { color: var(--nb-violet-light, #b388ff); }
+.search.is-nebula .search-input { max-width: 520px; color: #f2f2f2; caret-color: var(--nb-violet-light, #b388ff); font: 12px var(--mono); }
+.search.is-nebula .search-input::placeholder { color: #55555c; }
+.search.is-nebula.is-focused .search-prompt .nebula-cursor { display: none; }
+.search-panel.is-nebula { top: calc(100% + 4px); left: 6px; width: min(680px, 92vw); padding: 0 0 6px; background: #0b0b0d; box-shadow: 0 0 0 1px var(--nb-line, #333), 4px 4px 0 var(--nb-offset, #2e2340), 9px 9px 0 var(--background); font: 12px var(--mono); animation: none; }
+.search-shell-head { position: sticky; top: 0; z-index: 1; padding: 5px 10px; background: var(--nb-paper, #d4d4d4); color: var(--nb-ink, #111); font: 700 10.5px var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.search-shell-head span { font-weight: 400; opacity: .7; }
+.search-panel.is-nebula .search-section-title { margin: 8px 10px 2px; color: var(--nb-violet-light, #b388ff); font: 700 11px var(--mono); letter-spacing: 0; text-transform: none; }
+.search-panel.is-nebula .search-result { gap: 10px; min-height: 22px; padding: 1px 10px; font: 12px var(--mono); white-space: pre; }
+.search-panel.is-nebula .search-result[aria-selected='true'] { background: var(--nb-violet, #7b2cbf); color: #fff; }
+.search-panel.is-nebula .search-result[aria-selected='true'] :is(.search-result-title, .search-shell-date, .search-shell-type, .search-shell-tag) { color: #fff; }
+.search-shell-date { color: #6a6a72; }
+.search-shell-type { color: var(--tag, #8fb4ff); }
+.search-panel.is-nebula .search-result-title { flex: 1; color: #e8e8e8; font: inherit; }
+.search-shell-tag { color: #9a9aa2; }
+.search-panel.is-nebula mark { padding: 0; border-radius: 0; background: var(--holo); background-size: 200% 100%; color: #111; }
+.search-panel.is-nebula .search-suggest { border-bottom: 1px dashed var(--edge); }
+.search-panel.is-nebula .search-suggestion[aria-selected='true'] { background: #1d1d23; }
+.search-panel.is-nebula .search-suggestion-word b { color: var(--nb-violet-light, #b388ff); }
+.search-panel.is-nebula .search-empty { color: var(--error); font: 12px var(--mono); }
+
+/* A card found on the board blinks once. */
+.board-card.is-found { animation: search-found 1.4s ease 1; }
+@keyframes search-found { 0%, 60% { box-shadow: 0 0 0 3px var(--accent), 0 14px 28px -8px #000c; } 100% { box-shadow: 0 1px 1px #0005, 0 8px 18px -6px #000b; } }
+
+/* Pixel look: square, the pixel faces. */
+:root[data-pixel] :is(.search-field, .search-panel, .search-card, .search-tab, .search-result, .search-suggestion, .search mark, .search-keys kbd, .search-foot kbd) { border-radius: 0 !important; }
+:root[data-pixel] .search-panel.is-classic { outline: 1px solid var(--edge); outline-offset: 1px; box-shadow: 3px 3px 0 var(--border), 5px 5px 0 #0008; }
+:root[data-pixel] .search-card { box-shadow: inset 0 3px 0 #a8843c, 3px 3px 0 var(--border), 5px 5px 0 #0008; }
+:root[data-pixel] .search-suggestion, :root[data-pixel] .search-result-date, :root[data-pixel] .search-foot kbd { font-size: 15px !important; }
+:root[data-pixel] .search.is-journal .search-input, :root[data-pixel] .search-panel.is-journal .search-result-title { font-style: normal; font-size: 16px; }
+/* Room for the view tabs beside the field; the prompt keeps the bar's margin. */
+.search.is-classic { flex: 0 1 300px; width: auto; min-width: 150px; }
+.search-prompt { padding-left: 12px; }
+.search-panel.is-nebula { left: 12px; }
+/* Normal: compact at rest (the view tabs keep their room), opened over them while typing. */
+.search.is-classic { flex: 0 0 132px; min-width: 0; }
+.search.is-classic .search-field { position: relative; z-index: 2; width: 100%; box-sizing: border-box; transition: width 180ms var(--ease), box-shadow var(--fast) ease; }
+.search.is-classic.is-focused .search-field, .search.is-classic:has(.search-input:not(:placeholder-shown)) .search-field { position: absolute; right: 0; top: 50%; width: min(340px, 60vw); transform: translateY(-50%); background: var(--surface); }
+.search.is-classic .search-input::placeholder { color: var(--placeholder); }
+.search-panel.is-classic { left: auto; right: 0; transform: none; top: calc(100% + 10px); }
+/* Tag suggestions by kind (own, checklist, mail), set apart by a line as in the other tag lists. */
+.search-suggestion.is-kind-start { margin-top: 5px; border-top: 1px solid var(--divider); padding-top: 4px; min-height: 30px; }
+.search-panel.is-journal .search-suggestion.is-kind-start { border-top-style: dashed; }
+.search-panel.is-nebula .search-suggestion.is-kind-start { border-top: 1px dashed var(--edge); }
+
+.search-input-wrap { position: relative; display: flex; flex: 1; min-width: 0; max-width: 520px; }
+.search-input-wrap .search-cursor { position: absolute; left: 0; top: 50%; transform: translateY(-50%); margin: 0; pointer-events: none; }

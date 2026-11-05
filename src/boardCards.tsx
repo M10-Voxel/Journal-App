@@ -65,7 +65,7 @@ export function patchCard(id: string, changes: Partial<Card>) {
   const pending = enqueue([id, 'folders'], () => invoke('board_patch', { id, patch: changes, source }));
   void pending.catch(e => fail(cardStore, e)); return pending;
 }
-function apply(patches: Patches) {
+export function patchCards(patches: Patches) {
   const ids = Object.keys(patches);
   if (!ids.length) return Promise.resolve();
   set(cardStore, old => old.map(card => patches[card.id] ? { ...card, ...patches[card.id] } : card));
@@ -73,8 +73,8 @@ function apply(patches: Patches) {
   void pending.catch(e => fail(cardStore, e)); return pending;
 }
 /** Ties two cards with a thread (both sides). Returns false when they cannot be tied (or already are). */
-export function connectCards(a: string, b: string) { const patches = connectPatches(cardStore.value, a, b); if (!Object.keys(patches).length) return null; return apply(patches); }
-export function disconnectCards(a: string, b: string) { return apply(disconnectPatches(cardStore.value, a, b)); }
+export function connectCards(a: string, b: string) { const patches = connectPatches(cardStore.value, a, b); if (!Object.keys(patches).length) return null; return patchCards(patches); }
+export function disconnectCards(a: string, b: string) { return patchCards(disconnectPatches(cardStore.value, a, b)); }
 /** Removes a card for good; no thread keeps pointing at it. */
 export async function removeCard(id: string) {
   const removed = removalIds(cardStore.value, id);

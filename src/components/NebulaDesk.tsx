@@ -151,6 +151,19 @@ function NebulaCalendarPanel({ mode, date, today, onPick, dayCalendar }: { mode:
  * it, a click brings it to the front. Released with Shift over the grid it joins the grid; released outside the journal's
  * window it becomes a window of its own (calendar, notebook, board). Focus darkens everything else.
  */
+function usePanelScroll(body: React.RefObject<HTMLDivElement | null>) {
+  useEffect(() => {
+    const element = body.current;
+    if (!element) return;
+    const update = () => { element.style.overscrollBehaviorY = element.scrollHeight > element.clientHeight + 1 ? 'contain' : 'auto'; };
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    for (const child of element.children) observer.observe(child);
+    update();
+    return () => observer.disconnect();
+  }, []);
+}
+
 function DeskWindow({ id, stage, open, front, focused, command, label, closeLabel, className, bodyClass, disabled, sectionRef, drag, onClose, onFront, onFocus, onDock, children }: {
   id: PanelId; stage: React.RefObject<HTMLDivElement | null>; open: boolean; front: boolean; focused: boolean; command: string; label: string; closeLabel?: string;
   className: string; bodyClass: string; disabled?: boolean; sectionRef?: React.RefObject<HTMLElement | null>; drag: FloatingDrag;
@@ -159,6 +172,8 @@ function DeskWindow({ id, stage, open, front, focused, command, label, closeLabe
   useLanguage();
   const ownRef = useRef<HTMLElement>(null);
   const frame = sectionRef ?? ownRef;
+  const scrollBody = useRef<HTMLDivElement>(null);
+  usePanelScroll(scrollBody);
   const place = useFloatingWindow(`journal.nebulaWindow.${id}`, stage, frame, drag);
   return <section ref={frame} className={`${className}${open ? ' is-open' : ''}${place.floating ? ' is-floating' : ''}${place.dragging ? ' is-dragging' : ''}${front ? ' is-front' : ''}${focused ? ' is-focused' : ''}`}
     style={place.style} data-window={id} aria-label={label} aria-hidden={!open || undefined} inert={!open || disabled} onPointerDownCapture={onFront}
@@ -173,7 +188,7 @@ function DeskWindow({ id, stage, open, front, focused, command, label, closeLabe
         {onClose && closeLabel && <button type="button" className="nebula-calendar-close" aria-label={closeLabel} title={`${closeLabel} · Esc`} onClick={onClose}>×</button>}
       </span>
     </header>
-    <div className={bodyClass}>{children}</div>
+    <div ref={scrollBody} className={bodyClass}>{children}</div>
     {open && windowGrips.map(grip => <span key={grip.name} className={`nebula-grip is-${grip.name}`} aria-hidden="true" onPointerDown={place.startResize(grip.edges)} />)}
   </section>;
 }
@@ -195,6 +210,7 @@ function Panel({ id, command, label, minimized, span, height, held, dropBefore, 
 }) {
   useLanguage();
   const root = useRef<HTMLElement>(null), body = useRef<HTMLDivElement>(null);
+  usePanelScroll(body);
   function resizeHeight(event: React.PointerEvent<HTMLElement>) {
     if (event.button !== 0 || !body.current) return;
     event.preventDefault();
@@ -229,7 +245,7 @@ function Panel({ id, command, label, minimized, span, height, held, dropBefore, 
     };
     window.addEventListener('pointermove', move); window.addEventListener('pointerup', end); window.addEventListener('pointercancel', end);
   }
-  return <section ref={root} className={`nebula-terminal nebula-panel is-${id}${span < columns ? ' is-part' : ''}${span === columns / 2 ? ' is-half' : ''}${minimized ? ' is-minimized' : ''}${held ? ' is-held' : ''}${dropBefore ? ` is-drop-${dropBefore}` : ''}`}
+  return <section ref={root} className={`nebula-terminal nebula-panel is-${id}${height ? ' is-custom-height' : ''}${span < columns ? ' is-part' : ''}${span === columns / 2 ? ' is-half' : ''}${minimized ? ' is-minimized' : ''}${held ? ' is-held' : ''}${dropBefore ? ` is-drop-${dropBefore}` : ''}`}
     data-panel={id} data-span={span} aria-label={label} style={{ '--span': span, ...held ? { transform: `translate(${held.dx}px, ${held.dy}px) rotate(-.6deg)` } : {} } as CSSProperties}>
     <header className="nebula-terminal-head nebula-panel-head" onPointerDown={onGrab} onDoubleClick={event => { if (!(event.target as Element).closest('button')) onMinimize(); }}
       title={t('Ziehen zum Umordnen · aus dem Raster ziehen: schweben · Doppelklick: minimieren')}>

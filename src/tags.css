@@ -233,3 +233,39 @@
 :root[data-pixel] .cal-details-head strong { font-size: 14px; }
 /* Keep the tag picker mounted underneath the settings opened from it. */
 body:has(.shortcut-backdrop) .tag-picker { z-index:90; }
+
+/* Editing an entry in the calendar keeps its colour: its range (time grid) or the entry itself wears a dashed edge in
+   the entry's own colour (its tag's), nothing turns accent blue. */
+:root .cal-selection.is-edit { background: color-mix(in srgb, var(--tone) 16%, var(--background)) !important; color: color-mix(in srgb, var(--tone) 14%, var(--strong)) !important;
+  box-shadow: none !important; outline: 1.5px dashed var(--tone); outline-offset: -1.5px; }
+:root .cal-selection.is-edit .cal-selection-edge::after { background: var(--tone); }
+:root .cal-selection.is-edit .cal-selection-length { color: color-mix(in srgb, var(--tone) 30%, var(--text)); }
+:root .cal-item.is-block.is-editing { opacity: 0; }
+:root .cal-item.is-editing, :root .cal-item.is-editing.has-tag { box-shadow: none !important; outline: 1.5px dashed var(--tone); outline-offset: -1.5px; }
+:root[data-pixel] .cal-selection.is-edit, :root[data-pixel] .cal-item.is-editing { outline-width: 2px; }
+
+/* In the journal, an entry's symbol is drawn in its tag's colour; the line at the left of tagged rows gives way. */
+.entry.has-tag .entry-symbol { color: var(--tag); }
+.entry.has-tag::after { display: none !important; }
+
+/* Kinds of tags (own, checklist, mail) apart from each other in the filter, the picker and the settings. */
+.tag-filter-group { display: flex; flex-direction: column; gap: 1px; }
+.tag-filter-group + .tag-filter-group { margin-top: 5px; padding-top: 5px; border-top: 1px solid var(--divider); }
+.tag-group-label { display: block; margin: 2px 8px 3px; color: var(--placeholder); font: 600 9.5px var(--sans); letter-spacing: .1em; text-transform: uppercase; }
+.tag-option.is-kind-start { position: relative; margin-top: 9px; }
+.tag-option.is-kind-start::before { content: attr(data-kind-label); position: absolute; left: 8px; right: 0; top: -9px; height: 0; border-top: 1px solid var(--divider); color: transparent; }
+.tag-group { display: flex; flex-direction: column; gap: 5px; }
+.tag-group + .tag-group { margin-top: 10px; }
+.tag-group > .tag-group-label { margin: 0 0 2px 2px; }
+:root[data-theme='journal'] .tag-group-label { font: italic 600 11px var(--serif, var(--sans)); letter-spacing: .04em; text-transform: none; color: color-mix(in srgb, var(--error) 65%, var(--text)); }
+:root[data-theme='journal'] .tag-filter-group + .tag-filter-group { border-top-style: dashed; }
+:root[data-theme='nebula'] .tag-group-label { font: 700 10px var(--mono); }
+:root[data-theme='nebula'] .tag-group-label::before { content: '# '; color: var(--nb-violet-light, #b388ff); }
+:root[data-pixel] .tag-group-label { font-size: 13px; }
+
+/* Choosing entries by a frame (calendarSelection.ts): the frame while drawing, chosen entries ringed. */
+.cal-frame { position: fixed; z-index: 900; border: 1px dashed var(--accent); border-radius: 4px; background: color-mix(in srgb, var(--accent) 10%, transparent); pointer-events: none; }
+:root .cal-item.is-selected { outline: 2px solid var(--tone, var(--accent)); outline-offset: 1px; box-shadow: 0 0 0 4px color-mix(in srgb, var(--tone, var(--accent)) 25%, transparent) !important; z-index: 3; }
+:root[data-pixel] .cal-frame, :root[data-theme='nebula'] .cal-frame { border-radius: 0; border-width: 2px; }
+:root[data-theme='nebula'] .cal-frame { border-color: var(--nb-violet-light, #b388ff); background: color-mix(in srgb, var(--nb-violet, #7b2cbf) 14%, transparent); }
+:root[data-theme='journal'] .cal-frame { border-color: color-mix(in srgb, var(--error) 70%, transparent); background: color-mix(in srgb, var(--error) 6%, transparent); }

@@ -15,6 +15,7 @@ import { CalendarComposer } from './CalendarComposer';
 import type { Draft, EntryEdit, NewEntry } from './CalendarComposer';
 import { CalendarItem, CompactMonth, EditInCalendar, OpenInJournal, dayLabel, hasJournalContent, entrySymbol, openInJournal, useCalendarData, useJournalDate, useNow } from './calendarShared';
 import { NavCluster } from './NavCluster';
+import { calendarSelection, clearCalendarSelection, selectInFrame } from '../calendarSelection';
 import { Icon } from './Icon';
 import { CalendarTransfer } from './CalendarTransfer';
 import type { CalendarImport } from '../journal';
@@ -145,6 +146,38 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
   const rangePage=useRef(date);rangePage.current=date;
   useEffect(()=>{rootRef.current?.querySelectorAll<HTMLElement>('[data-range-date]').forEach(cell=>{const date=cell.dataset.rangeDate!, shown=rangeDraw ?? multi;cell.toggleAttribute('data-range-selected',Boolean(shown && date>=shown.start && date<=shown.end));});},[rangeDraw,multi,date,view]);
 
+  // A left drag over the calendar draws a frame: the entries wholly inside it are chosen (Ctrl adds to the choice). A
+  // chosen entry dragged moves them all; Delete removes them; Escape or a press elsewhere lets them go.
+  const [frame, setFrame] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
+  const beginFrame = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0 || !event.isPrimary) return;
+    const target = event.target as Element;
+    if (!target.closest('.cal-body') || target.closest('.cal-item, button, input, textarea, a, .cal-composer, .popover, .cal-selection, .sidebar-resizer')) { if (!target.closest('.cal-item.is-selected')) clearCalendarSelection(); return; }
+    const root = rootRef.current; if (!root) return;
+    const start = { x: event.clientX, y: event.clientY }, keep = event.ctrlKey;
+    if (!keep) clearCalendarSelection();
+    let moved = false;
+    const follow = (e: globalThis.PointerEvent) => {
+      if (!moved && Math.hypot(e.clientX - start.x, e.clientY - start.y) < 6) return;
+      moved = true;
+      const rect = new DOMRect(Math.min(start.x, e.clientX), Math.min(start.y, e.clientY), Math.abs(e.clientX - start.x), Math.abs(e.clientY - start.y));
+      setFrame({ left: rect.left, top: rect.top, width: rect.width, height: rect.height });
+      selectInFrame(root, rect, keep);
+    };
+    const end = () => {
+      window.removeEventListener('pointermove', follow); window.removeEventListener('pointerup', end); window.removeEventListener('pointercancel', end);
+      setFrame(null);
+      if (moved) { suppressClick.current = true; window.setTimeout(() => { suppressClick.current = false; }, 250); root.focus({ preventScroll: true }); }
+    };
+    window.addEventListener('pointermove', follow); window.addEventListener('pointerup', end); window.addEventListener('pointercancel', end);
+  };
+  useEffect(() => clearCalendarSelection, []);
+  useEffect(() => clearCalendarSelection(), [view, date]);
+  const removeChosen = async () => {
+    const chosen = [...calendarSelection().values()];
+    clearCalendarSelection();
+    if (onRemove) await Promise.all(chosen.map(item => onRemove(item.date, item.entry.id, []))).catch(reason => setNotice(String(reason)));
+  };
   const beginMulti=(event:ReactPointerEvent<HTMLDivElement>)=>{
    if(!onCreate || event.button!==2 || (event.target as Element).closest('.cal-item,input,button:not(.cal-year-day):not(.cal-month-number)'))return;
    const cell=(event.target as Element).closest<HTMLElement>('[data-range-date]');if(!cell)return;event.preventDefault();
@@ -181,11 +214,18 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
   },[date,onCreate]);
   const selectedIndex = calendarViews().findIndex(item => item.view === view);
   return <OpenInJournal.Provider value={onOpen}><EditInCalendar.Provider value={editContext}>
-    <div ref={rootRef} className={`cal${embedded ? ' is-embedded' : ''}${fixedView ? ' is-fixed' : ''}`} data-view={view} tabIndex={-1} aria-label={t("Kalender")} onKeyDown={onKeyDown} onPointerDown={beginMulti} onContextMenuCapture={event=>{const target=event.target as Element;if(target.closest('.cal-item,.cal-composer,.popover'))return;if(suppressContext.current){suppressContext.current=false;event.preventDefault();event.stopPropagation();return;}if(target.closest('.cal-time-column')){event.preventDefault();return;}const cell=target.closest<HTMLElement>('[data-range-date]');if(onCreate && cell && !cell.classList.contains('cal-time-allday-cell')){event.preventDefault();const selected=cell.dataset.rangeDate!;setMulti({start:selected,end:selected});}}} onClickCapture={event=>{if(suppressClick.current){event.preventDefault();event.stopPropagation();suppressClick.current=false;}}} onPointerMove={event=>{const day=(event.target as Element).closest<HTMLElement>('[data-date]')?.dataset.date;pasteTarget.current=day ?? date;}}>
+    <div ref={rootRef} className={`cal${embedded ? ' is-embedded' : ''}${fixedView ? ' is-fixed' : ''}`} data-view={view} tabIndex={-1} aria-label={t("Kalender")} onKeyDown={event => {
+      if (calendarSelection().size && !(event.target as Element).closest('input, textarea, [contenteditable="true"], .cal-composer, .popover')) {
+        if (event.key === 'Delete' || event.key === 'Backspace') { event.preventDefault(); event.stopPropagation(); void removeChosen(); return; }
+        if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); clearCalendarSelection(); return; }
+      }
+      onKeyDown(event);
+    }} onPointerDown={event => { beginMulti(event); beginFrame(event); }} onContextMenuCapture={event=>{const target=event.target as Element;if(target.closest('.cal-item,.cal-composer,.popover'))return;if(suppressContext.current){suppressContext.current=false;event.preventDefault();event.stopPropagation();return;}if(target.closest('.cal-time-column')){event.preventDefault();return;}const cell=target.closest<HTMLElement>('[data-range-date]');if(onCreate && cell && !cell.classList.contains('cal-time-allday-cell')){event.preventDefault();const selected=cell.dataset.rangeDate!;setMulti({start:selected,end:selected});}}} onClickCapture={event=>{if(suppressClick.current){event.preventDefault();event.stopPropagation();suppressClick.current=false;}}} onPointerMove={event=>{const day=(event.target as Element).closest<HTMLElement>('[data-date]')?.dataset.date;pasteTarget.current=day ?? date;}}>
       {/* Drawn over several days: the normal card, with the span's start and end (and repeating, tags, priority …). */}
       {multi && onCreate && <CalendarComposer key="multi" date={multi.start} draft={null} span={{ end: multi.end }} onSpanChange={setMulti} tag={newTag}
         anchor={() => (rootRef.current?.querySelector(`[data-range-date="${multi.end}"]`) ?? rootRef.current?.querySelector(`[data-range-date="${multi.start}"]`) ?? rootRef.current)?.getBoundingClientRect() ?? null}
         onCancel={byKey => { setMulti(null); if (byKey) refocus(); }} onCreate={async entry => { await onCreate(multi.start, entry); setMulti(null); refocus(); }} />}
+      {frame && <div className="cal-frame" aria-hidden="true" style={{ left: frame.left, top: frame.top, width: frame.width, height: frame.height }} />}
       {rangeDraw && <div className="cal-action-notice">{formatDate(rangeDraw.start)} – {formatDate(rangeDraw.end)}</div>}
       {notice && <div className="cal-action-notice" role="status">{notice}</div>}
       {pasting && <Popover anchor={rootRef.current} label={t('Einfügen')} onClose={()=>setPasting(null)}><div className="cal-paste-choice"><p>{t('Wiederholung einfügen')}</p><button type="button" onClick={()=>void paste(pasting.entry,pasting.date,false)}>{t('Nur diesen Tag')}</button><button type="button" onClick={()=>void paste(pasting.entry,pasting.date,true)}>{t('Mit Wiederholung')}</button></div></Popover>}
@@ -352,6 +392,18 @@ function TimeGrid({ journalDays, dates, today, now, journalDate, entriesOn, onDa
   onCreate?: (date: string, entry: NewEntry) => Promise<void>;
   editing: Editing | null; onEditEnd: (byKey: boolean) => void; onSave: (change: EntryEdit, scope?: ScopeOption) => Promise<void>; onRemove: (others: { id: string; date: string }[]) => Promise<void>;
 }) {
+  // An entry being edited keeps its own look: its range wears the entry's colour (its tag's) with a dashed edge.
+  const gridTags = useTags();
+  const editTone = editing ? tagOf(gridTags, editing.entry.tag)?.color ?? (editing.entry.kind === 'event' ? 'var(--event)' : 'var(--muted)') : null;
+  // The card sits by the part of the range that is on screen, both days of one past midnight taken together.
+  const selectionRect = () => {
+    const grid = scrollRef.current, parts = [...(grid?.querySelectorAll<HTMLElement>('.cal-selection') ?? [])].map(part => part.getBoundingClientRect());
+    if (!grid || !parts.length) return null;
+    const view = grid.getBoundingClientRect(), body = grid.querySelector('.cal-time-top')?.getBoundingClientRect().bottom ?? view.top;
+    const left = Math.min(...parts.map(r => r.left)), right = Math.max(...parts.map(r => r.right));
+    const top = Math.max(body, Math.min(...parts.map(r => r.top))), bottom = Math.min(view.bottom, Math.max(...parts.map(r => r.bottom)));
+    return bottom > top ? new DOMRect(left, top, right - left, bottom - top) : new DOMRect(left, Math.min(top, view.bottom - 24), right - left, 24);
+  };
   useLanguage();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [hourHeight, setHourHeight] = useState(48);
@@ -580,16 +632,16 @@ function TimeGrid({ journalDays, dates, today, now, journalDate, entriesOn, onDa
         {column.timed.map(({ item, start, duration, left, width }) => <CalendarItem key={item.id} entry={item.entry} date={item.from} variant="block" short={duration < 45} night={item.night}
           style={{ top: start / 60 * hourHeight + (item.night === 'rest' ? 0 : 1), height: Math.max(10, duration / 60 * hourHeight - (item.night ? 1 : 3)), left: `calc(${left}% + 2px)`, width: `calc(${width}% - 4px)` }} />)}
         {column.date === today && <div className="cal-now" style={{ top: nowMinutes / 60 * hourHeight }} aria-hidden="true" />}
-        {draft?.date === column.date && <div ref={selectionRef} className={`cal-selection${marking ? ' is-marking' : ''}${draft.end - draft.start < 45 ? ' is-short' : ''}${draft.end > 24 * 60 ? ' is-night-start' : ''}`}
-          style={{ top: draft.start / 60 * hourHeight, height: (Math.min(draft.end, 24 * 60) - draft.start) / 60 * hourHeight }} onPointerDown={event => begin(event, 'move', column.date)}>
+        {draft?.date === column.date && <div ref={selectionRef} className={`cal-selection${marking ? ' is-marking' : ''}${draft.end - draft.start < 45 ? ' is-short' : ''}${draft.end > 24 * 60 ? ' is-night-start' : ''}${editTone ? ' is-edit' : ''}`}
+          style={{ top: draft.start / 60 * hourHeight, height: (Math.min(draft.end, 24 * 60) - draft.start) / 60 * hourHeight, ...editTone ? { '--tone': editTone } : {} } as CSSProperties} onPointerDown={event => begin(event, 'move', column.date)}>
           <i className="cal-selection-edge is-start" title={t("Beginn ziehen")} onPointerDown={event => begin(event, 'start', column.date)} />
           <span className="cal-selection-time">{timeOfMinutes(draft.start)} – {formatEnd(timeOfMinutes(draft.end))}</span>
           <span className="cal-selection-length">{formatDuration(draft.end - draft.start)}</span>
           {draft.end <= 24 * 60 && <i className="cal-selection-edge is-end" title={t("Ende ziehen")} onPointerDown={event => begin(event, 'end', column.date)} />}
         </div>}
         {/* Past midnight the range goes on in the next day's column, where its end can be dragged. */}
-        {draft && draft.end > 24 * 60 && shiftDate(draft.date, 1) === column.date && <div className={`cal-selection is-night-rest${marking ? ' is-marking' : ''}`}
-          style={{ top: 0, height: (draft.end - 24 * 60) / 60 * hourHeight }} onPointerDown={event => begin(event, 'move', column.date)}>
+        {draft && draft.end > 24 * 60 && shiftDate(draft.date, 1) === column.date && <div className={`cal-selection is-night-rest${marking ? ' is-marking' : ''}${editTone ? ' is-edit' : ''}`}
+          style={{ top: 0, height: (draft.end - 24 * 60) / 60 * hourHeight , ...editTone ? { '--tone': editTone } : {} } as CSSProperties} onPointerDown={event => begin(event, 'move', column.date)}>
           <span className="cal-selection-time">{t("bis ")}{formatEnd(timeOfMinutes(draft.end))}</span>
           <i className="cal-selection-edge is-end" title={t("Ende ziehen")} onPointerDown={event => begin(event, 'end', column.date)} />
         </div>}
@@ -599,9 +651,9 @@ function TimeGrid({ journalDays, dates, today, now, journalDate, entriesOn, onDa
     {allDay && onCreate && <CalendarComposer key={`day-${allDay.date}`} date={allDay.date} draft={null} tag={newTag} anchor={() => allDay.element.isConnected ? allDay.element.getBoundingClientRect() : null}
       onCancel={byKey => { setAllDay(null); if (byKey) refocus(); }} onCreate={async entry => { await onCreate(allDay.date, entry); setAllDay(null); refocus(); }} />}
     {draft && !marking && onCreate && (editing && draft.date === editing.date
-      ? <CalendarComposer key={editing.entry.id} date={draft.date} draft={draft} entry={editing.entry} anchor={() => selectionRef.current?.getBoundingClientRect() ?? null} onChange={setDraft}
+      ? <CalendarComposer key={editing.entry.id} date={draft.date} draft={draft} entry={editing.entry} anchor={selectionRect} onChange={setDraft}
         onCancel={byKey => { setDraft(null); onEditEnd(byKey); }} onSave={async (change, scope) => { await onSave(change, scope); setDraft(null); }} onRemove={async others => { await onRemove(others); setDraft(null); }} />
-      : <CalendarComposer key={`new-${draft.date}`} date={draft.date} draft={draft} tag={newTag} anchor={() => selectionRef.current?.getBoundingClientRect() ?? null} onChange={setDraft}
+      : <CalendarComposer key={`new-${draft.date}`} date={draft.date} draft={draft} tag={newTag} anchor={selectionRect} onChange={setDraft}
         onCancel={byKey => { setDraft(null); if (byKey) refocus(); }} onCreate={async entry => { await onCreate(draft.date, entry); setDraft(null); refocus(); }} />)}
   </div>;
 }

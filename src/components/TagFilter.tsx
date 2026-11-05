@@ -5,6 +5,8 @@ import { untagged } from '../tags';
 import { manageTags, useTags } from '../tagStore';
 import { Icon } from './Icon';
 import { Popover } from './Popover';
+import { groupTags, orderedTags, tagKindLabel } from '../tagKinds';
+import { useActivityTagIds } from '../tagGroups';
 
 /**
  * Showing and hiding tags in a view: a small button with the colours of the shown tags (struck through where some are
@@ -13,7 +15,9 @@ import { Popover } from './Popover';
  */
 export function TagFilter({ hidden, onChange, label }: { hidden: ReadonlySet<string>; onChange: (next: ReadonlySet<string>) => void; label: string }) {
   useLanguage();
-  const tags = useTags();
+  const activityIds = useActivityTagIds();
+  const tags = orderedTags(useTags(), activityIds);
+  const groups = groupTags(tags, activityIds);
   const [open, setOpen] = useState(false);
   const button = useRef<HTMLButtonElement>(null);
   const list = useRef<HTMLDivElement>(null);
@@ -39,11 +43,14 @@ export function TagFilter({ hidden, onChange, label }: { hidden: ReadonlySet<str
           else if (/^[0-9]$/.test(event.key) && !event.ctrlKey && !event.altKey) { event.preventDefault(); const key = event.key === '0' ? untagged : tags[Number(event.key) - 1]?.id; if (key) toggle(key); }
           else if (event.key.toLowerCase() === 'a' && !event.ctrlKey && !event.altKey) { event.preventDefault(); onChange(new Set()); }
         }}>
-        {tags.map((tag, index) => <button key={tag.id} type="button" role="checkbox" className="tag-filter-row" aria-checked={!hidden.has(tag.id)} style={{ '--tag': tag.color } as CSSProperties}
-          data-autofocus={index === 0 ? true : undefined} onClick={event => event.altKey ? only(tag.id) : toggle(tag.id)}
-          onKeyDown={event => { if (event.key === 'Enter' && event.shiftKey) { event.preventDefault(); only(tag.id); } }}>
-          <span className="tag-check" aria-hidden="true"><Icon name="check" /></span><span className="tag-filter-name">{tag.name}</span>{index < 9 && <kbd>{index + 1}</kbd>}
-        </button>)}
+        {groups.map((group, groupIndex) => <div key={group.kind} className={`tag-filter-group is-${group.kind}`} role="group" aria-label={tagKindLabel(group.kind)}>
+          {groups.length > 1 && <span className="tag-group-label" aria-hidden="true">{tagKindLabel(group.kind)}</span>}
+          {group.tags.map(tag => { const index = tags.indexOf(tag); return <button key={tag.id} type="button" role="checkbox" className="tag-filter-row" aria-checked={!hidden.has(tag.id)} style={{ '--tag': tag.color } as CSSProperties}
+            data-autofocus={index === 0 && groupIndex === 0 ? true : undefined} onClick={event => event.altKey ? only(tag.id) : toggle(tag.id)}
+            onKeyDown={event => { if (event.key === 'Enter' && event.shiftKey) { event.preventDefault(); only(tag.id); } }}>
+            <span className="tag-check" aria-hidden="true"><Icon name="check" /></span><span className="tag-filter-name">{tag.name}</span>{index < 9 && <kbd>{index + 1}</kbd>}
+          </button>; })}
+        </div>)}
         <button type="button" role="checkbox" className="tag-filter-row is-untagged" aria-checked={!hidden.has(untagged)}
           onClick={event => event.altKey ? only(untagged) : toggle(untagged)} onKeyDown={event => { if (event.key === 'Enter' && event.shiftKey) { event.preventDefault(); only(untagged); } }}>
           <span className="tag-check" aria-hidden="true"><Icon name="check" /></span><span className="tag-filter-name">{t('Ohne Tag')}</span><kbd>0</kbd>

@@ -155,12 +155,12 @@ export function attachmentsOf(cards: Card[], note: Card): Card[] { return linked
 export function pagesOf(cards: Card[], note: Card): Card[] { return [note, ...linked(cards, note).filter(card => card.kind === 'note')]; }
 
 /** Notes in a folder choice: all, those outside every folder (folders that are gone count as none), or one folder with its subfolders. */
+/** The notes of a choice: all, those outside every folder, or a folder's own (its subfolders' are not shown). */
 export function notesIn(cards: Card[], folders: Folder[], choice: 'all' | 'none' | string, query = ''): Card[] {
   const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const known = new Set(folders.map(folder => folder.id));
-  const inside = choice === 'all' || choice === 'none' ? null : folderWithin(folders, choice);
   return cards.filter(card => card.kind === 'note')
-    .filter(card => words.length ? true : choice === 'all' || (choice === 'none' ? !card.folder || !known.has(card.folder) : inside!.has(card.folder ?? '')))
+    .filter(card => words.length ? true : choice === 'all' || (choice === 'none' ? !card.folder || !known.has(card.folder) : card.folder === choice))
     .filter(card => words.every(word => `${card.title} ${card.text}`.toLowerCase().includes(word)))
     .sort((a, b) => (b.order ?? 0) - (a.order ?? 0) || a.id.localeCompare(b.id));
 }

@@ -10,6 +10,8 @@
   --nb-ink: #111111;
   --nb-line: #e8e8e8;
   --nb-violet: #7b2cbf;
+  /* The offset shadow behind windows and popups: a dark, quiet violet that sets them off without competing with the content. */
+  --nb-offset: #2e2340;
   --nb-violet-light: #a66cf0;
   --nb-violet-dark: #4b1679;
   --holo: linear-gradient(115deg, #d5b8ff 0%, #b9a7ff 18%, #a6f2dc 42%, #e8f7c8 56%, #ffd0b0 74%, #e3c4ff 100%);
@@ -38,7 +40,7 @@
   --display: 'Instrument Serif', Georgia, serif;
 
   --popup-radius: 0px;
-  --popup-shadow: 0 0 0 1px var(--nb-line), 6px 6px 0 var(--nb-violet);
+  --popup-shadow: 0 0 0 1px var(--nb-line), 4px 4px 0 var(--nb-offset);
 }
 :root[data-theme='nebula'] .font-warmup { font-family: 'Space Mono'; }
 :root[data-theme='nebula'] body { background: var(--nb-black); }
@@ -146,7 +148,7 @@
 
 /* ── Terminals: a prompt head on grey paper, the content on black ─────────────────────────────────────────────── */
 .nebula-terminal { min-width: 0; border: 1px solid var(--nb-line); background: var(--surface); box-shadow: 6px 6px 0 #ffffff12; }
-.nebula-terminal.is-entries, .nebula-terminal.is-notes { box-shadow: 7px 7px 0 var(--nb-violet); }
+.nebula-terminal.is-entries, .nebula-terminal.is-notes { box-shadow: 4px 4px 0 var(--nb-offset); }
 .nebula-terminal-head { display: flex; align-items: center; gap: 10px; min-height: 26px; padding: 0 0 0 10px; border-bottom: 1px solid var(--nb-line); background: var(--nb-paper); color: var(--nb-ink); font: 11px var(--mono); }
 .nebula-prompt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nebula-prompt b { color: var(--nb-violet); font-weight: 700; }
@@ -193,7 +195,7 @@
   mask: radial-gradient(circle 9px at 0 50%, #0000 97%, #000) left / 51% 100% no-repeat, radial-gradient(circle 9px at 100% 50%, #0000 97%, #000) right / 51% 100% no-repeat;
   transition: transform 180ms var(--ease), background-position 900ms var(--ease); }
 .nebula-ticket:hover, .nebula-ticket:focus-visible { transform: translateY(-3px); background-position: calc(60% + var(--ticket, 0) * 30%) 0; outline: none; }
-.nebula-ticket:focus-visible { filter: drop-shadow(0 0 0 #fff) drop-shadow(2px 2px 0 var(--nb-violet)); }
+.nebula-ticket:focus-visible { filter: drop-shadow(0 0 0 #fff) drop-shadow(2px 2px 0 var(--nb-offset)); }
 .nebula-ticket-number { grid-row: 1 / 3; display: grid; place-items: center; border-right: 1px dashed #11111166; font: 700 10px var(--mono); writing-mode: vertical-rl; transform: rotate(180deg); letter-spacing: .1em; }
 .nebula-ticket-text { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; font: 400 20px/1.1 var(--display); }
 .nebula-ticket-meta { grid-column: 2; display: flex; flex-wrap: wrap; gap: 2px 10px; font: 700 10.5px var(--mono); text-transform: uppercase; }
@@ -219,7 +221,7 @@
 
 /* ── The calendar window ──────────────────────────────────────────────────────────────────────────────────────── */
 .nebula-calendar { position: absolute; top: 18px; bottom: 26px; left: calc(var(--nb-rail-w) + var(--nb-gap) * 2); right: var(--nb-gap); z-index: 20; display: flex; flex-direction: column; min-width: 0;
-  border: 1px solid var(--nb-line); background: var(--surface); box-shadow: 9px 9px 0 var(--nb-violet);
+  border: 1px solid var(--nb-line); background: var(--surface); box-shadow: 5px 5px 0 var(--nb-offset);
   visibility: hidden; opacity: 0; transform: translateY(14px); transition: opacity 160ms ease, transform 220ms var(--ease), visibility 0s linear 220ms; }
 .nebula-calendar.is-open { visibility: visible; opacity: 1; transform: none; transition: opacity 160ms ease, transform 220ms var(--ease), visibility 0s; }
 .nebula-calendar .nebula-terminal-head { padding-right: 0; }
@@ -275,7 +277,7 @@
 
 /* ── Other windows (calendar, mini calendar, reminders) take the palette and type through data-theme ─────────── */
 :root[data-theme='nebula'] body > #root > .cal { background: var(--nb-black); }
-:root[data-theme='nebula'] .reminder { box-shadow: 0 0 0 1px var(--nb-line), 5px 5px 0 var(--nb-violet); }
+:root[data-theme='nebula'] .reminder { box-shadow: 0 0 0 1px var(--nb-line), 3px 3px 0 var(--nb-offset); }
 
 /* ── Narrower windows ─────────────────────────────────────────────────────────────────────────────────────────── */
 /* The poster moves below the terminals. */
@@ -369,13 +371,13 @@
 :root[data-theme='nebula'] .board-actions button { height: 28px; margin-left: -1px; border: 1px solid var(--edge); color: var(--text); font: 11px var(--mono); text-transform: lowercase; }
 :root[data-theme='nebula'] .board-actions button:hover:not(:disabled), :root[data-theme='nebula'] .board-actions button[aria-expanded='true'] { border-color: var(--accent); background: var(--event-background); color: var(--strong); }
 :root[data-theme='nebula'] .board-head p { font: 11px var(--mono); }
-:root[data-theme='nebula'] :is(.board-link-form, .board-library) { box-shadow: 0 0 0 1px var(--nb-line), 5px 5px 0 var(--nb-violet); }
+:root[data-theme='nebula'] :is(.board-link-form, .board-library) { box-shadow: 0 0 0 1px var(--nb-line), 3px 3px 0 var(--nb-offset); }
 :root[data-theme='nebula'] :is(.board-link-form input, .board-library > input) { font: 12px var(--mono); }
 :root[data-theme='nebula'] .board-link-form button:first-of-type { background: var(--nb-violet); color: #fff; }
 :root[data-theme='nebula'] .board-card { --tilt: 0deg !important; --pin: var(--nb-violet); padding-top: 18px; border: 1px solid #000; background: var(--paper); box-shadow: 4px 4px 0 #ffffff1f; }
-:root[data-theme='nebula'] .board-card:hover { box-shadow: 5px 5px 0 var(--nb-violet); }
-:root[data-theme='nebula'] .board-card:focus-visible { box-shadow: 0 0 0 2px var(--nb-violet-light), 5px 5px 0 var(--nb-violet); }
-:root[data-theme='nebula'] .board-card.is-moving { transform: translate(-2px, -2px); box-shadow: 8px 8px 0 var(--nb-violet); }
+:root[data-theme='nebula'] .board-card:hover { box-shadow: 3px 3px 0 var(--nb-offset); }
+:root[data-theme='nebula'] .board-card:focus-visible { box-shadow: 0 0 0 2px var(--nb-violet-light), 3px 3px 0 var(--nb-offset); }
+:root[data-theme='nebula'] .board-card.is-moving { transform: translate(-2px, -2px); box-shadow: 4px 4px 0 var(--nb-offset); }
 /* A black strip on top of each card, its pin a violet square in it. */
 :root[data-theme='nebula'] .board-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 7px; background: var(--nb-ink); pointer-events: none; }
 :root[data-theme='nebula'] .board-pin { top: -4px; width: 11px; height: 11px; margin-left: -5.5px; background: var(--pin); box-shadow: 0 0 0 1px #000; }
@@ -397,7 +399,7 @@
 :root[data-theme='nebula'] .board-link img { box-shadow: 0 0 0 1px #111; }
 :root[data-theme='nebula'] .board-library > button { border: 1px solid #000; font: 11.5px var(--mono); box-shadow: 3px 3px 0 #ffffff1f; }
 :root[data-theme='nebula'] .board-lightbox { background: #050505e6; backdrop-filter: none; }
-:root[data-theme='nebula'] .board-lightbox figure { background: #050505; box-shadow: 0 0 0 1px var(--nb-line), 10px 10px 0 var(--nb-violet); }
+:root[data-theme='nebula'] .board-lightbox figure { background: #050505; box-shadow: 0 0 0 1px var(--nb-line), 5px 5px 0 var(--nb-offset); }
 :root[data-theme='nebula'] .board-lightbox figcaption { color: #e8e8e8; font: 12px var(--mono); }
 :root[data-theme='nebula'] .board-lightbox figcaption button { background: #ffffff14; color: #e8e8e8; }
 :root[data-theme='nebula'] .floating-note { border-top: 7px solid var(--nb-ink); }
@@ -414,13 +416,13 @@
 .nebula-notebook-toggle:hover, .nebula-notebook-toggle.is-open { background-color: var(--nb-violet-dark); }
 .nebula-notebook-toggle.is-open .nebula-calendar-command::after { content: ' _'; animation: nebula-blink 1.1s steps(1) infinite; }
 .nebula-notebook { --nb-half: calc((100% - var(--nb-rail-w) - var(--nb-gap) * 3) / 2); position: absolute; top: 18px; bottom: 26px; left: calc(var(--nb-rail-w) + var(--nb-gap) * 2); right: var(--nb-gap); z-index: 21; display: flex; flex-direction: column; min-width: 0;
-  border: 1px solid var(--nb-line); background: var(--surface); box-shadow: 9px 9px 0 var(--nb-violet-dark);
+  border: 1px solid var(--nb-line); background: var(--surface); box-shadow: 5px 5px 0 var(--nb-offset);
   visibility: hidden; opacity: 0; transform: translateY(14px); transition: opacity 160ms ease, transform 220ms var(--ease), visibility 0s linear 220ms; }
 .nebula-notebook.is-open { visibility: visible; opacity: 1; transform: none; transition: opacity 160ms ease, transform 220ms var(--ease), visibility 0s; }
 .nebula-notebook .nebula-terminal-head { padding-right: 0; }
 .nebula-notebook-body { flex: 1; min-height: 0; display: flex; }
 .nebula-stage.is-calendar-open.is-notebook-open .nebula-calendar { right: calc(var(--nb-gap) * 1.5 + (100% - var(--nb-rail-w) - var(--nb-gap) * 3) / 2); }
-.nebula-stage.is-calendar-open.is-notebook-open .nebula-notebook { left: calc(var(--nb-rail-w) + var(--nb-gap) * 2.5 + var(--nb-half)); }
+.nebula-stage.is-calendar-open.is-notebook-open .nebula-notebook { left: calc(var(--nb-rail-w) + var(--nb-gap) * 1.5 + var(--nb-half)); }
 @container journal (max-width: 900px) {
   .nebula-notebook-toggle { grid-column: 1 / -1; flex-direction: row; align-items: center; justify-content: space-between; padding: 10px 12px; }
   .nebula-notebook { top: 10px; left: var(--nb-gap); right: var(--nb-gap); bottom: 14px; }
@@ -461,7 +463,24 @@
 :is(.nebula-calendar, .nebula-notebook).is-front { z-index: 23; }
 .nebula-dim { position: absolute; inset: 0; z-index: 26; background: color-mix(in srgb, #000 66%, transparent); -webkit-backdrop-filter: blur(2px) grayscale(.4); backdrop-filter: blur(2px) grayscale(.4);
   animation: nebula-dim-in 220ms ease both; cursor: zoom-out; }
-:is(.nebula-calendar, .nebula-notebook).is-focused { z-index: 27; box-shadow: 9px 9px 0 var(--nb-violet), 0 0 0 1px var(--nb-violet-light), 0 0 60px color-mix(in srgb, var(--nb-violet) 45%, transparent); }
+:is(.nebula-calendar, .nebula-notebook).is-focused { z-index: 27; box-shadow: 5px 5px 0 var(--nb-offset), 0 0 0 1px var(--nb-violet-light), 0 0 60px color-mix(in srgb, var(--nb-violet) 45%, transparent); }
 @keyframes nebula-dim-in { from { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .nebula-dim { animation: none; } }
 
+
+/* Adjacent default windows share a seam; the calendar casts no shadow into the notebook. */
+.nebula-stage.is-calendar-open.is-notebook-open .nebula-calendar:not(.is-floating) { box-shadow: none; }
+/* Scrollbars in the tickets' holographic foil, as narrow as before. */
+:root[data-theme='nebula'], :root[data-theme='nebula'] * { scrollbar-color: auto; scrollbar-width: auto; }
+:root[data-theme='nebula'] ::-webkit-scrollbar { width: 8px; height: 8px; }
+:root[data-theme='nebula'] ::-webkit-scrollbar-track { background: transparent; }
+:root[data-theme='nebula'] ::-webkit-scrollbar-thumb { border: 1px solid #000; background: var(--holo); background-size: 100% 300px; }
+:root[data-theme='nebula'] ::-webkit-scrollbar-thumb:hover { filter: brightness(1.1); }
+:root[data-theme='nebula'] ::-webkit-scrollbar-button, :root[data-theme='nebula'] ::-webkit-scrollbar-corner { display: none; background: transparent; }
+/* The windows still cover what lies behind them as far as the old, wider shadow reached: a second, invisible layer in
+   the desk's colour under the thin offset. */
+:root[data-theme='nebula'] :is(.nebula-panel, .nebula-terminal, .nebula-calendar, .nebula-notebook, .nebula-poster) { box-shadow: 4px 4px 0 var(--nb-offset), 9px 9px 0 var(--background); }
+:root[data-theme='nebula'] .nebula-panel.is-held { box-shadow: 6px 7px 0 var(--nb-offset), 12px 14px 0 var(--background), 0 28px 60px #000000d9; }
+/* A blinking cursor only where one can type (the search): the toggles' "_" stays still. */
+.nebula-calendar-toggle.is-open .nebula-calendar-command::after, .nebula-notebook-toggle.is-open .nebula-calendar-command::after { content: none; animation: none; }
+.search-cursor { margin-right: -.6ch; color: var(--nb-violet-light, #b388ff); }

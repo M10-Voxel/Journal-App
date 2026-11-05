@@ -2,7 +2,7 @@
    with a side bar; journal: a sheet of the book (ruled paper, a contents page for the tree); Nebula: a terminal with the
    tree as `tree` output. Each with its pixel variant at the end. Where it lies (sheet, window, tab) is up to the design's
    own stylesheet (journal-theme.css, nebula-theme.css, styles.css). */
-.notebook { --nbk-side: 236px; container: notebook / inline-size; display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; height: 100%; color: var(--text); font: 13px var(--sans); }
+.notebook { --nbk-side: clamp(280px, 34%, 380px); container: notebook / inline-size; display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; height: 100%; color: var(--text); font: 13px var(--sans); }
 .notebook button { font: inherit; }
 .notebook :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .notebook-head { flex: none; display: flex; align-items: center; gap: 10px; min-height: 46px; padding: 0 12px 0 16px; border-bottom: 1px solid var(--divider); }
@@ -154,7 +154,7 @@
 :root[data-theme='classic'] .notebook-page { background: var(--background); }
 
 /* ── Journal: a sheet of the book. The tree is a contents page, the note ruled paper with a red margin. ───────── */
-:root[data-theme='journal'] .notebook { --nbk-side: 210px; background: var(--book-paper, var(--surface)); font-family: var(--serif); }
+:root[data-theme='journal'] .notebook { --nbk-side: clamp(260px, 36%, 360px); background: var(--book-paper, var(--surface)); font-family: var(--serif); }
 :root[data-theme='journal'] .notebook-head { min-height: 54px; padding: 4px 12px 0 22px; border-bottom: 1px solid color-mix(in srgb, var(--strong) 18%, transparent); }
 :root[data-theme='journal'] .notebook-head h2 { font: 600 22px var(--display); letter-spacing: -.01em; }
 :root[data-theme='journal'] .notebook-head h2 .icon { color: #a8322c; }
@@ -196,7 +196,7 @@
 :root[data-theme='journal'] .notebook-close { color: var(--muted); }
 
 /* ── Nebula: a terminal. The tree is `tree` output, notes a listing; the current row is inverted. ─────────────── */
-:root[data-theme='nebula'] .notebook { --nbk-side: 270px; background: var(--surface); font-family: var(--mono); }
+:root[data-theme='nebula'] .notebook { --nbk-side: clamp(300px, 36%, 400px); background: var(--surface); font-family: var(--mono); }
 :root[data-theme='nebula'] .notebook-head { min-height: 40px; border-bottom: 1px solid var(--nb-line, #e8e8e8); }
 :root[data-theme='nebula'] .notebook-head h2 { font: italic 400 24px var(--display); color: var(--strong); }
 :root[data-theme='nebula'] .notebook-head h2 .icon { display: none; }
@@ -280,3 +280,44 @@
 .notebook-add-folder b, .notebook-folder-tools b { font: 700 15px/1 var(--mono); }
 /* The normal design's tab, set apart from the views. */
 .journal-tab.is-notebook { margin-left: 8px; border-left: 1px solid var(--divider); }
+
+/* The folder of a note: a button that opens the list in the design's popup (FolderPick). */
+button.notebook-folder-pick { max-width: 190px; padding: 0 8px; border: 0; font: 12px var(--sans); color: var(--text); cursor: pointer; }
+button.notebook-folder-pick > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+button.notebook-folder-pick:hover, button.notebook-folder-pick[aria-expanded='true'] { box-shadow: inset 0 0 0 1px var(--accent); }
+.popover.folder-pick { min-width: 190px; max-width: 280px; }
+.folder-pick-list { display: flex; flex-direction: column; gap: 1px; max-height: 300px; overflow: auto; outline: 0; }
+.folder-pick-option { display: flex; align-items: center; gap: 8px; min-height: 28px; padding: 0 8px 0 calc(8px + var(--depth, 0) * 14px); border: 0; border-radius: 6px; background: transparent; color: var(--text); font: 12.5px var(--sans); text-align: left; cursor: pointer; }
+.folder-pick-option > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.folder-pick-option .icon { flex: none; width: 12px; height: 12px; color: var(--muted); }
+.folder-pick-option > .icon:last-child { color: var(--accent); }
+.folder-pick-option.is-none > span { color: var(--muted); }
+.folder-pick-option[aria-selected='true'] { background: var(--hover); color: var(--strong); }
+.folder-pick-option.is-current > span { font-weight: 600; }
+/* Journal: handwritten list on paper, the chosen one underlined. */
+:root[data-theme='journal'] button.notebook-folder-pick { border-radius: 2px; background: transparent; box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--text) 35%, transparent); font: italic 13px var(--write, var(--serif)); }
+:root[data-theme='journal'] .folder-pick-option { border-radius: 2px; font: 14px var(--serif, var(--sans)); }
+:root[data-theme='journal'] .folder-pick-option[aria-selected='true'] { background: color-mix(in srgb, var(--priority) 30%, transparent); }
+:root[data-theme='journal'] .folder-pick-option.is-current > span { font-weight: 400; font-style: italic; text-decoration: underline; text-underline-offset: 3px; }
+/* Nebula: a mono list with a violet bar; Holo-Papier in black on grey. */
+:root[data-theme='nebula'] button.notebook-folder-pick { border-radius: 0; background: #050505; box-shadow: inset 0 0 0 1px var(--edge); font: 11.5px var(--mono); }
+:root[data-theme='nebula'] .folder-pick-option { border-radius: 0; font: 12px var(--mono); }
+:root[data-theme='nebula'] .folder-pick-option[aria-selected='true'] { background: var(--nb-violet, #7b2cbf); color: #fff; }
+:root[data-theme='nebula'] .folder-pick-option[aria-selected='true'] .icon { color: #fff; }
+:root[data-theme='nebula'][data-popups='b'] .folder-pick-option { color: #111; }
+:root[data-pixel] :is(button.notebook-folder-pick, .folder-pick-option) { border-radius: 0; }
+:root[data-pixel] .folder-pick-option { font-size: 15px; }
+
+/* Several notes chosen (Ctrl / Shift + click): ringed, and a bar to move them all into a folder. */
+.notebook-note.is-chosen { background: color-mix(in srgb, var(--accent) 16%, transparent); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 60%, transparent); }
+.notebook-chosen { display: flex; align-items: center; gap: 6px; margin: 2px 0 6px; padding: 5px 6px 5px 9px; border-radius: 7px; background: color-mix(in srgb, var(--accent) 12%, var(--surface)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent); color: var(--text); font: 600 11.5px var(--sans); }
+.notebook-chosen > span { flex: 1; min-width: 0; white-space: nowrap; }
+.notebook-chosen button.notebook-folder-pick { height: 24px; }
+.notebook-chosen-clear { display: grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--muted); cursor: pointer; }
+.notebook-chosen-clear:hover { background: var(--hover); color: var(--text); }
+.notebook-chosen-clear .icon { width: 10px; height: 10px; }
+:root[data-theme='journal'] .notebook-note.is-chosen { background: color-mix(in srgb, var(--priority) 30%, transparent); box-shadow: inset 3px 0 0 var(--paper), inset 0 0 0 1px color-mix(in srgb, var(--priority) 70%, transparent); }
+:root[data-theme='journal'] .notebook-chosen { border-radius: 2px; background: color-mix(in srgb, var(--priority) 22%, var(--book-paper, var(--surface))); font: italic 600 12.5px var(--serif); }
+:root[data-theme='nebula'] .notebook-note.is-chosen { background: color-mix(in srgb, var(--nb-violet, #7b2cbf) 30%, transparent); box-shadow: inset 2px 0 0 var(--paper), inset 0 0 0 1px var(--nb-violet-light, #b388ff); }
+:root[data-theme='nebula'] .notebook-chosen { border-radius: 0; background: #0c0c0e; box-shadow: inset 0 0 0 1px var(--nb-violet-light, #b388ff); font: 700 11px var(--mono); }
+:root[data-pixel] :is(.notebook-chosen, .notebook-note.is-chosen, .notebook-chosen-clear) { border-radius: 0; }
