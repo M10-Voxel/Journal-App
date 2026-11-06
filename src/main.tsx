@@ -1,3 +1,4 @@
+import { useViewHistory } from './viewHistory';
 import { UndoShortcuts, flushHistoryWindows } from './components/UndoShortcuts';
 import { t, useLanguage, setLanguage } from './i18n.ts';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -90,6 +91,8 @@ import './popups.css';
 import './journal-theme.css';
 import './nebula-theme.css';
 import './nebula-grid.css';
+import './nebula-holo.css';
+import './nebula-ticket.css';
 import './popup-styles.css';
 import './popup-fields.css';
 import './popup-sheets.css';
@@ -330,6 +333,10 @@ function App() {
     setDate(target);
     return true;
   });
+  useViewHistory({ date, periodMode, bookView, calendar: drawer.open, notebook: notebook.open, settingsOpen }, async value => {
+    if (!await save()) return;
+    navigate(value.date); setPeriodMode(value.periodMode); setBookView(value.bookView); drawer.setOpen(value.calendar); notebook.setOpen(value.notebook); setSettingsOpen(value.settingsOpen);
+  });
   // Stepping a day back or forth (buttons, Alt ←/→, swiping) slides the new day in from that side.
   const stepDay = useStableCallback((amount: 1 | -1) => { if (navigate(shiftDate(date, amount))) setSlide(amount > 0 ? 'next' : 'prev'); });
   const stepPeriod = (amount: 1 | -1) => {
@@ -343,7 +350,11 @@ function App() {
   };
   const mainRef = useRef<HTMLElement>(null);
   // In the book, swiping turns pages (JournalBook) instead of whole days.
-  useWheelSwipe(stepPeriod, { root: bookMode ? undefined : mainRef, ignore:'.entry-dock-shell, .planner' });
+  // Shift+wheel turns the days, except over a window with its own use for it (Nebula: the calendars, the notebook, the
+  // board) – there the window alone answers.
+  useWheelSwipe(stepPeriod, { root: bookMode ? undefined : mainRef, ignore: nebulaMode
+    ? '.entry-dock-shell, .planner, .nebula-calendar, .nebula-notebook, .nebula-cal-panel, .nebula-panel.is-calendar, .nebula-panel.is-notebook, .board-viewport'
+    : '.entry-dock-shell, .planner' });
   // Saving does not lock the editor: edits made while the request is running stay in place and remain unsaved.
   // The journal saves by itself shortly after the last change (like the calendar does at once); Ctrl+S saves right away.
   const save = useStableCallback(async () => {
@@ -501,10 +512,10 @@ function App() {
 
   // New entries go directly below `afterId` when it is of the same kind and tag, otherwise to the end of their group.
   // They take the tag of that entry; without one, while entries without a tag are hidden, the first tag shown.
-  const addEntry = useStableCallback((kind: EntryKind, afterId?: string) => {
+  const addEntry = useStableCallback((kind: EntryKind, afterId?: string, withoutTag = false) => {
     if (!ready) return;
     const after = day.entries.find(item => item.id === afterId);
-    const tag = after ? tagOf(tags, after.tag)?.id ?? null : isShown(hiddenTags, null) ? null : tags.find(item => !hiddenTags.has(item.id))?.id ?? null;
+    const tag = withoutTag ? null : after ? tagOf(tags, after.tag)?.id ?? null : isShown(hiddenTags, null) ? null : tags.find(item => !hiddenTags.has(item.id))?.id ?? null;
     const entry: Entry = { id: crypto.randomUUID(), kind, text: '', done: false, cancelled: false, priority: false, time: null, reminder: false, plan: null, tag };
     focusEntryId.current = entry.id;
     setNewEntryId(entry.id);
@@ -704,7 +715,7 @@ function App() {
   });
   const visibleOpen = visibleEntries.filter(entry => entry.kind === 'task' && !entry.done && !entry.cancelled).length;
   const nebulaStats = { entries: entryCount, open: visibleOpen, done: visibleEntries.filter(entry => entry.done).length, events: visibleEntries.filter(entry => entry.kind === 'event').length };
-  const calendar = <Calendar embedded journalDate={date} onOpen={openFromCalendar} onCreate={createFromCalendar} onEdit={editFromCalendar} onMove={moveFromCalendar} onRemove={removeFromCalendar} onExport={exportFromCalendar} onImport={importFromCalendar} />;
+  const calendar = <Calendar embedded withoutDay={nebulaMode} journalDate={date} onOpen={openFromCalendar} onCreate={createFromCalendar} onEdit={editFromCalendar} onMove={moveFromCalendar} onRemove={removeFromCalendar} onExport={exportFromCalendar} onImport={importFromCalendar} />;
   return <div className={`app actions-${actionLayout}${sidebar.dragging ? ' is-resizing' : ''}${bookMode ? ' is-book' : ''}${nebulaMode ? ' is-nebula' : ''}`} onFocusCapture={event => {
     const target = event.target as HTMLElement;
     if (newEntryId && !target.closest('.popover') && target.closest<HTMLElement>('[data-entry-id]')?.dataset.entryId !== newEntryId) setNewEntryId(null);
@@ -723,7 +734,11 @@ function App() {
           controls sit on it in the top right corner, beside the register tabs. */}
       {nebulaMode ? <div className="nebula-window-bar" onMouseDown={dragWindow}>
         <SearchBox variant="nebula" onOpen={openResult} />
+        {/* The free bar moves the window; NebulaDesk puts the views (day … year) in the middle and the notebook's switch at
+            the end. */}
         <span className="nebula-window-space" />
+        <div className="nebula-bar-center" />
+        <div className="nebula-bar-end" />
         <button type="button" className="titlebar-button settings-button" data-mail-count={mailStatus.count || undefined} aria-label={t("Einstellungen")} aria-keyshortcuts="Control+," title={t("Einstellungen · Strg ,")} onClick={() => openSettings()}><Icon name="settings" /></button>
         <WindowControls onError={setError} />
       </div> : bookMode ? <div className="book-window-bar" onMouseDown={dragWindow}>
@@ -745,7 +760,7 @@ function App() {
         calendarTab={<><CalendarTab open={drawer.open} onToggle={() => toggleDrawer()} /><NotebookTab open={notebook.open} onToggle={() => toggleNotebook()} /><SearchTab onOpen={openResult} /></>} register={register}
         overlay={<><CalendarDrawer overlay open={drawer.open} animated={drawer.animated} width={sidebar.width} resizer={sidebar.handle} resizable={besideCalendar || !(bookView === 'double' && bookWide)} disabled={driveBusy} onClose={() => toggleDrawer(true)}>{calendar}</CalendarDrawer>
           <CalendarDrawer overlay kind="notebook" right={bothSheets} label={t('Notizen')} open={notebook.open} animated={notebook.animated} width={sidebar.width} resizer={sidebar.handle} resizable={besideCalendar || !(bookView === 'double' && bookWide)} disabled={driveBusy} onClose={() => toggleNotebook(true)}><Notebook onClose={() => toggleNotebook(true)} /></CalendarDrawer></>} />
-        : nebulaMode ? <NebulaDesk mode={periodMode} date={date} today={today} modes={periodModes} modeLabels={periodLabels} dirty={dirty} title={ready ? day.title : ''} stats={nebulaStats}
+        : nebulaMode ? <NebulaDesk onTitleChange={title => update(current => ({ ...current, title }))} mode={periodMode} date={date} today={today} modes={periodModes} modeLabels={periodLabels} dirty={dirty} title={ready ? day.title : ''} stats={nebulaStats}
           onMode={setPeriodMode} onStep={stepPeriod} onToday={() => navigate(today)} stepLabels={stepLabels} disabled={driveBusy}
           datePicker={<MiniCalendarPicker date={date} open={datePickerOpen} onOpenChange={setDatePickerOpen} onPick={navigate} buttonRef={datePickerButtonRef} className="nebula-date">{pageHeading(date, periodMode)}</MiniCalendarPicker>}
           tagFilter={<TagFilter label={t("Tags im Journal")} hidden={hiddenTags} onChange={next => { setNewEntryId(null); setHiddenTags(next); }} />}

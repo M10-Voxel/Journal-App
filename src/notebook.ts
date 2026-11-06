@@ -1,18 +1,23 @@
 // The notebook's logic without the interface (tested in tests/notebook.test.mjs): folders as a tree, and the threads
 // between cards. A thread joins two cards symmetrically (each names the other in `links`): an image or a link tied to a
-// note is an attachment of that note, two notes tied together are pages of each other.
+// note is an attachment of that note, two notes tied together are pages of each other, images and links tied to each
+// other form a bundle (a bundle tied to a note by one thread hangs on that note as a whole).
 
 export type Paper = 'yellow' | 'blue' | 'green' | 'pink';
 export type CardKind = 'note' | 'image' | 'link';
 export type Card = {
   id: string; kind: CardKind; title: string; text: string; dates: string[]; order: number; url?: string; image?: string; pixel?: boolean; asset?: string; size?: number;
   x?: number; y?: number; z?: number; paper?: Paper;
+  /** Absolute board coordinate; older cards keep their relative x until first moved. */
+  boardX?: number;
   /** Chosen size: width of every card, height of a note (images keep their proportions, links their content). */
   w?: number; h?: number;
   /** The folder of a note (notebook), none for notes outside every folder. */
   folder?: string | null;
   /** The cards tied to this one by a thread (symmetric: the other card names this one too). */
   links?: string[];
+  /** The main note of the notes tied together: the notebook shows it as their first page. */
+  primary?: boolean;
   /** The day the card was made. */
   created?: string;
   /** Made in the notebook (not on a day's board). */
@@ -98,17 +103,18 @@ export function nextFolderOrder(folders: Folder[], parent: string | null): numbe
   return Math.max(0, ...childFolders(folders, parent).map(folder => folder.order ?? 0)) + 1;
 }
 
-/** What a thread between two cards makes: an attachment (image or link to a note), another page (two notes), or nothing. */
-export function threadKind(a: Pick<Card, 'kind'>, b: Pick<Card, 'kind'>): 'attachment' | 'page' | null {
+/** What a thread between two cards makes: an attachment (image or link to a note), another page (two notes), or a
+ *  bundle (images and links among themselves). */
+export function threadKind(a: Pick<Card, 'kind'>, b: Pick<Card, 'kind'>): 'attachment' | 'page' | 'bundle' {
   if (a.kind === 'note' && b.kind === 'note') return 'page';
   if (a.kind === 'note' || b.kind === 'note') return 'attachment';
-  return null;
+  return 'bundle';
 }
 const linksOf = (card: Card | undefined) => card?.links ?? [];
 /** The changes tying `a` and `b` together (both sides); none when they cannot be or already are. */
 export function connectPatches(cards: Card[], a: string, b: string): Patches {
   const first = cards.find(card => card.id === a), second = cards.find(card => card.id === b);
-  if (!first || !second || a === b || !threadKind(first, second)) return {};
+  if (!first || !second || a === b) return {};
   const patches: Patches = {};
   if (!linksOf(first).includes(b)) patches[a] = { links: [...linksOf(first), b] };
   if (!linksOf(second).includes(a)) patches[b] = { links: [...linksOf(second), a] };
@@ -148,11 +154,39 @@ export function threads(cards: Card[]): [string, string][] {
   }
   return list;
 }
-const linked = (cards: Card[], note: Card) => linksOf(note).map(id => cards.find(card => card.id === id)).filter((card): card is Card => Boolean(card));
-/** A note's attachments: the images and links tied to it. */
-export function attachmentsOf(cards: Card[], note: Card): Card[] { return linked(cards, note).filter(card => card.kind !== 'note'); }
-/** A note's pages: the note itself, then every note tied to it. One page without threads (it scrolls, nothing to turn). */
-export function pagesOf(cards: Card[], note: Card): Card[] { return [note, ...linked(cards, note).filter(card => card.kind === 'note')]; }
+/** The cards reached from `start` by threads that only pass through cards `through` lets pass (breadth first, without `start`). */
+function reach(cards: Card[], start: Card, through: (card: Card) => boolean): Card[] {
+  const byId = new Map(cards.map(card => [card.id, card])), seen = new Set([start.id]), found: Card[] = [], queue = [start];
+  while (queue.length) {
+    for (const id of linksOf(queue.shift())) {
+      const card = byId.get(id);
+      if (!card || seen.has(id) || !through(card)) continue;
+      seen.add(id); found.push(card); queue.push(card);
+    }
+  }
+  return found;
+}
+/** A note's attachments: the images and links tied to it, and every image and link tied to those (a bundle comes whole). */
+export function attachmentsOf(cards: Card[], note: Card): Card[] { return reach(cards, note, card => card.kind !== 'note'); }
+/** The notes tied together with this one, directly or through other notes (this one first). */
+function noteGroup(cards: Card[], note: Card): Card[] { return [note, ...reach(cards, note, card => card.kind === 'note')]; }
+/**
+ * A note's pages: every note tied to it, directly or through other notes. The main note of them comes first, else this
+ * note. One page without threads (it scrolls, nothing to turn).
+ */
+export function pagesOf(cards: Card[], note: Card): Card[] {
+  const group = noteGroup(cards, note), main = group.find(card => card.primary);
+  return main ? [main, ...group.filter(card => card !== main)] : group;
+}
+/** The changes making `id` the main note of its notes (and no other one there); again on the main note: none is main. */
+export function primaryPatches(cards: Card[], id: string): Patches {
+  const note = cards.find(card => card.id === id);
+  if (note?.kind !== 'note') return {};
+  const patches: Patches = {};
+  for (const other of noteGroup(cards, note)) if (other !== note && other.primary) patches[other.id] = { primary: false };
+  patches[id] = { primary: !note.primary };
+  return patches;
+}
 
 /** Notes in a folder choice: all, those outside every folder (folders that are gone count as none), or one folder with its subfolders. */
 /** The notes of a choice: all, those outside every folder, or a folder's own (its subfolders' are not shown). */

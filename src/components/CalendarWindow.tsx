@@ -1,4 +1,5 @@
 import { calendarDaysWithSpans, calendarSpanLanes, calendarSpanSegment } from '../calendarSpans';
+import { useViewHistory } from '../viewHistory';
 import { readCalendarEntry } from '../calendarClipboard';
 import { withStart, occurrences, seriesHorizon } from '../repeat';
 import { Popover } from './Popover';
@@ -55,11 +56,13 @@ export function CalendarWindow() {
 // Memoized: in the sidebar it must not re-render while the journal is being typed in (`onOpen` is stable).
 /** An entry being edited (right click): its day and the element the card is placed at. */
 type Editing = { entry: Entry; date: string; element: HTMLElement };
-export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, onEdit, onMove, onRemove, onExport, onImport, embedded = false, autoFocus = false, fixedView, showDate, onDateChange }: {
+export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, onEdit, onMove, onRemove, onExport, onImport, embedded = false, autoFocus = false, fixedView, withoutDay = false, showDate, onDateChange }: {
   onExport?: () => Promise<CalendarDay[]>; onImport?: (entries: CalendarImport[]) => Promise<void>;
   journalDate: string | null; onOpen: (date: string, entry?: string) => void; embedded?: boolean; autoFocus?: boolean;
   /** Always this view, without the view tabs (Nebula's day beside the overview); the stored view stays the other calendars'. */
   fixedView?: CalendarView;
+  /** Without the day view (Nebula shows the day in its overview): the week instead wherever the day would open. */
+  withoutDay?: boolean;
   /** A day to show other than the journal's (Nebula: a day of the week picked in its strip). */
   showDate?: string;
   /** Hears the day the calendar shows. */
@@ -70,7 +73,8 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
   useLanguage();
   const [prefs, setPrefs] = useState(loadPrefs);
   const { kinds } = prefs;
-  const view = fixedView ?? prefs.view;
+  const views = calendarViews().filter(item => !withoutDay || item.view !== 'day');
+  const view = fixedView ?? (withoutDay && prefs.view === 'day' ? 'week' : prefs.view);
   const now = useNow();
   const today = localDate(now);
   const [date, setDate] = useState(journalDate ?? today);
@@ -123,7 +127,8 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
   const setView = (next: CalendarView) => { if (!fixedView) setPrefs(current => ({ ...current, view: next })); };
   // Going somewhere directly shows it in place; stepping slides the next page in from that side.
   const go = (value: string) => { setSlide(null); setDate(value); };
-  const show = (next: CalendarView, value: string) => { go(value); setView(next); };
+  useViewHistory({ date, view }, value => { go(value.date); setView(value.view); });
+  const show = (next: CalendarView, value: string) => { go(value); setView(withoutDay && next === 'day' ? 'week' : next); };
   // A day clicked in any view opens its note in the journal; the calendar goes there too.
   const openDay = (value: string) => { go(value); onOpen(value); };
   const step = (amount: 1 | -1) => { setSlide(amount > 0 ? 'next' : 'prev'); setDate(shiftView(view, date, amount)); };
@@ -131,7 +136,7 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
   function onKeyDown(event: KeyboardEvent) {
     if ((event.target as Element).closest('input, .cal-composer')) return;
     if (event.defaultPrevented || event.ctrlKey || event.altKey || event.metaKey) return;
-    const byKey = calendarViews().find((item, index) => item.key === event.key.toUpperCase() || String(index + 1) === event.key);
+    const byKey = views.find((item, index) => item.key === event.key.toUpperCase() || String(index + 1) === event.key);
     if (byKey) setView(byKey.view);
     else if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') step(event.key === 'ArrowLeft' ? -1 : 1);
     else if (event.key === 'h' || event.key === 'H') go(today);
@@ -212,7 +217,7 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
     };
     window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key);
   },[date,onCreate]);
-  const selectedIndex = calendarViews().findIndex(item => item.view === view);
+  const selectedIndex = views.findIndex(item => item.view === view);
   return <OpenInJournal.Provider value={onOpen}><EditInCalendar.Provider value={editContext}>
     <div ref={rootRef} className={`cal${embedded ? ' is-embedded' : ''}${fixedView ? ' is-fixed' : ''}`} data-view={view} tabIndex={-1} aria-label={t("Kalender")} onKeyDown={event => {
       if (calendarSelection().size && !(event.target as Element).closest('input, textarea, [contenteditable="true"], .cal-composer, .popover')) {
@@ -230,9 +235,9 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
       {notice && <div className="cal-action-notice" role="status">{notice}</div>}
       {pasting && <Popover anchor={rootRef.current} label={t('Einfügen')} onClose={()=>setPasting(null)}><div className="cal-paste-choice"><p>{t('Wiederholung einfügen')}</p><button type="button" onClick={()=>void paste(pasting.entry,pasting.date,false)}>{t('Nur diesen Tag')}</button><button type="button" onClick={()=>void paste(pasting.entry,pasting.date,true)}>{t('Mit Wiederholung')}</button></div></Popover>}
       {!fixedView && <nav className="cal-viewbar" aria-label={t("Kalenderansicht")}>
-        <div className="cal-views" role="tablist" aria-label={t("Ansicht")} style={{ '--index': selectedIndex, '--count': calendarViews().length } as CSSProperties}>
+        <div className="cal-views" role="tablist" aria-label={t("Ansicht")} style={{ '--index': selectedIndex, '--count': views.length } as CSSProperties}>
           <span className="cal-views-indicator" aria-hidden="true" />
-          {calendarViews().map((item, index) => <button key={item.view} type="button" role="tab" aria-selected={item.view === view} aria-label={item.label} title={`${item.label} · ${item.key} ${t('oder')} ${index + 1}`} onClick={() => setView(item.view)}>
+          {views.map((item, index) => <button key={item.view} type="button" role="tab" aria-selected={item.view === view} aria-label={item.label} title={`${item.label} · ${item.key} ${t('oder')} ${index + 1}`} onClick={() => setView(item.view)}>
             <span className="cal-view-long">{item.label}</span><span className="cal-view-short" aria-hidden="true">{item.short}</span>
           </button>)}
         </div>

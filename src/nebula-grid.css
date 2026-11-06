@@ -4,7 +4,12 @@
 .nebula-grid { position: relative; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 18px; align-items: stretch; }
 .nebula-grid > * { grid-column: 1 / -1; min-width: 0; }
 .nebula-grid > .nebula-panel { grid-column: span var(--span, 12); }
-@container nebula-center (max-width: 760px) { .nebula-grid > .nebula-panel { grid-column: 1 / -1; } }
+/* Rows as nebulaLayout lays them out: the first window of a row starts at the first column (else a narrow upright bar
+   could slip into the row above). */
+.nebula-grid > .nebula-panel.is-row-start { grid-column: 1 / span var(--span, 12); }
+@container nebula-center (max-width: 520px) {
+  .nebula-grid > .nebula-panel, .nebula-grid > .nebula-panel.is-row-start { grid-column: 1 / -1; }
+}
 .nebula-panel { position: relative; display: flex; flex-direction: column; }
 .nebula-panel:is(.is-custom-height, .is-minimized) { align-self: start; }
 .nebula-panel:not(.is-custom-height) > .nebula-panel-body { flex: 1; }
@@ -48,7 +53,7 @@
 .nebula-panel-width::after { content: ''; position: absolute; top: 50%; right: 4px; width: 3px; height: 34px; margin-top: -17px; background: repeating-linear-gradient(var(--nb-line) 0 3px, transparent 3px 6px); opacity: 0; transition: opacity 120ms ease; }
 .nebula-panel:hover > .nebula-panel-width::after, .nebula-panel.is-sizing > .nebula-panel-width::after { opacity: .7; }
 .nebula-panel.is-sizing { outline: 1px dashed var(--nb-violet-light); outline-offset: 3px; }
-@container nebula-center (max-width: 760px) { .nebula-panel-width { display: none; } }
+@container nebula-center (max-width: 520px) { .nebula-panel-width { display: none; } }
 .nebula-panel:is(.is-drop-top, .is-drop-split-left, .is-drop-split-right)::before { content: ''; position: absolute; z-index: 5; background: var(--nb-violet-light); box-shadow: 0 0 14px var(--nb-violet); pointer-events: none; }
 .nebula-panel.is-drop-top::before { left: 0; right: 0; top: -12px; height: 4px; }
 /* Beside a window: a bar on that side, and the half the dropped window would take tinted (the two share the width). */
@@ -97,3 +102,27 @@
 .nebula-panel .nebula-window-tools .nebula-panel-return { width: 30px; height: 100%; min-height: 26px; padding: 0; border: 0; border-left: 1px solid var(--nb-ink); background: transparent; color: var(--nb-ink); font: 700 14px var(--mono); cursor: pointer; }
 .nebula-panel .nebula-window-tools .nebula-panel-return:hover { background: var(--nb-ink); color: var(--nb-paper); }
 
+
+/* A minimized window beside an open one stands upright; the open window beside it takes the columns it gave up. */
+/* Upright: a bar as thick as the flat one (30 px), the command read from top to bottom, the window's buttons above it.
+   The bar keeps its column but closes up to its open window, which reaches over the rest of the column (--pull-*:
+   how many bars lie between its column edge and it; a step is a column plus the gap, a bar 30 px plus the gap). */
+.nebula-grid { --bar: 30px; --step: calc((100cqw - 11 * 18px) / 12 + 18px); }
+.nebula-grid > .nebula-panel { margin-left: calc(var(--pull-left, 0) * (var(--bar) + 18px - var(--step))); margin-right: calc(var(--pull-right, 0) * (var(--bar) + 18px - var(--step))); }
+.nebula-panel.is-upright { display: flex; width: var(--bar); justify-self: start; align-self: stretch; min-height: 180px; box-shadow: 4px 4px 0 #ffffff12 !important; }
+.nebula-panel.is-upright.is-before { justify-self: end; }
+.nebula-panel.is-upright .nebula-panel-head { flex: 1; flex-direction: column; align-items: stretch; gap: 0; min-height: 0; padding: 0; border-bottom: 0; cursor: grab; }
+.nebula-panel.is-upright .nebula-prompt { flex: 1; min-height: 0; padding: 10px 0; writing-mode: vertical-rl; align-self: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; }
+.nebula-panel.is-upright .nebula-panel-state { flex: none; align-self: center; padding: 6px 0 10px; writing-mode: vertical-rl; white-space: nowrap; }
+.nebula-panel.is-upright .nebula-window-tools { order: -1; flex-direction: column; align-self: stretch; margin: 0; }
+.nebula-panel.is-upright .nebula-window-tools > button { width: 100% !important; height: 30px !important; min-height: 30px; border-left: 0 !important; border-bottom: 1px solid var(--nb-ink) !important; }
+/* Narrow, every window has its own row: a minimized one lies flat again (after the upright rules, so it wins). */
+@container nebula-center (max-width: 520px) {
+  .nebula-grid > .nebula-panel { margin: 0; }
+  .nebula-panel.is-upright { display: block; width: auto; min-height: 0; }
+  .nebula-panel.is-upright .nebula-panel-head { flex-direction: row; align-items: center; padding: 0 0 0 10px; }
+  .nebula-panel.is-upright .nebula-prompt { writing-mode: horizontal-tb; padding: 0; align-self: auto; }
+  .nebula-panel.is-upright .nebula-panel-state { writing-mode: horizontal-tb; padding: 0; align-self: auto; }
+  .nebula-panel.is-upright .nebula-window-tools { order: 0; flex-direction: row; }
+  .nebula-panel.is-upright .nebula-window-tools > button { width: 30px !important; height: 100% !important; border-bottom: 0 !important; border-left: 1px solid var(--nb-ink) !important; }
+}

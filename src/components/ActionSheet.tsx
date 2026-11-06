@@ -94,9 +94,12 @@ export function ActionSheet({ look, title, items, onClose }: { look: PopupLook; 
     <div className="sheet-titlebar"><span className="sheet-title">{title || t('Eintrag')}.exe</span>
       <button type="button" className="sheet-close" aria-label={t('Schließen')} onClick={onClose}><Icon name="done" /></button></div>
     <div className="sheet-menubar" aria-hidden="true">{groups.map(group => <span key={group.id}><u>{group.title[0]}</u>{group.title.slice(1)}</span>)}</div>
+    {/* Two fixed rows (status and kind; planning, order, removal), so the window is as wide as its widest row. */}
     <div className="sheet-toolbar">
-      {groups.map(group => <div className="sheet-group" key={group.id} role="group" aria-label={group.title}>
-        {group.items.map(item => button(item, <><Icon name={item.icon} /><span>{item.short}</span></>))}
+      {[groups.slice(0, 2), groups.slice(2)].map((row, at) => <div className="sheet-toolbar-row" key={at}>
+        {row.map(group => <div className="sheet-group" key={group.id} role="group" aria-label={group.title}>
+          {group.items.map(item => button(item, <><Icon name={item.icon} /><span>{item.short}</span></>))}
+        </div>)}
       </div>)}
     </div>
     <div className="sheet-statusbar" aria-live="polite">{hint ? <>{hint.label}{hint.keys && <kbd>{hint.keys}</kbd>}</> : t('Bereit')}</div>

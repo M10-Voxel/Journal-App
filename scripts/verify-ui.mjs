@@ -1378,7 +1378,7 @@ async function checkNebulaTheme() {
   await until("!document.querySelector('.settings') && Boolean(document.querySelector('.nebula-desk'))");
   // Its own layout: no sidebar, toolbar or title bar; rail, terminals, poster; the window's controls in its own bar.
   assert.deepEqual(await evaluate("[...document.querySelectorAll('.app > .sidebar, .main > .toolbar, .main > .topbar, .book-stage')].map(e => e.className)"), []);
-  assert(await evaluate("['.nebula-rail','.nebula-terminal.is-entries','.nebula-terminal.is-data','.nebula-terminal.is-board','.nebula-poster','.nebula-backdrop'].every(s => document.querySelector(s))"));
+  assert(await evaluate("['.nebula-window-bar .nebula-tabs','.nebula-cal-panel .nebula-calendar-toggle','.nebula-terminal.is-entries','.nebula-terminal.is-data','.nebula-terminal.is-board','.nebula-poster','.nebula-backdrop'].every(s => document.querySelector(s))"));
   assert.equal(await evaluate("document.querySelectorAll('.nebula-window-bar .window-controls button').length"), 3);
   assert.equal(await evaluate("document.querySelector('.nebula-backdrop').getAttribute('aria-hidden')"), 'true');
   assert.equal(await evaluate("getComputedStyle(document.querySelector('.nebula-backdrop')).pointerEvents"), 'none');
@@ -1386,9 +1386,11 @@ async function checkNebulaTheme() {
   assert.match(await evaluate(prompt), new RegExp(`--day ${today}`));
   assert.match(await evaluate("getComputedStyle(document.querySelector('.nebula-terminal .entry-text')).fontFamily"), /Space Mono/);
   assert.match(await evaluate("getComputedStyle(document.querySelector('.nebula-poster-figure')).fontFamily"), /Instrument Serif/);
-  assert.match(await evaluate("getComputedStyle(document.querySelector('.nebula-tab')).fontFamily"), /Space Grotesk/);
-  assert.equal(await evaluate("document.querySelector('[data-stat=entries]').textContent"), '5');
-  assert.equal(await evaluate("document.querySelector('[data-stat=open]').textContent"), '1');
+  assert.match(await evaluate("getComputedStyle(document.querySelector('.nebula-tab')).fontFamily"), /Space Mono/);
+  // No rail any more: the overview (poster and calendar) on the left, the counts in the poster's prose.
+  assert(!(await evaluate("Boolean(document.querySelector('.nebula-rail'))")), 'No rail.');
+  assert(await evaluate("document.querySelector('.nebula-side').getBoundingClientRect().right <= document.querySelector('.nebula-terminals').getBoundingClientRect().left"), 'The overview lies left of the windows.');
+  assert.match(await evaluate("document.querySelector('.nebula-poster-prose').textContent"), /^5 Einträge · 1 offen/);
   assert.equal(await evaluate("document.querySelector('.nebula-today').disabled"), true);
   // Animated decoration (it stands still with reduced motion, below).
   assert(await evaluate("document.getAnimations().some(a => a.playState==='running' && a.effect?.getTiming().iterations===Infinity)"));
@@ -1407,7 +1409,7 @@ async function checkNebulaTheme() {
   await until("document.activeElement.closest('.entry')?.dataset.status==='done'");
   await saveNow();
   await until("window.__uiTest.saves>0 && window.__uiTest.day().entries.some(e => e.text==='Nebula schreibt mit' && e.done)");
-  assert.equal(await evaluate("document.querySelector('[data-stat=entries]').textContent"), '6');
+  assert.match(await evaluate("document.querySelector('.nebula-poster-prose').textContent"), /^6 Einträge/);
   // Turning days in the rail, and back with [ HEUTE ].
   await evaluate("document.querySelectorAll('.nebula-step')[1].click()");
   await until(`${prompt}?.includes(${JSON.stringify(tomorrow)})`);
@@ -1502,15 +1504,28 @@ async function checkNebulaTheme() {
   assert.equal(await evaluate("getComputedStyle(document.querySelector('.board-card')).borderTopLeftRadius"), '0px');
   await evaluate("document.querySelector('.nebula-terminal.is-board').scrollIntoView({block:'center'})");
   await pause(400); await screenshot('nebula-board.png');
-  // Widths: nothing runs out of the window; narrow, the rail is a bar on top and the poster lies below.
+  // The wheel over the board scrolls the desk on; only Ctrl+wheel zooms the board.
+  const deskTop = await evaluate("document.querySelector('.nebula-desk').scrollTop");
+  const overBoard = await evaluate("(() => { const r=document.querySelector('.nebula-terminal.is-board .board-viewport').getBoundingClientRect(); return { x:r.left+r.width-30, y:r.top+r.height/2 }; })()");
+  const boardZoom = await evaluate("document.querySelector('.board-viewport').style.getPropertyValue('--board-scale')");
+  await command('Input.dispatchMouseEvent', { type:'mouseWheel', x:overBoard.x, y:overBoard.y, deltaX:0, deltaY:-200 });
+  await until(`document.querySelector('.nebula-desk').scrollTop < ${deskTop}`);
+  assert.equal(await evaluate("document.querySelector('.board-viewport').style.getPropertyValue('--board-scale')"), boardZoom, 'Plain wheel leaves the zoom.');
+  // Widths: nothing runs out of the window; the overview lies left of the windows, narrow above them.
   for (const width of [1380, 1180, 820, 560]) {
     await command('Emulation.setDeviceMetricsOverride',{width,height:820,deviceScaleFactor:1,mobile:false}); await evaluate("document.querySelector('.nebula-desk').scrollTop=0"); await pause(350);
     assert(await evaluate("(() => { const d=document.querySelector('.nebula-desk'); return d.scrollWidth<=d.clientWidth+1; })()"), `No horizontal overflow at ${width}`);
     assert(await evaluate("[...document.querySelectorAll('.nebula-tab, .nebula-window-bar button, .nebula-step, .nebula-today, .nebula-calendar-toggle')].every(e => { const r=e.getBoundingClientRect(); return r.width>0 && r.left>=-1 && r.right<=innerWidth+1; })"), `Controls fit at ${width}`);
-    const order = await evaluate("(() => { const r=document.querySelector('.nebula-rail').getBoundingClientRect(), c=document.querySelector('.nebula-terminals').getBoundingClientRect(), p=document.querySelector('.nebula-side').getBoundingClientRect(); return { railAbove: r.bottom<=c.top+1, posterBelow: p.top>=c.bottom-1, posterRight: p.left>=c.right-1 }; })()");
-    if (width >= 1180) assert(order.posterRight, `Poster right of the terminals at ${width}`);
-    else assert(order.posterBelow, `Poster below the terminals at ${width}`);
-    if (width <= 820) assert(order.railAbove, `Rail above the terminals at ${width}`);
+    assert(await evaluate("(() => { const r=s=>document.querySelector(s).getBoundingClientRect(), tabs=[...document.querySelectorAll('.nebula-tab')].map(e=>e.getBoundingClientRect()); const bar=r('.nebula-window-bar'), search=r('.nebula-window-bar .search'), note=r('.nebula-notebook-toggle'), free=(tabs[0].left-search.right)+(note.left-tabs.at(-1).right); return search.right<=tabs[0].left+1 && tabs.at(-1).right<=note.left && note.right<=r('.nebula-window-bar .settings-button').left+1 && Math.abs((tabs[0].left+tabs.at(-1).right)/2-(bar.left+bar.width/2))<2 && free>=80; })()"), `The views sit in the middle, nothing overlaps, and the bar keeps room to move the window at ${width}`);
+    // The free bar moves the window.
+    const freeBar = await evaluate("(() => { const n=document.querySelector('.nebula-notebook-toggle').getBoundingClientRect(), t=[...document.querySelectorAll('.nebula-tab')].at(-1).getBoundingClientRect(); return { x:(t.right+n.left)/2, y:n.top+n.height/2 }; })()");
+    assert(await evaluate(`document.elementFromPoint(${freeBar.x}, ${freeBar.y})?.classList.contains('nebula-window-space')`), `Free bar at ${width}`);
+    await command('Input.dispatchMouseEvent', { type:'mousePressed', x:freeBar.x, y:freeBar.y, button:'left', buttons:1, clickCount:1 });
+    await command('Input.dispatchMouseEvent', { type:'mouseReleased', x:freeBar.x, y:freeBar.y, button:'left', buttons:0, clickCount:1 });
+    await until("window.__uiTest.invoked.at(-1)?.[0] === 'plugin:window|start_dragging'");
+    const order = await evaluate("(() => { const c=document.querySelector('.nebula-terminals').getBoundingClientRect(), p=document.querySelector('.nebula-side').getBoundingClientRect(); return { above: p.bottom<=c.top+1, left: p.right<=c.left+1 }; })()");
+    if (width >= 1180) assert(order.left, `Overview left of the windows at ${width}`);
+    else assert(order.above, `Overview above the windows at ${width}`);
     if (width === 1180) await screenshot('nebula-1180.png');
     if (width === 820) await screenshot('nebula-narrow.png');
     if (width === 560) await screenshot('nebula-small.png');
@@ -1572,9 +1587,56 @@ async function checkNebulaTheme() {
   await command('Input.dispatchMouseEvent',{type:'mouseReleased',x:small.left+40,y:small.top+12,button:'left',buttons:0,clickCount:2});
   await until("!document.querySelector('.nebula-calendar').classList.contains('is-floating') && localStorage.getItem('journal.nebulaWindow.calendar')===null");
   await key('Escape'); await until("!document.querySelector('.nebula-calendar.is-open')");
+  // Several windows focused at once – a grid window and the overview's calendar – both over the veil.
+  await evaluate("document.querySelector('.nebula-desk').scrollTop=0"); await pause(150);
+  await evaluate("document.querySelector('.nebula-panel.is-entries .nebula-window-focus').click()");
+  await evaluate("document.querySelector('.nebula-cal-panel .nebula-window-focus').click()");
+  await until("document.querySelector('.nebula-panel.is-entries').classList.contains('is-focused') && document.querySelector('.nebula-cal-panel').classList.contains('is-focused') && Boolean(document.querySelector('.nebula-dim'))");
+  assert(await evaluate("['.nebula-panel.is-entries .entry-text', '.nebula-cal-panel .nebula-cal-views button'].every(s => { const e=document.querySelector(s), r=e.getBoundingClientRect(), hit=document.elementFromPoint(r.left+r.width/2, r.top+r.height/2); return e===hit || e.contains(hit); })"), 'Focused windows lie above the veil.');
+  assert(await evaluate("(() => { const r=document.querySelector('.nebula-panel.is-data').getBoundingClientRect(); return document.elementFromPoint(r.left+r.width/2, r.top+r.height/2)?.matches('.nebula-panel.is-data.is-dimmed'); })()"), 'The others lie under a veil of their own.');
+  // The ◐ of a window under its veil shows through and lights up when pointed at; a click focuses it as well.
+  const dataFocus = await evaluate("(() => { const r=document.querySelector('.nebula-panel.is-data .nebula-window-focus').getBoundingClientRect(); return { x:r.left+r.width/2, y:r.top+r.height/2 }; })()");
+  assert(await evaluate(`document.elementFromPoint(${dataFocus.x}, ${dataFocus.y})?.matches('.nebula-panel.is-data .nebula-window-focus')`), 'The ◐ shows through the veil.');
+  await command('Input.dispatchMouseEvent', { type:'mouseMoved', x:dataFocus.x, y:dataFocus.y }); await pause(150);
+  assert.equal(await evaluate("getComputedStyle(document.querySelector('.nebula-panel.is-data .nebula-window-focus')).backgroundColor"), await evaluate("getComputedStyle(document.querySelector('.nebula-panel.is-entries .nebula-window-focus')).backgroundColor"), 'Pointed at, it is lit like a focused one.');
+  await pause(200); await screenshot('nebula-focus-hover.png');
+  await command('Input.dispatchMouseEvent', { type:'mousePressed', x:dataFocus.x, y:dataFocus.y, button:'left', buttons:1, clickCount:1 });
+  await command('Input.dispatchMouseEvent', { type:'mouseReleased', x:dataFocus.x, y:dataFocus.y, button:'left', buttons:0, clickCount:1 });
+  await until("document.querySelector('.nebula-panel.is-data').classList.contains('is-focused') && document.querySelector('.nebula-panel.is-entries').classList.contains('is-focused')");
+  await pause(300); await screenshot('nebula-focus-several.png');
+  await evaluate("document.querySelector('.nebula-panel.is-data .nebula-window-focus').click()");
+  await until("!document.querySelector('.nebula-panel.is-data').classList.contains('is-focused')");
+  await evaluate("document.querySelector('.nebula-cal-panel .nebula-window-focus').click()");
+  await until("!document.querySelector('.nebula-cal-panel').classList.contains('is-focused') && Boolean(document.querySelector('.nebula-dim'))");
+  // A click on a window under its veil ends every focus.
+  const veiled = await evaluate("(() => { const r=document.querySelector('.nebula-panel.is-data').getBoundingClientRect(); return { x:r.left+r.width/2, y:r.top+r.height/2 }; })()");
+  await command('Input.dispatchMouseEvent', { type:'mousePressed', x:veiled.x, y:veiled.y, button:'left', buttons:1, clickCount:1 });
+  await command('Input.dispatchMouseEvent', { type:'mouseReleased', x:veiled.x, y:veiled.y, button:'left', buttons:0, clickCount:1 });
+  await until("!document.querySelector('.nebula-dim') && !document.querySelector('.is-focused') && !document.querySelector('.is-dimmed')");
+  // The big calendar opens from the overview's calendar bar (the window bar keeps only the notebook's switch).
+  assert.equal(await evaluate("Boolean(document.querySelector('.nebula-window-bar .nebula-calendar-toggle'))"), false);
+  await evaluate("document.querySelector('.nebula-cal-panel .nebula-calendar-toggle').click()");
+  await until("Boolean(document.querySelector('.nebula-calendar.is-open')) && document.querySelector('.nebula-cal-panel .nebula-calendar-toggle').classList.contains('is-open')"); await pause(300);
+  // Shift+wheel over the calendar turns the calendar, not the journal's day.
+  const shownDay = await evaluate("document.querySelector('.nebula-poster-figure').textContent");
+  const calTitle = await evaluate("document.querySelector('.nebula-calendar .cal-title').textContent");
+  const overCal = await evaluate("(() => { const r=document.querySelector('.nebula-calendar .cal-body, .nebula-calendar .cal-month, .nebula-calendar .cal').getBoundingClientRect(); return { x:r.left+r.width/2, y:r.top+r.height/2 }; })()");
+  await command('Input.dispatchMouseEvent', { type:'mouseWheel', x:overCal.x, y:overCal.y, deltaX:0, deltaY:120, modifiers:8 });
+  await until(`document.querySelector('.nebula-calendar .cal-title').textContent !== ${JSON.stringify(calTitle)}`);
+  await pause(300);
+  assert.equal(await evaluate("document.querySelector('.nebula-poster-figure').textContent"), shownDay, 'The journal keeps its day.');
+  await evaluate("document.querySelector('.nebula-cal-panel .nebula-calendar-toggle').click()");
+  await until("!document.querySelector('.nebula-calendar.is-open')");
   // The grid: windows can be minimized to their bar, set to half or whole rows, moved by their bar, and the calendar and
   // notebook can join it (button, or Shift while dragging) and leave it again.
   await evaluate("localStorage.removeItem('journal.nebulaLayout.v1')");
+  await command('Page.reload');
+  await until("Boolean(document.querySelector('.nebula-grid .nebula-panel.is-entries .entry'))"); await pause(400);
+  // By default: entries and data side by side (7 + 5 columns, as tall as each other), the board below over the whole row.
+  assert(await evaluate("(() => { const r=id=>document.querySelector('.nebula-panel.is-'+id).getBoundingClientRect(), e=r('entries'), d=r('data'), b=r('board'); return document.querySelector('.nebula-panel.is-entries').dataset.span==='7' && document.querySelector('.nebula-panel.is-data').dataset.span==='5' && document.querySelector('.nebula-panel.is-board').dataset.span==='12' && Math.abs(e.top-d.top)<2 && Math.abs(e.height-d.height)<2 && b.top>e.bottom && b.height>e.height; })()"), 'The default layout: entries and data in a row, the board below.');
+  await pause(200); await screenshot('nebula-default.png');
+  // The checks below start from the earlier layout: data and board sharing a row, no heights.
+  await evaluate("localStorage.setItem('journal.nebulaLayout.v1', JSON.stringify({ order:{ day:['entries','data','board'], period:['notes','activities'] }, minimized:[], spans:{ data:6, board:6 }, docked:[], floating:[], heights:{} }))");
   await command('Page.reload');
   await until("Boolean(document.querySelector('.nebula-grid .nebula-panel.is-entries .entry'))"); await pause(400);
   const order = () => evaluate("[...document.querySelectorAll('.nebula-grid > .nebula-panel')].map(p => p.dataset.panel).join()");
@@ -1658,6 +1720,11 @@ async function checkNebulaTheme() {
   assert.equal(await evaluate("Boolean(document.querySelector('.nebula-layout-reset'))"), false);
   // The running line is off (its code stays).
   assert.equal(await evaluate("document.querySelector('.nebula-marquee')"), null);
+  // Reset gives the default layout; the width checks below start from data and board sharing a row again.
+  assert.equal(await evaluate("document.querySelector('.nebula-panel.is-data').dataset.span"), '5');
+  await evaluate("localStorage.setItem('journal.nebulaLayout.v1', JSON.stringify({ order:{ day:['entries','data','board'], period:['notes','activities'] }, minimized:[], spans:{ data:6, board:6 }, docked:[], floating:[], heights:{} }))");
+  await command('Page.reload');
+  await until("Boolean(document.querySelector('.nebula-grid .nebula-panel.is-entries .entry'))"); await pause(400);
   // Width: the right edge sets the columns (it snaps); a double click there gives the whole row again. (A floating
   // calendar would lie over the grid: closed first.)
   await evaluate("document.querySelector('section.nebula-calendar.is-open .nebula-calendar-close')?.click()");
@@ -1689,6 +1756,29 @@ async function checkNebulaTheme() {
   await until("Boolean(document.querySelector('.nebula-cal-panel.is-day'))"); await pause(300);
   assert(await posterTop() < restingTop - 100, 'Day: the poster scrolls away.');
   await evaluate("document.querySelector('.nebula-cal-panel [data-cal-view=month]').click()");
+  await evaluate("document.querySelector('.nebula-desk').scrollTop=0");
+  // Minimized beside an open window: the data window stands upright as a narrow bar, the board takes its columns; restored,
+  // both have their widths again.
+  await pause(200);
+  await evaluate("document.querySelector('.nebula-panel.is-data .nebula-panel-minimize').click()");
+  await until("document.querySelector('.nebula-panel.is-data').classList.contains('is-upright') && Boolean(document.querySelector('.nebula-panel.is-data .nebula-panel-state')) && document.querySelector('.nebula-panel.is-board').dataset.span==='11'");
+  assert(await evaluate("(() => { const d=document.querySelector('.nebula-panel.is-data').getBoundingClientRect(), b=document.querySelector('.nebula-panel.is-board').getBoundingClientRect(); return d.width < 40 && b.left - d.right < 26 && Math.abs(d.top-b.top) < 2 && Math.abs(d.height-b.height) < 2 && b.left > d.right; })()"), 'An upright bar, as thick as a flat one, as tall as its neighbour and close beside it.');
+  await evaluate("document.querySelector('.nebula-panel.is-data').scrollIntoView({block:'start'})"); await pause(250);
+  await screenshot('nebula-grid-upright.png');
+  await evaluate("document.querySelector('.nebula-panel.is-data .nebula-panel-minimize').click()");
+  await until("!document.querySelector('.nebula-panel.is-data').classList.contains('is-upright') && document.querySelector('.nebula-panel.is-data').dataset.span==='8' && document.querySelector('.nebula-panel.is-board').dataset.span==='4'");
+  // The board window's lower edge: the board inside grows with it while dragging and after.
+  await evaluate("document.querySelector('.nebula-panel.is-board .nebula-panel-resize').scrollIntoView({block:'center'})"); await pause(200);
+  const boardGrip = await evaluate("(() => { const r=document.querySelector('.nebula-panel.is-board .nebula-panel-resize').getBoundingClientRect(); return { x:r.left+r.width/2, y:r.top+r.height/2, board:document.querySelector('.nebula-panel.is-board .board-viewport').clientHeight }; })()");
+  await command('Input.dispatchMouseEvent', { type:'mouseMoved', x:boardGrip.x, y:boardGrip.y });
+  await command('Input.dispatchMouseEvent', { type:'mousePressed', x:boardGrip.x, y:boardGrip.y, button:'left', buttons:1, clickCount:1 });
+  await command('Input.dispatchMouseEvent', { type:'mouseMoved', x:boardGrip.x, y:boardGrip.y + 160, button:'left', buttons:1 }); await pause(150);
+  const pulled = await evaluate("(() => { const b=document.querySelector('.nebula-panel.is-board .nebula-panel-body'), v=b.querySelector('.board-viewport'); return { body:b.className+' '+b.style.height+' '+b.clientHeight, board:v.clientHeight, at:document.elementFromPoint(" + boardGrip.x + "," + boardGrip.y + ")?.className }; })()");
+  assert(pulled.board > boardGrip.board + 100, 'The board grows while its window is pulled taller: ' + JSON.stringify({ before: boardGrip, pulled }));
+  await command('Input.dispatchMouseEvent', { type:'mouseReleased', x:boardGrip.x, y:boardGrip.y + 160, button:'left', buttons:0, clickCount:1 }); await pause(250);
+  assert(await evaluate(`document.querySelector('.nebula-panel.is-board .board-viewport').clientHeight > ${boardGrip.board + 100}`), 'The board keeps the taller window.');
+  await evaluate("document.querySelector('.nebula-panel.is-board .nebula-panel-resize').dispatchEvent(new MouseEvent('dblclick', { bubbles:true }))");
+  await until("!document.querySelector('.nebula-panel.is-board .nebula-panel-body').classList.contains('has-height')");
   await evaluate("document.querySelector('.nebula-desk').scrollTop=0");
   // The day's own windows float too: the data window carried beside the grid floats there, ⊞ docks it again.
   const dataHead = await barOf('data');
@@ -2602,6 +2692,97 @@ try {
     await evaluate("window.dispatchEvent(new Event('journal:save-now'))");
     await until(`window.__uiTest.day().entries.some(e=>e.id==='${entryId}' && e.tag==='${tagId}')`);
     assert.deepEqual(errors,[]);console.log('Tag editor, settings and stable identity checks passed.');
+  } else if (process.env.JOURNAL_UI_SCOPE === 'board-free-drag') {
+    await evaluate("localStorage.setItem('journal.settings',JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'),theme:'nebula'}));sessionStorage.setItem('boardCards',JSON.stringify([{id:'free-card',kind:'note',title:'Free card',text:'',dates:[window.__uiTest.date],order:1,boardX:8,y:18,w:180,h:120}]));location.reload()");
+    const reset=async()=>{
+      await evaluate("const cards=JSON.parse(sessionStorage.boardCards);cards[0].boardX=8;cards[0].y=18;sessionStorage.boardCards=JSON.stringify(cards);location.reload()");
+      await until("Boolean(document.querySelector('.board-card'))");
+      await evaluate("document.querySelector('.board-viewport').scrollIntoView({block:'center'})");await pause(200);
+    };
+    const mouse=(type,p,buttons=1)=>command('Input.dispatchMouseEvent',{type,...p,button:'left',buttons,clickCount:1});
+    const drag=async direction=>{
+      const p=await evaluate("(() => {const c=document.querySelector('.board-card').getBoundingClientRect(),v=document.querySelector('.board-viewport').getBoundingClientRect();return {start:{x:c.left+12,y:c.top+8},left:v.left,right:v.right,bottom:v.bottom,top:v.top};})()");
+      const end=direction==='left'?{x:p.left-65,y:p.start.y}:direction==='right'?{x:p.right+65,y:p.start.y}:direction==='top'?{x:p.start.x,y:p.top-65}:{x:p.start.x,y:p.bottom+75};
+      await mouse('mouseMoved',p.start,0);await mouse('mousePressed',p.start);await mouse('mouseMoved',end);await pause(150);await mouse('mouseReleased',end,0);await pause(200);
+    };
+    await reset();
+    assert(await evaluate("getComputedStyle(document.querySelector('.board-viewport')).boxShadow==='none' && getComputedStyle(document.querySelector('.board-viewport')).borderTopWidth==='0px'"));
+    await drag('right');
+    assert(await evaluate("JSON.parse(sessionStorage.boardCards)[0].boardX>document.querySelector('.board-world').clientWidth-180"),'Cards can move past the former right boundary.');
+    const right=await evaluate("JSON.parse(sessionStorage.boardCards)[0].boardX");await evaluate('location.reload()');await until("Boolean(document.querySelector('.board-card'))");
+    assert.equal(await evaluate("document.querySelector('.board-card').offsetLeft"),right,'Absolute position survives reload.');
+    await reset();await drag('left');
+    assert(await evaluate("JSON.parse(sessionStorage.boardCards)[0].boardX<0"),'Cards can move past the former left boundary.');
+    await reset();await drag('top');
+    assert(await evaluate("JSON.parse(sessionStorage.boardCards)[0].y<0"),'Cards can move above the former top boundary.');
+    const above=await evaluate("JSON.parse(sessionStorage.boardCards)[0].y");await evaluate('location.reload()');await until("Boolean(document.querySelector('.board-card'))");
+    assert.equal(await evaluate("document.querySelector('.board-card').offsetTop"),above,'Negative vertical positions survive reload.');
+    await reset();
+    const readCamera=()=>evaluate("(() => {const v=document.querySelector('.board-viewport'),m=new DOMMatrix(getComputedStyle(document.querySelector('.board-world')).transform);return {width:v.clientWidth,height:v.clientHeight,scale:m.a,x:m.e,y:m.f,cx:(v.clientWidth/2-m.e)/m.a,cy:(v.clientHeight/2-m.f)/m.a};})()");
+    const original=await readCamera();
+    await evaluate(`(() => {const v=document.querySelector('.board-viewport');v.style.width='${original.width*.6}px';v.style.height='${original.height*.7}px';})()`);await pause(200);
+    const small=await readCamera();assert(small.scale<original.scale,'Resizing the complete board adjusts zoom.');
+    assert(Math.abs(small.cx-original.cx)<.01 && Math.abs(small.cy-original.cy)<.01,'Resizing preserves the centre of the content.');
+    await evaluate(`(() => {const v=document.querySelector('.board-viewport');v.style.width='${original.width}px';v.style.height='${original.height}px';})()`);await pause(200);
+    const restored=await readCamera();assert(Math.abs(restored.scale-original.scale)<.0001,'Growing back restores the previous zoom without drift.');
+    await reset();const height=await evaluate("document.querySelector('.board-viewport').clientHeight");await drag('bottom');
+    assert(await evaluate("document.querySelector('.board-viewport').clientHeight")>height,'Dragging below the board expands its visible area.');
+    assert(await evaluate("JSON.parse(sessionStorage.boardCards)[0].y>100"));
+    assert.deepEqual(errors,[]);console.log('Free board dragging passed: no frame, unbounded horizontal movement, persistence and downward expansion.');
+  } else if (process.env.JOURNAL_UI_SCOPE === 'interaction-fixes') {
+    await evaluate("localStorage.setItem('journal.settings',JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'),theme:'nebula'}));location.reload()");
+    await until("Boolean(document.querySelector('input.nebula-poster-title'))");
+    await evaluate("document.querySelector('input.nebula-poster-title').focus();document.querySelector('input.nebula-poster-title').select()");await key('a','KeyA',2);await command('Input.insertText',{text:'Direct poster title'});
+    assert.equal(await evaluate("document.querySelector('.title-input').value"),'Direct poster title');
+    await evaluate("window.__TAURI_INTERNALS__.invoke('save_tags',{tags:[{id:'test-tag',name:'Test',color:'#569eff'}]})");
+    await saveNow();
+    await evaluate("(() => {const d=window.__uiTest.day();d.entries[0].tag='test-tag';return window.__uiTest.store(d);})()");
+    await evaluate("window.__uiTest.emit('history:restored',null)");await pause(150);
+    await evaluate("document.querySelector('.entry[data-entry-id=\"10000000-0000-4000-8000-000000000001\"] .entry-text').focus()");
+    await key('Enter','Enter',2);
+    await until("document.querySelectorAll('.entry').length===6 && document.activeElement?.classList.contains('entry-text')");
+    await command('Input.insertText',{text:'Without tag via shortcut'});await pause(150);await saveNow();
+    await until("window.__uiTest.day().entries.some(e=>e.text==='Without tag via shortcut')");
+    assert.equal(await evaluate("window.__uiTest.day().entries.find(e=>e.text==='Without tag via shortcut').tag"),null);
+    await evaluate("document.querySelector('.board-actions button').click()");
+    await until("Boolean(document.querySelector('.board-card'))");
+    await evaluate("document.querySelector('.board-surface').scrollIntoView({block:'center'})");
+    const before=await evaluate("({width:document.querySelector('.board-world').clientWidth,left:document.querySelector('.board-card').offsetLeft,top:document.querySelector('.board-card').offsetTop,zoom:parseFloat(document.querySelector('.board-viewport').style.getPropertyValue('--board-scale')),height:document.querySelector('.board-viewport').clientHeight,grid:getComputedStyle(document.querySelector('.board-viewport')).backgroundSize})");
+    const pt=await evaluate("(() => {const r=document.querySelector('.board-surface').getBoundingClientRect();return {x:r.left+30,y:r.top+30};})()");
+    await command('Input.dispatchMouseEvent',{type:'mouseWheel',...pt,deltaY:120,deltaX:0,modifiers:2});
+    await until(`parseFloat(document.querySelector('.board-viewport').style.getPropertyValue('--board-scale'))<${before.zoom}`);
+    assert.equal(await evaluate("document.querySelector('.board-viewport').clientHeight"),before.height,'Zoom keeps the board frame the same height.');
+    assert.notEqual(await evaluate("getComputedStyle(document.querySelector('.board-viewport')).backgroundSize"),before.grid,'The background scales with the cards.');
+    const blank=await evaluate("(() => {const r=document.querySelector('.board-viewport').getBoundingClientRect();return {x:r.right-35,y:r.bottom-35};})()");
+    const panBefore=await evaluate("getComputedStyle(document.querySelector('.board-viewport')).backgroundPosition");
+    await command('Input.dispatchMouseEvent',{type:'mousePressed',...blank,button:'left',buttons:1,clickCount:1});
+    await command('Input.dispatchMouseEvent',{type:'mouseMoved',x:blank.x-60,y:blank.y-40,button:'left',buttons:1});
+    await command('Input.dispatchMouseEvent',{type:'mouseReleased',x:blank.x-60,y:blank.y-40,button:'left',buttons:0,clickCount:1});
+    assert.notEqual(await evaluate("getComputedStyle(document.querySelector('.board-viewport')).backgroundPosition"),panBefore,'Dragging free space moves the background.');
+    await evaluate("document.querySelector('.board-viewport').style.width='220px'");await pause(150);
+    assert.equal(await evaluate("document.querySelector('.board-world').clientWidth"),before.width);
+    assert.equal(await evaluate("document.querySelector('.board-card').offsetLeft"),before.left);
+    assert.equal(await evaluate("document.querySelector('.board-card').offsetTop"),before.top);
+    await evaluate("document.querySelector('.nebula-tab[data-period-mode=week]').click()");await pause(400);
+    const side=async (button,point={x:20,y:80})=>{
+      const name=button===3?'back':'forward';
+      await command('Input.dispatchMouseEvent',{type:'mousePressed',...point,button:name,buttons:button===3?8:16,clickCount:1});
+      await command('Input.dispatchMouseEvent',{type:'mouseReleased',...point,button:name,buttons:0,clickCount:1});
+    };
+    await side(3);await until("document.querySelector('.nebula-tab[data-period-mode=day]').hasAttribute('aria-current')");
+    await pause(100);await side(4);await until("document.querySelector('.nebula-tab[data-period-mode=week]').hasAttribute('aria-current')");
+    await evaluate("document.querySelector('.nebula-tab[data-period-mode=day]').click()");await pause(400);
+    await evaluate("document.querySelector('.nebula-panel.is-entries .nebula-panel-minimize').click()");await pause(400);
+    assert(await evaluate("document.querySelector('.nebula-panel.is-entries').classList.contains('is-minimized')"));
+    await side(3);await until("!document.querySelector('.nebula-panel.is-entries').classList.contains('is-minimized')");
+    await pause(100);await side(4);await until("document.querySelector('.nebula-panel.is-entries').classList.contains('is-minimized')");
+    await pause(100);await evaluate("document.querySelector('.nebula-notebook-toggle').click()");
+    await until("Boolean(document.querySelector('.notebook .cm-content'))");
+    await evaluate("document.querySelector('.notebook .cm-content').scrollIntoView({block:'center'});document.querySelector('.notebook .cm-content').focus()");await pause(400);
+    const notePoint=await evaluate("(() => {const n=document.querySelector('.notebook .cm-content'),r=n.getBoundingClientRect();return {x:r.left+20,y:r.top+10};})()");
+    await side(3,notePoint);await until("!document.querySelector('.nebula-notebook-toggle').classList.contains('is-open')");
+    await pause(100);await side(4);await until("document.querySelector('.nebula-notebook-toggle').classList.contains('is-open')");
+    assert.deepEqual(errors,[]);console.log('Interaction fixes passed: editable poster, untagged shortcut, board zoom and stable positions, view and Nebula layout history.');
   } else if (process.env.JOURNAL_UI_SCOPE === 'calendar-connected-spans') {
     const month=await evaluate('window.__uiTest.date.slice(0,7)');
     await evaluate(`(() => {const month='${month}';const entry=(id,end)=>({id,kind:'event',text:id,time:'00:00',end,done:false,cancelled:false,priority:false});return Promise.all([
@@ -3014,6 +3195,15 @@ try {
       await until(`Boolean(document.querySelector('.entry-dock-shell.is-open ${theme === 'classic' ? popups === 'a' ? '.dock-orbit' : '.dock-word' : '.sheet'}'))`);
       await pause(450);
       await screenshot(`look-${theme}-${popups}.png`);
+      // Holo-Papier: pressed buttons in mint foil behind frosted film, deleting in orange.
+      if (theme === 'nebula' && popups === 'b') {
+        // The window is as wide as its widest toolbar row, the close button in its corner.
+        assert(await evaluate("(() => { const w=document.querySelector('.entry-dock-shell.is-open .sheet-window'), r=w.getBoundingClientRect(), x=w.querySelector('.sheet-close').getBoundingClientRect(), rows=[...w.querySelectorAll('.sheet-toolbar-row')].map(row => [...row.children].reduce((sum, group) => sum + group.getBoundingClientRect().width + 4, -4)); return rows.length === 2 && r.right - x.right < 6 && r.width - Math.max(...rows) < 20; })()"), 'The action window fits its toolbar, the close button sits in the corner.');
+        const remove = await evaluate("(() => { const r=document.querySelector('.entry-dock-shell.is-open .sheet-remove').getBoundingClientRect(); return { x:r.left+r.width/2, y:r.top+r.height/2 }; })()");
+        await command('Input.dispatchMouseEvent', { type:'mouseMoved', x:remove.x, y:remove.y }); await pause(250);
+        assert.match(await evaluate("getComputedStyle(document.querySelector('.entry-dock-shell.is-open .sheet-remove')).backgroundImage"), /linear-gradient.*url/, 'Deleting shows the frosted orange foil.');
+        await screenshot('look-nebula-b-remove.png');
+      }
       if (!(theme === 'classic' && popups === 'a')) {
         const id = await evaluate("document.querySelector('.entry-dock-shell.is-open').closest('.entry').dataset.entryId");
         if (theme === 'nebula' && popups === 'a') { await command('Input.insertText',{text:'done'}); await key('Enter','Enter'); }
@@ -3248,6 +3438,18 @@ try {
     await until("Boolean(document.querySelector('.board-thread-cut'))");
     await evaluate("document.querySelector('.board-thread-cut').click()");
     await until("JSON.parse(sessionStorage.boardCards).every(c=>!c.links?.length)");
+    // Every card has the reserved extra button. An image tied to a link makes a bundle; a note tied to it then has both.
+    assert.equal(await evaluate("document.querySelectorAll('.board-card .board-extra').length"), 3, 'Each card has the extra button.');
+    await evaluate("document.querySelector('.board-card.is-image').focus()");
+    await key('l','KeyL',1);
+    for (let i = 0; i < 3 && !(await evaluate("Boolean(document.querySelector('.board-card.is-link.is-link-target'))")); i++) await key('ArrowRight','ArrowRight');
+    await key('Enter');
+    await until("(() => {const c=JSON.parse(sessionStorage.boardCards),i=c.find(x=>x.kind==='image'),l=c.find(x=>x.kind==='link');return i.links?.includes(l.id)&&l.links?.includes(i.id);})()");
+    assert.match(await evaluate("document.querySelector('.board-status')?.textContent||''"), /Bündel/, 'Image and link make a bundle.');
+    await evaluate("document.querySelector('.board-thread-hit').focus()");await key('Enter');
+    await until("Boolean(document.querySelector('.board-thread-cut'))");
+    await evaluate("document.querySelector('.board-thread-cut').click()");
+    await until("JSON.parse(sessionStorage.boardCards).every(c=>!c.links?.length) && !document.querySelector('.board-status')"); await pause(200);
     // Dragged by its paper, a card stays where it is let go (and comes to the top).
     const dragCard=await evaluate("(() => {const c=document.querySelector('.board-card.is-note'),r=c.getBoundingClientRect();return {id:c.dataset.boardId,left:c.offsetLeft,top:c.offsetTop,start:{x:r.left+18,y:r.top+6},end:{x:r.left+18+60,y:r.top+6+90}};})()");
     await command('Input.dispatchMouseEvent',{type:'mouseMoved',...dragCard.start});

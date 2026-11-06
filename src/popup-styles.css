@@ -131,7 +131,7 @@
 :root[data-theme='nebula'][data-popups='b'] :is(.planner-day, .cal-composer .cal-compact-day) { border-radius: 0; font-family: var(--mono); }
 :root[data-theme='nebula'][data-popups='b'] :is(.planner:not(.is-multi) .planner-day[aria-selected='true'], .cal-composer .cal-compact-day[aria-selected='true']) { background: var(--holo) !important; color: #111 !important; box-shadow: inset 0 0 0 1px #111; }
 :root[data-theme='nebula'][data-popups='b'] .planner:not(.is-multi) .planner-day[aria-selected='true']::after { background: #111; }
-:root[data-theme='nebula'][data-popups='b'] :is(.cal-composer-create, .planner-confirm:hover) { border-radius: 0; background: var(--holo) !important; color: #111 !important; box-shadow: inset 0 0 0 1px #111; }
+:root[data-theme='nebula'][data-popups='b'] :is(.cal-composer-create, .planner-confirm:hover) { border-radius: 0; background: var(--holo-positive) !important; color: #111 !important; box-shadow: inset 0 0 0 1px #111; }
 :root[data-theme='nebula'][data-popups='b'] .planner-foot { border-top: 2px solid #111; }
 :root[data-theme='nebula'][data-popups='b'] :is(.planner, .cal-composer) .icon { color: inherit; }
 

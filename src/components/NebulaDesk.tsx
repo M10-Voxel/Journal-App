@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { useViewHistory } from '../viewHistory';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { dateFormat, t, useLanguage } from '../i18n';
 import { formatShortDate, monthGrid, shiftDate, shiftMonth, weekDates } from '../dates';
@@ -17,7 +19,7 @@ import { CompactMonth, useCalendarData, useNow } from './calendarShared';
 import { Icon } from './Icon';
 import { useFloatingWindow, windowGrips, writeWindowRect } from './useFloatingWindow';
 import type { FloatingDrag } from './useFloatingWindow';
-import { columns, defaultLayout, dropTarget, floatPanel, leaveRow, minSpan, normalizeLayout, own, placePanel, resizeInRow, rowsOf, setHeight, setSpan, spanOf, toggleHalf, toggleMinimized, visiblePanels } from '../nebulaLayout';
+import { columns, defaultLayout, displaySpans, dropTarget, floatPanel, leaveRow, minSpan, normalizeLayout, own, placePanel, resizeInRow, rowsOf, setHeight, setSpan, spanOf, toggleHalf, toggleMinimized, visiblePanels } from '../nebulaLayout';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { detachable } from './DetachedPanel';
@@ -85,15 +87,25 @@ function useUpcoming(today: string, count: number): Upcoming[] {
 /** A holographic ticket: its number, tag, day and time; a click opens the day. */
 function Ticket({ item, index, onOpen }: { item: Upcoming; index: number; onOpen: (date: string, entry: string) => void }) {
   const text = plainText(item.entry.text) || t('ohne Text');
-  return <button type="button" className={`nebula-ticket is-${item.entry.kind}`} style={{ '--ticket': index } as CSSProperties} data-ticket-date={item.date} data-ticket-tag={item.tag}
+  // A serial like a printed ticket's: five digits from the entry (the same entry keeps its number).
+  const serial = String([...item.entry.id].reduce((sum, char) => (sum * 31 + char.charCodeAt(0)) % 100000, 7)).padStart(5, '0');
+  const weekday = dateFormat({ weekday: 'short' }).format(noon(item.date)).replace('.', '');
+  // Peach and mint foil take turns, like the two tickets the design comes from.
+  return <button type="button" className={`nebula-ticket is-${item.entry.kind} is-${index % 2 ? 'mint' : 'peach'}`} style={{ '--ticket': index } as CSSProperties} data-ticket-date={item.date} data-ticket-tag={item.tag}
     title={t('{0} · Tag öffnen', text)} onClick={() => onOpen(item.date, item.entry.id)}>
-    <span className="nebula-ticket-number" aria-hidden="true">NO.{String(index + 1).padStart(3, '0')}</span>
-    <span className="nebula-ticket-tag">{item.tag}</span>
-    <strong className="nebula-ticket-text">{text}</strong>
-    <span className="nebula-ticket-meta"><span>{formatShortDate(item.date)}</span>{item.entry.time ? <time>{formatSpan(item.entry.time, item.entry.end)}</time> : <span>{t('ganztägig')}</span>}</span>
-    <span className="nebula-ticket-arrow" aria-hidden="true">→</span>
+    <span className="nebula-ticket-band" aria-hidden="true" />
+    {/* Above the band the tag and the serial; on it the entry (the mail's subject); below it, under a rule, the day and
+        time. The stub past the tear line keeps the weekday and the black bar with its punched dot. */}
+    <span className="nebula-ticket-top"><span className="nebula-ticket-tag">{item.tag.toLowerCase()} ---</span><span className="nebula-ticket-number">No. {serial}</span></span>
+    <strong className="nebula-ticket-text"><span>{text}</span></strong>
+    <span className="nebula-ticket-bottom"><span className="nebula-ticket-date">{formatShortDate(item.date)}</span>{item.entry.time ? <time>{formatSpan(item.entry.time, item.entry.end)}</time> : <span>{t('ganztägig')}</span>}</span>
+    <span className="nebula-ticket-mark" aria-hidden="true">{weekday.toUpperCase()}</span>
+    <span className="nebula-ticket-bar" aria-hidden="true"><i /></span>
   </button>;
 }
+
+/** What can be focused: the windows, and the calendar in the overview. */
+type FocusId = PanelId | 'overview';
 
 const calendarViewKey = 'journal.nebulaCalendar';
 
@@ -105,7 +117,9 @@ export type DayCalendar = (showDate: string | undefined, onDateChange: (date: st
  * by dragging, editing by right click). In an overview (week … year) the day shown can be changed within the period
  * without leaving the overview: in the week by a strip of its seven days, otherwise with the calendar's own arrows.
  */
-function NebulaCalendarPanel({ mode, date, today, onPick, dayCalendar }: { mode: PeriodMode; date: string; today: string; onPick: (date: string) => void; dayCalendar: DayCalendar }) {
+function NebulaCalendarPanel({ mode, date, today, onPick, dayCalendar, calendarOpen, onCalendarToggle, focused, dimmed, onFocus }: { mode: PeriodMode; date: string; today: string; onPick: (date: string) => void; dayCalendar: DayCalendar;
+  /** The big calendar's window: open or not, and its switch (Ctrl+K), here beside the views. */
+  calendarOpen: boolean; onCalendarToggle: () => void; focused: boolean; dimmed: boolean; onFocus: () => void }) {
   useLanguage();
   const [view, setView] = useState<'month' | 'day'>(() => { try { return localStorage.getItem(calendarViewKey) === 'day' ? 'day' : 'month'; } catch { return 'month'; } });
   const choose = (next: 'month' | 'day') => { setView(next); try { localStorage.setItem(calendarViewKey, next); } catch { /* this session */ } };
@@ -120,12 +134,15 @@ function NebulaCalendarPanel({ mode, date, today, onPick, dayCalendar }: { mode:
   const { days } = useCalendarData(grid[0], grid[grid.length - 1]);
   const weekday = dateFormat({ weekday: 'short' });
 
-  return <section className={`nebula-cal-panel is-${view}`} aria-label={t('Kalender')}>
+  return <section className={`nebula-cal-panel is-${view}${focused ? ' is-focused' : ''}${dimmed ? ' is-dimmed' : ''}`} aria-label={t('Kalender')}>
     <header className="nebula-terminal-head">
-      <span className="nebula-prompt" aria-hidden="true"><b>[journal@~]$</b> ./cal.sh</span>
+      <span className="nebula-prompt" aria-hidden="true"><b>~$</b> ./cal.sh</span>
+      <button type="button" className={`nebula-calendar-toggle${calendarOpen ? ' is-open' : ''}`} aria-expanded={calendarOpen} aria-keyshortcuts="Control+K"
+        aria-label={calendarOpen ? t('Kalender schließen') : t('Kalender öffnen')} title={calendarOpen ? t('Kalender schließen · Strg K') : t('Kalender öffnen · Strg K')} onClick={onCalendarToggle}><Icon name="calendar" /></button>
       <div className="nebula-cal-views" role="tablist" aria-label={t('Kalenderansicht')}>
         {(['month', 'day'] as const).map(value => <button key={value} type="button" role="tab" aria-selected={view === value} data-cal-view={value} onClick={() => choose(value)}>{value === 'month' ? t('Monat') : t('Tag')}</button>)}
       </div>
+      <button type="button" className="nebula-window-focus" aria-pressed={focused} aria-label={t('{0}: Fokus', t('Kalender'))} title={focused ? t('Fokus beenden') : t('Fokus: Hintergrund abdunkeln')} onClick={onFocus}>◐</button>
     </header>
     {view === 'month' ? <div className="nebula-cal-body">
       <div className="nebula-cal-head">
@@ -164,8 +181,8 @@ function usePanelScroll(body: React.RefObject<HTMLDivElement | null>) {
   }, []);
 }
 
-function DeskWindow({ id, stage, open, front, focused, command, label, closeLabel, className, bodyClass, disabled, sectionRef, drag, onClose, onFront, onFocus, onDock, children }: {
-  id: PanelId; stage: React.RefObject<HTMLDivElement | null>; open: boolean; front: boolean; focused: boolean; command: string; label: string; closeLabel?: string;
+function DeskWindow({ id, stage, open, front, focused, dimmed = false, command, label, closeLabel, className, bodyClass, disabled, sectionRef, drag, onClose, onFront, onFocus, onDock, children }: {
+  id: PanelId; stage: React.RefObject<HTMLDivElement | null>; open: boolean; front: boolean; focused: boolean; dimmed?: boolean; command: string; label: string; closeLabel?: string;
   className: string; bodyClass: string; disabled?: boolean; sectionRef?: React.RefObject<HTMLElement | null>; drag: FloatingDrag;
   onClose?: () => void; onFront: () => void; onFocus: () => void; onDock: () => void; children: ReactNode;
 }) {
@@ -175,7 +192,7 @@ function DeskWindow({ id, stage, open, front, focused, command, label, closeLabe
   const scrollBody = useRef<HTMLDivElement>(null);
   usePanelScroll(scrollBody);
   const place = useFloatingWindow(`journal.nebulaWindow.${id}`, stage, frame, drag);
-  return <section ref={frame} className={`${className}${open ? ' is-open' : ''}${place.floating ? ' is-floating' : ''}${place.dragging ? ' is-dragging' : ''}${front ? ' is-front' : ''}${focused ? ' is-focused' : ''}`}
+  return <section ref={frame} className={`${className}${open ? ' is-open' : ''}${place.floating ? ' is-floating' : ''}${place.dragging ? ' is-dragging' : ''}${front ? ' is-front' : ''}${focused ? ' is-focused' : ''}${dimmed ? ' is-dimmed' : ''}`}
     style={place.style} data-window={id} aria-label={label} aria-hidden={!open || undefined} inert={!open || disabled} onPointerDownCapture={onFront}
     onKeyDown={event => { if (onClose && event.key === 'Escape' && !event.defaultPrevented && !(event.target as Element).closest('input, textarea, select, [contenteditable="true"], [role="dialog"]')) { event.preventDefault(); onClose(); } }}>
     <header className="nebula-terminal-head nebula-window-head" onPointerDown={place.startMove} onDoubleClick={event => { if (!(event.target as Element).closest('button')) place.dock(); }}
@@ -199,12 +216,19 @@ function DeskWindow({ id, stage, open, front, focused, command, label, closeLabe
  * minimize it to the bar, switch between half and whole row, let a calendar or notebook float again, or close it. Its
  * right edge sets its width in columns, its lower edge its height (a double click there: back to the default).
  */
-function Panel({ id, command, label, minimized, span, height, held, dropBefore, pair, onGrab, onMinimize, onHalf, onSpan, onHeight, onFloat, onClose, children }: {
-  id: PanelId; command: string; label: string; minimized: boolean; span: number; height?: number; held: { dx: number; dy: number } | null;
+function Panel({ id, command, label, minimized, span, shownSpan = span, upright = false, pull, rowStart = false, height, held, dropBefore, pair, focused = false, dimmed = false, onFocus, onGrab, onMinimize, onHalf, onSpan, onHeight, onFloat, onClose, children }: {
+  id: PanelId; command: string; label: string; minimized: boolean; span: number;
+  /** The width as shown (a minimized neighbour may give its columns to this one) and whether this one stands upright as
+   *  a narrow bar beside an open window (nebulaLayout: displaySpans). */
+  shownSpan?: number; upright?: boolean; pull?: [number, number];
+  /** The first window of its row: it starts at the grid's first column, so the rows stay as nebulaLayout lays them out. */
+  rowStart?: boolean; height?: number; held: { dx: number; dy: number } | null;
   /** Where a dragged window would land: above this one, or beside it (sharing its width; the half it would take is shown). */
   dropBefore: 'top' | 'split-left' | 'split-right' | null;
   /** The window sharing the row that gives or takes width when this one is resized (nebulaLayout: resizeInRow). */
   pair: { id: PanelId; total: number } | null;
+  /** Lit by focus (everything not focused lies under a dark veil); several windows can be focused at once. */
+  focused?: boolean; dimmed?: boolean; onFocus?: () => void;
   onGrab: (event: React.PointerEvent<HTMLElement>) => void; onMinimize: () => void; onHalf: () => void; onSpan: (span: number | null) => void; onHeight: (height: number | null) => void;
   onFloat?: () => void; onClose?: () => void; children: ReactNode;
 }) {
@@ -216,8 +240,19 @@ function Panel({ id, command, label, minimized, span, height, held, dropBefore, 
     event.preventDefault();
     const start = event.clientY, origin = body.current.getBoundingClientRect().height;
     let last = origin;
-    const move = (moved: PointerEvent) => { last = Math.max(120, origin + moved.clientY - start); if (body.current) body.current.style.height = `${last}px`; };
-    const end = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', end); window.removeEventListener('pointercancel', end); if (last !== origin) onHeight(last); };
+    // From the first move the window counts as sized (its own height, not its row's), so it and a board inside follow
+    // the pointer at once instead of only after letting go.
+    const sized = body.current.classList.contains('has-height');
+    const move = (moved: PointerEvent) => {
+      last = Math.max(120, origin + moved.clientY - start);
+      if (body.current) { body.current.style.height = `${last}px`; body.current.classList.add('has-height'); }
+      root.current?.classList.add('is-custom-height');
+    };
+    const end = () => {
+      window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', end); window.removeEventListener('pointercancel', end);
+      if (last !== origin) onHeight(last);
+      else if (!sized) { body.current?.classList.remove('has-height'); root.current?.classList.remove('is-custom-height'); }
+    };
     window.addEventListener('pointermove', move); window.addEventListener('pointerup', end); window.addEventListener('pointercancel', end);
   }
   // The width snaps to the grid's columns while it is dragged (shown at once, stored on release).
@@ -230,7 +265,8 @@ function Panel({ id, command, label, minimized, span, height, held, dropBefore, 
     // With a neighbour in the row, the two share their width: it shrinks or grows as this one changes, at once.
     const neighbour = pair ? grid.querySelector<HTMLElement>(`:scope > [data-panel="${pair.id}"]`) : null;
     const most = pair ? pair.total - minSpan : columns;
-    let last = span;
+    const lent = shownSpan - span;
+    let last = shownSpan;
     element.classList.add('is-sizing'); neighbour?.classList.add('is-sizing');
     const move = (moved: PointerEvent) => {
       last = Math.max(minSpan, Math.min(most, Math.round((origin + moved.clientX - start + gap) / (column + gap))));
@@ -241,19 +277,20 @@ function Panel({ id, command, label, minimized, span, height, held, dropBefore, 
       window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', end); window.removeEventListener('pointercancel', end);
       element.classList.remove('is-sizing'); element.style.removeProperty('--span');
       neighbour?.classList.remove('is-sizing'); neighbour?.style.removeProperty('--span');
-      if (last !== span) onSpan(last);
+      if (last !== shownSpan) onSpan(Math.max(minSpan, last - lent));
     };
     window.addEventListener('pointermove', move); window.addEventListener('pointerup', end); window.addEventListener('pointercancel', end);
   }
-  return <section ref={root} className={`nebula-terminal nebula-panel is-${id}${height ? ' is-custom-height' : ''}${span < columns ? ' is-part' : ''}${span === columns / 2 ? ' is-half' : ''}${minimized ? ' is-minimized' : ''}${held ? ' is-held' : ''}${dropBefore ? ` is-drop-${dropBefore}` : ''}`}
-    data-panel={id} data-span={span} aria-label={label} style={{ '--span': span, ...held ? { transform: `translate(${held.dx}px, ${held.dy}px) rotate(-.6deg)` } : {} } as CSSProperties}>
+  return <section ref={root} className={`nebula-terminal nebula-panel is-${id}${height ? ' is-custom-height' : ''}${shownSpan < columns ? ' is-part' : ''}${shownSpan === columns / 2 ? ' is-half' : ''}${minimized ? ' is-minimized' : ''}${upright ? ` is-upright${pull && pull[1] >= 0 ? ' is-before' : ''}` : ''}${rowStart ? ' is-row-start' : ''}${held ? ' is-held' : ''}${dropBefore ? ` is-drop-${dropBefore}` : ''}${focused ? ' is-focused' : ''}${dimmed ? ' is-dimmed' : ''}`}
+    data-panel={id} data-span={shownSpan} aria-label={label} style={{ '--span': shownSpan, ...pull ? { '--pull-left': Math.max(0, pull[0]), '--pull-right': Math.max(0, pull[1]) } : {}, ...held ? { transform: `translate(${held.dx}px, ${held.dy}px) rotate(-.6deg)` } : {} } as CSSProperties}>
     <header className="nebula-terminal-head nebula-panel-head" onPointerDown={onGrab} onDoubleClick={event => { if (!(event.target as Element).closest('button')) onMinimize(); }}
       title={t('Ziehen zum Umordnen · aus dem Raster ziehen: schweben · Doppelklick: minimieren')}>
-      <span className="nebula-prompt" aria-hidden="true"><b>[journal@~]$</b> {command}</span>
+      <span className="nebula-prompt" aria-hidden="true">{!upright && <><b>[journal@~]$</b> </>}{command}</span>
       <span className="visually-hidden">{label}</span>
       {minimized && <span className="nebula-panel-state" aria-hidden="true">[ {t('minimiert')} ]</span>}
       <span className="nebula-window-tools">
-        <button type="button" className="nebula-panel-half" aria-pressed={span === columns / 2} aria-label={t('{0}: halbe Breite', label)} title={span === columns / 2 ? t('Ganze Breite') : t('Halbe Breite')} onClick={onHalf}>{span === columns / 2 ? '▭' : '◫'}</button>
+        {!minimized && onFocus && <button type="button" className="nebula-window-focus" aria-pressed={focused} aria-label={t('{0}: Fokus', label)} title={focused ? t('Fokus beenden') : t('Fokus: Hintergrund abdunkeln')} onClick={onFocus}>◐</button>}
+        {!upright && <button type="button" className="nebula-panel-half" aria-pressed={span === columns / 2} aria-label={t('{0}: halbe Breite', label)} title={span === columns / 2 ? t('Ganze Breite') : t('Halbe Breite')} onClick={onHalf}>{span === columns / 2 ? '▭' : '◫'}</button>}
         <button type="button" className="nebula-panel-minimize" aria-expanded={!minimized} aria-label={minimized ? t('{0} wiederherstellen', label) : t('{0} minimieren', label)}
           title={minimized ? t('Wiederherstellen') : t('Minimieren')} onClick={onMinimize}>{minimized ? '▢' : '_'}</button>
         {onFloat && <button type="button" className="nebula-panel-float" aria-label={t('{0} lösen', label)} title={t('Aus dem Raster lösen (schwebt über dem Schreibtisch)')} onClick={onFloat}>⧉</button>}
@@ -262,7 +299,7 @@ function Panel({ id, command, label, minimized, span, height, held, dropBefore, 
     </header>
     <div ref={body} className={`nebula-terminal-body nebula-panel-body${height ? ' has-height' : ''}`} hidden={minimized} style={height ? { height } : undefined}>{children}</div>
     {!minimized && <span className="nebula-panel-resize" aria-hidden="true" title={t('Höhe ziehen · Doppelklick: automatisch')} onPointerDown={resizeHeight} onDoubleClick={() => onHeight(null)} />}
-    <span className="nebula-panel-width" aria-hidden="true" title={t('Breite ziehen · Doppelklick: ganze Reihe')} onPointerDown={resizeWidth} onDoubleClick={() => onSpan(null)} />
+    {!upright && <span className="nebula-panel-width" aria-hidden="true" title={t('Breite ziehen · Doppelklick: ganze Reihe')} onPointerDown={resizeWidth} onDoubleClick={() => onSpan(null)} />}
   </section>;
 }
 
@@ -277,6 +314,7 @@ function useNebulaLayout(): [NebulaLayout, (update: (layout: NebulaLayout) => Ne
     try { localStorage.setItem(layoutKey, JSON.stringify(next)); } catch { /* this session */ }
     return next;
   });
+  useViewHistory(layout, value => { setLayout(value); localStorage.setItem(layoutKey, JSON.stringify(value)); });
   return [layout, change];
 }
 
@@ -319,9 +357,9 @@ export function NebulaBackdrop() {
   </div>;
 }
 
-export function NebulaDesk({ mode, date, today, modes, modeLabels, dirty, title, stats, onMode, onStep, onToday, stepLabels, datePicker, tagFilter,
+export function NebulaDesk({ mode, date, today, modes, modeLabels, dirty, title, onTitleChange, stats, onMode, onStep, onToday, stepLabels, datePicker, tagFilter,
   entries, data, board, notes, activities, calendar, calendarOpen, onCalendarToggle, onCalendarClose, notebook, notebookOpen = false, onNotebookToggle, onNotebookClose, onOpenDay, onNavigate, dayCalendar, scrollRef, disabled }: {
-  mode: PeriodMode; date: string; today: string; modes: readonly PeriodMode[]; modeLabels: string[]; dirty: boolean; title: string; stats: NebulaStats;
+  mode: PeriodMode; date: string; today: string; modes: readonly PeriodMode[]; modeLabels: string[]; dirty: boolean; title: string; onTitleChange: (title: string) => void; stats: NebulaStats;
   onMode: (mode: PeriodMode) => void; onStep: (step: 1 | -1) => void; onToday: () => void; stepLabels: { prev: { label: string; tip: string }; next: { label: string; tip: string } };
   /** The date as a button opening the mini calendar (Ctrl+G). */
   datePicker: ReactNode; tagFilter: ReactNode;
@@ -341,7 +379,7 @@ export function NebulaDesk({ mode, date, today, modes, modeLabels, dirty, title,
   useEffect(() => {
     const row = ticketRow.current;
     if (!row) return;
-    const fit = () => setTicketCount(Math.max(1, Math.min(6, Math.floor((row.clientWidth + 14) / (210 + 14)))));
+    const fit = () => setTicketCount(Math.max(1, Math.min(6, Math.floor((row.clientWidth + 18) / (250 + 18)))));
     fit();
     const observer = new ResizeObserver(fit);
     observer.observe(row);
@@ -378,7 +416,8 @@ export function NebulaDesk({ mode, date, today, modes, modeLabels, dirty, title,
   // The windows over the desk: which lies on top, and which one has the focus (everything else darkened).
   const stageRef = useRef<HTMLDivElement>(null);
   const [front, setFront] = useState<PanelId>('calendar');
-  const [focused, setFocused] = useState<PanelId | null>(null);
+  const [focused, setFocused] = useState<FocusId[]>([]);
+  useViewHistory({ front, focused }, value => { setFront(value.front); setFocused(value.focused); });
 
   // The grid of windows in the middle (nebulaLayout.ts): its order, widths, minimized windows, heights; the calendar and
   // notebook while docked in it; the day's own windows floating over the desk.
@@ -404,9 +443,15 @@ export function NebulaDesk({ mode, date, today, modes, modeLabels, dirty, title,
   const floatingOwn = layout.floating.filter(id => own[family].includes(id) && !detached.includes(id));
   const docked = (id: WindowId) => layout.docked.includes(id);
   const isOpen = (id: PanelId) => id === 'calendar' ? calendarOpen : id === 'notebook' ? openWindows.notebook : !detached.includes(id);
-  const focusOpen = focused !== null && isOpen(focused) && (id => id === 'calendar' || id === 'notebook' ? !docked(id) : floatingOwn.includes(id))(focused);
-  useEffect(() => { if (focused && !focusOpen) setFocused(null); }, [focused, focusOpen]);
-  const toggleFocus = (id: PanelId) => { setFront(id); setFocused(current => current === id ? null : id); };
+  // Focus: any window that is there to see (open, not minimized; in the grid or floating) and the overview's calendar.
+  const present = (id: FocusId) => id === 'overview' || (isOpen(id) && (floatingOwn.includes(id) || (id === 'calendar' || id === 'notebook') && !docked(id)
+    || shown.includes(id) && !layout.minimized.includes(id)));
+  const liveFocus = (Array.isArray(focused) ? focused : []).filter(present);
+  const focusOpen = liveFocus.length > 0;
+  useEffect(() => { if (Array.isArray(focused) && liveFocus.length !== focused.length) setFocused(liveFocus); }, [liveFocus.join(), Array.isArray(focused) ? focused.join() : '']);
+  const isFocused = (id: FocusId) => liveFocus.includes(id);
+  const dimmedNow = (id: FocusId) => focusOpen && !liveFocus.includes(id);
+  const toggleFocus = (id: FocusId) => { if (id !== 'overview') setFront(id); setFocused(current => (Array.isArray(current) ? current : []).includes(id) ? current.filter(other => other !== id) : [...(Array.isArray(current) ? current : []), id]); };
   const gridRef = useRef<HTMLDivElement>(null);
   // A drag in progress: the window moved (carried from the grid, or floating), where it would land, whether Shift is held
   // while a floating window is over the grid (only then it docks), and whether the pointer has left the journal's window.
@@ -433,13 +478,12 @@ export function NebulaDesk({ mode, date, today, modes, modeLabels, dirty, title,
       setDrop(null);
       if (outside(point) && canLeave(id)) { detach(id, { x: window.screenX + point.x, y: window.screenY + point.y }, sizeOf(id)); return true; }
       if (!shift || !overGrid(point)) return false;
-      setFocused(null);
       const target = dropTarget(boxes(id), point);
       changeLayout(current => placePanel(current, family, shownRef.current, id, target, openWindows, false));
       return true;
     },
   });
-  const dockAtEnd = (id: PanelId) => { setFocused(null); changeLayout(current => placePanel(current, family, shown, id, { index: shown.length }, openWindows, false)); };
+  const dockAtEnd = (id: PanelId) => { changeLayout(current => placePanel(current, family, shown, id, { index: shown.length }, openWindows, false)); };
   /** Floating: at the pointer when carried out of the grid, else where it floated last. */
   const float = (id: PanelId, point?: { x: number; y: number }) => {
     const stage = stageRef.current?.getBoundingClientRect(), size = sizeOf(id);
@@ -478,63 +522,78 @@ export function NebulaDesk({ mode, date, today, modes, modeLabels, dirty, title,
   const commandOf = (id: PanelId) => id === 'entries' || id === 'notes' || id === 'activities' ? `./${id}.sh ${dayArg}` : ({ data: './data.sh', board: './board.sh', calendar: './calendar.sh', notebook: './notes.sh --tree' } as Record<string, string>)[id];
   const panelContent: Record<PanelId, ReactNode> = { entries, data, board, notes, activities, calendar, notebook };
   const isDefault = JSON.stringify(layout) === JSON.stringify(defaultLayout());
+  const [barSlots, setBarSlots] = useState<{ center: HTMLElement; end: HTMLElement } | null>(null);
+  useLayoutEffect(() => {
+    const center = document.querySelector<HTMLElement>('.nebula-bar-center'), end = document.querySelector<HTMLElement>('.nebula-bar-end');
+    setBarSlots(center && end ? { center, end } : null);
+  }, []);
+  const barViews = <>
+    <nav className="nebula-tabs" aria-label={language === 'en' ? 'Journal views' : 'Journalansichten'}>
+      {modes.map((value, index) => <button type="button" key={value} className="nebula-tab" data-period-mode={value} aria-current={mode === value ? 'page' : undefined}
+        title={`${modeLabels[index]} · ${t('Strg')} ${index + 1}`} onClick={() => onMode(value)}>
+        <span className="nebula-tab-long">{modeLabels[index]}</span><span className="nebula-tab-short" aria-hidden="true">{modeLabels[index][0]}</span>
+        {index === 0 && dirty && <span className="unsaved-dot" aria-label={t('Ungespeicherte Änderungen')} />}
+      </button>)}
+    </nav>
+  </>;
+  const barEnd = <>
+    {onNotebookToggle && <button type="button" className={`nebula-notebook-toggle${notebookOpen ? ' is-open' : ''}`} aria-expanded={notebookOpen} aria-keyshortcuts="Control+Shift+N"
+      title={notebookOpen ? t('Notizen schließen · Strg ⇧ N') : t('Notizen öffnen · Strg ⇧ N')} onClick={onNotebookToggle}>
+      <span className="nebula-calendar-command">./{t('notizen')}</span><Icon name="note" />
+    </button>}
+  </>;
 
-  return <div ref={stageRef} className={`nebula-stage${calendarOpen && !docked('calendar') ? ' is-calendar-open' : ''}${notebookOpen && !docked('notebook') ? ' is-notebook-open' : ''}${focusOpen ? ' is-focus' : ''}`} data-period-mode={mode}>
+  return <div ref={stageRef} className={`nebula-stage${calendarOpen && !docked('calendar') ? ' is-calendar-open' : ''}${notebookOpen && !docked('notebook') ? ' is-notebook-open' : ''}${focusOpen ? ' is-focus' : ''}`} data-period-mode={mode}
+    onPointerDownCapture={event => { if (focusOpen && (event.target as Element).classList?.contains('is-dimmed')) setFocused([]); }}>
+    {barSlots && createPortal(barViews, barSlots.center)}
+    {barSlots && createPortal(barEnd, barSlots.end)}
     <NebulaBackdrop />
     <div className="nebula-desk" ref={scrollRef} inert={disabled}>
-      <aside className="nebula-rail nebula-paper" aria-label={t('Navigation')}>
-        <div className="nebula-rail-head">
-          <span className="nebula-glyphs" aria-hidden="true">+ ×</span>
-          <dl className="nebula-status">
-            <div><dt>{t('Einträge')}</dt><dd data-stat="entries">{stats.entries}</dd></div>
-            <div><dt>{t('offen')}</dt><dd data-stat="open">{stats.open}</dd></div>
-            <div><dt>{t('Bewertung')}</dt><dd data-stat="rating">{rating ?? '–'}</dd></div>
-          </dl>
+
+      <div className="nebula-side">
+      <aside ref={posterRef} className="nebula-poster nebula-paper" aria-label={t('Überblick')}>
+        <div className="nebula-bar" aria-hidden="true" />
+        <div className="nebula-poster-figure" data-figure={figure}>{figure}</div>
+        <hr />
+        <div className="nebula-poster-date" title={caption}>{datePicker}</div>
+        {mode === 'day' ? <input className="nebula-poster-title" aria-label={t('Titel')} disabled={disabled} value={title} placeholder={'[ ' + t('Gib deinem Tag einen Namen …') + ' ]'} onChange={event => onTitleChange(event.target.value)} /> : <p className="nebula-poster-title">[ {title.trim() || periodTitle(date, mode)} ]</p>}
+        <p className="nebula-poster-prose">{prose}</p>
+        <div className="nebula-poster-controls">
+          <div className="nebula-day-nav" role="group" aria-label={mode === 'day' ? t('Tagesnavigation') : language === 'en' ? 'Period navigation' : 'Zeitraumnavigation'}>
+            <button type="button" className="nebula-step" aria-label={stepLabels.prev.label} title={stepLabels.prev.tip} onClick={() => onStep(-1)}><Icon name="left" /></button>
+            <button type="button" className="nebula-today" disabled={isToday} title={t('Heute · Alt H')} onClick={onToday}>[ {t('Heute')} ]</button>
+            <button type="button" className="nebula-step" aria-label={stepLabels.next.label} title={stepLabels.next.tip} onClick={() => onStep(1)}><Icon name="right" /></button>
+          </div>
+          {mode === 'day' && <div className="nebula-poster-tags">{tagFilter}</div>}
         </div>
-        <div className="nebula-day-nav" role="group" aria-label={mode === 'day' ? t('Tagesnavigation') : language === 'en' ? 'Period navigation' : 'Zeitraumnavigation'}>
-          <button type="button" className="nebula-step" aria-label={stepLabels.prev.label} title={stepLabels.prev.tip} onClick={() => onStep(-1)}><Icon name="left" /></button>
-          <button type="button" className="nebula-today" disabled={isToday} title={t('Heute · Alt H')} onClick={onToday}>[ {t('Heute')} ]</button>
-          <button type="button" className="nebula-step" aria-label={stepLabels.next.label} title={stepLabels.next.tip} onClick={() => onStep(1)}><Icon name="right" /></button>
-        </div>
-        <div className="nebula-rail-date">{datePicker}</div>
-        <nav className="nebula-tabs" aria-label={language === 'en' ? 'Journal views' : 'Journalansichten'}>
-          {modes.map((value, index) => <button type="button" key={value} className="nebula-tab" data-period-mode={value} aria-current={mode === value ? 'page' : undefined}
-            title={`${modeLabels[index]} · ${t('Strg')} ${index + 1}`} onClick={() => onMode(value)}>
-            <span className="nebula-hook" aria-hidden="true" /><span>{modeLabels[index]}</span>{index === 0 && dirty && <span className="unsaved-dot" aria-label={t('Ungespeicherte Änderungen')} />}
-          </button>)}
-        </nav>
-        {mode === 'day' && <div className="nebula-rail-tags">{tagFilter}</div>}
-        <button type="button" className={`nebula-calendar-toggle${calendarOpen ? ' is-open' : ''}`} aria-expanded={calendarOpen} aria-keyshortcuts="Control+K"
-          title={calendarOpen ? t('Kalender schließen · Strg K') : t('Kalender öffnen · Strg K')} onClick={onCalendarToggle}>
-          <span className="nebula-calendar-command">./{t('kalender')}</span><span className="nebula-calendar-keys"><kbd>{t('Strg')}</kbd> <kbd>K</kbd></span>
-        </button>
-        {onNotebookToggle && <button type="button" className={`nebula-notebook-toggle${notebookOpen ? ' is-open' : ''}`} aria-expanded={notebookOpen} aria-keyshortcuts="Control+Shift+N"
-          title={notebookOpen ? t('Notizen schließen · Strg ⇧ N') : t('Notizen öffnen · Strg ⇧ N')} onClick={onNotebookToggle}>
-          <span className="nebula-calendar-command">./{t('notizen')}</span><span className="nebula-calendar-keys"><kbd>{t('Strg')}</kbd> <kbd>⇧</kbd> <kbd>N</kbd></span>
-        </button>}
-        <span className="nebula-rail-arrow" aria-hidden="true">×+ ───────→</span>
+        <Orbit />
+        <div className="nebula-bar is-foot" aria-hidden="true" />
       </aside>
+      <NebulaCalendarPanel mode={mode} date={date} today={today} onPick={onNavigate} dayCalendar={dayCalendar} calendarOpen={calendarOpen} onCalendarToggle={onCalendarToggle}
+        focused={isFocused('overview')} dimmed={dimmedNow('overview')} onFocus={() => toggleFocus('overview')} />
+      </div>
 
       <div className="nebula-terminals">
         {/* The grid of windows (twelve columns). A carried window follows the pointer; a violet bar marks where it lands. */}
         <div ref={gridRef} className={`nebula-grid${drop ? ' is-dragging' : ''}${drop && !drop.out && !drop.target.beside && drop.target.index === shown.filter(id => id !== drop.id).length && (!drop.floating || drop.shift) ? ' is-drop-end' : ''}`}>
-          {shown.map((id, index) => {
+          {(display => shown.map((id, index) => {
             const others = drop ? shown.filter(other => other !== drop.id) : shown;
             const marking = drop && !drop.out && (!drop.floating || drop.shift) && drop.id !== id;
             const mark: 'top' | 'split-left' | 'split-right' | null = !marking ? null : drop.target.beside?.id === id ? (drop.target.beside.side === 'left' ? 'split-left' : 'split-right')
               : !drop.target.beside && others.indexOf(id) === drop.target.index ? 'top' : null;
             const row = rowsOf(layout, shown).find(list => list.includes(id)) ?? [];
-            const neighbour = row[row.indexOf(id) + 1] ?? row[row.indexOf(id) - 1];
+            // With an upright bar in the row the open window there takes its columns; width is not shared with it then.
+            const neighbour = row.some(other => display.upright.includes(other)) ? undefined : row[row.indexOf(id) + 1] ?? row[row.indexOf(id) - 1];
             const window = id === 'calendar' || id === 'notebook' ? id : null;
-            return [<Panel key={id} id={id} command={commandOf(id)} label={panelLabels[id]} minimized={layout.minimized.includes(id)} span={spanOf(layout, id)} height={layout.heights[id] ?? (window ? 560 : undefined)}
-              held={held?.id === id ? held : null} dropBefore={mark} pair={neighbour ? { id: neighbour, total: spanOf(layout, id) + spanOf(layout, neighbour) } : null}
+            return [<Panel key={id} id={id} command={commandOf(id)} label={panelLabels[id]} minimized={layout.minimized.includes(id)} span={spanOf(layout, id)} shownSpan={display.spans[id] ?? spanOf(layout, id)} upright={display.upright.includes(id)} pull={display.pull[id]} rowStart={row[0] === id} height={layout.heights[id] ?? (window ? 560 : undefined)}
+              held={held?.id === id ? held : null} dropBefore={mark} focused={isFocused(id)} dimmed={dimmedNow(id)} onFocus={() => toggleFocus(id)} pair={neighbour ? { id: neighbour, total: spanOf(layout, id) + spanOf(layout, neighbour) } : null}
               onGrab={event => grab(id, event)} onMinimize={() => changeLayout(current => toggleMinimized(current, id))} onHalf={() => changeLayout(current => toggleHalf(current, id))}
               onSpan={span => changeLayout(current => span == null ? setSpan(current, id, columns) : resizeInRow(current, shown, id, span))} onHeight={height => changeLayout(current => setHeight(current, id, height))}
               onFloat={() => float(id)} onClose={window === 'calendar' ? onCalendarClose : window === 'notebook' ? onNotebookClose : undefined}>
               <div className={window === 'calendar' ? 'nebula-calendar-body' : window === 'notebook' ? 'nebula-notebook-body' : 'nebula-panel-content'}
                 ref={window === 'calendar' ? calendarRef as React.RefObject<HTMLDivElement> : window === 'notebook' ? notebookRef as React.RefObject<HTMLDivElement> : undefined}>{panelContent[id]}</div>
             </Panel>, showMarquee && index === 0 ? <Marquee key="marquee" words={mode === 'day' ? [word, word, title.trim() || word] : [word, word, periodTitle(date, mode)]} /> : null];
-          })}
+          }))(displaySpans(layout, shown))}
           {drop?.floating && !drop.shift && !drop.out && <p className="nebula-dock-hint" role="status">{t('⇧ halten und loslassen: hier andocken')}</p>}
         </div>
         {drop?.out && <p className="nebula-detach-hint" role="status">{t('Loslassen: als eigenes Fenster')}</p>}
@@ -545,33 +604,19 @@ export function NebulaDesk({ mode, date, today, modes, modeLabels, dirty, title,
             : <p className="nebula-empty">[ {t('Keine Termine in Sicht.')} ]</p>}
         </section>
       </div>
-
-      <div className="nebula-side">
-      <aside ref={posterRef} className="nebula-poster nebula-paper" aria-label={t('Überblick')}>
-        <div className="nebula-bar" aria-hidden="true" />
-        <div className="nebula-poster-figure" data-figure={figure}>{figure}</div>
-        <hr />
-        <p className="nebula-poster-caption">{caption}</p>
-        <p className="nebula-poster-title">[ {title.trim() || (mode === 'day' ? t('Gib deinem Tag einen Namen …') : periodTitle(date, mode))} ]</p>
-        <p className="nebula-poster-prose">{prose}</p>
-        <Orbit />
-        <div className="nebula-bar is-foot" aria-hidden="true" />
-      </aside>
-      <NebulaCalendarPanel mode={mode} date={date} today={today} onPick={onNavigate} dayCalendar={dayCalendar} />
-      </div>
     </div>
 
     {/* Focus: everything but the focused window lies under a dark veil; a click on it ends the focus. */}
-    {focusOpen && <div className="nebula-dim" aria-hidden="true" onPointerDown={() => setFocused(null)} />}
+    {focusOpen && <div className="nebula-dim" aria-hidden="true" onPointerDown={() => setFocused([])} />}
     {/* The calendar and the notebook as windows of their own over the desk; they stay mounted (closed: inert and hidden). */}
-    {!docked('calendar') && <DeskWindow id="calendar" stage={stageRef} sectionRef={calendarRef} open={calendarOpen} front={front === 'calendar'} focused={focused === 'calendar' && calendarOpen} command="./calendar.sh"
+    {!docked('calendar') && <DeskWindow id="calendar" stage={stageRef} sectionRef={calendarRef} open={calendarOpen} front={front === 'calendar'} focused={isFocused('calendar')} dimmed={dimmedNow('calendar')} command="./calendar.sh"
       label={t('Kalender und Navigation')} closeLabel={t('Kalender schließen')} className="nebula-calendar" bodyClass="nebula-calendar-body" disabled={disabled} drag={floatingDrag('calendar')}
       onClose={onCalendarClose} onFront={() => setFront('calendar')} onFocus={() => toggleFocus('calendar')} onDock={() => dockAtEnd('calendar')}>{calendar}</DeskWindow>}
-    {notebook && !docked('notebook') && <DeskWindow id="notebook" stage={stageRef} sectionRef={notebookRef} open={notebookOpen} front={front === 'notebook'} focused={focused === 'notebook' && notebookOpen} command="./notes.sh --tree"
+    {notebook && !docked('notebook') && <DeskWindow id="notebook" stage={stageRef} sectionRef={notebookRef} open={notebookOpen} front={front === 'notebook'} focused={isFocused('notebook')} dimmed={dimmedNow('notebook')} command="./notes.sh --tree"
       label={t('Notizen')} closeLabel={t('Notizen schließen')} className="nebula-notebook" bodyClass="nebula-notebook-body" disabled={disabled} drag={floatingDrag('notebook')}
       onClose={() => onNotebookClose?.()} onFront={() => setFront('notebook')} onFocus={() => toggleFocus('notebook')} onDock={() => dockAtEnd('notebook')}>{notebook}</DeskWindow>}
     {/* The day's own windows taken out of the grid float like the calendar (they cannot be closed, only docked again). */}
-    {floatingOwn.map(id => <DeskWindow key={id} id={id} stage={stageRef} open front={front === id} focused={focused === id} command={commandOf(id)} label={panelLabels[id]}
+    {floatingOwn.map(id => <DeskWindow key={id} id={id} stage={stageRef} open front={front === id} focused={isFocused(id)} dimmed={dimmedNow(id)} command={commandOf(id)} label={panelLabels[id]}
       className={`nebula-floating nebula-terminal is-${id}`} bodyClass="nebula-terminal-body nebula-floating-body" disabled={disabled} drag={floatingDrag(id)}
       onFront={() => setFront(id)} onFocus={() => toggleFocus(id)} onDock={() => dockAtEnd(id)}>{panelContent[id]}</DeskWindow>)}
   </div>;

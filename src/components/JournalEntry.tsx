@@ -32,7 +32,7 @@ interface TextSelection { start: number; end: number; direction: 'forward' | 'ba
 export const JournalEntry = memo(function JournalEntry({ layout, entry, day, tag, tagFirst, tagLast, traceSaved, isNew, isOpen, isGroupStart, canMoveUp, canMoveDown, dragState, drag, onMoveOffset, onOpenChange, onChange, onRemove, onLinkedChange, onCreate, onNavigate, focusEntryId, focusMoveEntryId }: {
   layout: ActionLayout; entry: Entry; day: string; traceSaved: boolean;
   /** The entry's tag; entries of one tag follow each other, the first of them names it (`tagFirst`). */
-  tag: Tag | null; tagFirst: boolean; tagLast: boolean; onNavigate: (date: string) => void; onCreate: (kind: Entry['kind'], afterId: string) => void; isNew: boolean; isOpen: boolean; onOpenChange: (id: string, open: boolean) => void;
+  tag: Tag | null; tagFirst: boolean; tagLast: boolean; onNavigate: (date: string) => void; onCreate: (kind: Entry['kind'], afterId: string, withoutTag?: boolean) => void; isNew: boolean; isOpen: boolean; onOpenChange: (id: string, open: boolean) => void;
   onChange: (id: string, change: EntryChange) => void; onRemove: (id: string) => void; focusEntryId: { current: string | null };
   /** The same action for linked entries elsewhere (chosen in ScopeChoice). */
   onLinkedChange: (others: ScopeOption['others'], action: LinkedAction) => void;
@@ -232,6 +232,7 @@ export const JournalEntry = memo(function JournalEntry({ layout, entry, day, tag
       if (!focusText(target) && event.key === 'ArrowUp') focusText(titleInput());
       return true;
     }
+    if (text && event.ctrlKey && !event.altKey && !event.shiftKey && !event.metaKey && event.key === 'Enter' && !event.nativeEvent.isComposing) { onCreate(entry.kind, entry.id, true); return true; }
     if (!text || !plain || event.nativeEvent.isComposing) return false;
     if (event.key === 'Enter' && !event.shiftKey) { onCreate(entry.kind, entry.id); return true; }
     if (event.key === 'Backspace' && text.value === '' && !trace) {

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { attachmentsOf, canMoveFolder, connectPatches, disconnectPatches, flatTree, folderPath, folderWithin, nextFolderOrder, notesIn, onDayPatch, pagesOf, removalIds, removalPatches, threadKind, threads, visibleTree } from '../src/notebook.ts';
+import { primaryPatches, attachmentsOf, canMoveFolder, connectPatches, disconnectPatches, flatTree, folderPath, folderWithin, nextFolderOrder, notesIn, onDayPatch, pagesOf, removalIds, removalPatches, threadKind, threads, visibleTree } from '../src/notebook.ts';
 
 const folder = (id, name, parent = null, order = 1) => ({ id, name, parent, order });
 const card = (id, kind, extra = {}) => ({ id, kind, title: id, text: '', dates: [], order: 1, ...extra });
@@ -49,9 +49,8 @@ test('threads tie both cards: an image or link to a note is an attachment, two n
   let cards = [card('n1', 'note'), card('n2', 'note'), card('img', 'image'), card('url', 'link')];
   assert.equal(threadKind(cards[0], cards[2]), 'attachment');
   assert.equal(threadKind(cards[0], cards[1]), 'page');
-  assert.equal(threadKind(cards[2], cards[3]), null);
-  // Two images (or an image and a link) cannot be tied, nor a card to itself.
-  assert.deepEqual(connectPatches(cards, 'img', 'url'), {});
+  assert.equal(threadKind(cards[2], cards[3]), 'bundle');
+  // A card cannot be tied to itself.
   assert.deepEqual(connectPatches(cards, 'n1', 'n1'), {});
   cards = apply(cards, connectPatches(cards, 'n1', 'img'));
   cards = apply(cards, connectPatches(cards, 'url', 'n1'));
@@ -112,4 +111,21 @@ test('notes sort by title, by when they were made and by when they were last edi
   assert.deepEqual(sortNotes(notes, 'created').map(c => c.id), ['c', 'b', 'd', 'a', 'e'], 'Newest first; an old note counts from its day.');
   assert.deepEqual(sortNotes(notes, 'updated').map(c => c.id), ['c', 'a', 'b', 'd', 'e'], 'Last edited first; never edited counts from when it was made.');
   assert.deepEqual(notes.map(c => c.id), ['a', 'b', 'c', 'd', 'e'], 'The list itself stays as it was.');
+});
+
+test('images and links tied to each other hang on a note as a bundle; the main note is the first page', () => {
+  let cards = [card('n1', 'note'), card('n2', 'note'), card('n3', 'note'), card('a', 'image'), card('b', 'link'), card('c', 'image')];
+  for (const [x, y] of [['a', 'b'], ['b', 'c'], ['c', 'n1'], ['n1', 'n2'], ['n2', 'n3']]) cards = apply(cards, connectPatches(cards, x, y));
+  const get = id => cards.find(c => c.id === id);
+  assert.deepEqual(attachmentsOf(cards, get('n1')).map(c => c.id), ['c', 'b', 'a'], 'One thread brings the whole bundle.');
+  assert.deepEqual(attachmentsOf(cards, get('n2')).map(c => c.id), [], 'Through another note nothing is attached.');
+  assert.deepEqual(pagesOf(cards, get('n3')).map(c => c.id), ['n3', 'n2', 'n1'], 'Notes tied in a chain are all pages.');
+  cards = apply(cards, primaryPatches(cards, 'n2'));
+  assert.deepEqual(pagesOf(cards, get('n3')).map(c => c.id), ['n2', 'n3', 'n1'], 'The main note comes first.');
+  cards = apply(cards, primaryPatches(cards, 'n1'));
+  assert.equal(get('n2').primary, false, 'Only one main note in a group.');
+  assert.equal(pagesOf(cards, get('n2'))[0].id, 'n1');
+  cards = apply(cards, primaryPatches(cards, 'n1'));
+  assert.equal(get('n1').primary, false, 'Again: no main note.');
+  assert.deepEqual(primaryPatches(cards, 'a'), {}, 'Only notes can be main notes.');
 });

@@ -1,13 +1,14 @@
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { Icon } from './Icon';
 import { Popover } from './Popover';
 import { useLanguage } from '../i18n';
-import { BoardImage, Lightbox, Note, connectCards, disconnectCards, hostOf, httpsLink, linkPreview, nextOrder, source, storeImage, useCards, useFolders, usePixelTheme, waitForCard } from '../boardCards';
+import { BoardImage, Lightbox, Note, connectCards, disconnectCards, togglePrimaryNote, hostOf, httpsLink, linkPreview, nextOrder, source, storeImage, useCards, useFolders, usePixelTheme, waitForCard } from '../boardCards';
 import type { Card, Paper } from '../boardCards';
 import { folderPath, threadKind, threads } from '../notebook';
+import { resizeBoardView } from '../boardViewport';
 import './bulletinBoard.css';
 export { flushBoardData } from '../boardCards';
 
@@ -51,6 +52,52 @@ export function BulletinBoard({ date }: { date: string }) {
   const [dragging, setDragging] = useState<{ id: string; x: number; y: number } | null>(null);
   const [sizing, setSizing] = useState<{ id: string; w: number; h?: number } | null>(null);
   const [width, setWidth] = useState(640), [heights, setHeights] = useState<Record<string, number>>({});
+  const viewportRef = useRef<HTMLDivElement>(null), canvasWidth = useRef(0);
+  const viewportSize = useRef({ width: 0, height: 0 });
+  const resizeReference = useRef({ width: 0, height: 0, scale: 1 });
+  const growingHeight = useRef(0);
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [panning, setPanning] = useState(false);
+  const [viewportHeight, setViewportHeight] = useState(380);
+  const cardDragCleanup = useRef<(() => void) | null>(null);
+  useEffect(() => () => cardDragCleanup.current?.(), []);
+  const scale = zoom;
+  const camera = useRef({ zoom, scale, pan }); camera.current = { zoom, scale, pan };
+  useEffect(() => {
+    const viewport = viewportRef.current; if (!viewport) return;
+    // Over the board the page scrolls on as usual; Ctrl+wheel zooms the board, Shift+wheel moves it sideways.
+    const wheel = (event: WheelEvent) => {
+      if (event.shiftKey && !event.ctrlKey) {
+        event.preventDefault(); event.stopPropagation();
+        const current = camera.current, delta = event.deltaX || event.deltaY;
+        setPan({ x: current.pan.x - delta, y: current.pan.y });
+        return;
+      }
+      if (!event.ctrlKey) return; event.preventDefault(); event.stopPropagation();
+      const current = camera.current, next = Math.max(.02, Math.min(8, current.zoom * Math.exp(-event.deltaY * .002)));
+      const rect = viewport.getBoundingClientRect(), ratio = viewport.clientWidth / rect.width;
+      const point = { x: (event.clientX - rect.left) * ratio, y: (event.clientY - rect.top) * ratio };
+      setPan({ x: point.x - (point.x - current.pan.x) * next / current.zoom, y: point.y - (point.y - current.pan.y) * next / current.zoom });
+      setZoom(next);
+      resizeReference.current = { ...viewportSize.current, scale: next };
+    };
+    viewport.addEventListener('wheel', wheel, { passive: false });
+    return () => viewport.removeEventListener('wheel', wheel);
+  }, []);
+  function startPan(event: ReactPointerEvent<HTMLDivElement>) {
+    if (event.button !== 0 || (event.target as Element).closest('.board-card,.board-thread-hit,button,input,textarea,a,[contenteditable=true]')) return;
+    event.preventDefault(); event.stopPropagation();
+    const element = event.currentTarget, origin = { ...pan }, x = event.clientX, y = event.clientY;
+    const ratio = element.clientWidth / element.getBoundingClientRect().width;
+    element.setPointerCapture(event.pointerId); setPanning(true);
+    const move = (e: PointerEvent) => { if (e.pointerId === event.pointerId) setPan({ x: origin.x + (e.clientX - x) * ratio, y: origin.y + (e.clientY - y) * ratio }); };
+    const end = (e: PointerEvent) => {
+      if (e.pointerId !== event.pointerId) return;
+      element.removeEventListener('pointermove', move); element.removeEventListener('pointerup', end); element.removeEventListener('pointercancel', end); element.removeEventListener('lostpointercapture', end); setPanning(false);
+    };
+    element.addEventListener('pointermove', move); element.addEventListener('pointerup', end); element.addEventListener('pointercancel', end); element.addEventListener('lostpointercapture', end);
+  }
   const upload = useRef<HTMLInputElement>(null), boardRef = useRef<HTMLDivElement>(null);
   const visible = cards.filter(c => c.dates?.includes(date)).sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
   const topZ = Math.max(0, ...visible.map(c => c.z ?? 0));
@@ -59,7 +106,7 @@ export function BulletinBoard({ date }: { date: string }) {
   const placed = visible.map((card, index) => {
     const free = Math.max(0, width - widthOf(card) - 16);
     const auto = { x: columns > 1 ? (index % columns) / (columns - 1) : 0, y: 18 + Math.floor(index / columns) * 250 };
-    const x = dragging?.id === card.id ? dragging.x : Math.round(8 + (card.x ?? auto.x) * free);
+    const x = dragging?.id === card.id ? dragging.x : card.boardX ?? Math.round(8 + (card.x ?? auto.x) * free);
     const y = dragging?.id === card.id ? dragging.y : card.y ?? auto.y;
     return { card, x, y, z: dragging?.id === card.id ? topZ + 1 : card.z ?? 0 };
   });
@@ -67,13 +114,31 @@ export function BulletinBoard({ date }: { date: string }) {
   useLayoutEffect(() => {
     const board = boardRef.current; if (!board) return;
     const measure = () => {
-      setWidth(board.clientWidth);
+      const viewport = viewportRef.current!;
+      const size = { width: viewport.clientWidth, height: viewport.clientHeight };
+      if (size.width <= 0 || size.height <= 0) return;
+      if (!canvasWidth.current) { canvasWidth.current = size.width; setWidth(size.width); }
+      const previous = viewportSize.current, view = camera.current;
+      if (!previous.width) resizeReference.current = { ...size, scale: view.scale };
+      else if (size.width !== previous.width || size.height !== previous.height) {
+        // Only a window with a set height is resized by hand; otherwise the board's own height follows its cards, and
+        // that growth must neither zoom nor shift the view (nor undo a drag by zooming out).
+        if (size.width === previous.width && (!viewport.closest('.nebula-panel-body.has-height') || Math.abs(size.height - growingHeight.current) < 2)) {
+          resizeReference.current = { ...size, scale: view.scale };
+          growingHeight.current = 0;
+        } else {
+          const next = resizeBoardView(view, previous, size, resizeReference.current);
+          camera.current = { zoom: next.scale, ...next };
+          setZoom(next.scale); setPan(next.pan);
+        }
+      }
+      viewportSize.current = size;
       const next: Record<string, number> = {};
       board.querySelectorAll<HTMLElement>('.board-card').forEach(el => { next[el.dataset.boardId!] = el.offsetHeight; });
       setHeights(old => Object.keys(next).length === Object.keys(old).length && Object.entries(next).every(([k, v]) => old[k] === v) ? old : next);
     };
     measure();
-    const observer = new ResizeObserver(measure); observer.observe(board);
+    const observer = new ResizeObserver(measure); observer.observe(board); if (viewportRef.current) observer.observe(viewportRef.current);
     board.querySelectorAll('.board-card').forEach(el => observer.observe(el));
     return () => observer.disconnect();
   }, [visible.length, cards]);
@@ -85,9 +150,9 @@ export function BulletinBoard({ date }: { date: string }) {
     for (let row = 0; row < 40; row++) for (let col = 0; col < columns; col++) {
       const share = columns > 1 ? col / (columns - 1) : 0, x = 8 + share * Math.max(0, width - w - 16), y = 18 + row * 120;
       if (!placed.some(p => x < p.x + widthOf(p.card) + 12 && x + w + 12 > p.x && y < p.y + (heights[p.card.id] ?? 220) + 12 && y + 200 > p.y))
-        return { x: share, y };
+        return { x: share, boardX: x, y };
     }
-    return { x: 0, y: boardHeight - 20 };
+    return { x: 0, boardX: 8, y: boardHeight - 20 };
   }
   async function add(kind: Card['kind'], extra: Partial<Card> = {}) {
     const id = crypto.randomUUID();
@@ -116,11 +181,11 @@ export function BulletinBoard({ date }: { date: string }) {
     const first = cards.find(c => c.id === a), second = cards.find(c => c.id === b);
     if (!first || !second) return;
     const kind = threadKind(first, second);
-    if (!kind) { setMessage(tr('Bilder und Links lassen sich nur mit einem Zettel verbinden.', 'Images and links can only be tied to a note.')); return; }
     const done = connectCards(a, b);
     if (!done) { setMessage(tr('Schon verbunden.', 'Already tied.')); return; }
     setMessage(kind === 'page' ? tr('Verbunden · Seite: Die Zettel sind im Notizblock Seiten voneinander.', 'Tied · Page: the notes are pages of each other in the notebook.')
-      : tr('Verbunden · Anhang: Im Notizblock hängt es am Zettel.', 'Tied · Attachment: it hangs on the note in the notebook.'));
+      : kind === 'bundle' ? tr('Verbunden · Bündel: Ein Faden vom Bündel zu einem Zettel hängt alles daran.', 'Tied · Bundle: one thread from the bundle to a note attaches all of it.')
+      : tr('Verbunden · Anhang: Im Notizblock hängt es am Zettel (mit allem, was daran verbunden ist).', 'Tied · Attachment: it hangs on the note in the notebook (with everything tied to it).'));
     void done.catch(e => setMessage(String(e)));
   }
   // Drawing from a pin: a taut thread follows the pointer; let go on a card, they are tied.
@@ -129,7 +194,7 @@ export function BulletinBoard({ date }: { date: string }) {
     event.preventDefault(); event.stopPropagation();
     const element = event.currentTarget, surface = boardRef.current!.getBoundingClientRect();
     element.setPointerCapture(event.pointerId);
-    const at = (e: PointerEvent | ReactPointerEvent) => ({ x: e.clientX - surface.left, y: e.clientY - surface.top });
+    const at = (e: PointerEvent | ReactPointerEvent) => ({ x: (e.clientX - surface.left) / scale, y: (e.clientY - surface.top) / scale });
     const target = (e: PointerEvent) => { const id = document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>('.board-card')?.dataset.boardId; return id && id !== card.id ? id : null; };
     setLinking({ from: card.id, ...at(event), over: null });
     const move = (e: PointerEvent) => setLinking({ from: card.id, ...at(e), over: target(e) });
@@ -166,22 +231,69 @@ export function BulletinBoard({ date }: { date: string }) {
   function grab(event: ReactPointerEvent<HTMLElement>, card: Card, x: number, y: number) {
     if (event.button !== 0 || (event.target as Element).closest('input, textarea, button, a, [contenteditable="true"], .cm-editor, .entry-text, .board-image')) return;
     event.preventDefault();
-    const element = event.currentTarget; element.setPointerCapture(event.pointerId);
-    const start = { px: event.clientX, py: event.clientY, x, y };
+    const element = event.currentTarget, viewport = viewportRef.current!;
+    element.setPointerCapture(event.pointerId);
+    cardDragCleanup.current?.();
+    const point = { x: event.clientX, y: event.clientY };
+    const worldPoint = () => {
+      const box = viewport.getBoundingClientRect(), ratio = viewport.clientWidth / box.width, view = camera.current;
+      return { x: ((point.x - box.left) * ratio - view.pan.x) / view.scale, y: ((point.y - box.top) * ratio - view.pan.y) / view.scale };
+    };
+    const initial = worldPoint(), offset = { x: initial.x - x, y: initial.y - y };
+    const start = { px: event.clientX, py: event.clientY };
     let last = { x, y }, moved = false;
-    const move = (e: PointerEvent) => {
-      const free = Math.max(0, width - widthOf(card) - 16);
-      last = { x: Math.max(8, Math.min(8 + free, start.x + e.clientX - start.px)), y: Math.max(4, start.y + e.clientY - start.py) };
-      moved ||= Math.hypot(e.clientX - start.px, e.clientY - start.py) > 3;
+    let frame = 0, previousFrame = performance.now();
+    const update = () => {
+      const at = worldPoint();
+      last = { x: at.x - offset.x, y: at.y - offset.y };
       setDragging({ id: card.id, ...last });
+      // Ordinary boards grow with the card. A deliberately sized window keeps its
+      // frame and reveals more world space by panning at its edge instead.
+      if (!viewport.closest('.nebula-panel-body.has-height')) {
+        const view = camera.current;
+        setViewportHeight(current => {
+          const next = Math.max(current, view.pan.y + (last.y + (heights[card.id] ?? element.offsetHeight) + 36) * view.scale);
+          if (next > current) growingHeight.current = next;
+          return next;
+        });
+      }
     };
-    const end = () => {
-      element.removeEventListener('pointermove', move); element.removeEventListener('pointerup', end); element.removeEventListener('pointercancel', end);
+    const animate = (now: number) => {
+      const seconds = Math.min(.05, (now - previousFrame) / 1000); previousFrame = now;
+      if (moved) {
+        const box = viewport.getBoundingClientRect(), ratio = viewport.clientWidth / box.width;
+        const speed = (value: number, min: number, max: number) => value < min ? Math.min(700, (min - value) * 5 + 100) : value > max ? -Math.min(700, (value - max) * 5 + 100) : 0;
+        const dx = speed(point.x, box.left, box.right) * ratio * seconds;
+        const dy = point.y < box.top || viewport.closest('.nebula-panel-body.has-height') ? speed(point.y, box.top, box.bottom) * ratio * seconds : 0;
+        if (dx || dy) {
+          const pan = { x: camera.current.pan.x + dx, y: camera.current.pan.y + dy };
+          camera.current = { ...camera.current, pan }; setPan(pan);
+        }
+        update();
+      }
+      frame = requestAnimationFrame(animate);
+    };
+    const move = (e: PointerEvent) => {
+      if (e.pointerId !== event.pointerId) return;
+      point.x = e.clientX; point.y = e.clientY;
+      moved ||= Math.hypot(e.clientX - start.px, e.clientY - start.py) > 3;
+      if (moved) update();
+    };
+    const cleanup = () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', end); window.removeEventListener('pointercancel', end);
+      cardDragCleanup.current = null;
+    };
+    const end = (e: PointerEvent) => {
+      if (e.pointerId !== event.pointerId) return;
+      if (moved && e.type === 'pointerup') { point.x = e.clientX; point.y = e.clientY; update(); }
+      cleanup();
       setDragging(null);
-      const free = Math.max(1, width - widthOf(card) - 16);
-      void patch(card.id, moved ? { x: Math.max(0, Math.min(1, (last.x - 8) / free)), y: Math.round(last.y), z: topZ + 1 } : { z: topZ + 1 });
+      if (e.type === 'pointerup') void patch(card.id, moved ? { boardX: Math.round(last.x), y: Math.round(last.y), z: topZ + 1 } : { z: topZ + 1 });
     };
-    element.addEventListener('pointermove', move); element.addEventListener('pointerup', end); element.addEventListener('pointercancel', end);
+    cardDragCleanup.current = cleanup;
+    frame = requestAnimationFrame(animate);
+    window.addEventListener('pointermove', move); window.addEventListener('pointerup', end); window.addEventListener('pointercancel', end);
   }
   // The corner sets the size (a note's height as well); a double click there resets it.
   function resize(event: ReactPointerEvent<HTMLElement>, card: Card, x: number) {
@@ -192,28 +304,25 @@ export function BulletinBoard({ date }: { date: string }) {
     const start = { px: event.clientX, py: event.clientY, w: article.offsetWidth, h: article.offsetHeight };
     let last: { w: number; h?: number } = { w: start.w, h: card.kind === 'note' ? start.h : undefined };
     const move = (e: PointerEvent) => {
-      const w = Math.round(Math.max(sizes.minWidth, Math.min(sizes.maxWidth, width - x - 8, start.w + e.clientX - start.px)));
-      last = { w, h: card.kind === 'note' ? Math.round(Math.max(sizes.minHeight, Math.min(sizes.maxHeight, start.h + e.clientY - start.py))) : undefined };
+      const w = Math.round(Math.max(sizes.minWidth, Math.min(sizes.maxWidth, start.w + (e.clientX - start.px) / scale)));
+      last = { w, h: card.kind === 'note' ? Math.round(Math.max(sizes.minHeight, Math.min(sizes.maxHeight, start.h + (e.clientY - start.py) / scale))) : undefined };
       setSizing({ id: card.id, ...last });
     };
     const end = () => {
       element.removeEventListener('pointermove', move); element.removeEventListener('pointerup', end); element.removeEventListener('pointercancel', end);
       setSizing(null);
-      const free = Math.max(1, width - last.w - 16);
-      void patch(card.id, { w: last.w, ...last.h ? { h: last.h } : {}, x: Math.max(0, Math.min(1, (x - 8) / free)), z: topZ + 1 });
+      void patch(card.id, { w: last.w, ...last.h ? { h: last.h } : {}, boardX: x, z: topZ + 1 });
     };
     element.addEventListener('pointermove', move); element.addEventListener('pointerup', end); element.addEventListener('pointercancel', end);
   }
   function grow(card: Card, x: number, dw: number, dh: number) {
-    const w = Math.max(sizes.minWidth, Math.min(sizes.maxWidth, width - 16, widthOf(card) + dw));
+    const w = Math.max(sizes.minWidth, Math.min(sizes.maxWidth, widthOf(card) + dw));
     const h = card.kind === 'note' && dh ? Math.max(sizes.minHeight, Math.min(sizes.maxHeight, (card.h ?? heights[card.id] ?? 200) + dh)) : card.h;
-    const free = Math.max(1, width - w - 16);
-    void patch(card.id, { w, ...h ? { h } : {}, x: Math.max(0, Math.min(1, (Math.min(x, width - w - 8) - 8) / free)) });
+    void patch(card.id, { w, ...h ? { h } : {}, boardX: x });
   }
   // Arrow keys move the focused card (Shift: further).
   function nudge(card: Card, x: number, y: number, dx: number, dy: number) {
-    const free = Math.max(1, width - widthOf(card) - 16);
-    void patch(card.id, { x: Math.max(0, Math.min(1, (x + dx - 8) / free)), y: Math.max(4, Math.round(y + dy)), z: topZ + 1 });
+    void patch(card.id, { boardX: Math.round(x + dx), y: Math.round(y + dy), z: topZ + 1 });
   }
 
   return <section className={`bulletin-board${pixelTheme ? ' is-pixel' : ''}`} aria-label={tr('Pinnwand', 'Pinboard')} onKeyDown={e => { if (!(e.ctrlKey && e.shiftKey && e.code === 'KeyN')) e.stopPropagation(); }}>
@@ -239,10 +348,12 @@ export function BulletinBoard({ date }: { date: string }) {
       })}
       <p className="page-hint">{tr('Zettel von anderen Tagen und abgenommene Zettel. Derselbe Zettel – Änderungen erscheinen überall.', 'Notes from other days and taken-down notes. The same note – edits show everywhere.')}</p></div>}
     {(busy || error || message) && <p role="status" className="board-status">{busy ? tr('Wird verarbeitet …', 'Working …') : message || error}</p>}
-    <div ref={boardRef} className={`board-surface${linking ? ' is-linking' : ''}`} style={{ height: boardHeight }}>
+    <div ref={viewportRef} className={`board-viewport board-surface${panning ? ' is-panning' : ''}${linking ? ' is-linking' : ''}`} onPointerDown={startPan}
+      style={{ height: Math.max(viewportHeight, Math.ceil(pan.y + boardHeight * scale)), '--board-scale': scale, '--board-pan-x': `${pan.x}px`, '--board-pan-y': `${pan.y}px` } as CSSProperties}>
+    <div ref={boardRef} className={`board-world${linking ? ' is-linking' : ''}`} style={{ height: boardHeight, width, transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})` }}>
       {!visible.length && <p className="board-empty">{tr('Noch leer.', 'Still empty.')}<span className="page-hint"> {tr('Pinne einen Zettel, ein Bild oder einen Link an.', 'Pin a note, an image or a link.')}</span></p>}
       {placed.map(({ card, x, y, z }) => <article key={card.id} data-board-id={card.id} tabIndex={0}
-        className={`board-card is-${card.kind}${card.kind === 'note' ? ` paper-${card.paper ?? 'yellow'}` : ''}${dragging?.id === card.id ? ' is-moving' : ''}${sizing?.id === card.id ? ' is-sizing' : ''}${card.h ? ' has-height' : ''}${target === card.id ? ' is-link-target' : ''}${linking?.from === card.id || picking?.from === card.id ? ' is-link-source' : ''}`}
+        className={`board-card is-${card.kind}${card.kind === 'note' ? ` paper-${card.paper ?? 'yellow'}` : ''}${dragging?.id === card.id ? ' is-moving' : ''}${sizing?.id === card.id ? ' is-sizing' : ''}${card.h ? ' has-height' : ''}${target === card.id ? ' is-link-target' : ''}${linking?.from === card.id || picking?.from === card.id ? ' is-link-source' : ''}${card.kind === 'note' && card.primary ? ' is-primary' : ''}`}
         style={{ left: x, top: y, zIndex: 1 + z, width: sizing?.id === card.id ? sizing.w : widthOf(card), height: card.kind === 'note' ? (sizing?.id === card.id ? sizing.h : card.h || undefined) : undefined, '--tilt': `${tiltOf(card.id)}deg` } as CSSProperties}
         aria-label={`${card.kind === 'note' ? tr('Zettel', 'Note') : card.kind === 'image' ? tr('Bild', 'Image') : 'Link'}: ${card.title}`}
         onPointerDown={e => grab(e, card, x, y)}
@@ -266,10 +377,16 @@ export function BulletinBoard({ date }: { date: string }) {
           <div className="board-tools">
             {card.kind === 'note' && <button type="button" className="board-paper" aria-label={tr('Papierfarbe', 'Paper colour')} title={tr('Papierfarbe', 'Paper colour')} onClick={() => void patch(card.id, { paper: papers[(papers.indexOf(card.paper ?? 'yellow') + 1) % papers.length] })}><i /></button>}
             {card.kind === 'image' && pixelTheme && <button type="button" className="board-pixel-switch" aria-pressed={!!card.pixel} title={card.pixel ? tr('Normal zeigen', 'Show normal') : tr('Verpixelt zeigen', 'Show pixelated')} onClick={() => void patch(card.id, { pixel: !card.pixel })}><Icon name="month" /></button>}
+            {card.kind === 'note' && card.links?.some(id => cards.find(other => other.id === id)?.kind === 'note') && <button type="button" className="board-primary" aria-pressed={!!card.primary}
+              title={card.primary ? tr('Hauptnotiz (erste Seite im Notizblock) · aufheben', 'Main note (first page in the notebook) · undo') : tr('Als Hauptnotiz markieren: erste Seite im Notizblock', 'Mark as main note: first page in the notebook')}
+              aria-label={tr('Hauptnotiz', 'Main note')} onClick={() => void run(() => togglePrimaryNote(card.id))}><Icon name="priority" /></button>}
             {card.kind === 'note' && <button type="button" className="board-detach" title={tr('Als schwebende Notiz öffnen', 'Open floating note')} aria-label={tr('Als schwebende Notiz öffnen', 'Open floating note')} onClick={() => void run(() => invoke('board_detach', { id: card.id }))}><Icon name="pin" /></button>}
+            {/* Reserved for a function every card will get; it does nothing yet. */}
+            <button type="button" className="board-extra" title={tr('Weitere Funktion (folgt)', 'More (coming)')} aria-label={tr('Weitere Funktion', 'More')}><Icon name="details" /></button>
             <button type="button" className="board-remove" title={tr('Abnehmen (Zettel bleiben unter „Vorhandene“)', 'Take down (notes stay under “Existing”)')} aria-label={tr('Abnehmen', 'Take down')} onClick={() => { const dates = card.dates.filter(d => d !== date); void run(() => patch(card.id, { dates, ...card.onDay && !dates.length ? { onDay: false } : {} })); }}><Icon name="trash" /></button>
           </div>
         </header>
+        {card.kind === 'note' && card.primary && <span className="board-primary-mark" aria-label={tr('Hauptnotiz', 'Main note')}>{tr('Hauptnotiz', 'Main note')}</span>}
         {card.kind === 'note' ? <div className="board-note"><Note card={card} patch={patch} /></div>
           : card.kind === 'image' ? <><BoardImage card={card} onOpen={() => setOpen(card)} /><div className="board-caption"><small>AVIF · {Math.round((card.size ?? 0) / 1024)} KB</small></div></>
           : <button type="button" className="board-link" onClick={() => void run(() => invoke('board_open_link', { url: card.url }))}>
@@ -294,9 +411,13 @@ export function BulletinBoard({ date }: { date: string }) {
         {drawing?.from && drawing.to && <path className="board-thread is-drawing" d={threadPath(drawing.from, drawing.to, pixelTheme, true)} />}
       </svg>}
     </div>
+    </div>
     {threadMenu && <Popover anchor={threadMenu.anchor} className="board-thread-menu" label={tr('Faden', 'Thread')} onClose={() => setThreadMenu(null)}>
       {(() => { const first = cards.find(c => c.id === threadMenu.a), second = cards.find(c => c.id === threadMenu.b); const kind = first && second ? threadKind(first, second) : null;
-        return <p>{titleOf(first)} ↔ {titleOf(second)}<small>{kind === 'page' ? tr('Seite im Notizblock', 'Page in the notebook') : tr('Anhang im Notizblock', 'Attachment in the notebook')}</small></p>; })()}
+        return <><p>{titleOf(first)} ↔ {titleOf(second)}<small>{kind === 'page' ? tr('Seite im Notizblock', 'Page in the notebook') : kind === 'bundle' ? tr('Bündel: hängt gemeinsam an einem Zettel', 'Bundle: hangs on a note together') : tr('Anhang im Notizblock', 'Attachment in the notebook')}</small></p>
+          {/* Two notes: either can be made the main note (the first page of all notes tied together). */}
+          {kind === 'page' && [first!, second!].map(note => <button type="button" key={note.id} className="board-thread-primary" aria-pressed={!!note.primary} onClick={() => void run(() => togglePrimaryNote(note.id))}>
+            <Icon name="priority" />{note.primary ? tr('{0}: Hauptnotiz aufheben', '{0}: undo main note').replace('{0}', titleOf(note)) : tr('{0} als Hauptnotiz', '{0} as main note').replace('{0}', titleOf(note))}</button>)}</>; })()}
       <button type="button" className="board-thread-cut" onClick={() => { const { a, b } = threadMenu; setThreadMenu(null); void run(() => disconnectCards(a, b)); }}><Icon name="cancel" />{tr('Lösen', 'Untie')}</button>
     </Popover>}
     {open && <Lightbox card={open} onClose={() => setOpen(null)} />}

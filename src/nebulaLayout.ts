@@ -25,7 +25,7 @@ export interface NebulaLayout {
 export const own: Record<Family, PanelId[]> = { day: ['entries', 'data', 'board'], period: ['notes', 'activities'] };
 export const windows: readonly WindowId[] = ['calendar', 'notebook'];
 export const columns = 12, minSpan = 3;
-export const defaultLayout = (): NebulaLayout => ({ order: { day: [...own.day], period: [...own.period] }, minimized: [], spans: { data: 6, board: 6 }, docked: [], floating: [], heights: {} });
+export const defaultLayout = (): NebulaLayout => ({ order: { day: [...own.day], period: [...own.period] }, minimized: [], spans: { entries: 7, data: 5 }, docked: [], floating: [], heights: { entries: 520, data: 520, board: 620 } });
 export const spanOf = (layout: NebulaLayout, id: PanelId) => layout.spans[id] ?? columns;
 const isOwn = (id: PanelId) => !windows.includes(id as WindowId);
 
@@ -189,3 +189,40 @@ export function placePanel(layout: NebulaLayout, family: Family, ids: readonly P
   const total = spanOf(next, drop.beside.id), own = Math.max(minSpan, Math.floor(total / 2));
   return setSpan(setSpan(next, drop.beside.id, Math.max(minSpan, total - own)), id, own);
 }
+
+/**
+ * The widths as shown: a minimized window that shares its row with an open one lies on its side as a narrow bar (one
+ * column), and the open window next to it (the next one, else the one before) takes the columns it gives up. A row of
+ * only minimized windows, or a minimized window alone, keeps its widths (bars lying flat). The stored widths stay as
+ * they are, so restoring a window gives back the row it had.
+ */
+export function displaySpans(layout: NebulaLayout, ids: readonly PanelId[]): { spans: Partial<Record<PanelId, number>>; upright: PanelId[]; pull: Partial<Record<PanelId, [number, number]>> } {
+  const spans: Partial<Record<PanelId, number>> = {}, upright: PanelId[] = [];
+  // How many bar widths an element moves in from its left and right column edge: a bar is narrower than a column, so
+  // the bars close up towards their open window and that window reaches over the rest (see nebula-grid.css).
+  const pull: Partial<Record<PanelId, [number, number]>> = {};
+  for (const row of rowsOf(layout, ids)) {
+    for (const id of row) spans[id] = spanOf(layout, id);
+    const open = row.filter(id => !layout.minimized.includes(id));
+    if (!open.length || open.length === row.length) continue;
+    row.forEach((id, at) => {
+      if (!layout.minimized.includes(id)) return;
+      const taker = row.slice(at + 1).find(other => open.includes(other)) ?? row.slice(0, at).reverse().find(other => open.includes(other))!;
+      spans[taker] = (spans[taker] ?? 0) + spanOf(layout, id) - 1;
+      spans[id] = 1;
+      upright.push(id);
+    });
+    row.forEach((id, at) => {
+      if (layout.minimized.includes(id)) return;
+      let left = 0, right = 0;
+      while (at - left - 1 >= 0 && layout.minimized.includes(row[at - left - 1])) left++;
+      if (row.slice(at + 1).every(other => layout.minimized.includes(other))) right = row.length - at - 1;
+      if (!left && !right) return;
+      pull[id] = [left, right];
+      for (let i = 0; i < left; i++) pull[row[at - left + i]] = [i, -1];
+      for (let i = 0; i < right; i++) pull[row[at + right - i]] = [-1, i];
+    });
+  }
+  return { spans, upright, pull };
+}
+

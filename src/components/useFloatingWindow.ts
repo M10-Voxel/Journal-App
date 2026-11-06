@@ -1,3 +1,4 @@
+import { useViewHistory } from '../viewHistory';
 import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties, PointerEvent as ReactPointerEvent, RefObject } from 'react';
 
@@ -43,6 +44,7 @@ export interface FloatingDrag { onDrag?: (point: { x: number; y: number }, shift
 export function useFloatingWindow(key: string, stage: RefObject<HTMLElement | null>, frame: RefObject<HTMLElement | null>, drag: FloatingDrag = {}) {
   const [rect, setRect] = useState<WindowRect | null>(() => read(key));
   const [dragging, setDragging] = useState(false);
+  useViewHistory(rect, value => { setRect(value); write(key, value); });
   const latest = useRef(rect); latest.current = rect;
   // The stage may shrink (a smaller window): the floating window stays inside it.
   useEffect(() => {

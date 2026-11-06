@@ -7,7 +7,7 @@ import { EntryText } from './components/EntryText';
 import { Icon } from './components/Icon';
 import { t } from './i18n';
 import type { Entry } from './journal';
-import { connectPatches, disconnectPatches, removalIds } from './notebook';
+import { connectPatches, disconnectPatches, primaryPatches, removalIds } from './notebook';
 import type { Card, Folder, Patches } from './notebook';
 export type { Card, Folder, Paper } from './notebook';
 
@@ -75,6 +75,8 @@ export function patchCards(patches: Patches) {
 /** Ties two cards with a thread (both sides). Returns false when they cannot be tied (or already are). */
 export function connectCards(a: string, b: string) { const patches = connectPatches(cardStore.value, a, b); if (!Object.keys(patches).length) return null; return patchCards(patches); }
 export function disconnectCards(a: string, b: string) { return patchCards(disconnectPatches(cardStore.value, a, b)); }
+/** Makes a note the main note (first page) of the notes tied to it, or takes that back. */
+export function togglePrimaryNote(id: string) { return patchCards(primaryPatches(cardStore.value, id)); }
 /** Removes a card for good; no thread keeps pointing at it. */
 export async function removeCard(id: string) {
   const removed = removalIds(cardStore.value, id);

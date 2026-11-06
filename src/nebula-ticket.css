@@ -1,0 +1,70 @@
+/* Nebula's tickets (NebulaDesk: Ticket): printed holo tickets – marbled foil (peach and lilac, or mint and lilac, from
+   nebula-holo.css), rounded corners, a half-round notch top and bottom where the stub tears off, a row of scallops at
+   both sides, a pale band across the middle. The print is turned a quarter: the serial, the entry in heavy capitals, a
+   rule with the day, the tag; a faint weekday and a black bar with the time and a punched dot towards the stub. */
+.nebula-ticket-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 18px; }
+.nebula-ticket { --foil: var(--holo-peach); --ground: var(--holo-peach-ground); --notch: 22px; --scallop: 8.5px; --pitch: 21px;
+  position: relative; display: block; aspect-ratio: 1.42; min-height: 150px; padding: 0; border: 0; border-radius: 16px; overflow: hidden;
+  background: var(--foil) calc(var(--ticket, 0) * -137px) calc(var(--ticket, 0) * -71px) / 520px 380px, var(--ground);
+  color: #141414; text-align: left; cursor: pointer; transition: transform 200ms var(--ease), filter 160ms ease;
+  /* The cuts: every layer is solid but for one hole; their intersection is the ticket. */
+  mask:
+    radial-gradient(circle var(--notch) at 73% 0, #0000 calc(100% - .5px), #000 100%),
+    radial-gradient(circle var(--notch) at 73% 100%, #0000 calc(100% - .5px), #000 100%),
+    radial-gradient(circle var(--scallop) at 0 calc(50% - var(--pitch) * 2), #0000 calc(100% - .5px), #000 100%),
+    radial-gradient(circle var(--scallop) at 0 calc(50% - var(--pitch)), #0000 calc(100% - .5px), #000 100%),
+    radial-gradient(circle var(--scallop) at 0 50%, #0000 calc(100% - .5px), #000 100%),
+    radial-gradient(circle var(--scallop) at 0 calc(50% + var(--pitch)), #0000 calc(100% - .5px), #000 100%),
+    radial-gradient(circle var(--scallop) at 0 calc(50% + var(--pitch) * 2), #0000 calc(100% - .5px), #000 100%),
+    radial-gradient(circle var(--scallop) at 100% calc(50% - var(--pitch) * 2), #0000 calc(100% - .5px), #000 100%),
+    radial-gradient(circle var(--scallop) at 100% calc(50% - var(--pitch)), #0000 calc(100% - .5px), #000 100%),
+    radial-gradient(circle var(--scallop) at 100% 50%, #0000 calc(100% - .5px), #000 100%),
+    radial-gradient(circle var(--scallop) at 100% calc(50% + var(--pitch)), #0000 calc(100% - .5px), #000 100%),
+    radial-gradient(circle var(--scallop) at 100% calc(50% + var(--pitch) * 2), #0000 calc(100% - .5px), #000 100%);
+  mask-composite: intersect; }
+.nebula-ticket.is-mint { --foil: var(--holo-mint); --ground: var(--holo-mint-ground); }
+/* Nebula squares every corner; the printed ticket keeps its round ones and its round punched dot. */
+:root[data-theme='nebula'] .nebula-ticket { border-radius: 16px !important; }
+:root[data-theme='nebula'] .nebula-ticket-bar i { border-radius: 50% !important; }
+.nebula-ticket:hover { transform: translateY(-4px) rotate(-.6deg); filter: saturate(1.15) brightness(1.03); }
+.nebula-ticket:focus-visible { outline: none; transform: translateY(-4px); filter: saturate(1.2); }
+.nebula-ticket:focus-visible .nebula-ticket-band { box-shadow: inset 0 2px 0 #141414, inset 0 -2px 0 #141414; }
+
+/* The pale band across the middle: the foil seen through frosted film. */
+.nebula-ticket-band { position: absolute; left: 0; right: 0; top: 24%; bottom: 24%; background: color-mix(in srgb, #fff 26%, transparent);
+  -webkit-backdrop-filter: blur(7px) saturate(.75); backdrop-filter: blur(7px) saturate(.75); pointer-events: none; }
+
+/* The print, read normally. The main part runs to the tear line (73 %); the stub beyond it keeps the weekday and the
+   bar. Sizes follow the ticket's width (container units), so a narrow and a wide ticket look alike. */
+.nebula-ticket { container-type: inline-size; }
+.nebula-ticket :is(.nebula-ticket-top, .nebula-ticket-text, .nebula-ticket-bottom) { position: absolute; left: 9%; right: 31%; }
+/* Above the band: the tag on the left, the serial on the right. */
+.nebula-ticket-top { top: 0; height: 24%; display: flex; align-items: center; justify-content: space-between; gap: 8px; font: 500 clamp(10px, 3.6cqi, 13px) var(--mono); letter-spacing: .04em; }
+.nebula-ticket-top > * { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nebula-ticket-number { flex: none; letter-spacing: .08em; }
+/* On the band: the entry – the mail's subject – in heavy capitals, two lines at most. */
+.nebula-ticket-text { top: 24%; height: 52%; display: flex; align-items: center; font: 800 clamp(15px, 7.4cqi, 30px)/1.02 var(--sans); letter-spacing: .015em; text-transform: uppercase; }
+.nebula-ticket-text > span { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+/* Below the band: a heavy rule, then the day and the time. */
+.nebula-ticket-bottom { bottom: 0; height: 24%; display: flex; align-items: center; justify-content: space-between; gap: 8px; border-top: 3px solid #141414; font: 600 clamp(10px, 3.6cqi, 13px) var(--mono); letter-spacing: .05em; }
+.nebula-ticket-bottom { top: 76%; bottom: auto; margin-top: 2px; }
+.nebula-ticket-bottom > * { white-space: nowrap; }
+/* The stub: the weekday, faint and large, and a black bar with a punched dot. */
+.nebula-ticket-mark { position: absolute; right: 7%; top: 5%; width: 18%; text-align: center; color: #ffffffc4; font: 800 clamp(16px, 7cqi, 28px) var(--sans); letter-spacing: .06em; pointer-events: none; }
+.nebula-ticket-bar { position: absolute; right: 12%; top: 31%; bottom: 31%; width: 7%; min-width: 18px; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; padding-bottom: 8%;
+  background: #151515; }
+.nebula-ticket-bar i { width: 34%; aspect-ratio: 1; min-width: 6px; border-radius: 50%; background: #f3f3f3; }
+@media (prefers-reduced-motion: reduce) { .nebula-ticket { transition: none; } .nebula-ticket:hover { transform: none; } }
+
+/* Scrollbars in the foil: the desk's own (the whole page) in orange, every small one in mint. */
+:root[data-theme='nebula'] ::-webkit-scrollbar-thumb { border: 1px solid #000; background: var(--holo-mint) 0 0 / 260px 190px, var(--holo-mint-ground); }
+:root[data-theme='nebula'] .nebula-desk::-webkit-scrollbar { width: 14px; }
+:root[data-theme='nebula'] .nebula-desk::-webkit-scrollbar-track { background: #050505; box-shadow: inset 1px 0 0 #ffffff1f; }
+:root[data-theme='nebula'] .nebula-desk::-webkit-scrollbar-thumb { border: 2px solid #050505; background: var(--holo-orange) 0 0 / 520px 380px, var(--holo-orange-ground); }
+
+/* The foil says what a button does (behind frosted film, see nebula-holo.css): lilac neutral (pressed toggles, chosen
+   days), green positive (create, confirm, done), orange negative (delete, cancel). In the entry sheet the positive and
+   negative ones show their foil when pointed at, pressed or chosen. */
+:root[data-theme='nebula'] .sheet-window .sheet-done:is(:hover, :focus-visible, :active, [aria-pressed='true']):not(:disabled) { background: var(--holo-positive) !important; color: #111 !important; }
+:root[data-theme='nebula'] .sheet-window :is(.sheet-remove, .sheet-cancelled):is(:hover, :focus-visible, :active, [aria-pressed='true']):not(:disabled) { background: var(--holo-danger) !important; color: #111 !important; }
+:root[data-theme='nebula'][data-popups='b'] .cal-composer .chrome-actions .chrome-remove:is(:hover, :focus-visible) { background: var(--holo-danger) !important; color: #111 !important; }

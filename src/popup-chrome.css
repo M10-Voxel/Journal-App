@@ -72,7 +72,7 @@
 :root[data-theme='nebula'][data-popups='a'] .chrome-actions .chrome-submit { background: var(--nb-violet, #7b2cbf); color: #fff; box-shadow: none; }
 :root[data-theme='nebula'][data-popups='a'] .chrome-actions button::before { content: '> '; opacity: .6; }
 :root[data-theme='nebula'][data-popups='b'] .chrome-actions button { min-width: 76px; border-radius: 0; background: #cfcfcf; color: #111; box-shadow: inset -1px -1px 0 #555, inset 1px 1px 0 #fff, 0 0 0 1px #111; font: 11.5px var(--sans); }
-:root[data-theme='nebula'][data-popups='b'] .chrome-actions .chrome-submit { background: var(--holo); font-weight: 700; }
+:root[data-theme='nebula'][data-popups='b'] .chrome-actions .chrome-submit { background: var(--holo-positive); font-weight: 700; }
 :root[data-theme='nebula'][data-popups='b'] .chrome-actions button:active { box-shadow: inset 1px 1px 0 #555, inset -1px -1px 0 #fff, 0 0 0 1px #111; }
 
 /* Pixel look: square, and the pixel faces. */

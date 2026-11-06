@@ -44,7 +44,7 @@ export function DetachedPanel({ kind }: { kind: DetachedKind }) {
         </span>
       </header>
       <div className="nebula-terminal-body nebula-panel-body nebula-detached-body">
-        {kind === 'calendar' ? <Calendar embedded journalDate={date} onOpen={openInJournal} onCreate={requestCalendarCreate} onMove={requestCalendarMove} /> : kind === 'notebook' ? <Notebook /> : <BulletinBoard key={date} date={date} />}
+        {kind === 'calendar' ? <Calendar embedded withoutDay journalDate={date} onOpen={openInJournal} onCreate={requestCalendarCreate} onMove={requestCalendarMove} /> : kind === 'notebook' ? <Notebook /> : <BulletinBoard key={date} date={date} />}
       </div>
       {windowGrips.map(grip => <span key={grip.name} className={`nebula-grip is-${grip.name}`} aria-hidden="true"
         onMouseDown={event => { if (event.button === 0) { event.preventDefault(); void window.startResizeDragging(directions[grip.name]); } }} />)}

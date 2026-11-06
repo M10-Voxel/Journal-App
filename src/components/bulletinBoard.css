@@ -269,3 +269,37 @@
 :root[data-pixel] .board-thread-knot { shape-rendering: crispEdges; }
 :root[data-pixel] .board-card .board-pin { transition: none; }
 :root[data-pixel] .board-card .board-pin::after, :root[data-pixel] .board-thread-cut { border-radius: 0; }
+.board-viewport.board-surface { width: 100%; min-width: 0; height: 380px; min-height: 160px; overflow: hidden; touch-action: none; cursor: grab; transition: none;
+  background-size: calc(9px * var(--board-scale)) calc(9px * var(--board-scale)), calc(13px * var(--board-scale)) calc(13px * var(--board-scale)), 100% 100%;
+  background-position: var(--board-pan-x) var(--board-pan-y), calc(var(--board-pan-x) + 4px * var(--board-scale)) calc(var(--board-pan-y) + 6px * var(--board-scale)), 0 0; }
+.board-viewport.is-panning, .board-viewport.is-panning * { cursor: grabbing !important; }
+.board-world { position: absolute; top: 0; left: 0; transform-origin: 0 0; }
+:root .board-viewport.board-surface { border: 0 !important; border-radius: 0 !important; box-shadow: none !important; }
+.board-empty { pointer-events: none; }
+:root[data-pixel] .board-viewport { background-size: calc(4px * var(--board-scale)) calc(4px * var(--board-scale)), calc(12px * var(--board-scale)) calc(12px * var(--board-scale)); }
+:root[data-theme='classic'] .board-viewport.board-surface { background-size: calc(18px * var(--board-scale)) calc(18px * var(--board-scale)); background-position: calc(var(--board-pan-x) + 9px * var(--board-scale)) calc(var(--board-pan-y) + 9px * var(--board-scale)); }
+:root[data-theme='nebula'] .nebula-terminal .board-viewport.board-surface { background-size: calc(24px * var(--board-scale)) calc(24px * var(--board-scale)); background-position: var(--board-pan-x) var(--board-pan-y); }
+.nebula-panel-body.has-height .bulletin-board { height: 100%; display: flex; flex-direction: column; min-height: 0; margin-block: 0; padding-bottom: 0; }
+.nebula-panel-body.has-height .board-viewport { flex: 1; height: auto; min-height: 80px; }
+
+/* Notes tied together: the main note (the notebook's first page) carries a small tag at its top edge; its switch in the
+   card's tools stays lit. Images and links may be tied among themselves (a bundle). */
+.board-card.is-primary { outline: 2px solid var(--accent); outline-offset: 2px; }
+.board-primary-mark { position: absolute; top: -9px; left: 12px; z-index: 2; padding: 1px 7px; border-radius: 999px; background: var(--accent); color: var(--accent-text, #fff); font: 700 9.5px/16px var(--sans); letter-spacing: .05em; text-transform: uppercase; pointer-events: none; }
+.board-tools .board-primary[aria-pressed='true'] { color: var(--accent); }
+.board-thread-primary { display: flex; align-items: center; gap: 7px; width: 100%; height: 30px; margin-bottom: 4px; padding: 0 10px; border: 0; border-radius: 6px; background: transparent; color: var(--text); font: 500 12.5px var(--sans); text-align: left; cursor: pointer; }
+.board-thread-primary:hover, .board-thread-primary[aria-pressed='true'] { background: var(--hover); color: var(--strong); }
+.board-thread-primary[aria-pressed='true'] .icon { color: var(--accent); }
+.board-thread-primary .icon { flex: none; width: 13px; height: 13px; }
+:root[data-pixel] :is(.board-primary-mark, .board-thread-primary) { border-radius: 0; }
+:root[data-theme='nebula'] .board-card.is-primary { outline-color: var(--nb-violet, #7b2cbf); }
+:root[data-theme='nebula'] .board-primary-mark { border-radius: 0; background: var(--nb-violet, #7b2cbf); color: #fff; font-family: var(--mono); }
+/* The board in a Nebula window fills it: with a set height (from the first pull at the lower edge) exactly, else when
+   its row stretches the window taller (never below the board's own height). The window's content wrapper passes the
+   height on (without it, a set height left the board at its smallest). */
+.nebula-panel.is-board > .nebula-panel-body { display: flex; flex-direction: column; }
+.nebula-panel.is-board > .nebula-panel-body > .nebula-panel-content { flex: 1 0 auto; display: flex; flex-direction: column; min-height: 0; }
+.nebula-panel.is-board > .nebula-panel-body.has-height > .nebula-panel-content { flex: 1 1 0; }
+.nebula-panel.is-board > .nebula-panel-body > .nebula-panel-content > .bulletin-board { flex: 1 0 auto; display: flex; flex-direction: column; min-height: 0; }
+.nebula-panel.is-board > .nebula-panel-body.has-height > .nebula-panel-content > .bulletin-board { flex: 1 1 0; height: auto; }
+.nebula-panel.is-board > .nebula-panel-body:not(.has-height) .board-viewport { flex: 1 0 auto; }
