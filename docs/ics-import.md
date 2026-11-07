@@ -1,9 +1,29 @@
-# ICS import
+# ICS-Import und -Export
 
-The import preview preserves daily, weekly, monthly and yearly RRULEs (including BYDAY/BYSETPOS and EXDATE), and RDATE sets. Expanded occurrences are linked in SQLite's existing series table. A compact original recurrence component stays in the rule JSON so future horizon extensions use the same pattern. Editing the recurrence controls explicitly replaces the imported rule with the app's selected native pattern. Reimport reuses the external UID and series identity.
+Die Transfer-Aktion beim Kalender öffnet Import und Export über einen nativen Dateidialog. Kalenderdateien sind ein Austauschformat; SQLite bleibt der maßgebliche Speicher. Ein Import ist kein laufender Abgleich mit einem anderen Kalenderdienst.
 
-Initial occurrences cover the previous year through two years ahead. Future dates are generated when needed. The preview reports this horizon. Exceptions with RECURRENCE-ID preserve their overridden date, time and text as standalone entries; their original occurrence is excluded from future generation. The preview discloses this. Hourly and smaller rules remain unsupported; expansion and file-size limits protect the app.
+## Import
 
-All-day multi-day events use their exclusive DTEND, so a Friday-to-Monday event covers Friday through Sunday as one span. Timed overnight and multi-day entries also stay one entry. Multi-day spans use the app's existing hours-since-start-day end format, preserving both actual clock times.
+Vor dem Speichern erscheint eine Vorschau. Unterstützt werden ganztägige und zeitgebundene Ereignisse sowie datierte Aufgaben, UTC, lokale Zeiten und IANA-Zeitzonen beziehungsweise eingebettete `VTIMEZONE`-Definitionen. Die Grenzen sind 5 MB Dateigröße und 5.000 importierte Einträge.
 
-CATEGORIES supplies a tag name (first category because entries currently have one tag). Calendar-level X-WR-CALNAME is the fallback. COLOR and common Apple/calendar color extensions supply hex or supported named colors; absent color uses blue. Existing tags match case-insensitively and retain their customized color. New tags and all imported entries commit atomically together; views receive the updated tag list immediately. Missing categories never remove a local tag.
+Gleiche Kalender-UIDs aktualisieren vorhandene Vorkommen. Andere Journalinhalte bleiben bestehen; bereits weitergeplante Einträge werden nicht einfach verschoben. Aus der Quelldatei entfernte Termine werden nicht automatisch lokal gelöscht.
+
+Tägliche, wöchentliche, monatliche und jährliche `RRULE`s einschließlich `BYDAY`, `BYSETPOS`, `EXDATE` sowie `RDATE`-Mengen werden als Wiederholungszusammenhang übernommen. Der anfängliche Horizont reicht vom Vorjahr bis zum Ende des übernächsten Jahres; spätere Vorkommen werden bei Bedarf ergänzt. Eine kompakte Ursprungsregel bleibt für diese Erweiterung gespeichert. Eine bewusste Änderung in den Wiederholungsfeldern ersetzt sie durch die gewählte native Regel.
+
+Ausnahmen mit `RECURRENCE-ID` behalten ihre abweichenden Daten/Uhrzeiten als eigenständige Einträge; das ursprüngliche Vorkommen wird ausgeschlossen. Stündliche und kleinere Wiederholungsintervalle werden nicht unterstützt. Die Vorschau nennt Umwandlungen und Grenzen.
+
+Mehrtägige Ereignisse bleiben **ein Eintrag**. Bei ganztägigen Terminen ist `DTEND` exklusiv: Freitag bis Montag umfasst Freitag, Samstag und Sonntag. Zeitgebundene Spannen behalten ihre tatsächlichen Uhrzeiten und ihr Enddatum.
+
+## Tags und Farben
+
+`CATEGORIES` liefert den Tag-Namen; bei mehreren Kategorien wird die erste verwendet, weil ein Eintrag derzeit einen Tag besitzt. Als Rückfall dient `X-WR-CALNAME`. `COLOR` und verbreitete Kalender-/Apple-Erweiterungen liefern Hexwerte oder unterstützte Farbnamen, sonst wird Blau verwendet.
+
+Vorhandene Tags werden unabhängig von Groß-/Kleinschreibung wiederverwendet und behalten ihre angepasste Farbe. Neue Tags und importierte Einträge werden gemeinsam gespeichert. Fehlende Kategorien entfernen eine vorhandene lokale Zuordnung nicht.
+
+## Export
+
+Exportiert werden Aufgaben und Ereignisse einschließlich reiner Kalendereinträge. Journal-Notizen, Tagestitel, Pinnwand-/Notizblockinhalte und Planungsspuren gehören nicht dazu. Journal-spezifische Zusatzfelder bewahren unter anderem Eintragsart, Sichtbarkeit, Status, Priorität und Erinnerung; andere Kalenderprogramme müssen diese Zusatzfelder nicht verstehen. Für Mailbeschreibungen wird die gespeicherte Textalternative exportiert, nicht die HTML-Vorschau.
+
+**Wiederholungen werden beim Export derzeit als angelegte einzelne Vorkommen geschrieben.** Die ursprüngliche `RRULE` wird nicht rekonstruiert; der Export ist deshalb kein vollständiger Serien-Rundlauf. Mehrtägige Einträge erhalten ihr tatsächliches Start-/Enddatum.
+
+Implementierung: `src/ical.ts`, `src/components/CalendarTransfer.tsx`, Importbefehle in `src-tauri/src/storage.rs`. Logiktests: `tests/ical.test.mjs`; Browserbereich `calendar`.

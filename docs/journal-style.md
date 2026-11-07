@@ -1,29 +1,25 @@
-# UI-Stil „Journal“
+# UI-Stil Journal
 
-Dritter UI-Stil neben „Klassisch“ und „Pixel“ (`Theme = 'journal'`, `data-theme="journal"`). Die App wird zum aufgeschlagenen Buch: Papierseiten, Tinte, Lesezeichen. Bedienung, Tastenkürzel und Speichern bleiben unverändert.
+Journal ist eines der drei Basisdesigns neben Normal und Nebula. Die Darstellung als Buch verändert Anordnung und Optik; Speichern, Inhalte, Tastenkürzel und Verbindungen verwenden dieselben Funktionen. Pixel kann zusätzlich eingeschaltet werden und ist kein eigenes Basisdesign.
 
-Eigene Paletten: `paper` („Papier & Tinte“, hell) und `candle` („Leder & Kerzenlicht“, dunkel). Beim Wechsel auf „Journal“ wird `paper` gesetzt, sofern nicht schon eine der beiden aktiv ist; die vorher gewählte Palette wird als `previousColorTheme` gemerkt und beim Zurückwechseln wiederhergestellt, sofern dann noch eine Journal-Palette aktiv ist (`withTheme` in `settings.ts`). Buchkanten und Seiten mischen ihre Farben aus der Palette, damit jede Palette passt. Die Palette bleibt danach frei wählbar. Helle Paletten setzen `color-scheme: light`. Schriften (lokal über `@fontsource`): Source Serif 4 für Text und Editor (`--write`), Fraunces für Überschriften und Datum, IBM Plex Sans für Bedienelemente. Kein Pixel-Zuschlag bei der automatischen Größe.
+## Farben und Schrift
 
-## Buch
+Die eigenen Paletten heißen **Papier & Tinte** (`paper`) und **Leder & Kerzenlicht** (`candle`). Beim Wechsel in Journal wird eine passende Buchpalette gewählt, sofern noch keine aktiv ist. Die vorherige Farbwahl wird beim Zurückwechseln wiederhergestellt, solange eine Journal-Palette aktiv blieb. Danach bleiben die Farben frei anpassbar, einschließlich Einband und Buchfalz.
 
-Seitenmodell in `src/book.ts` (getestet in `tests/book.test.mjs`): Ein Tag hat die Seiten `entries`, `data` (Bewertung, Checkliste) und `board` (Pinnwand), eine Übersicht (Woche bis Jahr) `notes` und `activities`. Das Buch ist durchgehend: Nach der Pinnwand von Tag N folgt die Einträge-Seite von Tag N+1. Eine Doppelseite zeigt eine Seite und die nächste; Umblättern geht um eine Seite weiter, die rechte Seite wandert nach links. Eine Doppelseite enthält nie zwei Einträge-Seiten, deshalb ist das `date` der App immer der Tag der sichtbaren Einträge-Seite, sonst der linken Seite. Laden und Autosave laufen unverändert über `navigate`.
+Ohne Pixel verwendet Journal Source Serif 4 für die Schreibschrift, Fraunces für Überschriften/Datum und IBM Plex Sans für Bedienelemente. Die Fonts werden lokal mitgeliefert. Pixel ersetzt die betreffenden Schrift-/Formregeln, erhält aber das Buchlayout.
 
-`JournalBook.tsx` hält die Seiten als Elemente mit stabilem Schlüssel (`page:date`). Die Seite, die beim Umblättern die Seite wechselt, bleibt dadurch gemountet (Fokus, Scrollposition, Editoren). Animation: 3D-Drehung um den Rücken (320 ms), bei `prefers-reduced-motion` nur Überblenden. Sprünge (Alt+←/→, Kalender, Heute) blenden kurz über. Das Buch füllt die ganze App; die Seiten wachsen mit dem Fenster. Unter 880 px Breite zeigt das Buch automatisch eine Seite; die Wahl Doppel/Einzel steht in den Einstellungen (Darstellung → Buchansicht) und liegt in `localStorage` (`journal.bookView`).
+## Seiten und Navigation
 
-Einstellung „Blättern“ (`bookPaging`): Seite für Seite oder beide Seiten auf einmal (`spreadPagesOf`/`turnSpread` in `book.ts`): Ein Tag ist dann die Doppelseite Einträge | Daten und danach die Pinnwand über beide Seiten. Wo eine Seite beim Umblättern nicht zweimal gezeichnet werden kann (die breite Pinnwand), dreht sich ein leeres Blatt für ihre Hälfte. Liegt der Kalender dabei als Blatt auf dem Buch, zeigt das Buch eine Seite, die erst an seinem Rand beginnt.
+Ein Tag besitzt Einträge-, Daten- und Pinnwand-Seiten; Zeitraumübersichten haben Notizen und Aktivitäten. Nach der letzten Tagesseite folgt der nächste Tag. Der Modus **Seite für Seite** blättert ein Blatt weiter; **beide Seiten** zeigt Einträge und Daten zusammen und anschließend eine breite Pinnwand. Doppel-/Einzelseite kann gewählt werden; bei weniger als 880 Pixel verfügbarer Bühnenbreite erscheint automatisch eine Seite.
 
-Die Einträge-Seite ist nur dort liniert, wo geschrieben wird: unter dem Titel und unter jeder Textzeile eines Eintrags (auch umbrochenen), mit Randlinie ab dem Titel.
+Die obere Leiste enthält Navigation und Fensterfunktionen. Tag, Woche, Monat, Quartal und Jahr sind Buchregister (`Strg+1–5`). Die Register für Einträge/Daten/Pinnwand behalten ihre Position. Das Leseband führt zu heute; die unteren äußeren Seitenecken sind dünne graue Winkel zum Blättern. Alternativen sind Wischen, Umschalt+Mausrad und `Strg+Bild↑`/`Strg+Bild↓`.
 
-Umblättern: Eselsohr unten außen, Wischen bzw. Shift+Mausrad, `Strg+Bild↓` / `Strg+Bild↑`. Das Register am rechten Rand zeigt immer alle Seitenarten des Tages (bzw. Zeitraums), jede auf fester Höhe und in fester Breite; der Reiter der äußeren Seite gehört zum Papier der Seite, ebenso ist der Reiter der zweiten sichtbaren Seite desselben Tages papierfarben. Liegt die Pinnwand über beide Seiten, blenden Falzschatten und Leseband unterhalb der Oberkante aus. Ein Klick blättert mit derselben Animation wie das Eselsohr zur Seite, auch über mehrere Seiten. Das Leseband ist flach: Am heutigen Tag liegt es über den Seiten und ist oben über die Buchkante umgeschlagen, sonst ragt nur sein Ende unten heraus und schlägt heute auf.
+Bestehende Seiten erhalten beim Wechsel stabile Schlüssel, um Editoren, Fokus und Scrollzustand möglichst zu bewahren. Reduzierte Bewegung wird berücksichtigt. Die normale untere Statusleiste ist im Buchlayout ausgeblendet; die Tastenkürzel bleiben über `F1` erreichbar.
 
-## Ansichten und Farben
+## Kalender, Notizen und Raster
 
-Im Journal-Stil gibt es keine Titelleiste: Der Einband um das Buch verschiebt das Fenster (Doppelklick maximiert), Einstellungen und Fensterknöpfe sitzen oben rechts auf dem Einband neben den Registerreitern. Tag und Datum werden auf der Seite geblättert. Der F1-Hinweis entfällt (F1 öffnet die Tastenkürzel weiterhin). Tag, Woche, Monat, Quartal und Jahr sind Registerreiter an der Oberkante des Buchs (`Strg+1–5`, in allen Stilen). Die Kalenderansichten sind Reiter am rechten Rand des Kalenderblatts. Der Einband bzw. Hintergrund um das Buch ist das Farb-Token `cover` jeder Palette (Farben → Buch) und damit anpassbar. Ebenso der Schatten im Buchfalz (Token `spine`). Liegt der Kalender beim Blättern beider Seiten auf dem Buch, läuft der Falz samt Schatten und Leseband an der Kante des Blatts; das Buch legt seine Doppelseite erst wieder an, wenn das Blatt weggeglitten ist. Die Scrollleiste einer Seite beginnt unter den Registerreitern.
+Kalender und Notizblock öffnen über ihre Buchlaschen beziehungsweise Tastenkürzel. Das Kalenderblatt kann das Buch überlagern oder daneben liegen; die Breite ist abhängig von Buchansicht und verfügbarem Platz veränderbar. Der Kalenderreiter liegt an der Buchkante, der Notiz-Tagfilter als horizontale Lasche am Buch. Ein gewählter Journaltag schließt die offenen Ansichten wieder.
 
-## Kalender
+Die karierten Kalenderflächen richten sich nach dem jeweiligen Raster: In Stundenansichten folgen horizontale Linien der Stundenhöhe und dem Kalenderzoom; die vertikalen Linien passen sich der Spaltenbreite an. Monats- und Jahreszellen besitzen entsprechend angepasste Raster. Auf den Eintragsseiten wird der Schreibbereich liniiert.
 
-Im Journal-Stil gibt es keine Seitenleiste. Der Reiter „Kalender“ am linken Buchrand (oder `Strg+K`) zieht den Kalender als Blatt auf das Buch (`CalendarDrawer.tsx`): Bei einer Doppelseite liegt es über der linken Seite, das Buch bleibt stehen; bei einer Einzelseite hat es eine ziehbare Breite. Ein Klick auf einen Tag legt es zurück. Blättern beide Seiten auf einmal, zeigt das Buch daneben eine Seite. Zurücklegen per Reiter, `Esc` oder `Strg+K`; das Blatt gleitet dabei als eigene Animation zurück (eine Transition startet nach der Öffnungs-Animation nicht). Der Zustand liegt in `localStorage` (`journal.calendarDrawer`).
-
-## Prüfung
-
-`JOURNAL_UI_SCOPE=journal node scripts/verify-ui.mjs` (nach `npx vite build`).
+Implementierung: `src/book.ts`, `src/components/JournalBook.tsx`, `src/components/CalendarDrawer.tsx`, `src/journal-theme.css`, `src/settings.ts`. Browserbereiche: `journal`, `journal-sheet`, `journal-layout`, `journal-grid`. Aufruf: [Entwicklung](development.md).

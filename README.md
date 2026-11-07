@@ -45,6 +45,7 @@ EXE und Installer entstehen unter `src-tauri/target/release/` bzw. `src-tauri/ta
 
 ## Dokumentation
 
+- [Übersicht](docs/README.md), [erste Schritte](docs/getting-started.md) und [Entwicklung & Tests](docs/development.md)
 - [Vault, Updates und automatische Releases](docs/vault-and-updates.md)
 - [Google Drive](docs/google-drive.md)
 - [E-Mail-Konten](docs/mail-accounts.md) und [lokale Terminerkennung](docs/mail-context-ml.md)

@@ -1,19 +1,22 @@
 # Popup-Stile
 
-Einstellungen → Darstellung → **Popups**: zwei Varianten pro Design (`Settings.popupStyle`, `'a' | 'b'`, Standard `a`). `applyTheme` setzt `data-popups` auf dem Wurzelelement; über `journal:theme` übernehmen Kalender-, Mini- und Erinnerungsfenster die Wahl.
+Unter **Einstellungen → Darstellung → Popups** stehen zwei Varianten je Basisdesign zur Wahl. Die zusätzliche Pixel-Option wirkt auf Normal und Journal. Inhalte und Funktionen bleiben gleich; verbundene Fenster übernehmen den Stilwechsel.
 
-Betroffen sind die Popups für Einträge und Kalendereinträge: der Planer (`.planner` mit Uhr, Wiederholung, Enddatum), der Composer beim Anlegen/Bearbeiten im Kalender (`.cal-composer`) und die kleinen Karten und Auswahlen (`.popover`: Tags, Details, Auswahlen). Die Regeln stehen in `src/popup-styles.css`; fast alles läuft über Farb-Tokens, die auf dem Popup selbst gesetzt werden.
+| Design | Variante A | Variante B |
+| --- | --- | --- |
+| Normal | Karte | Glas mit durchscheinender Fläche und Unschärfe |
+| Journal | Karteikarte mit Papier-/Tintenregeln | Notizblock mit Bindung und Textmarker |
+| Nebula | Terminal mit Prompt-Leiste | Holo-Papier mit violettem Titelbalken |
 
-| Design | A | B |
-|---|---|---|
-| Normal | **Karte** (Basis aus popups.css/styles.css/calendar.css) | **Glas**: durchscheinend mit Unschärfe, heller Rand, runde Felder, leuchtende Auswahl |
-| Journal | **Karteikarte**: glattes Papier, roter Strich oben, unterstrichene Felder, umkringelte Tage | **Notizblock**: gelbliches Blatt mit Ringbindung, Textmarker für die Auswahl |
-| Nebula | **Terminal**: schwarzes Fenster, graue Prompt-Leiste (`./plan.sh`, `./entry.sh --new/--edit`, `./pick.sh`), violetter Versatzschatten | **Holo-Papier**: graues Papier mit violettem Balken, schwarze Konturen, holografische Auswahl |
+Der Stil gilt für Planen/Uhr/Wiederholung, neue und bearbeitete Kalendereinträge sowie Auswahlkarten, Tags, Farben und Kontextmenüs. Mail-Detailkarten verwenden denselben Rahmen, behalten aber die originale Darstellung innerhalb der [Mailvorschau](mail-display-and-delivery.md).
 
-Die Pfeile (`::before`) entfallen dort, wo das Blatt eine eigene Kante hat (Bindung, Prompt-Leiste, Balken); der Tag-Streifen des Composers wird dann als Rand gezeigt. Die Karten in den Einstellungen zeichnen je ein kleines Popup (`settings.css`, `.popup-sample`).
+## Schließen und Eingaben
 
-Prüfung: `JOURNAL_UI_SCOPE=popups node scripts/verify-ui.mjs` öffnet in allen sechs Varianten den Planer (Alt+T) und den Composer (Rechtsklick auf einen Kalendereintrag) und legt `popups-<design>-<a|b>-<planner|composer>.png` ab.
+- Escape beziehungsweise × schließt die aktive Ebene. Ein Klick innerhalb des Popups aktiviert nicht den Kalendereintrag dahinter.
+- Ein Klick außerhalb schließt zunächst nur die oberste Popup-Ebene; derselbe Klick öffnet keinen darunterliegenden Kalendertag und startet keine weitere Aktion.
+- Verschachtelte Auswahlfenster bleiben eigene Ebenen, etwa ein Tagpicker im Editor. Nach ihrem Schließen bleibt der übergeordnete Editor erhalten.
+- Die Eingabe in Wiederholungsfeldern ist dauerhaft dezent erkennbar. Beim Schreiben treten darunterliegende Inhalte zurück; Vorschläge können mit Pfeilen gewählt und mit Tab/Enter übernommen werden.
 
-## Wischen
+Auf dem Desktop werden Orbit und eingebettete Eintragsaktionen angeboten. `swipe` ist als Implementierung für Touch-/Android-Kontexte vorhanden, aber im normalen Desktop-Menü ausgeblendet. Daraus folgt noch keine fertig gebaute Android-App.
 
-Die Aktionsart „Wischen“ (`actionLayout: 'swipe'`) bleibt im Code für Touch-Geräte (Android), wird auf dem Desktop aber nicht mehr angeboten (`swipeAvailable()` in `settings.ts`); ein gespeichertes `swipe` gilt dort als Orbit. Die UI-Prüfung schaltet sie mit `window.__journalSwipeLayout = true` frei.
+Implementierung: `src/popup-styles.css`, `src/popup-chrome.css`, `src/components/Popover.tsx`, `src/components/ContextMenu.tsx`, `src/components/useDismissLayer.ts`. Browserbereiche: `popups`, `popup-dismissal`, `context-menus`, `mail-header-themes`; siehe [Entwicklung](development.md).

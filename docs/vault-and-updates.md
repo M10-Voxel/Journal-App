@@ -1,69 +1,66 @@
-# Vault-Ordner und Updates
+# Vault, Sicherung und Updates
 
-## Speicherort
+## Speicherort wählen
 
-Einstellungen → **Speicherort**:
+Unter **Einstellungen → Speicherort**:
 
-- **Vault öffnen**: einen Ordner mit `journal.sqlite3` auswählen.
-- **Aktuellen Stand übernehmen…**: einen leeren Zielordner auswählen. Tage, Kalender, Wiederholungen, Aktivitäten, Tags, Notizen/Ordner, Pinnwand, Bilder und Mail-Daten werden kopiert.
-- **Leeren Vault anlegen**: einen leeren Zielordner auswählen und unabhängig neu anfangen.
+| Aktion | Verhalten |
+| --- | --- |
+| **Vault öffnen** | Einen vorhandenen Ordner mit `journal.sqlite3` auswählen |
+| **Aktuellen Stand übernehmen…** | Journal, Kalender, Serien, Tags, Aktivitäten, Notizblock, Pinnwand/Bilder und Maildaten in einen leeren Zielordner kopieren |
+| **Leeren Vault anlegen** | Einen leeren Zielordner wählen und unabhängig neu anfangen |
 
-Nach Bestätigung speichert Journal ausstehende Änderungen aus allen Fenstern und startet neu. Die Kopie wird beim Neustart erstellt; der alte Vault bleibt erhalten. SQLite wird über die Backup-API gesichert, einschließlich bestätigter WAL-Transaktionen. Ein Fehler beim Erstellen behält den alten Vault bei und wird im Journal angezeigt. Ein fehlender externer Vault wird nicht automatisch durch einen leeren ersetzt; Journal bietet einen anderen vorhandenen Vault zur Auswahl an.
+Vor dem Wechsel werden ausstehende Änderungen der offenen Fenster gespeichert. Nach Bestätigung speichert Journal den Auftrag und startet neu. SQLite wird bei der Übernahme über die Backup-API gesichert, einschließlich bestätigter WAL-Daten. Die alte Kopie wird **nicht automatisch gelöscht**. Ein fehlender benutzerdefinierter Vault führt zu einer Auswahlhilfe statt zu einem stillen Wechsel auf leere Daten.
 
-Ohne Auswahl bleibt der bisherige Speicherort `%LOCALAPPDATA%/de.journal.local` aktiv. Nur die gerätelokale Datei `vault.json` dort verweist auf den gewählten Ordner. Im Vault liegen `journal.sqlite3`, `mail.sqlite3`, `board-images/` und `journal.local.json`. Letztere speichert beim Wechsel laufende Timer, Filter, Notizauswahl und verschlüsselte Cloud-Vergleichsstände. Beim Zurückwechseln werden diese wiederhergestellt.
+Der aktive Vault enthält:
 
-Design, Fensterlayout, WebView-Profil, Google-Drive-Anmeldung und das Mail-Modell bleiben gerätelokal. Mail-Zugangsdaten in `mail.sqlite3` sind durch Windows-DPAPI an das bisherige Windows-Konto gebunden und müssen auf einem anderen Gerät neu eingegeben werden. Der Vault ist **keine Sammlung von Markdown-Dateien**; Obsidian kann seine SQLite-Daten nicht direkt lesen. Der Speicherortwechsel ersetzt keine geräteübergreifende Synchronisierung. Einen geöffneten SQLite-Vault nicht gleichzeitig von mehreren Geräten bearbeiten.
+- `journal.sqlite3`: Inhalte und lokale Rückgängig-Historie.
+- `mail.sqlite3`: Mailkonten, lokal geschützte Zugangsdaten und Abruf-/Vorschlagsdaten.
+- `board-images/`: AVIF-Dateien der Karten und Anhänge.
+- `journal.local.json`: beim Wechsel gesicherte vaultbezogene Browserzustände, etwa Timer, Notizauswahl und verschlüsselte Drive-Vergleichsstände.
 
-## Updates verwenden
+SQLite-WAL-/SHM-Dateien können während des Betriebs danebenliegen. Ohne eigene Auswahl ist `%LOCALAPPDATA%/de.journal.local` der bisherige Windows-Speicherort. Die gerätelokale Datei `vault.json` dort merkt sich aktiven und gegebenenfalls angeforderten Vault-Pfad.
 
-Einstellungen → **Updates** → **Nach Updates suchen** → **Update herunterladen** → **Installieren und neu starten**. Die Suche erfolgt nur auf Knopfdruck. Vor Installation werden ausstehende Daten gespeichert. Windows verwendet den NSIS-Installer und startet Journal danach wieder. Eine lose EXE kann ebenfalls suchen/herunterladen; die Installation erfolgt dann über den Installer. Eine schon installierte App ist der vorgesehene Weg für weitere Updates.
+Darstellung, Fenstergeometrie, WebView-Profil, Modellartefakte und Google-Drive-Anmeldung werden beim Vault-Wechsel nicht in den Zielordner kopiert. Allgemeine Darstellungseinstellungen können separat durch einen bewusst ausgeführten Drive-Abgleich übertragen werden. Die Drive-Zugangsdaten liegen DPAPI-geschützt in `drive.credentials` im gerätelokalen Tauri-`app_data_dir`; sie sind von der Vault-Zeigerdatei im lokalen Datenverzeichnis getrennt.
 
-Quelle: `https://github.com/M10-Voxel/Journal-App/releases/latest/download/latest.json`. Die Assets müssen öffentlich ohne Anmeldung abrufbar sein. Es wird keine Anmeldung oder ein GitHub-Token in der App benötigt. Private Repositories benötigen eine andere öffentliche Downloadquelle.
+Die Inhalte sind keine frei editierbare Sammlung von Markdown-Dateien. Journalinhalte liegen als SQLite-Daten vor; nur Zugangsdaten sind lokal gezielt mit DPAPI geschützt. Auf einem anderen Gerät müssen kopierte Mailkonten erneut angemeldet werden. Der Speicherortwechsel ersetzt keine [Gerätesynchronisierung](google-drive.md).
 
-Tauri prüft sowohl die Signatur der heruntergeladenen Datei als auch die darin authentifizierte Versionsnummer (`requireSignedVersion`). Der öffentliche Schlüssel steht in `src-tauri/tauri.conf.json`. Dokumentation: https://v2.tauri.app/plugin/updater/
+## Sichern und wieder öffnen
 
-## Automatische Updates aus Actions
+Für eine normale Dateisicherung Journal über das Tray-Menü vollständig **beenden**, dann den gesamten Vault-Ordner kopieren. Eine laufende SQLite-Datenbank nicht nur als einzelne Hauptdatei sichern und nicht gleichzeitig von mehreren Geräten bearbeiten. Ein Cloud-Dateiclient auf dem geöffneten Vault ist kein Ersatz für den eingebauten Abgleich.
 
-Ein Push auf `Windows` startet den Workflow **Windows builds**. Nach erfolgreichen Tests erzeugt er automatisch eine höhere Versionsnummer, baut und signiert den Windows-Installer und veröffentlicht ein reguläres Release mit EXE, Installer, Signatur und `latest.json`. Auch ein manueller Workflow-Start auf `Windows` veröffentlicht ein Update. Pull Requests mit Ziel Windows erzeugen ausschließlich Test-Downloads. Pushes auf andere Branches starten diesen Windows-Workflow nicht; ein manueller Start auf einem anderen Branch wird übersprungen.
+Eine Sicherung wird über **Vault öffnen** wieder ausgewählt. Die App prüft Datenbank und Schema; beschädigte oder nicht unterstützte Datenbanken werden nicht still als neuer Vault geöffnet. Den alten AppData-Ordner erst löschen, wenn die Übernahme geprüft wurde; dort liegen auch weiterhin benötigte gerätelokale Dateien. Für mehrere unabhängige Journale separate Vaults verwenden.
 
-Die App verwendet weiterhin dieselbe öffentliche Release-Adresse. Für ein neues Update genügt jetzt ein normaler Code-Push auf `Windows`; Versionsnummern, Signieren und das Anlegen des Releases müssen nicht mehr manuell erledigt werden. Es wird kein GitHub-Zugang in der App benötigt.
+## Updates in der App
 
-Die Versionsnummer wird nur im Build-Verzeichnis des Runners in npm-, Cargo- und Tauri-Dateien gesetzt, nicht zurückcommittet. Sie ist höher als bereits vergebene reguläre Release- und Entwurfsversionen. Eine bewusst erhöhte Basisversion im Quellcode wird berücksichtigt. Abgebrochene Läufe können deshalb Lücken in den Versionsnummern hinterlassen.
+**Einstellungen → Updates → Nach Updates suchen → Update herunterladen → Installieren und neu starten.** Die Suche erfolgt auf Knopfdruck. Vor der Installation werden ausstehende Inhalte und vaultbezogene Zustände gespeichert. Vault und Verbindungen bleiben beim Update erhalten; ein normales Versionsupdate verlangt keine erneute Einrichtung.
 
-Der Build-Job besitzt nur Leserechte am Repository. Der getrennte Veröffentlichungsjob erhält Schreibrechte, prüft erneut die Signatur und bestätigt nach jedem Upload Größe und SHA-256. Erst wenn alle vier Dateien vollständig vorliegen, wird der Release-Entwurf öffentlich zum neuesten Update. Neuere bereits veröffentlichte Versionen werden nicht durch ältere Builds ersetzt. Windows-Läufe werden nacheinander ausgeführt, damit ein Push keine laufende Veröffentlichung unterbricht. Tags erzeugen keine neue Build-Schleife.
+Quelle: `https://github.com/M10-Voxel/Journal-App/releases/latest/download/latest.json`. Die Release-Dateien sind öffentlich ohne GitHub-Anmeldung abrufbar. Tauri prüft die Dateisignatur und die darin authentifizierte Versionsnummer (`requireSignedVersion`). Die Windows-Installation erfolgt über NSIS im passiven Modus. Eine lose EXE kann Updates suchen/herunterladen; für das Einspielen wird ebenfalls der Installer verwendet.
 
-Für die Signierung sind im Repository die Actions-Secrets `TAURI_SIGNING_PRIVATE_KEY` und `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` eingerichtet. Der Schlüssel stimmt mit dem öffentlichen Schlüssel der bisherigen App überein. Die Secret-Werte werden nur dem Signierungsschritt vertrauenswürdiger Windows-Läufe übergeben. Sie gehören niemals in Git, Artefakte oder Logs. Der lokale, verschlüsselte Schlüssel bleibt als Sicherung erhalten.
+Die Quellcode-Version ist eine Basisversion. Die installierte Version steht in der App; der aktuell veröffentlichte Stand unter [Releases](https://github.com/M10-Voxel/Journal-App/releases/latest). Neue Versionen können Datenbanken migrieren; ein beliebiges Zurückgehen auf ältere EXEs wird nicht garantiert.
 
-## Späterer Android-Branch
+## Automatische Veröffentlichung
 
-`Windows` bleibt der feste Zweig für Windows-Updates, unabhängig davon, welcher Branch auf GitHub als Standard eingestellt ist. Ein späterer `android`-Branch startet weder den Windows-Build noch dessen Veröffentlichung und kann keine Windows-Versionsnummer vergeben.
+Ein Push auf `Windows` startet **Windows builds**. Nach erfolgreichen Tests vergibt CI eine höhere Versionsnummer, baut EXE und Installer, signiert den Installer und lädt EXE, Installer, `.sig` und `latest.json` in ein Release. Ein manueller Workflow-Start auf `Windows` ist ebenfalls möglich. Für ein neues App-Update sind keine manuellen Versions-Commits oder Release-Klicks nötig.
 
-Mit dem Android-Umbau wird ein eigener Workflow für Android eingerichtet, der installierbare APKs als Actions-Downloads bereitstellt. Android benötigt eine eigene Android-Signierung; der vorhandene Tauri-Update-Schlüssel ist für Windows-Installer vorgesehen. Android-Builds sind derzeit noch nicht eingerichtet.
+Versionen werden nur im Runner gemeinsam in npm-, Cargo- und Tauri-Dateien gesetzt, nicht zurückcommittet. Bereits vergebene reguläre Versionen und Entwürfe werden berücksichtigt; eine bewusst erhöhte Basisversion gilt ebenfalls. Abgebrochene Läufe können Nummern auslassen.
 
-Für spätere Android-Releases sind getrennte Tags wie `android-v0.1.0` vorgesehen. Diese werden mit `make_latest: false` veröffentlicht und bekommen eigene APK-Dateien. Die derzeitige Windows-Updateadresse verwendet GitHubs globales „Latest“-Release; deshalb darf ein Android-Release diesen Zeiger oder die Windows-Datei `latest.json` nicht ersetzen. Windows ignoriert Android-Tags bei der Vergabe seiner Versionsnummern.
+Der Build-Job besitzt Repository-Leserechte. Ein eigener Veröffentlichungsjob erhält begrenzte Schreibrechte, prüft die Signatur erneut und vergleicht Größe und SHA-256 aller Uploads. Erst ein vollständiger Entwurf wird zum öffentlichen neuesten Release. Ein älterer Build darf keine bereits neuere Version ersetzen. Windows-Läufe werden zur Veröffentlichung nacheinander abgearbeitet; Release-Tags starten keine weitere Build-Schleife.
 
-## Ein Update manuell bereitstellen
+Die Actions-Secrets `TAURI_SIGNING_PRIVATE_KEY` und `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` sind eingerichtet. Sie werden nur dem Signierungsschritt vertrauenswürdiger Windows-Läufe übergeben und gehören weder in Quellcode noch in Artefakte/Logs. Der öffentliche Schlüssel bleibt in der App-Konfiguration, damit bisherige Installationen neue Updates akzeptieren.
 
-1. Eine höhere Version in `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` und `package.json` eintragen, zum Beispiel `0.1.1`. Lockfiles ebenfalls aktualisieren. Gleiche oder ältere Versionen werden nicht angeboten.
-2. `npm run release` aus einer Windows-Entwicklungsumgebung mit Rust/MSVC ausführen. Optional: `npm run release -- -NotesFile RELEASE_NOTES.md`.
-3. In GitHub ein öffentlich abrufbares Release mit passendem Tag (zum Beispiel `v0.1.1`) am gebauten Commit anlegen und die vier Dateien aus `src-tauri/target/release/update/` anhängen: EXE, Installer, `.sig`, `latest.json`. Zuerst als Entwurf hochladen und prüfen, dann als reguläres Release veröffentlichen, damit `/releases/latest/` darauf zeigt.
+## Actions-Downloads und spätere Android-Version
 
-Der Release-Befehl erzeugt und signiert den Installer, erstellt das Manifest und veröffentlicht **nichts**. Normale schnelle Builds und normale Installer-Builds benötigen den Schlüssel nicht. Für CI können `TAURI_SIGNING_PRIVATE_KEY` und `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` aus geschützten Secrets gesetzt werden.
+Unter **Actions → Windows builds → erfolgreicher Lauf → Artifacts** stehen EXE und Installer getrennt als ZIP, benannt nach Version und Commit. Diese Downloads benötigen eine GitHub-Anmeldung und bleiben 30 Tage verfügbar. Veröffentlichte Releases sind unabhängig davon dauerhaft abrufbar. Der Installer-Download eines signierten Builds enthält auch Signatur und Manifest.
 
-Der private Schlüssel liegt **passwortverschlüsselt** in `.release-keys/journal-release.key`; sein zufälliges Passwort ist in `.release-keys/journal-release.password.dpapi` durch das aktuelle Windows-Konto geschützt. `.release-keys/` ist Git-ignoriert. Den verschlüsselten Schlüssel und das zugehörige Passwort getrennt sicher sichern: die DPAPI-Datei allein ist auf einem anderen Windows-Konto nicht entschlüsselbar. Ein früher lokaler Erzeugungsversuch (`journal-updater.*`) wird nicht verwendet.
+Pull Requests mit Ziel `Windows` erzeugen ausschließlich unsignierte Test-Downloads. Andere Branches starten den Windows-Workflow nicht; ein manueller Start auf einem anderen Branch wird übersprungen. `Windows` ist fest gewählt und folgt nicht automatisch einem später geänderten Standardbranch.
 
-Um das Release-Passwort selbst in einem Passwortmanager zu sichern, kann es auf diesem Windows-Konto in PowerShell in die Zwischenablage kopiert werden (nicht in Logs oder Git einfügen):
+Ein späterer `android`-Branch benötigt einen eigenen Android-Umbau, APK-Workflow und Android-Signierschlüssel. Solche Builds sind derzeit nicht eingerichtet. Für Android-Releases sind eigene Tags wie `android-v0.1.0` mit `make_latest: false` vorgesehen: Die derzeitige Windows-Adresse verwendet das globale „Latest“-Release, das ein Android-Release deshalb nicht ersetzen darf. Windows ignoriert diese Android-Tags bei der Versionsvergabe.
 
-```powershell
-$secure = Get-Content .release-keys/journal-release.password.dpapi -Raw | ConvertTo-SecureString
-$credential = New-Object System.Management.Automation.PSCredential('updater', $secure)
-Set-Clipboard -Value $credential.GetNetworkCredential().Password
-```
+## Manuell signieren und Schlüssel sichern
 
-Der private Schlüssel muss bei zukünftigen Releases derselbe bleiben, damit bereits installierte Apps die Signatur weiterhin prüfen können.
+In einer Windows-Entwicklungsumgebung kann `npm.cmd run release` weiterhin ein signiertes Paket unter `src-tauri/target/release/update/` erstellen; optional mit `-- -NotesFile DATEI.md`. Dieser Befehl veröffentlicht selbst nichts. Bei manueller Veröffentlichung müssen alle Versionsdateien zu einer noch nicht vergebenen höheren Version passen und EXE, Installer, Signatur sowie Manifest zum gebauten Commit gehören.
 
-## Downloads unter GitHub Actions
+Der lokale private Schlüssel liegt passwortverschlüsselt in `.release-keys/journal-release.key`; das zugehörige Passwort ist mit dem Windows-Konto in `.release-keys/journal-release.password.dpapi` geschützt. Beide sind Git-ignoriert. Den verschlüsselten Schlüssel und das Passwort getrennt sicher sichern: Eine DPAPI-Datei allein lässt sich auf einem anderen Windows-Konto nicht entschlüsseln. Den privaten Schlüssel nicht einfach austauschen, da vorhandene Apps die neue Signatur sonst nicht akzeptieren.
 
-Der Workflow [Windows builds](../.github/workflows/windows-build.yml) läuft bei Pushes auf Windows, Pull Requests mit Ziel Windows und manuell über **Actions → Windows builds → Run workflow**. Er prüft Frontend und Backend und baut die EXE sowie den NSIS-Installer mit WebView2-Offlinelaufzeit. Unter **Artifacts** des erfolgreichen Laufs stehen beide Downloads getrennt als ZIP bereit, mit Version und Commit im Namen. Für diese Downloads ist eine GitHub-Anmeldung nötig; die Aufbewahrungszeit beträgt 30 Tage.
-
-Erfolgreiche Windows-Builds werden zusätzlich automatisch als signierte Updates unter **Releases** veröffentlicht. Ihr Installer-Artefakt enthält auch die Signatur und `latest.json`. Pull Requests erhalten keinen Signierschlüssel und verändern die Updatequelle nicht. Andere Plattform-Branches werden von diesem Workflow nicht gebaut. Unter **Releases** bleiben veröffentlichte Versionen unabhängig von der Aufbewahrungszeit der Actions-Artefakte abrufbar.
+Quellen und Implementierung: [Tauri Updater](https://v2.tauri.app/plugin/updater/), `.github/workflows/windows-build.yml`, `scripts/ci-release.mjs`, `scripts/build-release.ps1`, `scripts/verify-update.mjs`, `src-tauri/src/vault.rs`. Weitere Befehle und Testgrenzen: [Entwicklung](development.md).
