@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { GitHub, compareVersions, isPublishRun, nextVersion, parseVersion, prepare, publish, repository, setVersion, stage } from '../scripts/ci-release.mjs';
 import { verifyUpdate } from '../scripts/verify-update.mjs';
 
-const env = {GITHUB_REPOSITORY:repository, GITHUB_REF:'refs/heads/WIP', GITHUB_EVENT_NAME:'push', GITHUB_SHA:'a'.repeat(40), GITHUB_RUN_ID:'12345', GITHUB_RUN_ATTEMPT:'1', RELEASE_VERSION:'0.1.2'};
+const env = {GITHUB_REPOSITORY:repository, GITHUB_REF:'refs/heads/Windows', GITHUB_EVENT_NAME:'push', GITHUB_SHA:'a'.repeat(40), GITHUB_RUN_ID:'12345', GITHUB_RUN_ATTEMPT:'1', RELEASE_VERSION:'0.1.2'};
 const release = (version, extra = {}) => ({tag_name:'v' + version, draft:false, prerelease:false, ...extra});
 async function temporary(t) { const root = await mkdtemp(join(tmpdir(), 'journal-release-test-')); t.after(() => rm(root, {recursive:true, force:true})); return root; }
 async function versionFixture(t) {
@@ -65,9 +65,9 @@ test('automatic versions advance across releases, reserved drafts and Windows co
  for(const bad of ['1.2.3-beta','01.2.3','1.2.65536','../1.2.3','1.2'])assert.equal(parseVersion(bad),null);
  assert(compareVersions('0.1.10','0.1.9')>0);
 });
-test('only push or manual builds of the original WIP branch may sign and publish',()=>{
+test('only push or manual builds of the original Windows branch may sign and publish',()=>{
  assert(isPublishRun(env));assert(isPublishRun({...env,GITHUB_EVENT_NAME:'workflow_dispatch'}));
- for(const other of [{GITHUB_EVENT_NAME:'pull_request'},{GITHUB_EVENT_NAME:'pull_request_target'},{GITHUB_REF:'refs/heads/test'},{GITHUB_REPOSITORY:'fork/Journal-App'}])assert(!isPublishRun({...env,...other}));
+ for(const other of [{GITHUB_EVENT_NAME:'pull_request'},{GITHUB_EVENT_NAME:'pull_request_target'},{GITHUB_REF:'refs/heads/test'},{GITHUB_REF:'refs/heads/WIP'},{GITHUB_REF:'refs/heads/android'},{GITHUB_REPOSITORY:'fork/Journal-App'}])assert(!isPublishRun({...env,...other}));
 });
 test('version preparation updates every package version while preserving dependency versions and Cargo syntax',async t=>{
  const root=await versionFixture(t);await setVersion(root,'0.1.12');
@@ -126,7 +126,21 @@ test('retries can resume their own draft but do not replace public releases or o
  await assert.rejects(publish({...fixture,env,github:existing.github}),/another commit/);
 });
 test('untrusted publication contexts fail before accessing files or GitHub',async()=>{
- await assert.rejects(publish({env:{...env,GITHUB_EVENT_NAME:'pull_request'},github:{releases:()=>assert.fail()}}),/trusted WIP/);
+ await assert.rejects(publish({env:{...env,GITHUB_EVENT_NAME:'pull_request'},github:{releases:()=>assert.fail()}}),/trusted Windows/);
+});
+test('Android builds cannot allocate Windows versions or publish Windows updates',async t=>{
+ const root=await versionFixture(t);
+ for(const event of ['push','workflow_dispatch']){
+  const android={...env,GITHUB_REF:'refs/heads/android',GITHUB_EVENT_NAME:event};
+  const github={releases:()=>assert.fail('Android must not query the Windows release channel')};
+  const result=await prepare({root,env:android,github});
+  assert.equal(result.publish,'false');assert.equal(result.version,'0.1.1');
+  await assert.rejects(publish({root,env:android,github}),/trusted Windows/);
+ }
+ assert.equal(nextVersion('0.1.1',[release('0.1.2'),{tag_name:'android-v999.0.0',prerelease:false}]),'0.1.3');
+ const fixture=await signedFixture(t),mock=githubFixture({releases:[{tag_name:'android-v999.0.0',prerelease:false,draft:false}]});
+ await publish({...fixture,env,github:mock.github});
+ assert(mock.calls.some(call=>call.method==='PATCH'));
 });
 test('upload tokens cannot be sent to another host or repository',async()=>{
  const github=new GitHub('test-token',()=>assert.fail('No request may be sent'));

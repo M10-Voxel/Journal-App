@@ -24,15 +24,23 @@ Tauri prüft sowohl die Signatur der heruntergeladenen Datei als auch die darin 
 
 ## Automatische Updates aus Actions
 
-Ein Push auf `WIP` startet den Workflow **Windows builds**. Nach erfolgreichen Tests erzeugt er automatisch eine höhere Versionsnummer, baut und signiert den Windows-Installer und veröffentlicht ein reguläres Release mit EXE, Installer, Signatur und `latest.json`. Auch ein manueller Workflow-Start auf `WIP` veröffentlicht ein Update. Andere Branches und Pull Requests erzeugen ausschließlich Test-Downloads.
+Ein Push auf `Windows` startet den Workflow **Windows builds**. Nach erfolgreichen Tests erzeugt er automatisch eine höhere Versionsnummer, baut und signiert den Windows-Installer und veröffentlicht ein reguläres Release mit EXE, Installer, Signatur und `latest.json`. Auch ein manueller Workflow-Start auf `Windows` veröffentlicht ein Update. Pull Requests mit Ziel Windows erzeugen ausschließlich Test-Downloads. Pushes auf andere Branches starten diesen Windows-Workflow nicht; ein manueller Start auf einem anderen Branch wird übersprungen.
 
-Die App verwendet weiterhin dieselbe öffentliche Release-Adresse. Für ein neues Update genügt jetzt ein normaler Code-Push auf `WIP`; Versionsnummern, Signieren und das Anlegen des Releases müssen nicht mehr manuell erledigt werden. Es wird kein GitHub-Zugang in der App benötigt.
+Die App verwendet weiterhin dieselbe öffentliche Release-Adresse. Für ein neues Update genügt jetzt ein normaler Code-Push auf `Windows`; Versionsnummern, Signieren und das Anlegen des Releases müssen nicht mehr manuell erledigt werden. Es wird kein GitHub-Zugang in der App benötigt.
 
 Die Versionsnummer wird nur im Build-Verzeichnis des Runners in npm-, Cargo- und Tauri-Dateien gesetzt, nicht zurückcommittet. Sie ist höher als bereits vergebene reguläre Release- und Entwurfsversionen. Eine bewusst erhöhte Basisversion im Quellcode wird berücksichtigt. Abgebrochene Läufe können deshalb Lücken in den Versionsnummern hinterlassen.
 
-Der Build-Job besitzt nur Leserechte am Repository. Der getrennte Veröffentlichungsjob erhält Schreibrechte, prüft erneut die Signatur und bestätigt nach jedem Upload Größe und SHA-256. Erst wenn alle vier Dateien vollständig vorliegen, wird der Release-Entwurf öffentlich zum neuesten Update. Neuere bereits veröffentlichte Versionen werden nicht durch ältere Builds ersetzt. WIP-Läufe werden nacheinander ausgeführt, damit ein Push keine laufende Veröffentlichung unterbricht. Tags erzeugen keine neue Build-Schleife.
+Der Build-Job besitzt nur Leserechte am Repository. Der getrennte Veröffentlichungsjob erhält Schreibrechte, prüft erneut die Signatur und bestätigt nach jedem Upload Größe und SHA-256. Erst wenn alle vier Dateien vollständig vorliegen, wird der Release-Entwurf öffentlich zum neuesten Update. Neuere bereits veröffentlichte Versionen werden nicht durch ältere Builds ersetzt. Windows-Läufe werden nacheinander ausgeführt, damit ein Push keine laufende Veröffentlichung unterbricht. Tags erzeugen keine neue Build-Schleife.
 
-Für die Signierung sind im Repository die Actions-Secrets `TAURI_SIGNING_PRIVATE_KEY` und `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` eingerichtet. Der Schlüssel stimmt mit dem öffentlichen Schlüssel der bisherigen App überein. Die Secret-Werte werden nur dem Signierungsschritt vertrauenswürdiger WIP-Läufe übergeben. Sie gehören niemals in Git, Artefakte oder Logs. Der lokale, verschlüsselte Schlüssel bleibt als Sicherung erhalten.
+Für die Signierung sind im Repository die Actions-Secrets `TAURI_SIGNING_PRIVATE_KEY` und `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` eingerichtet. Der Schlüssel stimmt mit dem öffentlichen Schlüssel der bisherigen App überein. Die Secret-Werte werden nur dem Signierungsschritt vertrauenswürdiger Windows-Läufe übergeben. Sie gehören niemals in Git, Artefakte oder Logs. Der lokale, verschlüsselte Schlüssel bleibt als Sicherung erhalten.
+
+## Späterer Android-Branch
+
+`Windows` bleibt der feste Zweig für Windows-Updates, unabhängig davon, welcher Branch auf GitHub als Standard eingestellt ist. Ein späterer `android`-Branch startet weder den Windows-Build noch dessen Veröffentlichung und kann keine Windows-Versionsnummer vergeben.
+
+Mit dem Android-Umbau wird ein eigener Workflow für Android eingerichtet, der installierbare APKs als Actions-Downloads bereitstellt. Android benötigt eine eigene Android-Signierung; der vorhandene Tauri-Update-Schlüssel ist für Windows-Installer vorgesehen. Android-Builds sind derzeit noch nicht eingerichtet.
+
+Für spätere Android-Releases sind getrennte Tags wie `android-v0.1.0` vorgesehen. Diese werden mit `make_latest: false` veröffentlicht und bekommen eigene APK-Dateien. Die derzeitige Windows-Updateadresse verwendet GitHubs globales „Latest“-Release; deshalb darf ein Android-Release diesen Zeiger oder die Windows-Datei `latest.json` nicht ersetzen. Windows ignoriert Android-Tags bei der Vergabe seiner Versionsnummern.
 
 ## Ein Update manuell bereitstellen
 
@@ -56,6 +64,6 @@ Der private Schlüssel muss bei zukünftigen Releases derselbe bleiben, damit be
 
 ## Downloads unter GitHub Actions
 
-Der Workflow [Windows builds](../.github/workflows/windows-build.yml) läuft bei Pushes, Pull Requests und manuell über **Actions → Windows builds → Run workflow**. Er prüft Frontend und Backend und baut die EXE sowie den NSIS-Installer mit WebView2-Offlinelaufzeit. Unter **Artifacts** des erfolgreichen Laufs stehen beide Downloads getrennt als ZIP bereit, mit Version und Commit im Namen. Für diese Downloads ist eine GitHub-Anmeldung nötig; die Aufbewahrungszeit beträgt 30 Tage.
+Der Workflow [Windows builds](../.github/workflows/windows-build.yml) läuft bei Pushes auf Windows, Pull Requests mit Ziel Windows und manuell über **Actions → Windows builds → Run workflow**. Er prüft Frontend und Backend und baut die EXE sowie den NSIS-Installer mit WebView2-Offlinelaufzeit. Unter **Artifacts** des erfolgreichen Laufs stehen beide Downloads getrennt als ZIP bereit, mit Version und Commit im Namen. Für diese Downloads ist eine GitHub-Anmeldung nötig; die Aufbewahrungszeit beträgt 30 Tage.
 
-Erfolgreiche WIP-Builds werden zusätzlich automatisch als signierte Updates unter **Releases** veröffentlicht. Ihr Installer-Artefakt enthält auch die Signatur und `latest.json`. Builds anderer Branches und Pull Requests erhalten keinen Signierschlüssel und verändern die Updatequelle nicht. Unter **Releases** bleiben veröffentlichte Versionen unabhängig von der Aufbewahrungszeit der Actions-Artefakte abrufbar.
+Erfolgreiche Windows-Builds werden zusätzlich automatisch als signierte Updates unter **Releases** veröffentlicht. Ihr Installer-Artefakt enthält auch die Signatur und `latest.json`. Pull Requests erhalten keinen Signierschlüssel und verändern die Updatequelle nicht. Andere Plattform-Branches werden von diesem Workflow nicht gebaut. Unter **Releases** bleiben veröffentlichte Versionen unabhängig von der Aufbewahrungszeit der Actions-Artefakte abrufbar.

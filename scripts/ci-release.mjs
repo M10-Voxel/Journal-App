@@ -10,7 +10,7 @@ import { pathToFileURL } from 'node:url';
 import { verifyUpdate } from './verify-update.mjs';
 
 export const repository = 'M10-Voxel/Journal-App';
-const sourceBranch = 'refs/heads/WIP';
+const sourceBranch = 'refs/heads/Windows';
 const componentLimit = 65535;
 export function parseVersion(value) {
  if (typeof value !== 'string' || !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(value)) return null;
@@ -112,7 +112,7 @@ export async function prepare({root = process.cwd(), env = process.env, github} 
   let messages;
   try { messages = execFileSync('git', ['log', ...range, '-20', '--format=%s'], {cwd:root, encoding:'utf8', windowsHide:true}).trim(); }
   catch { messages = 'Journal aktualisiert'; }
-  const notes = `Journal ${version}\n\n${messages.split(/\r?\n/).filter(Boolean).map(message => '- ' + message).join('\n')}\n\nAutomatischer Build aus WIP (${env.GITHUB_SHA.slice(0, 7)}).\n[Build ansehen](https://github.com/${repository}/actions/runs/${env.GITHUB_RUN_ID})\n`;
+  const notes = `Journal ${version}\n\n${messages.split(/\r?\n/).filter(Boolean).map(message => '- ' + message).join('\n')}\n\nAutomatischer Build aus Windows (${env.GITHUB_SHA.slice(0, 7)}).\n[Build ansehen](https://github.com/${repository}/actions/runs/${env.GITHUB_RUN_ID})\n`;
   await mkdir(join(root, 'src-tauri/target'), {recursive:true}); await writeFile(join(root, notes_file), notes);
  }
  return output(env, {publish:String(publish), version, prefix:`Journal-${version}-${env.GITHUB_SHA.slice(0, 7)}`, notes_file});
@@ -136,7 +136,7 @@ async function digest(file) {
  return {size:(await stat(file)).size, digest:'sha256:' + hash.digest('hex')};
 }
 export async function publish({directory = 'src-tauri/target/release/update', root = process.cwd(), env = process.env, github} = {}) {
- assert(isPublishRun(env), 'Only trusted WIP builds may publish app updates.'); context(env);
+ assert(isPublishRun(env), 'Only trusted Windows builds may publish app updates.'); context(env);
  assert(parseVersion(env.RELEASE_VERSION), 'Missing build version.');
  const verified = await verifyUpdate(directory, {configPath:join(root, 'src-tauri/tauri.conf.json'), expectedVersion:env.RELEASE_VERSION});
  const {manifest, files} = verified, tag = 'v' + manifest.version;
