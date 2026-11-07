@@ -10,6 +10,8 @@ const directory = resolve(process.argv[2] || 'src-tauri/target/release/update');
 const config = JSON.parse(await readFile('src-tauri/tauri.conf.json', 'utf8'));
 const manifest = JSON.parse(await readFile(join(directory, 'latest.json'), 'utf8'));
 assert.equal(manifest.version, config.version, 'The manifest must match the app version.');
+assert.equal(typeof manifest.notes, 'string', 'Release notes must be plain text.');
+assert(Number.isFinite(Date.parse(manifest.pub_date)), 'A valid publication date is required.');
 const platform = manifest.platforms['windows-x86_64'];
 const download = new URL(platform.url);
 assert.equal(download.origin, 'https://github.com');

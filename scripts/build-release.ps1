@@ -40,7 +40,7 @@ try {
   $signature = Get-Content -LiteralPath ($installer.FullName + '.sig') -Raw
   $signedComment = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($signature.Trim()))
   if ($signedComment -notmatch ('(?m)^trusted comment:.*\bversion:' + [regex]::Escape($version) + '(?:\s|$)')) { throw 'Die Signatur enthält keine passende App-Version.' }
-  $notes = if ($NotesFile) { Get-Content -LiteralPath $NotesFile -Raw -Encoding UTF8 } else { "Journal $version" }
+  $notes = if ($NotesFile) { [IO.File]::ReadAllText((Resolve-Path -LiteralPath $NotesFile).Path, [Text.Encoding]::UTF8) } else { "Journal $version" }
   $output = Join-Path $projectRoot 'src-tauri/target/release/update'
   New-Item -ItemType Directory -Path $output -Force | Out-Null
   $manifest = [ordered]@{
