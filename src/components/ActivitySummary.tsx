@@ -28,6 +28,6 @@ export function ActivitySummary({ activity, dates, data, mode }: { activity: Act
         </div>;
       })}
     </div>}
-    {activity.trackTime && mode === 'week' && <p className="activity-unit">{en ? 'Minutes' : 'Minuten'}{monthly ? en ? ' per month' : ' pro Monat' : en ? ' per day' : ' pro Tag'}</p>}
+    {mode === 'week' && <p className="activity-unit" aria-hidden={!activity.trackTime || undefined}>{activity.trackTime ? en ? 'Minutes per day' : 'Minuten pro Tag' : '\u00a0'}</p>}
   </article>;
 }

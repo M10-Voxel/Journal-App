@@ -1,0 +1,121 @@
+/* The right-click menus (ContextMenu.tsx) in the build of each popup look. The base is shared; every look lays its own
+   frame, head, rows and choice over it (`.ctx-menu.is-<look>`). Submenus (`.is-sub`) have no head. */
+.ctx-menu { position: fixed; z-index: 3100; display: flex; flex-direction: column; box-sizing: border-box; min-width: 200px; max-width: min(340px, calc(100vw - 12px)); max-height: calc(100vh - 12px);
+  overflow: hidden auto; padding: 5px; outline: none; color: var(--text); font: 12.5px var(--sans); user-select: none; animation: ctx-in 150ms cubic-bezier(.2, .9, .3, 1.2); }
+.ctx-menu.is-sub { min-width: 180px; animation-duration: 110ms; }
+@keyframes ctx-in { from { opacity: 0; transform: translateY(-3px) scale(.97); } }
+.ctx-list { display: flex; flex-direction: column; }
+.ctx-item { position: relative; display: flex; align-items: center; gap: 9px; box-sizing: border-box; width: 100%; min-height: 28px; padding: 0 10px 0 calc(9px + var(--depth, 0) * 14px);
+  border: 0; border-radius: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.ctx-item:focus { outline: none; }
+.ctx-item .icon { flex: none; width: 14px; height: 14px; color: var(--muted); }
+.ctx-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ctx-item kbd { flex: none; margin: 0 0 0 16px; padding: 0; border: 0; background: transparent; box-shadow: none; color: var(--muted); font: 10.5px var(--mono); }
+.ctx-arrow { flex: none; margin-left: 8px; color: var(--muted); font-size: 10px; }
+.ctx-check { flex: none; width: 14px; text-align: center; font-weight: 700; }
+.ctx-swatch { flex: none; width: 14px; height: 14px; border-radius: 3px; background: var(--paper, var(--swatch, var(--accent))); box-shadow: inset 0 0 0 1px #00000033; }
+.ctx-item:disabled { opacity: .4; cursor: default; }
+.ctx-item.is-danger { color: var(--error); }
+.ctx-item.is-danger .icon { color: inherit; }
+.ctx-separator { flex: none; height: 1px; margin: 4px 8px; background: var(--edge); }
+.ctx-head { flex: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ── Normal · Karte: a rounded card, a soft hover, the choice in the accent ─────────────────────────────────────── */
+.ctx-menu.is-classic-a { border-radius: 10px; background: var(--surface); box-shadow: 0 0 0 1px var(--edge), 0 14px 34px -12px #000000e6, 0 3px 8px #00000066; }
+.ctx-menu.is-classic-a .ctx-item { border-radius: 6px; }
+.ctx-menu.is-classic-a .ctx-item:is(:hover, :focus-visible, .is-open):not(:disabled) { background: var(--hover); color: var(--strong); }
+.ctx-menu.is-classic-a .ctx-item:is(:hover, :focus-visible):not(:disabled) .icon { color: var(--accent); }
+.ctx-menu.is-classic-a .ctx-item.is-danger:is(:hover, :focus-visible) { background: color-mix(in srgb, var(--error) 14%, transparent); color: var(--error); }
+.ctx-menu.is-classic-a .ctx-item.is-danger:is(:hover, :focus-visible) .icon { color: var(--error); }
+.ctx-menu.is-classic-a .ctx-item.is-checked .ctx-check, .ctx-menu.is-classic-a .ctx-item.is-checked .icon { color: var(--accent); }
+
+/* ── Normal · Glas: frosted, a bright rim, pill rows that glow in the accent ───────────────────────────────────── */
+.ctx-menu.is-classic-b { padding: 6px; border-radius: 16px; background: color-mix(in srgb, var(--surface) 60%, transparent);
+  -webkit-backdrop-filter: blur(22px) saturate(1.6); backdrop-filter: blur(22px) saturate(1.6);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--strong) 22%, transparent), inset 0 0 0 1px color-mix(in srgb, var(--strong) 12%, transparent), 0 26px 50px -20px #000000f2, 0 0 0 1px #00000055; }
+.ctx-menu.is-classic-b .ctx-head.is-glass { padding: 4px 12px 6px; color: var(--muted); font: 500 10.5px var(--sans); letter-spacing: .02em; }
+.ctx-menu.is-classic-b .ctx-item { min-height: 30px; border-radius: 999px; padding-left: calc(12px + var(--depth, 0) * 14px); padding-right: 12px; }
+.ctx-menu.is-classic-b .ctx-item:is(:hover, :focus-visible, .is-open):not(:disabled) { background: color-mix(in srgb, var(--strong) 12%, transparent); color: var(--strong); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--strong) 10%, transparent); }
+.ctx-menu.is-classic-b .ctx-item:is(:hover, :focus-visible):not(:disabled) .icon { color: var(--accent); filter: drop-shadow(0 0 5px color-mix(in srgb, var(--accent) 70%, transparent)); }
+.ctx-menu.is-classic-b .ctx-item.is-checked { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--strong); }
+.ctx-menu.is-classic-b .ctx-item.is-danger:is(:hover, :focus-visible) { background: color-mix(in srgb, var(--error) 18%, transparent); color: var(--error); box-shadow: 0 0 14px color-mix(in srgb, var(--error) 30%, transparent); }
+.ctx-menu.is-classic-b .ctx-separator { margin: 5px 14px; background: color-mix(in srgb, var(--strong) 10%, transparent); }
+.ctx-menu.is-classic-b .ctx-item kbd { padding: 1px 6px; border-radius: 999px; background: color-mix(in srgb, var(--strong) 8%, transparent); }
+
+/* ── Journal · Karteikarte: an index card – the title over the red rule, a blue line under each row, tick boxes ─── */
+.ctx-menu.is-journal-a { --row: 27px; padding: 0 0 6px; border-radius: 2px; background: var(--surface);
+  box-shadow: 0 0 0 1px var(--edge), 0 18px 34px -14px color-mix(in srgb, #3b2a1a 60%, transparent); font-family: var(--serif); }
+.ctx-menu.is-journal-a.is-sub { padding-top: 4px; }
+/* The card's blue line under every row (drawn by the row, so the lines always meet the rows). */
+.ctx-menu.is-journal-a .ctx-item { box-shadow: inset 0 -1px 0 color-mix(in srgb, #4a7bb7 30%, transparent); }
+.ctx-menu.is-journal-a .ctx-head.is-card { height: 34px; box-sizing: border-box; padding: 9px 14px 0; border-bottom: 1.5px solid color-mix(in srgb, var(--error) 50%, transparent); color: var(--strong); font: italic 600 14px var(--display, var(--serif)); }
+.ctx-menu.is-journal-a .ctx-item { height: var(--row); min-height: 0; padding-left: calc(12px + var(--depth, 0) * 14px); padding-right: 14px; font: italic 14px var(--write, var(--serif)); }
+.ctx-menu.is-journal-a .ctx-check { width: 12px; height: 12px; border: 1px solid color-mix(in srgb, var(--text) 50%, transparent); border-radius: 1px; color: var(--accent); font: 700 12px/12px var(--sans); }
+.ctx-menu.is-journal-a .ctx-item:is(:hover, :focus-visible, .is-open):not(:disabled) { color: var(--accent); }
+.ctx-menu.is-journal-a .ctx-item:is(:hover, :focus-visible, .is-open):not(:disabled) .ctx-label { text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--accent) 55%, transparent); text-underline-offset: 3px; }
+.ctx-menu.is-journal-a .ctx-item.is-danger:is(:hover, :focus-visible) { color: var(--error); }
+.ctx-menu.is-journal-a .ctx-item kbd { font: 11px var(--mono); }
+.ctx-menu.is-journal-a .ctx-separator { height: 0; margin: 0; background: transparent; border-top: 1px dashed color-mix(in srgb, var(--error) 35%, transparent); }
+.ctx-menu.is-journal-a .ctx-swatch { border-radius: 50%; }
+
+/* ── Journal · Notizblock: an amber sheet on a spiral binding, the title on a tab, a highlighter for the row ────── */
+.ctx-menu.is-journal-b { --surface: color-mix(in srgb, var(--priority) 26%, var(--book-paper, var(--surface))); padding: 0 6px 8px; border-radius: 3px 3px 1px 1px; background: var(--surface);
+  box-shadow: 0 0 0 1px var(--edge), 0 3px 0 -1px color-mix(in srgb, var(--surface) 86%, #000), 0 5px 0 -2px color-mix(in srgb, var(--surface) 78%, #000), 0 20px 34px -14px color-mix(in srgb, #3b2a1a 60%, transparent); font-family: var(--serif); }
+.ctx-menu.is-journal-b.is-sub { padding-top: 6px; }
+.ctx-menu.is-journal-b .ctx-head.is-pad { position: relative; display: flex; justify-content: flex-end; height: 22px; margin: 0 -6px 6px; padding: 0 10px; background: color-mix(in srgb, var(--priority) 34%, var(--book-paper, var(--surface))); overflow: visible; }
+.ctx-menu.is-journal-b .ctx-rings { position: absolute; inset: 0; background: radial-gradient(circle at 50% 9px, color-mix(in srgb, var(--text) 75%, transparent) 2.6px, transparent 3.3px) 4px 0 / 16px 22px repeat-x; }
+.ctx-menu.is-journal-b .ctx-tab { position: relative; align-self: flex-end; margin-bottom: -6px; padding: 2px 9px; border-radius: 3px 3px 0 0; background: var(--surface); box-shadow: 0 -1px 0 color-mix(in srgb, #3b2a1a 18%, transparent); color: var(--text); font: 600 11px var(--serif); }
+.ctx-menu.is-journal-b .ctx-item { gap: 8px; min-height: 27px; padding-left: calc(8px + var(--depth, 0) * 14px); border-radius: 2px 6px 3px 5px; font: 14px var(--write, var(--serif)); }
+.ctx-menu.is-journal-b .ctx-item .icon { color: color-mix(in srgb, var(--text) 70%, transparent); }
+.ctx-menu.is-journal-b .ctx-item:is(:hover, :focus-visible, .is-open):not(:disabled) { background: color-mix(in srgb, var(--priority) 55%, transparent); color: var(--strong); transform: rotate(-.6deg); }
+.ctx-menu.is-journal-b .ctx-item.is-danger:is(:hover, :focus-visible) { background: color-mix(in srgb, var(--error) 22%, transparent); color: var(--error); }
+.ctx-menu.is-journal-b .ctx-item.is-checked .ctx-label { text-decoration: underline wavy color-mix(in srgb, var(--accent) 60%, transparent); text-underline-offset: 4px; }
+.ctx-menu.is-journal-b .ctx-item kbd { padding: 0 4px; border-radius: 2px; background: color-mix(in srgb, var(--surface) 70%, #fff 30%); box-shadow: 0 1px 0 color-mix(in srgb, #3b2a1a 25%, transparent); color: var(--text); }
+.ctx-menu.is-journal-b .ctx-separator { height: 0; margin: 4px 6px; background: transparent; border-top: 1px dashed color-mix(in srgb, var(--text) 30%, transparent); }
+
+/* ── Nebula · Terminal: a black window under a prompt bar, every row a command, keys in brackets ──────────────── */
+.ctx-menu.is-nebula-a { min-width: 260px; padding: 0 0 4px; border-radius: 0; background: #0c0c0e; box-shadow: 0 0 0 1px var(--nb-line, #2a2a30), 4px 4px 0 var(--nb-offset, #2e2340); color: #d8d8d8; font: 12px var(--mono); }
+.ctx-menu.is-nebula-a.is-sub { padding-top: 4px; }
+.ctx-menu.is-nebula-a .ctx-head.is-prompt { height: 22px; margin-bottom: 4px; padding: 0 10px; background: var(--nb-paper, #d4d4d4); color: var(--nb-ink, #111); font: 10px/22px var(--mono); }
+.ctx-menu.is-nebula-a .ctx-head.is-prompt b { font-weight: 700; }
+.ctx-menu.is-nebula-a .ctx-item { gap: 12px; min-height: 24px; padding-left: calc(10px + var(--depth, 0) * 2ch); }
+.ctx-menu.is-nebula-a .ctx-command { flex: none; min-width: 10ch; color: var(--nb-violet-light, #b388ff); }
+.ctx-menu.is-nebula-a .ctx-command::before { content: '> '; color: #5c5c66; }
+.ctx-menu.is-nebula-a .ctx-label { color: #8a8a92; }
+.ctx-menu.is-nebula-a .ctx-item kbd { color: #8a8a92; font: inherit; }
+.ctx-menu.is-nebula-a .ctx-item kbd::before { content: '['; } .ctx-menu.is-nebula-a .ctx-item kbd::after { content: ']'; }
+.ctx-menu.is-nebula-a .ctx-item:is(:hover, :focus-visible, .is-open):not(:disabled) { background: var(--nb-violet, #7b2cbf); }
+.ctx-menu.is-nebula-a .ctx-item:is(:hover, :focus-visible, .is-open):not(:disabled) :is(.ctx-command, .ctx-label, kbd, .ctx-arrow) { color: #fff; }
+.ctx-menu.is-nebula-a .ctx-item:is(:hover, :focus-visible, .is-open):not(:disabled) .ctx-command::before { color: #ffffffa0; }
+.ctx-menu.is-nebula-a .ctx-item.is-checked .ctx-command::after { content: ' *'; color: var(--now, #4ade80); }
+.ctx-menu.is-nebula-a .ctx-item.is-danger .ctx-command { color: var(--error); }
+.ctx-menu.is-nebula-a .ctx-item.is-danger:is(:hover, :focus-visible) { background: color-mix(in srgb, var(--error) 75%, #000); }
+.ctx-menu.is-nebula-a .ctx-separator { height: 0; margin: 3px 10px; background: transparent; border-top: 1px dashed #2f2f36; }
+.ctx-menu.is-nebula-a .ctx-swatch { display: none; }
+
+/* ── Nebula · Holo-Papier: a window menu – violet title bar, grey bevels, a check column, underlined letters ────── */
+.ctx-menu.is-nebula-b { min-width: 220px; padding: 0 3px 3px; border-radius: 0; background: #cfcfcf; color: #111; box-shadow: inset -1px -1px 0 #555, inset 1px 1px 0 #fff, 0 0 0 1px #000, 5px 5px 0 #000; font: 12px var(--sans); }
+.ctx-menu.is-nebula-b.is-sub { padding-top: 3px; }
+.ctx-menu.is-nebula-b .ctx-head.is-window { height: 20px; margin: 0 -3px 3px; padding: 0 8px; background: linear-gradient(90deg, var(--nb-violet, #7b2cbf), #b388ff); color: #fff; font: 700 11px/20px var(--sans); }
+.ctx-menu.is-nebula-b .ctx-item { gap: 6px; min-height: 22px; padding-left: calc(4px + var(--depth, 0) * 14px); padding-right: 8px; color: #111; }
+.ctx-menu.is-nebula-b .ctx-check { width: 16px; font: 700 11px var(--sans); }
+.ctx-menu.is-nebula-b .ctx-label u { text-decoration-thickness: 1px; text-underline-offset: 2px; }
+.ctx-menu.is-nebula-b .ctx-item kbd { color: #3e3e44; font: 11px var(--sans); }
+.ctx-menu.is-nebula-b .ctx-arrow { color: #111; }
+/* The row pointed at in the foil of what it does: lilac neutral, green creating, orange removing (nebula-holo.css). */
+.ctx-menu.is-nebula-b .ctx-item:is(:hover, :focus-visible, .is-open):not(:disabled) { background: var(--holo); color: #111; box-shadow: inset 0 0 0 1px #111; }
+.ctx-menu.is-nebula-b .ctx-item.is-positive:is(:hover, :focus-visible):not(:disabled) { background: var(--holo-positive); }
+.ctx-menu.is-nebula-b .ctx-item.is-danger { color: #a3122a; }
+.ctx-menu.is-nebula-b .ctx-item.is-danger:is(:hover, :focus-visible):not(:disabled) { background: var(--holo-danger); color: #111; }
+.ctx-menu.is-nebula-b .ctx-item:disabled { color: #85858b; opacity: 1; text-shadow: 1px 1px 0 #fff; }
+.ctx-menu.is-nebula-b .ctx-separator { height: 0; margin: 3px 2px; background: transparent; border-top: 1px solid #888; border-bottom: 1px solid #fff; }
+.ctx-menu.is-nebula-b .ctx-swatch { border-radius: 0; box-shadow: inset 0 0 0 1px #111; }
+
+/* Pixel look: square, the pixel faces a little larger. */
+:root[data-pixel] .ctx-menu, :root[data-pixel] .ctx-menu :is(.ctx-item, .ctx-swatch, kbd, .ctx-tab) { border-radius: 0 !important; }
+:root[data-pixel] .ctx-menu { font-size: 15px; }
+:root[data-pixel] .ctx-menu :is(.ctx-item, .ctx-head) { font-style: normal; }
+:root[data-pixel] .ctx-menu.is-journal-a .ctx-item, :root[data-pixel] .ctx-menu.is-journal-b .ctx-item { font-size: 15px; }
+:root[data-pixel] .ctx-menu .ctx-item kbd { font-size: 13px; }
+:root[data-pixel] .ctx-menu.is-journal-b .ctx-item:hover { transform: none; }
+@media (prefers-reduced-motion: reduce) { .ctx-menu { animation: none; } .ctx-menu.is-journal-b .ctx-item:hover { transform: none; } }

@@ -49,11 +49,7 @@ fn configure(app: &tauri::AppHandle, value: bool) -> Result<()> {
         let state=app.state::<MailState>(); let mut db=state.db.lock().map_err(err)?;
         let tx=db.transaction().map_err(err)?;
         tx.execute("INSERT INTO mail_settings(key,value) VALUES('ml_enabled',?1) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [if value { "1" } else { "0" }]).map_err(err)?;
-        let revision=format!("context-v1-{}",fingerprint());
-        if value && tx.query_row("SELECT value FROM mail_settings WHERE key='ml_revision'",[],|row|row.get::<_,String>(0)).ok().as_deref()!=Some(revision.as_str()) {
-            requeue_unrecognized(&tx)?;
-            tx.execute("INSERT INTO mail_settings(key,value) VALUES('ml_revision',?1) ON CONFLICT(key) DO UPDATE SET value=excluded.value",[revision]).map_err(err)?;
-        }
+        if value { update_recognition_revision(&tx)?; }
         tx.commit().map_err(err)?;
     }
     if !value { app.state::<MlState>().worker.lock().map_err(err)?.take(); }
@@ -62,6 +58,18 @@ fn configure(app: &tauri::AppHandle, value: bool) -> Result<()> {
 fn requeue_unrecognized(db: &rusqlite::Connection) -> Result<()> {
     // Previously accepted or dismissed suggestions stay resolved. Only old non-results are fetched again.
     db.execute("DELETE FROM messages WHERE body IS NULL AND NOT EXISTS (SELECT 1 FROM candidates WHERE candidates.account_id=messages.account_id AND json_extract(candidates.data,'$.messageKey')=messages.key)",[]).map_err(err)?;
+    Ok(())
+}
+fn update_recognition_revision(db: &rusqlite::Connection) -> Result<bool> {
+    let revision = format!("sentences-v2-{}-{:x}", fingerprint(), Sha256::digest(include_bytes!("../../../src/mailContextModel.json")));
+    if db.query_row("SELECT value FROM mail_settings WHERE key='ml_revision'",[],|row|row.get::<_,String>(0)).ok().as_deref()==Some(revision.as_str()) { return Ok(false); }
+    requeue_unrecognized(db)?;
+    db.execute("INSERT INTO mail_settings(key,value) VALUES('ml_revision',?1) ON CONFLICT(key) DO UPDATE SET value=excluded.value",[revision]).map_err(err)?;
+    Ok(true)
+}
+pub fn resume(app: &tauri::AppHandle) -> Result<()> {
+    // A recognition upgrade needs no model download. Retry old non-results once, not accepted entries.
+    if enabled(app) && complete(&root(app)?) { configure(app,true)?; }
     Ok(())
 }
 #[tauri::command]
@@ -194,7 +202,7 @@ pub async fn mail_ml_analyze(app: tauri::AppHandle, text: String) -> Result<Anal
     }).await.map_err(err)?
 }
 pub fn release_idle(app: &tauri::AppHandle) {
-    if let Ok(mut worker) = app.state::<MlState>().worker.try_lock() { if worker.as_ref().is_some_and(|worker| worker.used.elapsed() > Duration::from_secs(300)) { worker.take(); } }
+    if let Ok(mut worker) = app.state::<MlState>().worker.try_lock() { if worker.as_ref().is_some_and(|worker| worker.used.elapsed() > Duration::from_secs(60)) { worker.take(); } }
 }
 
 /// Called before Tauri initialisation. This process has no journal database, windows, account tokens or network client.
@@ -226,6 +234,16 @@ pub fn worker(root: &Path) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    #[test] fn sentence_recognition_upgrade_is_idempotent() {
+        let state=super::super::MailState::open(std::path::Path::new(":memory:")).unwrap();
+        let db=state.db.lock().unwrap();
+        db.execute("INSERT INTO accounts(id,config,secret) VALUES('account','{}',X'00')",[]).unwrap();
+        db.execute("INSERT INTO messages(account_id,key,body,created) VALUES('account','retry',NULL,0)",[]).unwrap();
+        assert!(super::update_recognition_revision(&db).unwrap());
+        db.execute("INSERT INTO messages(account_id,key,body,created) VALUES('account','new-non-result',NULL,0)",[]).unwrap();
+        assert!(!super::update_recognition_revision(&db).unwrap());
+        assert_eq!(db.query_row("SELECT count(*) FROM messages",[],|r|r.get::<_,i64>(0)).unwrap(),1);
+    }
     #[test] fn model_upgrade_rechecks_non_results_without_reviving_ignored_or_accepted_suggestions() {
         let state=super::super::MailState::open(std::path::Path::new(":memory:")).unwrap();
         let db=state.db.lock().unwrap();

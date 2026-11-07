@@ -1,0 +1,2965 @@
+{
+  "provenance": "Real offline predictions from the pinned GLiNER2.5 worker on synthetic mail only. Model weights not fine-tuned; contextual post-processing is tested separately.",
+  "revision": "3de2c11f55853b7919f985a59bfc8df27b5ec991",
+  "cases": [
+    {
+      "id": "delivery-today-between",
+      "analysis": {
+        "text": "Ihr Paket kommt heute\n\nHallo, Ihr Paket wird heute zwischen 10 und 12 Uhr zugestellt. Bitte halten Sie Ihre Klingel erreichbar.",
+        "mentions": [
+          {
+            "text": "Paket",
+            "field": "event",
+            "score": 0.9831045,
+            "start": 34,
+            "end": 39
+          },
+          {
+            "text": "heute",
+            "field": "date",
+            "score": 0.97653145,
+            "start": 45,
+            "end": 50
+          },
+          {
+            "text": "Paket",
+            "field": "event",
+            "score": 0.9721458,
+            "start": 4,
+            "end": 9
+          },
+          {
+            "text": "Klingel",
+            "field": "location",
+            "score": 0.96461993,
+            "start": 108,
+            "end": 115
+          },
+          {
+            "text": "heute",
+            "field": "date",
+            "score": 0.9543325,
+            "start": 16,
+            "end": 21
+          }
+        ],
+        "classifications": [
+          {
+            "label": "a future appointment, invitation or announced delivery",
+            "score": 0.63130546
+          },
+          {
+            "label": "a cancelled appointment or delivery",
+            "score": 0.21613604
+          },
+          {
+            "label": "a past event or retrospective statement",
+            "score": 0.10235262
+          },
+          {
+            "label": "a hypothetical event or unrelated information",
+            "score": 0.050205942
+          }
+        ],
+        "milliseconds": 158
+      }
+    },
+    {
+      "id": "delivery-today-short",
+      "analysis": {
+        "text": "Ihre Lieferung\n\nHeute zwischen 14:30 und 16:15 Uhr. Wir bringen Ihre Bestellung an die angegebene Adresse.",
+        "mentions": [
+          {
+            "text": "Heute",
+            "field": "date",
+            "score": 0.9911054,
+            "start": 16,
+            "end": 21
+          },
+          {
+            "text": "14:30",
+            "field": "time",
+            "score": 0.9768371,
+            "start": 31,
+            "end": 36
+          },
+          {
+            "text": "Lieferung",
+            "field": "event",
+            "score": 0.9064355,
+            "start": 5,
+            "end": 14
+          },
+          {
+            "text": "16:15",
+            "field": "time",
+            "score": 0.9052145,
+            "start": 41,
+            "end": 46
+          },
+          {
+            "text": "angegebene Adresse",
+            "field": "location",
+            "score": 0.76687044,
+            "start": 87,
+            "end": 105
+          }
+        ],
+        "classifications": [
+          {
+            "label": "a future appointment, invitation or announced delivery",
+            "score": 0.4885437
+          },
+          {
+            "label": "a cancelled appointment or delivery",
+            "score": 0.2978589
+          },
+          {
+            "label": "a past event or retrospective statement",
+            "score": 0.1537516
+          },
+          {
+            "label": "a hypothetical event or unrelated information",
+            "score": 0.05984581
+          }
+        ],
+        "milliseconds": 103
+      }
+    },
+    {
+      "id": "delivery-typo-between",
+      "analysis": {
+        "text": "Ihre Sendung ist unterwegs\n\nWir liefern heute zwichen 13 und 15 Uhr bei Ihnen aus.",
+        "mentions": [
+          {
+            "text": "heute",
+            "field": "date",
+            "score": 0.978492,
+            "start": 40,
+            "end": 45
+          },
+          {
+            "text": "13",
+            "field": "time",
+            "score": 0.92704594,
+            "start": 54,
+            "end": 56
+          },
+          {
+            "text": "Sendung",
+            "field": "event",
+            "score": 0.83887744,
+            "start": 5,
+            "end": 12
+          },
+          {
+            "text": "15",
+            "field": "time",
+            "score": 0.7166076,
+            "start": 61,
+            "end": 63
+          }
+        ],
+        "classifications": [
+          {
+            "label": "a future appointment, invitation or announced delivery",
+            "score": 0.5834965
+          },
+          {
+            "label": "a cancelled appointment or delivery",
+            "score": 0.25514203
+          },
+          {
+            "label": "a past event or retrospective statement",
+            "score": 0.12380849
+          },
+          {
+            "label": "a hypothetical event or unrelated information",
+            "score": 0.037553083
+          }
+        ],
+        "milliseconds": 94
+      }
+    },
+    {
+      "id": "delivery-mixed-hours",
+      "analysis": {
+        "text": "Voraussichtliche Zustellung\n\nIhre Sendung erreicht Sie morgen zwischen 20 und 21:20 Uhr.",
+        "mentions": [
+          {
+            "text": "morgen",
+            "field": "date",
+            "score": 0.9879475,
+            "start": 55,
+            "end": 61
+          },
+          {
+            "text": "Sendung",
+            "field": "event",
+            "score": 0.8756196,
+            "start": 34,
+            "end": 41
+          },
+          {
+            "text": "20",
+            "field": "time",
+            "score": 0.58852375,
+            "start": 81,
+            "end": 83
+          }
+        ],
+        "classifications": [
+          {
+            "label": "a future appointment, invitation or announced delivery",
+            "score": 0.7802695
+          },
+          {
+            "label": "a cancelled appointment or delivery",
+            "score": 0.11968057
+          },
+          {
+            "label": "a past event or retrospective statement",
+            "score": 0.06753523
+          },
+          {
+            "label": "a hypothetical event or unrelated information",
+            "score": 0.032514755
+          }
+        ],
+        "milliseconds": 86
+      }
+    },
+    {
+      "id": "delivery-clock-hours",
+      "analysis": {
+        "text": "Lieferankündigung\n\nIhr Paket kommt heute von 20:00 Uhr bis 20:15.",
+        "mentions": [
+          {
+            "text": "heute",
+            "field": "date",
+            "score": 0.9850294,
+            "start": 35,
+            "end": 40
+          },
+          {
+            "text": "20:15",
+            "field": "time",
+            "score": 0.8393808,
+            "start": 59,
+            "end": 64
+          },
+          {
+            "text": "20:00",
+            "field": "time",
+            "score": 0.75155777,
+            "start": 45,
+            "end": 50
+          },
+          {
+            "text": "Paket",
+            "field": "event",
+            "score": 0.69634485,
+            "start": 23,
+            "end": 28
+          }
+        ],
+        "classifications": [
+          {
+            "label": "a future appointment, invitation or announced delivery",
+            "score": 0.7761554
+          },
+          {
+            "label": "a cancelled appointment or delivery",
+            "score": 0.122185126
+          },
+          {
+            "label": "a past event or retrospective statement",
+            "score": 0.07355959
+          },
+          {
+            "label": "a hypothetical event or unrelated information",
+            "score": 0.028099924
+          }
+        ],
+        "milliseconds": 74
+      }
+    },
+    {
+      "id": "delivery-dot-hours",
+      "analysis": {
+        "text": "Heute kommt Ihre Bestellung\n\nDer Fahrer stellt Ihre Bestellung heute zwischen 10.30 und 12.45 Uhr zu.",
+        "mentions": [
+          {
+            "text": "Bestellung",
+            "field": "event",
+            "score": 0.98168564,
+            "start": 52,
+            "end": 62
+          },
+          {
+            "text": "Bestellung",
+            "field": "event",
+            "score": 0.9743618,
+            "start": 17,
+            "end": 27
+          },
+          {
+            "text": "10.30",
+            "field": "time",
+            "score": 0.94936115,
+            "start": 78,
+            "end": 83
+          },
+          {
+            "text": "12.45",
+            "field": "time",
+            "score": 0.8816342,
+            "start": 88,
+            "end": 93
+          },
+          {
+            "text": "heute",
+            "field": "date",
+            "score": 0.84522635,
+            "start": 63,
+            "end": 68
+          },
+          {
+            "text": "Heute",
+            "field": "date",
+            "score": 0.6219694,
+            "start": 0,
+            "end": 5
+          }
+        ],
+        "classifications": [
+          {
+            "label": "a future appointment, invitation or announced delivery",
+            "score": 0.53658384
+          },
+          {
+            "label": "a cancelled appointment or delivery",
+            "score": 0.2771532
+          },
+          {
+            "label": "a past event or retrospective statement",
+            "score": 0.13927789
+          },
+          {
+            "label": "a hypothetical event or unrelated information",
+            "score": 0.046985026
+          }
+        ],
+        "milliseconds": 83
+      }
+    },
+    {
+      "id": "delivery-dash",
+      "analysis": {
+        "text": "Zustellung heute\n\nFür Ihr Paket ist heute ein Zeitfenster von 09:15–11:45 Uhr vorgesehen.",
+        "mentions": [
+          {
+            "text": "heute",
+            "field": "date",
+            "score": 0.97615063,
+            "start": 36,
+            "end": 41
+          },
+          {
+            "text": "Zustellung",
+            "field": "event",
+            "score": 0.95569867,
+            "start": 0,
+            "end": 10
+          },
+          {
+            "text": "heute",
+            "field": "date",
+            "score": 0.95448524,
+            "start": 11,
+            "end": 16
+          },
+          {
+            "text": "09:15",
+            "field": "time",
+            "score": 0.8366512,
+            "start": 62,
+            "end": 67
+          }
+        ],
+        "classifications": [
+          {
+            "label": "a future appointment, invitation or announced delivery",
+            "score": 0.5242158
+          },
+          {
+            "label": "a cancelled appointment or delivery",
+            "score": 0.22201346
+          },
+          {
+            "label": "a past event or retrospective statement",
+            "score": 0.17046805
+          },
+          {
+            "label": "a hypothetical event or unrelated information",
+            "score": 0.083302744
+          }
+        ],
+        "milliseconds": 75
+      }
+    },
+    {
+      "id": "delivery-linebreaks",
+      "analysis": {
+        "text": "Liefertermin für Ihre Bestellung\n\nWir bringen Ihr Paket vorbei.\nHeute\nzwischen 11 und 13 Uhr.\nBitte prüfen Sie die Lieferadresse.",
+        "mentions": [
+          {
+            "text": "Heute",
+            "field": "date",
+            "score": 0.9871989,
+            "start": 64,
+            "end": 69
+          },
+          {
+            "text": "Lieferadresse",
+            "field": "location",
+            "score": 0.9788614,
+            "start": 115,
+            "end": 128
+          },
+          {
+            "text": "Bestellung",
+            "field": "event",
+            "score": 0.80373347,
+            "start": 22,
+            "end": 32
+          }
+        ],
+        "classifications": [
+          {
+            "label": "a future appointment, invitation or announced delivery",
+            "score": 0.4113342
+          },
+          {
+            "label": "a cancelled appointment or delivery",
+            "score": 0.34579343
+          },
+          {
+            "label": "a past event or retrospective statement",
+            "score": 0.18123598
+          },
+          {
+            "label": "a hypothetical event or unrelated information",
+            "score": 0.06163642
+          }
+        ],
+        "milliseconds": 89
+      }
+    },
+    {
+      "id": "delivery-footer-support",
+      "analysis": {
+        "text": "Heute erfolgt Ihre Zustellung\n\nIhr Paket wird heute zwischen 10 und 12 Uhr zugestellt.\nUnser Support ist morgen von 8 bis 18 Uhr erreichbar.\nFreundliche Grüße, Ihr Versandteam",
+        "mentions": [
+          {
+            "text": "heute",
+            "field": "date",
+            "score": 0.97319907,
+            "start": 46,
+            "end": 51
+          },
+          {
+            "text": "morgen",
+            "field": "date",
+            "score": 0.9729437,
+            "start": 105,
+            "end": 111
+          },
+          {
+            "text": "Heute",
+            "field": "date",
+            "score": 0.95668465,
+            "start": 0,
+            "end": 5
+          },
+          {
+            "text": "8 bis 18 Uhr",
+            "field": "time",
+            "score": 0.8344721,
+            "start": 116,
+            "end": 128
+          },
+          {
+            "text": "Support",
+            "field": "event",
+            "score": 0.6968681,
+            "start": 93,
+            "end": 100
+          },
+          {
+            "text": "Zustellung",
+            "field": "event",
+            "score": 0.6110031,
+            "start": 19,
+            "end": 29
+          }
+        ],
+        "classifications": [
+          {
+            "label": "a future appointment, invitation or announced delivery",
+            "score": 0.67454195
+          },
+          {
+            "label": "a cancelled appointment or delivery",
+            "score": 0.16766374
+          },
+          {
+            "label": "a past event or retrospective statement",
+            "score": 0.11016326
+          },
+          {
+            "label": "a hypothetical event or unrelated information",
+            "score": 0.047631077
+          }
+        ],
+        "milliseconds": 102
+      }
+    },
+    {
+      "id": "delivery-date-support-clock",
+      "analysis": {
+        "text": "Ihre Sendung\n\nIhre Lieferung kommt morgen.\nUnser Kundenservice ist von 08:00 bis 20:00 Uhr für Sie erreichbar.",
+        "mentions": [
+          {
+            "text": "morgen",
+            "field": "date",
+            "score": 0.99752563,
+            "start": 35,
+            "end": 41
+          },
+          {
+            "text": "08:00",
+            "field": "time",
+            "score": 0.8873188,
+            "start": 71,
+            "end": 76
+          },
+          {
+            "text": "Lieferung",
+            "field": "event",
+            "score": 0.8790659,
+            "start": 19,
+            "end": 28
+          },
+          {
+            "text": "Sendung",
+            "field": "event",
+            "score": 0.83955723,
+            "start": 5,
+            "end": 12
+          }
+        ],
+        "classifications": [
+          {
+            "label": "a future appointment, invitation or announced delivery",
+            "score": 0.8865138
+          },
+          {
+            "label": "a cancelled appointment or delivery",
+            "score": 0.059521012
+          },
+          {
+            "label": "a past event or retrospective statement",
+            "score": 0.034261223
+          },
+          {
+            "label": "a hypothetical event or unrelated information",
+            "score": 0.01970389
+          }
+        ],
+        "milliseconds": 93
+      }
+    },
+    {
+      "id": "delivery-with-invoice",
+      "analysis": {
+        "text": "Versandbestätigung\n\nRechnungsdatum: 9. November 2026, erstellt um 07:40 Uhr.\nIhr Paket wird morgen zwischen 15 und 17 Uhr zugestellt.",
+        "mentions": [
+          {
+            "text": "9. November 2026",
+            "field": "date",
+            "score": 0.9939902,
+            "start": 36,
+            "end": 52
+          },
+          {
+            "text": "07:40 Uhr",
+            "field": "time",
+            "score": 0.94814163,
+            "start": 66,
+            "end": 75
+          },
+          {
+            "text": "Versandbestätigung",
+            "field": "event",
+            "score": 0.70359856,
+            "start": 0,
+            "end": 18
+          }
+        ],
+        "classifications": [
+          {
+            "label": "a future appointment, invitation or announced delivery",
+            "score": 0.3686016
+          },
+          {
+            "label": "a cancelled appointment or delivery",
+            "score": 0.3905172
+          },
+          {
+            "label": "a past event or retrospective statement",
+            "score": 0.18945132
+          },
+          {
+            "label": "a hypothetical event or unrelated information",
+            "score": 0.051429857
+          }
+        ],
+        "milliseconds": 90
+      }
+    },
+    {
+      "id": "delivery-time-before-date",
+      "analysis": {
+        "text": "Ankunft Ihrer Bestellung\n\nDie Lieferung erfolgt zwischen 18:00 und 19:30 Uhr morgen.",
+        "mentions": [
+          {
+            "text": "morgen",
+            "field": "date",
+            "score": 0.9816776,
+            "start": 77,
+            "end": 83
+          },
+          {
+            "text": "Lieferung",
+            "field": "event",
+            "score": 0.9588094,
+            "start": 30,
+            "end": 39
+          },
+          {
+            "text": "18:00",
+            "field": "time",
+            "score": 0.9488868,
+            "start": 57,
+            "end": 62
+          },
+          {
+            "text": "19:30",
+            "field": "time",
+            "score": 0.90901446,
+            "start": 67,
+            "end": 72
+          },
+          {
+            "text": "Bestellung",
+            "field": "event",
+            "score": 0.6839861,
+            "start": 14,
+            "end": 24
+          }
+        ],
+        "classifications": [
+          {
+            "label": "a future appointment, invitation or announced delivery",
+            "score": 0.41487777
+          },
+          {
+            "label": "a cancelled appointment or delivery",
+            "score": 0.36354905
+          },
+          {
+            "label": "a past event or retrospective statement",
+            "score": 0.1576716
+          },
+          {
+            "label": "a hypothetical event or unrelated information",
+            "score": 0.063901626
+          }
+        ],
+        "milliseconds": 88
+      }
+    },
+    {
+      "id": "delivery-overnight",
+      "analysis": {
+        "text": "Ihr Liefertermin\n\nWir liefern Ihre Bestellung morgen zwischen 23:30 und 01:00 Uhr.",
+        "mentions": [
+          {
+            "text": "morgen",
+            "field": "date",
+            "score": 0.99450207,
+            "start": 46,
+            "end": 52
+          },
+          {
+            "text": "23:30",
+            "field": "time",
+            "score": 0.93751484,
+            "start": 62,
+            "end": 67
+          },
+          {
+            "text": "01:00",
+            "field": "time",
+            "score": 0.87922037,
+            "start": 72,
+            "end": 77
+          },
+          {
+            "text": "Bestellung",
+            "field": "event",
+            "score": 0.7036047,
+            "start": 35,
+            "end": 45
+          }
+        ],
+        "classifications": [
+          {
+            "label": "a future appointment, invitation or announced delivery",
+            "score": 0.45745468
+          },
+          {
+            "label": "a cancelled appointment or delivery",
+            "score": 0.31664023
+          },
+          {
+            "label": "a past event or retrospective statement",
+            "score": 0.16095085
+          },
+          {
+            "label": "a hypothetical event or unrelated information",
+            "score": 0.064954236
+          }
+        ],
+        "milliseconds": 84
+      }
+    },
+    {
+      "id": "delivery-english",
+      "analysis": {
+        "text": "Your parcel is on the way\n\nYour parcel will arrive today between 2 and 4 pm. Our support is available tomorrow from 8 am to 6 pm.",
+        "mentions": [
+          {
+            "text": "today",
+            "field": "date",
+            "score": 0.9850483,
+            "start": 51,
+            "end": 56
+          },
+          {
+            "text": "tomorrow",
+            "field": "date",
+            "score": 0.9832686,
+            "start": 102,
+            "end": 110
+          },
+          {
+            "text": "parcel",
+            "field": "event",
+            "score": 0.8961072,
+            "start": 32,
+            "end": 38
+          },
+          {
+            "text": "support",
+            "field": "event",
+            "score": 0.86843663,
+            "start": 81,
+            "end": 88
+          },
+          {
+            "text": "parcel",
+            "field": "event",
+            "score": 0.8632172,
+            "start": 5,
+            "end": 11
+          },
+          {
+            "text": "8 am to 6 pm",
+            "field": "time",
+            "score": 0.84630847,
+            "start": 116,
+            "end": 128
+          },
+          {
+            "text": "2 and 4 pm",
+            "field": "time",
+            "score": 0.6635485,
+            "start": 65,
+            "end": 75
+          }
+        ],
+        "classifications": [
+          {
+            "label": "a future appointment, invitation or announced delivery",
+            "score": 0.6956543
+          },
+          {
+            "label": "a cancelled appointment or delivery",
+            "score": 0.18471026
+          },
+          {
+            "label": "a past event or retrospective statement",
+            "score": 0.08500066
+          },
+          {
+            "label": "a hypothetical event or unrelated information",
+            "score": 0.034634806
+          }
+        ],
+        "milliseconds": 83
+      }
+    },
+    {
+      "id": "delivery-english-tomorrow",
+      "analysis": {
+        "text": "Delivery update\n\nYour order will be delivered tomorrow between 10:30 am and 12:15 pm.",
+        "mentions": [
+          {
+            "text": "tomorrow",
+            "field": "date",
+            "score": 0.99603003,
+            "start": 46,
+            "end": 54
+          },
+          {
+            "text": "10:30 am",
+            "field": "time",
+            "score": 0.9838307,
+            "start": 63,
+            "end": 71
+          },
+          {
+            "text": "12:15 pm",
+            "field": "time",
+            "score": 0.9734393,
+            "start": 76,
+            "end": 84
+          },
+          {
+            "text": "order",
+            "field": "event",
+            "score": 0.83773303,
+            "start": 22,
+            "end": 27
+          }
+        ],
+        "classifications": [
+          {
+            "label": "a future appointment, invitation or announced delivery",
+            "score": 0.6936641
+          },
+          {
+            "label": "a cancelled appointment or delivery",
+            "score": 0.15306327
+          },
+          {
+            "label": "a past event or retrospective statement",
+            "score": 0.111077376
+          },
+          {
+            "label": "a hypothetical event or unrelated information",
+            "score": 0.042195365
+          }
+        ],
+        "milliseconds": 83
+      }
+    },
+    {
+      "id": "personal-proposal",
+      "analysis": {
+        "text": "Nach der Arbeit\n\nHast du morgen um 17 Uhr Zeit für einen Spaziergang?",
+        "mentions": [
+          {
+            "text": "morgen",
+            "field": "date",
+            "score": 0.99500716,
+            "start": 25,
+            "end": 31
+          },
+          {
+            "text": "17 Uhr",
+            "field": "time",
+            "score": 0.99253744,
+            "start": 35,
+            "end": 41
+          },
+          {
+            "text": "Spaziergang",
+            "field": "event",
+            "score": 0.9771678,
+            "start": 57,
+            "end": 68
+          }
+        ],
+        "classifications": [
+          {
+            "label": "a future appointment, invitation or announced delivery",
+            "score": 0.30614302
+          },
+          {
+            "label": "a cancelled appointment or delivery",
+            "score": 0.27095607
+          },
+          {
+            "label": "a past event or retrospective statement",
+            "score": 0.27930346
+          },
+          {
+            "label": "a hypothetical event or unrelated information",
+            "score": 0.14359745
+          }
+        ],
+        "milliseconds": 80
+      }
+    },
+    {
+      "id": "personal-bare",
+      "analysis": {
+        "text": "Treffen\n\nHeute zwischen 16 und 17 Uhr bei mir?",
+        "mentions": [
+          {
+            "text": "Heute",
+            "field": "date",
+            "score": 0.9918716,
+            "start": 9,
+            "end": 14
+          },
+          {
+            "text": "Treffen",
+            "field": "event",
+            "score": 0.9551807,
+            "start": 0,
+            "end": 7
+          },
+          {
+            "text": "bei mir",
+            "field": "location",
+            "score": 0.73982304,
+            "start": 38,
+            "end": 45
+          }
+        ],
+        "classifications": [
+          {
+            "label": "a future appointment, invitation or announced delivery",
+            "score": 0.41581827
+          },
+          {
+            "label": "a cancelled appointment or delivery",
+            "score": 0.26849174
+          },
+          {
+            "label": "a past event or retrospective statement",
+            "score": 0.20669365
+          },
+          {
+            "label": "a hypothetical event or unrelated information",
+            "score": 0.10899636
+          }
+        ],
+        "milliseconds": 75
+      }
+    },
+    {
+      "id": "personal-two-events",
+      "analysis": {
+        "text": "Unsere Termine\n\nMorgen um 17 Uhr treffen wir Anna im Café. Übermorgen um 10 Uhr holen wir das Paket ab.",
+        "mentions": [
+          {
+            "text": "Café",
+            "field": "location",
+            "score": 0.99696034,
+            "start": 53,
+            "end": 57
+          },
+          {
+            "text": "10 Uhr",
+            "field": "time",
+            "score": 0.9924959,
+            "start": 73,
+            "end": 79
+          },
+          {
+            "text": "17 Uhr",
+            "field": "time",
+            "score": 0.9893141,
+            "start": 26,
+            "end": 32
+          },
+          {
+            "text": "Morgen",
+            "field": "date",
+            "score": 0.9788381,
+            "start": 16,
+            "end": 22
+          },
+          {
+            "text": "Übermorgen",
+            "field": "date",
+            "score": 0.97253215,
+            "start": 59,
+            "end": 69
+          }
+        ],
+        "classifications": [
+          {
+            "label": "a future appointment, invitation or announced delivery",
+            "score": 0.6754837
+          },
+          {
+            "label": "a cancelled appointment or delivery",
+            "score": 0.20164105
+          },
+          {
+            "label": "a past event or retrospective statement",
+            "score": 0.09441148
+          },
+          {
+            "label": "a hypothetical event or unrelated information",
+            "score": 0.028463751
+          }
+        ],
+        "milliseconds": 89
+      }
+    },
+    {
+      "id": "support-availability",
+      "analysis": {
+        "text": "Wir sind für Sie da\n\nUnser Support ist morgen zwischen 8 und 18 Uhr erreichbar. Sie können uns telefonisch oder per E-Mail kontaktieren.",
+        "mentions": [
+          {
+            "text": "morgen",
+            "field": "date",
+            "score": 0.9955675,
+            "start": 39,
+            "end": 45
+          },
+          {
+            "text": "Support",
+            "field": "event",
+            "score": 0.9385493,
+            "start": 27,
+            "end": 34
+          }
+        ],
+        "classifications": [
+          {
+            "label": "a future appointment, invitation or announced delivery",
+            "score": 0.38514188
+          },
+          {
+            "label": "a cancelled appointment or delivery",
+            "score": 0.30621952
+          },
+          {
+            "label": "a past event or retrospective statement",
+            "score": 0.23448192
+          },
+          {
+            "label": "a hypothetical event or unrelated information",
+            "score": 0.07415665
+          }
+        ],
+        "milliseconds": 97
+      }
+    },
+    {
+      "id": "support-today",
+      "analysis": {
+        "text": "Hilfe zu Ihrer Bestellung\n\nHeute zwischen 9 und 17 Uhr ist unser Kundenservice für Sie erreichbar. Weitere Informationen finden Sie im Hilfeportal.",
+        "mentions": [
+          {
+            "text": "Hilfeportal",
+            "field": "location",
+            "score": 0.9867154,
+            "start": 135,
+            "end": 146
+          },
+          {
+            "text": "Heute",
+            "field": "date",
+            "score": 0.9773602,
+            "start": 27,
+            "end": 32
+          },
+          {
+            "text": "Bestellung",
+            "field": "event",
+            "score": 0.8262479,
+            "start": 15,
+            "end": 25
+          },
+          {
+            "text": "9",
+            "field": "time",
+            "score": 0.7765495,
+            "start": 42,
+            "end": 43
+          }
+        ],
+        "classifications": [
+          {
+            "label": "a future appointment, invitation or announced delivery",
+            "score": 0.34118083
+          },
+          {
+            "label": "a cancelled appointment or delivery",
+            "score": 0.3235289
+          },
+          {
+            "label": "a past event or retrospective statement",
+            "score": 0.21187831
+          },
+          {
+            "label": "a hypothetical event or unrelated information",
+            "score": 0.123412035
+          }
+        ],
+        "milliseconds": 99
+      }
+    },
+    {
+      "id": "support-weekdays",
+      "analysis": {
+        "text": "Kontaktinformationen\n\nUnsere Servicezeiten: Montag bis Freitag von 08:00 bis 18:00 Uhr. Am Wochenende ist die Hotline geschlossen.",
+        "mentions": [
+          {
+            "text": "Montag",
+            "field": "date",
+            "score": 0.9884576,
+            "start": 44,
+            "end": 50
+          },
+          {
+            "text": "Freitag",
+            "field": "date",
+            "score": 0.9543344,
+            "start": 55,
+            "end": 62
+          },
+          {
+            "text": "Hotline",
+            "field": "location",
+            "score": 0.88008475,
+            "start": 110,
+            "end": 117
+          },
+          {
+            "text": "08:00 bis 18:00",
+            "field": "time",
+            "score": 0.6357217,
+            "start": 67,
+            "end": 82
+          }
+        ],
+        "classifications": [
+          {
+            "label": "a future appointment, invitation or announced delivery",
+            "score": 0.06850542
+          },
+          {
+            "label": "a cancelled appointment or delivery",
+            "score": 0.7587243
+          },
+          {
+            "label": "a past event or retrospective statement",
+            "score": 0.1222845
+          },
+          {
+            "label": "a hypothetical event or unrelated information",
+            "score": 0.050485756
+          }
+        ],
+        "milliseconds": 102
+      }
+    },
+    {
+      "id": "support-english",
+      "analysis": {
+        "text": "Contact us\n\nOur support team is available tomorrow between 8 am and 6 pm. Please call our hotline if you have any questions.",
+        "mentions": [
+          {
+            "text": "tomorrow",
+            "field": "date",
+            "score": 0.9967584,
+            "start": 42,
+            "end": 50
+          },
+          {
+            "text": "8 am",
+            "field": "time",
+            "score": 0.9725399,
+            "start": 59,
+            "end": 63
+          },
+          {
+            "text": "support team",
+            "field": "event",
+            "score": 0.9361903,
+            "start": 16,
+            "end": 28
+          },
+          {
+            "text": "hotline",
+            "field": "location",
+            "score": 0.9124301,
+            "start": 90,
+            "end": 97
+          },
+          {
+            "text": "6 pm",
+            "field": "time",
+            "score": 0.8687577,
+            "start": 68,
+            "end": 72
+          }
+        ],
+        "classifications": [
+          {
+            "label": "a future appointment, invitation or announced delivery",
+            "score": 0.34258676
+          },
+          {
+            "label": "a cancelled appointment or delivery",
+            "score": 0.32767186
+          },
+          {
+            "label": "a past event or retrospective statement",
+            "score": 0.21866363
+          },
+          {
+            "label": "a hypothetical event or unrelated information",
+            "score": 0.111077756
+          }
+        ],
+        "milliseconds": 77
+      }
+    },
+    {
+      "id": "support-personal-appointment",
+      "analysis": {
+        "text": "Ihr vereinbarter Support-Termin\n\nIhr persönlicher Rückruf durch unseren Support ist morgen von 10 bis 10:30 Uhr für Sie gebucht.",
+        "mentions": [
+          {
+            "text": "morgen",
+            "field": "date",
+            "score": 0.98261154,
+            "start": 84,
+            "end": 90
+          },
+          {
+            "text": "Support",
+            "field": "location",
+            "score": 0.908205,
+            "start": 72,
+            "end": 79
+          }
+        ],
+        "classifications": [
+          {
+            "label": "a future appointment, invitation or announced delivery",
+            "score": 0.35064164
+          },
+          {
+            "label": "a cancelled appointment or delivery",
+            "score": 0.39478913
+          },
+          {
+            "label": "a past event or retrospective statement",
+            "score": 0.1897838
+          },
+          {
+            "label": "a hypothetical event or unrelated information",
+            "score": 0.064785466
+          }
+        ],
+        "milliseconds": 99
+      }
+    },
+    {
+      "id": "support-personal-callback",
+      "analysis": {
+        "text": "Rückruf bestätigt\n\nUnsere Kundenberaterin ruft Sie heute um 14 Uhr zu Ihrem Ticket an.",
+        "mentions": [
+          {
+            "text": "14 Uhr",
+            "field": "time",
+            "score": 0.98972577,
+            "start": 60,
+            "end": 66
+          },
+          {
+            "text": "heute",
+            "field": "date",
+            "score": 0.9887488,
+            "start": 51,
+            "end": 56
+          },
+          {
+            "text": "Ticket",
+            "field": "event",
+            "score": 0.57669497,
+            "start": 76,
+            "end": 82
+          }
+        ],
+        "classifications": [
+          {
+            "label": "a future appointment, invitation or announced delivery",
+            "score": 0.25249195
+          },
+          {
+            "label": "a cancelled appointment or delivery",
+            "score": 0.46856418
+          },
+          {
+            "label": "a past event or retrospective statement",
+            "score": 0.21041924
+          },
+          {
+            "label": "a hypothetical event or unrelated information",
+            "score": 0.06852458
+          }
+        ],
+        "milliseconds": 86
+      }
+    },
+    {
+      "id": "newsletter-sale",
+      "analysis": {
+        "text": "Nur heute sparen\n\nHeute zwischen 12 und 18 Uhr erhalten Sie 20 Prozent Rabatt auf alle Produkte. Jetzt im Shop stöbern!",
+        "mentions": [
+          {
+            "text": "Shop",
+            "field": "location",
+            "score": 0.99328244,
+            "start": 106,
+            "end": 110
+          },
+          {
+            "text": "Heute",
+            "field": "date",
+            "score": 0.9855552,
+            "start": 18,
+            "end": 23
+          },
+          {
+            "text": "heute",
+            "field": "date",
+            "score": 0.94795215,
+            "start": 4,
+            "end": 9
+          },
+          {
+            "text": "12",
+            "field": "time",
+            "score": 0.6927691,
+            "start": 33,
+            "end": 35
+          }
+        ],
+        "classifications": [
+          {
+            "label": "a future appointment, invitation or announced delivery",
+            "score": 0.29063752
+          },
+          {
+            "label": "a cancelled appointment or delivery",
+            "score": 0.16613153
+          },
+          {
+            "label": "a past event or retrospective statement",
+            "score": 0.43835026
+          },
+          {
+            "label": "a hypothetical event or unrelated information",
+            "score": 0.10488071
+          }
+        ],
+        "milliseconds": 90
+      }
+    },
+    {
+      "id": "newsletter-example",
+      "analysis": {
+        "text": "So funktioniert unser Versand\n\nZum Beispiel wird ein Paket morgen zwischen 10 und 12 Uhr geliefert, wenn Sie heute bestellen. Dies ist nur ein Beispiel für unsere Lieferoptionen.",
+        "mentions": [
+          {
+            "text": "heute",
+            "field": "date",
+            "score": 0.98215103,
+            "start": 109,
+            "end": 114
+          },
+          {
+            "text": "morgen",
+            "field": "date",
+            "score": 0.97910714,
+            "start": 59,
+            "end": 65
+          },
+          {
+            "text": "Versand",
+            "field": "event",
+            "score": 0.86467683,
+            "start": 22,
+            "end": 29
+          },
+          {
+            "text": "Lieferoptionen",
+            "field": "event",
+            "score": 0.67816114,
+            "start": 163,
+            "end": 177
+          }
+        ],
+        "classifications": [
+          {
+            "label": "a future appointment, invitation or announced delivery",
+            "score": 0.37977472
+          },
+          {
+            "label": "a cancelled appointment or delivery",
+            "score": 0.22778848
+          },
+          {
+            "label": "a past event or retrospective statement",
+            "score": 0.20944136
+          },
+          {
+            "label": "a hypothetical event or unrelated information",
+            "score": 0.18299554
+          }
+        ],
+        "milliseconds": 105
+      }
+    },
+    {
+      "id": "delivery-cancelled",
+      "analysis": {
+        "text": "Information zu Ihrer Lieferung\n\nIhre Lieferung morgen zwischen 10 und 12 Uhr findet nicht statt. Der Auftrag wurde storniert.",
+        "mentions": [
+          {
+            "text": "morgen",
+            "field": "date",
+            "score": 0.98335934,
+            "start": 47,
+            "end": 53
+          },
+          {
+            "text": "Lieferung",
+            "field": "event",
+            "score": 0.95884675,
+            "start": 37,
+            "end": 46
+          },
+          {
+            "text": "Lieferung",
+            "field": "event",
+            "score": 0.87195027,
+            "start": 21,
+            "end": 30
+          },
+          {
+            "text": "Auftrag",
+            "field": "event",
+            "score": 0.62214404,
+            "start": 101,
+            "end": 108
+          }
+        ],
+        "classifications": [
+          {
+            "label": "a future appointment, invitation or announced delivery",
+            "score": 0.0067571444
+          },
+          {
+            "label": "a cancelled appointment or delivery",
+            "score": 0.95810974
+          },
+          {
+            "label": "a past event or retrospective statement",
+            "score": 0.02486322
+          },
+          {
+            "label": "a hypothetical event or unrelated information",
+            "score": 0.010269893
+          }
+        ],
+        "milliseconds": 100
+      }
+    },
+    {
+      "id": "delivery-negated",
+      "analysis": {
+        "text": "Update zu Ihrem Paket\n\nIhr Paket wird heute nicht zwischen 10 und 12 Uhr zugestellt. Ein neuer Termin steht noch nicht fest.",
+        "mentions": [
+          {
+            "text": "Paket",
+            "field": "event",
+            "score": 0.9800413,
+            "start": 16,
+            "end": 21
+          },
+          {
+            "text": "Paket",
+            "field": "event",
+            "score": 0.978822,
+            "start": 27,
+            "end": 32
+          },
+          {
+            "text": "10 und 12 Uhr",
+            "field": "time",
+            "score": 0.55417943,
+            "start": 59,
+            "end": 72
+          }
+        ],
+        "classifications": [
+          {
+            "label": "a future appointment, invitation or announced delivery",
+            "score": 0.1941138
+          },
+          {
+            "label": "a cancelled appointment or delivery",
+            "score": 0.48982114
+          },
+          {
+            "label": "a past event or retrospective statement",
+            "score": 0.15175365
+          },
+          {
+            "label": "a hypothetical event or unrelated information",
+            "score": 0.16431144
+          }
+        ],
+        "milliseconds": 77
+      }
+    },
+    {
+      "id": "delivery-historical",
+      "analysis": {
+        "text": "Vielen Dank\n\nIhr Paket wurde gestern zwischen 10 und 12 Uhr zugestellt. Wir wünschen Ihnen viel Freude mit Ihrer Bestellung.",
+        "mentions": [
+          {
+            "text": "gestern",
+            "field": "date",
+            "score": 0.9950387,
+            "start": 29,
+            "end": 36
+          },
+          {
+            "text": "Bestellung",
+            "field": "event",
+            "score": 0.7089652,
+            "start": 113,
+            "end": 123
+          },
+          {
+            "text": "Paket",
+            "field": "event",
+            "score": 0.5758367,
+            "start": 17,
+            "end": 22
+          }
+        ],
+        "classifications": [
+          {
+            "label": "a future appointment, invitation or announced delivery",
+            "score": 0.29058748
+          },
+          {
+            "label": "a cancelled appointment or delivery",
+            "score": 0.35839108
+          },
+          {
+            "label": "a past event or retrospective statement",
+            "score": 0.3064877
+          },
+          {
+            "label": "a hypothetical event or unrelated information",
+            "score": 0.044533726
+          }
+        ],
+        "milliseconds": 91
+      }
+    },
+    {
+      "id": "invoice-generated",
+      "analysis": {
+        "text": "Ihre Rechnung\n\nRechnungsdatum: 10. November 2026. Automatisch erstellt um 17:00 Uhr. Bitte bewahren Sie diese Rechnung auf.",
+        "mentions": [
+          {
+            "text": "10. November 2026",
+            "field": "date",
+            "score": 0.9931108,
+            "start": 31,
+            "end": 48
+          },
+          {
+            "text": "17:00 Uhr",
+            "field": "time",
+            "score": 0.99291176,
+            "start": 74,
+            "end": 83
+          },
+          {
+            "text": "Rechnung",
+            "field": "event",
+            "score": 0.9427736,
+            "start": 110,
+            "end": 118
+          },
+          {
+            "text": "Rechnung",
+            "field": "event",
+            "score": 0.8458673,
+            "start": 5,
+            "end": 13
+          }
+        ],
+        "classifications": [
+          {
+            "label": "a future appointment, invitation or announced delivery",
+            "score": 0.1683759
+          },
+          {
+            "label": "a cancelled appointment or delivery",
+            "score": 0.22686869
+          },
+          {
+            "label": "a past event or retrospective statement",
+            "score": 0.49144435
+          },
+          {
+            "label": "a hypothetical event or unrelated information",
+            "score": 0.113311045
+          }
+        ],
+        "milliseconds": 101
+      }
+    },
+    {
+      "id": "opening-hours",
+      "analysis": {
+        "text": "Unsere Öffnungszeiten\n\nUnsere Filiale ist morgen zwischen 9 und 18 Uhr geöffnet. Wir freuen uns auf Ihren Besuch.",
+        "mentions": [
+          {
+            "text": "morgen",
+            "field": "date",
+            "score": 0.99639904,
+            "start": 42,
+            "end": 48
+          },
+          {
+            "text": "Filiale",
+            "field": "location",
+            "score": 0.9853763,
+            "start": 30,
+            "end": 37
+          }
+        ],
+        "classifications": [
+          {
+            "label": "a future appointment, invitation or announced delivery",
+            "score": 0.3956055
+          },
+          {
+            "label": "a cancelled appointment or delivery",
+            "score": 0.25417846
+          },
+          {
+            "label": "a past event or retrospective statement",
+            "score": 0.2467334
+          },
+          {
+            "label": "a hypothetical event or unrelated information",
+            "score": 0.10348259
+          }
+        ],
+        "milliseconds": 83
+      }
+    },
+    {
+      "id": "tracking-update-only",
+      "analysis": {
+        "text": "Ihre Sendung wurde bearbeitet\n\nLetzte Statusänderung: heute um 09:15 Uhr. Ihr Paket befindet sich im Paketzentrum. Ein Liefertermin ist noch nicht bekannt.",
+        "mentions": [
+          {
+            "text": "Paketzentrum",
+            "field": "location",
+            "score": 0.99761677,
+            "start": 101,
+            "end": 113
+          },
+          {
+            "text": "heute",
+            "field": "date",
+            "score": 0.9938426,
+            "start": 54,
+            "end": 59
+          },
+          {
+            "text": "09:15 Uhr",
+            "field": "time",
+            "score": 0.98397726,
+            "start": 63,
+            "end": 72
+          },
+          {
+            "text": "Liefertermin",
+            "field": "event",
+            "score": 0.73292285,
+            "start": 119,
+            "end": 131
+          },
+          {
+            "text": "Sendung",
+            "field": "event",
+            "score": 0.7124948,
+            "start": 5,
+            "end": 12
+          }
+        ],
+        "classifications": [
+          {
+            "label": "a future appointment, invitation or announced delivery",
+            "score": 0.11403843
+          },
+          {
+            "label": "a cancelled appointment or delivery",
+            "score": 0.26015934
+          },
+          {
+            "label": "a past event or retrospective statement",
+            "score": 0.16412747
+          },
+          {
+            "label": "a hypothetical event or unrelated information",
+            "score": 0.4616748
+          }
+        ],
+        "milliseconds": 109
+      }
+    },
+    {
+      "id": "support-workdays",
+      "analysis": {
+        "text": "Ihre Versandbestätigung\n\nIhre Anfrage an den Support beantworten wir innerhalb von 1 bis 2 Werktagen. Ihr Paket ist unterwegs; ein Liefertermin steht noch nicht fest.",
+        "mentions": [
+          {
+            "text": "Support",
+            "field": "location",
+            "score": 0.9959132,
+            "start": 45,
+            "end": 52
+          },
+          {
+            "text": "1 bis 2 Werktagen",
+            "field": "time",
+            "score": 0.8638742,
+            "start": 83,
+            "end": 100
+          },
+          {
+            "text": "Anfrage",
+            "field": "event",
+            "score": 0.65346867,
+            "start": 30,
+            "end": 37
+          }
+        ],
+        "classifications": [
+          {
+            "label": "a future appointment, invitation or announced delivery",
+            "score": 0.17018616
+          },
+          {
+            "label": "a cancelled appointment or delivery",
+            "score": 0.22305673
+          },
+          {
+            "label": "a past event or retrospective statement",
+            "score": 0.13645935
+          },
+          {
+            "label": "a hypothetical event or unrelated information",
+            "score": 0.47029775
+          }
+        ],
+        "milliseconds": 107
+      }
+    },
+    {
+      "id": "shipping-workdays-positive",
+      "analysis": null
+    },
+    {
+      "id": "mixed-cancelled-and-new",
+      "analysis": {
+        "text": "Ihr neuer Liefertermin\n\nDie Lieferung heute um 10 Uhr wurde abgesagt. Ihr Paket wird stattdessen morgen zwischen 12 und 14 Uhr zugestellt.",
+        "mentions": [
+          {
+            "text": "morgen",
+            "field": "date",
+            "score": 0.989369,
+            "start": 97,
+            "end": 103
+          },
+          {
+            "text": "heute",
+            "field": "date",
+            "score": 0.9417814,
+            "start": 38,
+            "end": 43
+          },
+          {
+            "text": "10 Uhr",
+            "field": "time",
+            "score": 0.9397278,
+            "start": 47,
+            "end": 53
+          },
+          {
+            "text": "Lieferung",
+            "field": "event",
+            "score": 0.8424278,
+            "start": 28,
+            "end": 37
+          },
+          {
+            "text": "12 und 14 Uhr",
+            "field": "time",
+            "score": 0.520207,
+            "start": 113,
+            "end": 126
+          }
+        ],
+        "classifications": [
+          {
+            "label": "a future appointment, invitation or announced delivery",
+            "score": 0.12781654
+          },
+          {
+            "label": "a cancelled appointment or delivery",
+            "score": 0.8143204
+          },
+          {
+            "label": "a past event or retrospective statement",
+            "score": 0.048769653
+          },
+          {
+            "label": "a hypothetical event or unrelated information",
+            "score": 0.009093484
+          }
+        ],
+        "milliseconds": 84
+      }
+    },
+    {
+      "id": "delivery-with-footer-only-clock",
+      "analysis": {
+        "text": "Ihr Paket ist unterwegs\n\nWir stellen Ihre Sendung morgen zu. Bei Fragen ist unser Support zwischen 10 und 12 Uhr erreichbar.",
+        "mentions": [
+          {
+            "text": "morgen",
+            "field": "date",
+            "score": 0.9839188,
+            "start": 50,
+            "end": 56
+          },
+          {
+            "text": "Support",
+            "field": "location",
+            "score": 0.85014415,
+            "start": 82,
+            "end": 89
+          },
+          {
+            "text": "Sendung",
+            "field": "event",
+            "score": 0.82658225,
+            "start": 42,
+            "end": 49
+          },
+          {
+            "text": "Paket",
+            "field": "event",
+            "score": 0.54327744,
+            "start": 4,
+            "end": 9
+          }
+        ],
+        "classifications": [
+          {
+            "label": "a future appointment, invitation or announced delivery",
+            "score": 0.6083913
+          },
+          {
+            "label": "a cancelled appointment or delivery",
+            "score": 0.2715437
+          },
+          {
+            "label": "a past event or retrospective statement",
+            "score": 0.08701414
+          },
+          {
+            "label": "a hypothetical event or unrelated information",
+            "score": 0.033050865
+          }
+        ],
+        "milliseconds": 85
+      }
+    },
+    {
+      "id": "challenge-delivery-paraphrase",
+      "analysis": {
+        "text": "Gute Nachrichten zu Ihrem Einkauf\n\nDer Zusteller klingelt morgen zwischen 09:45 und 11:15 Uhr an Ihrer Haustür.",
+        "mentions": [
+          {
+            "text": "morgen",
+            "field": "date",
+            "score": 0.9930034,
+            "start": 58,
+            "end": 64
+          },
+          {
+            "text": "Haustür",
+            "field": "location",
+            "score": 0.975372,
+            "start": 103,
+            "end": 110
+          },
+          {
+            "text": "09:45",
+            "field": "time",
+            "score": 0.96958935,
+            "start": 74,
+            "end": 79
+          },
+          {
+            "text": "11:15",
+            "field": "time",
+            "score": 0.90093184,
+            "start": 84,
+            "end": 89
+          },
+          {
+            "text": "Einkauf",
+            "field": "event",
+            "score": 0.8408182,
+            "start": 26,
+            "end": 33
+          },
+          {
+            "text": "Zusteller",
+            "field": "event",
+            "score": 0.6258114,
+            "start": 39,
+            "end": 48
+          }
+        ],
+        "classifications": [
+          {
+            "label": "a future appointment, invitation or announced delivery",
+            "score": 0.46841526
+          },
+          {
+            "label": "a cancelled appointment or delivery",
+            "score": 0.26809704
+          },
+          {
+            "label": "a past event or retrospective statement",
+            "score": 0.16807096
+          },
+          {
+            "label": "a hypothetical event or unrelated information",
+            "score": 0.095416784
+          }
+        ],
+        "milliseconds": 177
+      }
+    },
+    {
+      "id": "challenge-time-table",
+      "analysis": {
+        "text": "Ihr Paket\n\nVoraussichtliche Zustellung\nMorgen\n12:00–14:00 Uhr",
+        "mentions": [
+          {
+            "text": "Morgen",
+            "field": "date",
+            "score": 0.9570813,
+            "start": 39,
+            "end": 45
+          },
+          {
+            "text": "Zustellung",
+            "field": "event",
+            "score": 0.93159586,
+            "start": 28,
+            "end": 38
+          },
+          {
+            "text": "12:00–14:00 Uhr",
+            "field": "time",
+            "score": 0.80373937,
+            "start": 46,
+            "end": 61
+          }
+        ],
+        "classifications": [
+          {
+            "label": "a future appointment, invitation or announced delivery",
+            "score": 0.9183509
+          },
+          {
+            "label": "a cancelled appointment or delivery",
+            "score": 0.046944108
+          },
+          {
+            "label": "a past event or retrospective statement",
+            "score": 0.022212882
+          },
+          {
+            "label": "a hypothetical event or unrelated information",
+            "score": 0.012492245
+          }
+        ],
+        "milliseconds": 67
+      }
+    },
+    {
+      "id": "challenge-contact-details",
+      "analysis": {
+        "text": "Informationen zu Ihrem Auftrag\n\nUnsere Telefonzentrale ist heute von 07:30 bis 19:00 Uhr besetzt. Lieferzeiten sehen Sie im Kundenportal.",
+        "mentions": [
+          {
+            "text": "heute",
+            "field": "date",
+            "score": 0.98698145,
+            "start": 59,
+            "end": 64
+          },
+          {
+            "text": "07:30",
+            "field": "time",
+            "score": 0.95896393,
+            "start": 69,
+            "end": 74
+          },
+          {
+            "text": "Telefonzentrale",
+            "field": "location",
+            "score": 0.9304036,
+            "start": 39,
+            "end": 54
+          },
+          {
+            "text": "19:00",
+            "field": "time",
+            "score": 0.8428439,
+            "start": 79,
+            "end": 84
+          },
+          {
+            "text": "Kundenportal",
+            "field": "location",
+            "score": 0.81747675,
+            "start": 124,
+            "end": 136
+          }
+        ],
+        "classifications": [
+          {
+            "label": "a future appointment, invitation or announced delivery",
+            "score": 0.3307972
+          },
+          {
+            "label": "a cancelled appointment or delivery",
+            "score": 0.44347864
+          },
+          {
+            "label": "a past event or retrospective statement",
+            "score": 0.15703857
+          },
+          {
+            "label": "a hypothetical event or unrelated information",
+            "score": 0.06868556
+          }
+        ],
+        "milliseconds": 111
+      }
+    },
+    {
+      "id": "challenge-help-footer",
+      "analysis": {
+        "text": "Sendungsverfolgung\n\nSie erreichen die Kundenbetreuung am Dienstag zwischen 8 und 16 Uhr. Ein Zustelltag wurde noch nicht festgelegt.",
+        "mentions": [
+          {
+            "text": "Dienstag",
+            "field": "date",
+            "score": 0.99733174,
+            "start": 57,
+            "end": 65
+          },
+          {
+            "text": "Kundenbetreuung",
+            "field": "event",
+            "score": 0.86260355,
+            "start": 38,
+            "end": 53
+          },
+          {
+            "text": "Zustelltag",
+            "field": "event",
+            "score": 0.73181546,
+            "start": 93,
+            "end": 103
+          },
+          {
+            "text": "8 und 16 Uhr",
+            "field": "time",
+            "score": 0.60255957,
+            "start": 75,
+            "end": 87
+          }
+        ],
+        "classifications": [
+          {
+            "label": "a future appointment, invitation or announced delivery",
+            "score": 0.17263877
+          },
+          {
+            "label": "a cancelled appointment or delivery",
+            "score": 0.22237225
+          },
+          {
+            "label": "a past event or retrospective statement",
+            "score": 0.17468247
+          },
+          {
+            "label": "a hypothetical event or unrelated information",
+            "score": 0.43030658
+          }
+        ],
+        "milliseconds": 87
+      }
+    },
+    {
+      "id": "challenge-split-date-clock",
+      "analysis": {
+        "text": "Ihre Lieferung kommt morgen\n\nIhr persönliches Zustellfenster: 13:30 bis 15:00 Uhr. Bitte sorgen Sie dafür, dass die Klingel funktioniert.",
+        "mentions": [
+          {
+            "text": "morgen",
+            "field": "date",
+            "score": 0.9885478,
+            "start": 21,
+            "end": 27
+          },
+          {
+            "text": "Lieferung",
+            "field": "event",
+            "score": 0.8807135,
+            "start": 5,
+            "end": 14
+          },
+          {
+            "text": "13:30",
+            "field": "time",
+            "score": 0.7666504,
+            "start": 62,
+            "end": 67
+          }
+        ],
+        "classifications": [
+          {
+            "label": "a future appointment, invitation or announced delivery",
+            "score": 0.5711876
+          },
+          {
+            "label": "a cancelled appointment or delivery",
+            "score": 0.24673267
+          },
+          {
+            "label": "a past event or retrospective statement",
+            "score": 0.11156328
+          },
+          {
+            "label": "a hypothetical event or unrelated information",
+            "score": 0.0705165
+          }
+        ],
+        "milliseconds": 91
+      }
+    },
+    {
+      "id": "challenge-explicit-appointment",
+      "analysis": {
+        "text": "Besuchsbestätigung\n\nGerne bestätige ich unseren Besuch am 18. November um 15:45 Uhr.",
+        "mentions": [
+          {
+            "text": "18. November",
+            "field": "date",
+            "score": 0.9988164,
+            "start": 58,
+            "end": 70
+          },
+          {
+            "text": "15:45 Uhr",
+            "field": "time",
+            "score": 0.99275994,
+            "start": 74,
+            "end": 83
+          },
+          {
+            "text": "Besuch",
+            "field": "event",
+            "score": 0.86140585,
+            "start": 48,
+            "end": 54
+          }
+        ],
+        "classifications": [
+          {
+            "label": "a future appointment, invitation or announced delivery",
+            "score": 0.32430002
+          },
+          {
+            "label": "a cancelled appointment or delivery",
+            "score": 0.33614606
+          },
+          {
+            "label": "a past event or retrospective statement",
+            "score": 0.25866768
+          },
+          {
+            "label": "a hypothetical event or unrelated information",
+            "score": 0.08088626
+          }
+        ],
+        "milliseconds": 84
+      }
+    },
+    {
+      "id": "challenge-advisory-call",
+      "analysis": {
+        "text": "Beratung zu Ihrer Anfrage\n\nFür Sie ist morgen zwischen 10 und 11 Uhr ein Telefontermin gebucht.",
+        "mentions": [
+          {
+            "text": "morgen",
+            "field": "date",
+            "score": 0.9948795,
+            "start": 39,
+            "end": 45
+          },
+          {
+            "text": "Telefontermin",
+            "field": "event",
+            "score": 0.53113145,
+            "start": 73,
+            "end": 86
+          }
+        ],
+        "classifications": [
+          {
+            "label": "a future appointment, invitation or announced delivery",
+            "score": 0.4408567
+          },
+          {
+            "label": "a cancelled appointment or delivery",
+            "score": 0.317702
+          },
+          {
+            "label": "a past event or retrospective statement",
+            "score": 0.17720793
+          },
+          {
+            "label": "a hypothetical event or unrelated information",
+            "score": 0.0642333
+          }
+        ],
+        "milliseconds": 74
+      }
+    },
+    {
+      "id": "challenge-bare-today",
+      "analysis": {
+        "text": "Paketankündigung\n\nHeute zwischen 18 und 20 Uhr",
+        "mentions": [
+          {
+            "text": "Paketankündigung",
+            "field": "event",
+            "score": 0.99042916,
+            "start": 0,
+            "end": 16
+          },
+          {
+            "text": "Heute",
+            "field": "date",
+            "score": 0.9872038,
+            "start": 18,
+            "end": 23
+          },
+          {
+            "text": "18",
+            "field": "time",
+            "score": 0.82392186,
+            "start": 33,
+            "end": 35
+          },
+          {
+            "text": "20",
+            "field": "time",
+            "score": 0.6562359,
+            "start": 40,
+            "end": 42
+          }
+        ],
+        "classifications": [
+          {
+            "label": "a future appointment, invitation or announced delivery",
+            "score": 0.4184085
+          },
+          {
+            "label": "a cancelled appointment or delivery",
+            "score": 0.35802144
+          },
+          {
+            "label": "a past event or retrospective statement",
+            "score": 0.1787465
+          },
+          {
+            "label": "a hypothetical event or unrelated information",
+            "score": 0.04482353
+          }
+        ],
+        "milliseconds": 67
+      }
+    },
+    {
+      "id": "challenge-price-next-to-meeting",
+      "analysis": {
+        "text": "Unser Treffen\n\nWir treffen uns morgen um 18 Uhr. Das Essen kostet ungefähr 20 bis 30 Euro.",
+        "mentions": [
+          {
+            "text": "18 Uhr",
+            "field": "time",
+            "score": 0.9957562,
+            "start": 41,
+            "end": 47
+          },
+          {
+            "text": "morgen",
+            "field": "date",
+            "score": 0.9930448,
+            "start": 31,
+            "end": 37
+          },
+          {
+            "text": "Treffen",
+            "field": "event",
+            "score": 0.9727068,
+            "start": 6,
+            "end": 13
+          }
+        ],
+        "classifications": [
+          {
+            "label": "a future appointment, invitation or announced delivery",
+            "score": 0.35869023
+          },
+          {
+            "label": "a cancelled appointment or delivery",
+            "score": 0.26915509
+          },
+          {
+            "label": "a past event or retrospective statement",
+            "score": 0.27469626
+          },
+          {
+            "label": "a hypothetical event or unrelated information",
+            "score": 0.09745837
+          }
+        ],
+        "milliseconds": 92
+      }
+    },
+    {
+      "id": "challenge-newsletter",
+      "analysis": {
+        "text": "Dein Paket ist das beste Geschenk\n\nMorgen zwischen 10 und 16 Uhr bekommst du kostenlosen Versand im Shop. Bestelle jetzt dein Wunschpaket!",
+        "mentions": [
+          {
+            "text": "Shop",
+            "field": "location",
+            "score": 0.9979777,
+            "start": 100,
+            "end": 104
+          },
+          {
+            "text": "Morgen",
+            "field": "date",
+            "score": 0.98760486,
+            "start": 35,
+            "end": 41
+          },
+          {
+            "text": "Paket",
+            "field": "event",
+            "score": 0.77397174,
+            "start": 5,
+            "end": 10
+          }
+        ],
+        "classifications": [
+          {
+            "label": "a future appointment, invitation or announced delivery",
+            "score": 0.49562734
+          },
+          {
+            "label": "a cancelled appointment or delivery",
+            "score": 0.23967601
+          },
+          {
+            "label": "a past event or retrospective statement",
+            "score": 0.16853616
+          },
+          {
+            "label": "a hypothetical event or unrelated information",
+            "score": 0.0961604
+          }
+        ],
+        "milliseconds": 89
+      }
+    },
+    {
+      "id": "challenge-historical-timestamp",
+      "analysis": {
+        "text": "Paketstatus\n\nGestern zwischen 9 und 10 Uhr haben wir Ihr Paket an der Haustür übergeben. Danke für Ihren Einkauf.",
+        "mentions": [
+          {
+            "text": "Gestern",
+            "field": "date",
+            "score": 0.9951716,
+            "start": 13,
+            "end": 20
+          },
+          {
+            "text": "Haustür",
+            "field": "location",
+            "score": 0.93691653,
+            "start": 70,
+            "end": 77
+          }
+        ],
+        "classifications": [
+          {
+            "label": "a future appointment, invitation or announced delivery",
+            "score": 0.26262465
+          },
+          {
+            "label": "a cancelled appointment or delivery",
+            "score": 0.2705517
+          },
+          {
+            "label": "a past event or retrospective statement",
+            "score": 0.38822845
+          },
+          {
+            "label": "a hypothetical event or unrelated information",
+            "score": 0.078595184
+          }
+        ],
+        "milliseconds": 95
+      }
+    },
+    {
+      "id": "challenge-timeout-date",
+      "analysis": {
+        "text": "Ihr Kundenkonto\n\nDie letzte Anmeldung war heute um 08:10 Uhr. Falls Sie das nicht waren, ändern Sie bitte Ihr Passwort.",
+        "mentions": [
+          {
+            "text": "heute",
+            "field": "date",
+            "score": 0.99401397,
+            "start": 42,
+            "end": 47
+          },
+          {
+            "text": "08:10 Uhr",
+            "field": "time",
+            "score": 0.9844648,
+            "start": 51,
+            "end": 60
+          },
+          {
+            "text": "Anmeldung",
+            "field": "event",
+            "score": 0.79428995,
+            "start": 28,
+            "end": 37
+          }
+        ],
+        "classifications": [
+          {
+            "label": "a future appointment, invitation or announced delivery",
+            "score": 0.16336
+          },
+          {
+            "label": "a cancelled appointment or delivery",
+            "score": 0.36458403
+          },
+          {
+            "label": "a past event or retrospective statement",
+            "score": 0.3623583
+          },
+          {
+            "label": "a hypothetical event or unrelated information",
+            "score": 0.109697655
+          }
+        ],
+        "milliseconds": 100
+      }
+    },
+    {
+      "id": "challenge-response-business-days",
+      "analysis": {
+        "text": "Versanddetails\n\nFür die Beantwortung Ihres Tickets benötigen wir 2 bis 3 Werktage. Das ist keine Aussage zum Liefertermin.",
+        "mentions": [
+          {
+            "text": "2 bis 3 Werktage",
+            "field": "time",
+            "score": 0.9682727,
+            "start": 65,
+            "end": 81
+          },
+          {
+            "text": "Tickets",
+            "field": "event",
+            "score": 0.72780114,
+            "start": 43,
+            "end": 50
+          }
+        ],
+        "classifications": [
+          {
+            "label": "a future appointment, invitation or announced delivery",
+            "score": 0.12700458
+          },
+          {
+            "label": "a cancelled appointment or delivery",
+            "score": 0.2538796
+          },
+          {
+            "label": "a past event or retrospective statement",
+            "score": 0.16464768
+          },
+          {
+            "label": "a hypothetical event or unrelated information",
+            "score": 0.45446807
+          }
+        ],
+        "milliseconds": 76
+      }
+    },
+    {
+      "id": "challenge-refund-business-days",
+      "analysis": {
+        "text": "Ihre Bestellung\n\nFür Retouren rechnen Sie bitte mit 1 bis 2 Werktagen. Die Ware wurde bereits zurückgesandt.",
+        "mentions": [
+          {
+            "text": "1 bis 2 Werktagen",
+            "field": "time",
+            "score": 0.88561827,
+            "start": 52,
+            "end": 69
+          },
+          {
+            "text": "Retouren",
+            "field": "event",
+            "score": 0.8518672,
+            "start": 21,
+            "end": 29
+          }
+        ],
+        "classifications": [
+          {
+            "label": "a future appointment, invitation or announced delivery",
+            "score": 0.17181519
+          },
+          {
+            "label": "a cancelled appointment or delivery",
+            "score": 0.31209964
+          },
+          {
+            "label": "a past event or retrospective statement",
+            "score": 0.4931598
+          },
+          {
+            "label": "a hypothetical event or unrelated information",
+            "score": 0.022925334
+          }
+        ],
+        "milliseconds": 88
+      }
+    },
+    {
+      "id": "challenge-English-opening",
+      "analysis": {
+        "text": "Your order has shipped\n\nOur customer helpline is open tomorrow between 8:30 am and 5 pm for questions about your shipment.",
+        "mentions": [
+          {
+            "text": "tomorrow",
+            "field": "date",
+            "score": 0.9899697,
+            "start": 54,
+            "end": 62
+          },
+          {
+            "text": "8:30 am",
+            "field": "time",
+            "score": 0.9131507,
+            "start": 71,
+            "end": 78
+          },
+          {
+            "text": "5 pm",
+            "field": "time",
+            "score": 0.6783716,
+            "start": 83,
+            "end": 87
+          },
+          {
+            "text": "customer helpline",
+            "field": "event",
+            "score": 0.66353226,
+            "start": 28,
+            "end": 45
+          },
+          {
+            "text": "customer helpline",
+            "field": "location",
+            "score": 0.5029171,
+            "start": 28,
+            "end": 45
+          }
+        ],
+        "classifications": [
+          {
+            "label": "a future appointment, invitation or announced delivery",
+            "score": 0.39285123
+          },
+          {
+            "label": "a cancelled appointment or delivery",
+            "score": 0.34521657
+          },
+          {
+            "label": "a past event or retrospective statement",
+            "score": 0.15114659
+          },
+          {
+            "label": "a hypothetical event or unrelated information",
+            "score": 0.11078566
+          }
+        ],
+        "milliseconds": 91
+      }
+    },
+    {
+      "id": "challenge-English-noon",
+      "analysis": {
+        "text": "Your delivery is confirmed\n\nYour parcel will reach you tomorrow between 11 am and 1 pm.",
+        "mentions": [
+          {
+            "text": "tomorrow",
+            "field": "date",
+            "score": 0.9936743,
+            "start": 55,
+            "end": 63
+          },
+          {
+            "text": "11 am",
+            "field": "time",
+            "score": 0.9725801,
+            "start": 72,
+            "end": 77
+          },
+          {
+            "text": "1 pm",
+            "field": "time",
+            "score": 0.9167988,
+            "start": 82,
+            "end": 86
+          },
+          {
+            "text": "delivery",
+            "field": "event",
+            "score": 0.91430134,
+            "start": 5,
+            "end": 13
+          }
+        ],
+        "classifications": [
+          {
+            "label": "a future appointment, invitation or announced delivery",
+            "score": 0.7062646
+          },
+          {
+            "label": "a cancelled appointment or delivery",
+            "score": 0.15330546
+          },
+          {
+            "label": "a past event or retrospective statement",
+            "score": 0.08765788
+          },
+          {
+            "label": "a hypothetical event or unrelated information",
+            "score": 0.05277199
+          }
+        ],
+        "milliseconds": 76
+      }
+    },
+    {
+      "id": "challenge-negative-new-date",
+      "analysis": {
+        "text": "Update zur Bestellung\n\nMorgen kommt Ihr Paket nicht. Wir kündigen einen neuen Liefertermin gesondert an.",
+        "mentions": [
+          {
+            "text": "Morgen",
+            "field": "date",
+            "score": 0.94171757,
+            "start": 23,
+            "end": 29
+          },
+          {
+            "text": "Liefertermin",
+            "field": "event",
+            "score": 0.6553432,
+            "start": 78,
+            "end": 90
+          },
+          {
+            "text": "Bestellung",
+            "field": "event",
+            "score": 0.6006829,
+            "start": 11,
+            "end": 21
+          }
+        ],
+        "classifications": [
+          {
+            "label": "a future appointment, invitation or announced delivery",
+            "score": 0.17189813
+          },
+          {
+            "label": "a cancelled appointment or delivery",
+            "score": 0.64913154
+          },
+          {
+            "label": "a past event or retrospective statement",
+            "score": 0.10280445
+          },
+          {
+            "label": "a hypothetical event or unrelated information",
+            "score": 0.07616592
+          }
+        ],
+        "milliseconds": 74
+      }
+    },
+    {
+      "id": "challenge-double-header",
+      "analysis": {
+        "text": "Heute ist Ihre Zustellung\n\nHeute stellt der Zusteller Ihre Sendung zwischen 11 und 14 Uhr zu. Der Kundenservice ist heute zwischen 8 und 18 Uhr besetzt.",
+        "mentions": [
+          {
+            "text": "heute",
+            "field": "date",
+            "score": 0.9763071,
+            "start": 116,
+            "end": 121
+          },
+          {
+            "text": "Heute",
+            "field": "date",
+            "score": 0.959742,
+            "start": 0,
+            "end": 5
+          },
+          {
+            "text": "Heute",
+            "field": "date",
+            "score": 0.94026595,
+            "start": 27,
+            "end": 32
+          },
+          {
+            "text": "8 und 18 Uhr",
+            "field": "time",
+            "score": 0.85845673,
+            "start": 131,
+            "end": 143
+          },
+          {
+            "text": "Sendung",
+            "field": "event",
+            "score": 0.85519624,
+            "start": 59,
+            "end": 66
+          },
+          {
+            "text": "Zustellung",
+            "field": "event",
+            "score": 0.81679094,
+            "start": 15,
+            "end": 25
+          },
+          {
+            "text": "11 und 14 Uhr",
+            "field": "time",
+            "score": 0.76227075,
+            "start": 76,
+            "end": 89
+          },
+          {
+            "text": "Kundenservice",
+            "field": "event",
+            "score": 0.52796084,
+            "start": 98,
+            "end": 111
+          }
+        ],
+        "classifications": [
+          {
+            "label": "a future appointment, invitation or announced delivery",
+            "score": 0.6141139
+          },
+          {
+            "label": "a cancelled appointment or delivery",
+            "score": 0.2080263
+          },
+          {
+            "label": "a past event or retrospective statement",
+            "score": 0.119190216
+          },
+          {
+            "label": "a hypothetical event or unrelated information",
+            "score": 0.058669493
+          }
+        ],
+        "milliseconds": 99
+      }
+    },
+    {
+      "id": "challenge-numeric-date",
+      "analysis": {
+        "text": "Ihr Termin\n\nWir sehen uns am 12.11.2026 um 17:30 Uhr.",
+        "mentions": [
+          {
+            "text": "12.11.2026",
+            "field": "date",
+            "score": 0.9953686,
+            "start": 29,
+            "end": 39
+          },
+          {
+            "text": "17:30 Uhr",
+            "field": "time",
+            "score": 0.98325574,
+            "start": 43,
+            "end": 52
+          }
+        ],
+        "classifications": [
+          {
+            "label": "a future appointment, invitation or announced delivery",
+            "score": 0.4107426
+          },
+          {
+            "label": "a cancelled appointment or delivery",
+            "score": 0.24687307
+          },
+          {
+            "label": "a past event or retrospective statement",
+            "score": 0.23881505
+          },
+          {
+            "label": "a hypothetical event or unrelated information",
+            "score": 0.10356928
+          }
+        ],
+        "milliseconds": 84
+      }
+    },
+    {
+      "id": "challenge-relative-reference",
+      "analysis": {
+        "text": "Ihr Paket kommt bald\n\nIhr Paket erreicht Sie heute zwischen 13 und 15 Uhr. Diese Nachricht wurde automatisch erzeugt.",
+        "mentions": [
+          {
+            "text": "Paket",
+            "field": "event",
+            "score": 0.9459894,
+            "start": 26,
+            "end": 31
+          },
+          {
+            "text": "Paket",
+            "field": "event",
+            "score": 0.93150544,
+            "start": 4,
+            "end": 9
+          },
+          {
+            "text": "heute",
+            "field": "date",
+            "score": 0.90389574,
+            "start": 45,
+            "end": 50
+          },
+          {
+            "text": "13",
+            "field": "time",
+            "score": 0.60472494,
+            "start": 60,
+            "end": 62
+          }
+        ],
+        "classifications": [
+          {
+            "label": "a future appointment, invitation or announced delivery",
+            "score": 0.7670882
+          },
+          {
+            "label": "a cancelled appointment or delivery",
+            "score": 0.056553863
+          },
+          {
+            "label": "a past event or retrospective statement",
+            "score": 0.07717566
+          },
+          {
+            "label": "a hypothetical event or unrelated information",
+            "score": 0.099182285
+          }
+        ],
+        "milliseconds": 86
+      }
+    }
+  ]
+}

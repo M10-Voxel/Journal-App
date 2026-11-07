@@ -136,10 +136,10 @@ export function removalPatches(cards: Card[], id: string): Patches {
   return patches;
 }
 /** Private notebook attachments disappear with their note; shared and day-board cards remain. */
-export function removalIds(cards: Card[], id: string): Set<string> {
+export function removalIds(cards: Card[], id: string, removing = new Set([id])): Set<string> {
   const removed = new Set([id]), note = cards.find(card => card.id === id);
   if (note?.kind === 'note') for (const card of cards) {
-    if (card.kind !== 'note' && card.notebook && !card.dates.length && linksOf(note).includes(card.id) && linksOf(card).every(other => other === id)) removed.add(card.id);
+    if (card.kind !== 'note' && card.notebook && !card.dates.length && linksOf(note).includes(card.id) && linksOf(card).every(other => removing.has(other))) removed.add(card.id);
   }
   return removed;
 }

@@ -1,6 +1,6 @@
 {
   "name": "journal-app",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,7 +8,10 @@
     "build": "tsc --noEmit && vite build",
     "check:ui": "node scripts/verify-ui.mjs",
     "test": "node --test tests/*.test.mjs",
-    "tauri": "tauri"
+    "train:mail-context": "node scripts/train-mail-context.mjs",
+    "check:mail-context": "node scripts/evaluate-mail-context.mjs",
+    "tauri": "tauri",
+    "release": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-release.ps1"
   },
   "dependencies": {
     "@codemirror/commands": "^6.11.1",
@@ -25,6 +28,7 @@
     "@fontsource/vt323": "^5.3.0",
     "@jsquash/avif": "^2.1.1",
     "@tauri-apps/api": "^2.0.0",
+    "@tauri-apps/plugin-updater": "^2.14.1",
     "chrono-node": "^2.10.3",
     "ical.js": "^2.2.1",
     "react": "^19.0.0",

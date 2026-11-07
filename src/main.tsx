@@ -1,3 +1,4 @@
+import { WindowActivity } from './components/WindowActivity';
 import { useViewHistory } from './viewHistory';
 import { UndoShortcuts, flushHistoryWindows } from './components/UndoShortcuts';
 import { t, useLanguage, setLanguage } from './i18n.ts';
@@ -47,6 +48,7 @@ import type { BookControl } from './components/JournalBook';
 import { CalendarDrawer, CalendarTab, NotebookTab, calendarDrawerKey, notebookDrawerKey, useDrawer } from './components/CalendarDrawer';
 import { Notebook } from './components/Notebook';
 import { SearchBox, SearchTab } from './components/Search';
+import { ContextMenuHost } from './components/ContextMenu';
 import type { SearchResult } from './search';
 import { DetachedPanel, detachable } from './components/DetachedPanel';
 import type { DetachedKind } from './components/DetachedPanel';
@@ -98,6 +100,7 @@ import './popup-fields.css';
 import './popup-sheets.css';
 import './popup-chrome.css';
 import './search.css';
+import './components/mailDetails.css';
 import { applyColors } from './colors';
 
 applyTheme(loadSettings());
@@ -136,7 +139,7 @@ function App() {
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
   const [savedCount, setSavedCount] = useState(0);
-  const [error, setError] = useState('');
+  const [error, setError] = useState(() => { const message = localStorage.getItem('journal.vaultError') ?? ''; localStorage.removeItem('journal.vaultError'); return message; });
   const [openEntryId, setOpenEntryId] = useState<string | null>(null);
   const [newEntryId, setNewEntryId] = useState<string | null>(null);
   const [moveAnnouncement, setMoveAnnouncement] = useState('');
@@ -296,6 +299,8 @@ function App() {
     showFromCalendar(target, entryId ?? null);
   });
   const showFromCalendar = useStableCallback((target: string, entryId: string | null) => {
+    notebook.setOpen(false);
+    setPeriodMode('day');
     if (target !== date) {
       navigate(target);
       // The entry takes the focus when it mounts with the newly shown day.
@@ -713,6 +718,12 @@ function App() {
     };
     window.setTimeout(flash, 120);
   });
+  // "Im Notizblock öffnen" from a board card's menu: the notebook opens on that note.
+  useEffect(() => {
+    const show = (event: Event) => openResult({ target: { kind: 'card', id: (event as CustomEvent<string>).detail, date: null, notebook: true } } as SearchResult);
+    window.addEventListener('journal:show-note', show);
+    return () => window.removeEventListener('journal:show-note', show);
+  }, []);
   const visibleOpen = visibleEntries.filter(entry => entry.kind === 'task' && !entry.done && !entry.cancelled).length;
   const nebulaStats = { entries: entryCount, open: visibleOpen, done: visibleEntries.filter(entry => entry.done).length, events: visibleEntries.filter(entry => entry.kind === 'event').length };
   const calendar = <Calendar embedded withoutDay={nebulaMode} journalDate={date} onOpen={openFromCalendar} onCreate={createFromCalendar} onEdit={editFromCalendar} onMove={moveFromCalendar} onRemove={removeFromCalendar} onExport={exportFromCalendar} onImport={importFromCalendar} />;
@@ -759,7 +770,7 @@ function App() {
       {bookMode ? <JournalBook mode={periodMode} date={date} today={today} onToday={() => navigate(today)} renderNav={bookNav} view={bookView} paging={settings.bookPaging} beside={besideCalendar} sheetWidth={sidebar.width} onNavigate={navigate} renderPage={bookPage} entriesScrollRef={scrollRef} controlRef={bookRef} onWideChange={setBookWide}
         calendarTab={<><CalendarTab open={drawer.open} onToggle={() => toggleDrawer()} /><NotebookTab open={notebook.open} onToggle={() => toggleNotebook()} /><SearchTab onOpen={openResult} /></>} register={register}
         overlay={<><CalendarDrawer overlay open={drawer.open} animated={drawer.animated} width={sidebar.width} resizer={sidebar.handle} resizable={besideCalendar || !(bookView === 'double' && bookWide)} disabled={driveBusy} onClose={() => toggleDrawer(true)}>{calendar}</CalendarDrawer>
-          <CalendarDrawer overlay kind="notebook" right={bothSheets} label={t('Notizen')} open={notebook.open} animated={notebook.animated} width={sidebar.width} resizer={sidebar.handle} resizable={besideCalendar || !(bookView === 'double' && bookWide)} disabled={driveBusy} onClose={() => toggleNotebook(true)}><Notebook onClose={() => toggleNotebook(true)} /></CalendarDrawer></>} />
+          <CalendarDrawer overlay kind="notebook" right={bothSheets} label={t('Notizen')} open={notebook.open} animated={notebook.animated} width={sidebar.width} resizer={sidebar.handle} resizable={besideCalendar || !(bookView === 'double' && bookWide)} disabled={driveBusy} onClose={() => toggleNotebook(true)}><Notebook onOpenDay={target => openFromCalendar(target)} onClose={() => toggleNotebook(true)} /></CalendarDrawer></>} />
         : nebulaMode ? <NebulaDesk onTitleChange={title => update(current => ({ ...current, title }))} mode={periodMode} date={date} today={today} modes={periodModes} modeLabels={periodLabels} dirty={dirty} title={ready ? day.title : ''} stats={nebulaStats}
           onMode={setPeriodMode} onStep={stepPeriod} onToday={() => navigate(today)} stepLabels={stepLabels} disabled={driveBusy}
           datePicker={<MiniCalendarPicker date={date} open={datePickerOpen} onOpenChange={setDatePickerOpen} onPick={navigate} buttonRef={datePickerButtonRef} className="nebula-date">{pageHeading(date, periodMode)}</MiniCalendarPicker>}
@@ -768,9 +779,9 @@ function App() {
           notes={<PeriodNotes date={date} mode={periodMode} part="notes" onManage={() => openSettings('activities')} onImport={importFromCalendar} />}
           activities={<PeriodNotes date={date} mode={periodMode} part="activities" onManage={() => openSettings('activities')} onImport={importFromCalendar} />}
           calendar={calendar} calendarOpen={drawer.open} onCalendarToggle={() => toggleDrawer()} onCalendarClose={() => toggleDrawer(true)}
-          notebook={<Notebook />} notebookOpen={notebook.open} onNotebookToggle={() => toggleNotebook()} onNotebookClose={() => toggleNotebook(true)} onOpenDay={(target, entry) => showFromCalendar(target, entry ?? null)} onNavigate={navigate} scrollRef={scrollRef}
+          notebook={<Notebook onOpenDay={target => openFromCalendar(target)} />} notebookOpen={notebook.open} onNotebookToggle={() => toggleNotebook()} onNotebookClose={() => toggleNotebook(true)} onOpenDay={(target, entry) => showFromCalendar(target, entry ?? null)} onNavigate={navigate} scrollRef={scrollRef}
           dayCalendar={(showDate, onDateChange) => <Calendar embedded fixedView="day" journalDate={date} showDate={showDate} onDateChange={onDateChange} onOpen={openFromCalendar} onCreate={createFromCalendar} onEdit={editFromCalendar} onMove={moveFromCalendar} onRemove={removeFromCalendar} />} />
-        : notebookView ? <div className="notebook-view"><Notebook /></div>
+        : notebookView ? <div className="notebook-view"><Notebook onOpenDay={target => openFromCalendar(target)} /></div>
         : <div className="scroll" ref={scrollRef}>
           <div className="content">
             {periodMode === 'day' && entriesPage()}
@@ -795,4 +806,4 @@ const windowLabel = getCurrentWindow().label;
 if (windowLabel === 'reminder') document.documentElement.classList.add('is-popup');
 // A window of Nebula's desk pulled out of the journal draws its own frame on a transparent window.
 if (windowLabel.startsWith('panel-')) document.documentElement.classList.add('is-panel-window');
-createRoot(document.getElementById('root')!).render(<><ThemeSync /><UndoShortcuts />{windowLabel.startsWith('board-') ? <FloatingNote /> : windowLabel.startsWith('panel-') && detachable.includes(windowLabel.slice(6) as DetachedKind) ? <DetachedPanel kind={windowLabel.slice(6) as DetachedKind} /> : windowLabel === 'calendar' ? <CalendarWindow /> : windowLabel === 'mini' ? <MiniCalendar /> : windowLabel === 'reminder' ? <ReminderPopup /> : <App />}{!windowLabel.startsWith('board-') && !['mini', 'reminder'].includes(windowLabel) && <MailImportToast />}</>);
+createRoot(document.getElementById('root')!).render(<><WindowActivity /><ThemeSync /><UndoShortcuts /><ContextMenuHost />{windowLabel.startsWith('board-') ? <FloatingNote /> : windowLabel.startsWith('panel-') && detachable.includes(windowLabel.slice(6) as DetachedKind) ? <DetachedPanel kind={windowLabel.slice(6) as DetachedKind} /> : windowLabel === 'calendar' ? <CalendarWindow /> : windowLabel === 'mini' ? <MiniCalendar /> : windowLabel === 'reminder' ? <ReminderPopup /> : <App />}{!windowLabel.startsWith('board-') && !['mini', 'reminder'].includes(windowLabel) && <MailImportToast />}</>);

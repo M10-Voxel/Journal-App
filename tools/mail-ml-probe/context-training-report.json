@@ -1,0 +1,620 @@
+{
+  "provenance": "Hand-authored synthetic German/English mail sentences. No real messages. Splits are by template, never random expanded rows. Integration context-cases.json is not training input.",
+  "templates": {
+    "train": 232,
+    "validation": 14,
+    "test": 14
+  },
+  "features": 5562,
+  "sourceSha256": "ce65d72cc5ad9ba6ea2833c727c5e7ded8c8245c4a6dce2a2aa79f9a825661f6",
+  "threshold": 0.4,
+  "thresholdSelection": "validation F0.5, test unused for threshold selection",
+  "train": {
+    "samples": 5568,
+    "tp": 2256,
+    "fp": 0,
+    "tn": 3312,
+    "fn": 0,
+    "precision": 1,
+    "recall": 1,
+    "failures": []
+  },
+  "validation": {
+    "samples": 336,
+    "tp": 168,
+    "fp": 24,
+    "tn": 144,
+    "fn": 0,
+    "precision": 0.875,
+    "recall": 1,
+    "failures": [
+      {
+        "id": "validation-ignore-5-0",
+        "label": 0,
+        "score": 0.6710972122999828,
+        "text": "Für Retouren rechnen Sie bitte mit 2 bis 3 Werktagen."
+      },
+      {
+        "id": "validation-ignore-5-1",
+        "label": 0,
+        "score": 0.6701297121668073,
+        "text": "Für Retouren rechnen Sie bitte mit 1 bis 2 Werktagen."
+      },
+      {
+        "id": "validation-ignore-5-2",
+        "label": 0,
+        "score": 0.672818230088351,
+        "text": "Für Retouren rechnen Sie bitte mit 2 bis 3 Werktagen."
+      },
+      {
+        "id": "validation-ignore-5-3",
+        "label": 0,
+        "score": 0.671126670522987,
+        "text": "Für Retouren rechnen Sie bitte mit 1 bis 2 Werktagen."
+      },
+      {
+        "id": "validation-ignore-5-4",
+        "label": 0,
+        "score": 0.6696051447060181,
+        "text": "Für Retouren rechnen Sie bitte mit 2 bis 3 Werktagen."
+      },
+      {
+        "id": "validation-ignore-5-5",
+        "label": 0,
+        "score": 0.6711161471974396,
+        "text": "Für Retouren rechnen Sie bitte mit 1 bis 2 Werktagen."
+      },
+      {
+        "id": "validation-ignore-5-6",
+        "label": 0,
+        "score": 0.6704390771900024,
+        "text": "Für Retouren rechnen Sie bitte mit 2 bis 3 Werktagen."
+      },
+      {
+        "id": "validation-ignore-5-7",
+        "label": 0,
+        "score": 0.6706995329979737,
+        "text": "Für Retouren rechnen Sie bitte mit 1 bis 2 Werktagen."
+      },
+      {
+        "id": "validation-ignore-5-8",
+        "label": 0,
+        "score": 0.6710972122999828,
+        "text": "Für Retouren rechnen Sie bitte mit 2 bis 3 Werktagen."
+      },
+      {
+        "id": "validation-ignore-5-9",
+        "label": 0,
+        "score": 0.6701297121668073,
+        "text": "Für Retouren rechnen Sie bitte mit 1 bis 2 Werktagen."
+      },
+      {
+        "id": "validation-ignore-5-10",
+        "label": 0,
+        "score": 0.672818230088351,
+        "text": "Für Retouren rechnen Sie bitte mit 2 bis 3 Werktagen."
+      },
+      {
+        "id": "validation-ignore-5-11",
+        "label": 0,
+        "score": 0.671126670522987,
+        "text": "Für Retouren rechnen Sie bitte mit 1 bis 2 Werktagen."
+      },
+      {
+        "id": "validation-ignore-5-12",
+        "label": 0,
+        "score": 0.6696051447060181,
+        "text": "Für Retouren rechnen Sie bitte mit 2 bis 3 Werktagen."
+      },
+      {
+        "id": "validation-ignore-5-13",
+        "label": 0,
+        "score": 0.6711161471974396,
+        "text": "Für Retouren rechnen Sie bitte mit 1 bis 2 Werktagen."
+      },
+      {
+        "id": "validation-ignore-5-14",
+        "label": 0,
+        "score": 0.6704390771900024,
+        "text": "Für Retouren rechnen Sie bitte mit 2 bis 3 Werktagen."
+      },
+      {
+        "id": "validation-ignore-5-15",
+        "label": 0,
+        "score": 0.6706995329979737,
+        "text": "Für Retouren rechnen Sie bitte mit 1 bis 2 Werktagen."
+      },
+      {
+        "id": "validation-ignore-5-16",
+        "label": 0,
+        "score": 0.6710972122999828,
+        "text": "Für Retouren rechnen Sie bitte mit 2 bis 3 Werktagen."
+      },
+      {
+        "id": "validation-ignore-5-17",
+        "label": 0,
+        "score": 0.6701297121668073,
+        "text": "Für Retouren rechnen Sie bitte mit 1 bis 2 Werktagen."
+      },
+      {
+        "id": "validation-ignore-5-18",
+        "label": 0,
+        "score": 0.672818230088351,
+        "text": "Für Retouren rechnen Sie bitte mit 2 bis 3 Werktagen."
+      },
+      {
+        "id": "validation-ignore-5-19",
+        "label": 0,
+        "score": 0.671126670522987,
+        "text": "Für Retouren rechnen Sie bitte mit 1 bis 2 Werktagen."
+      },
+      {
+        "id": "validation-ignore-5-20",
+        "label": 0,
+        "score": 0.6696051447060181,
+        "text": "Für Retouren rechnen Sie bitte mit 2 bis 3 Werktagen."
+      },
+      {
+        "id": "validation-ignore-5-21",
+        "label": 0,
+        "score": 0.6711161471974396,
+        "text": "Für Retouren rechnen Sie bitte mit 1 bis 2 Werktagen."
+      },
+      {
+        "id": "validation-ignore-5-22",
+        "label": 0,
+        "score": 0.6704390771900024,
+        "text": "Für Retouren rechnen Sie bitte mit 2 bis 3 Werktagen."
+      },
+      {
+        "id": "validation-ignore-5-23",
+        "label": 0,
+        "score": 0.6706995329979737,
+        "text": "Für Retouren rechnen Sie bitte mit 1 bis 2 Werktagen."
+      }
+    ]
+  },
+  "test": {
+    "samples": 336,
+    "tp": 144,
+    "fp": 48,
+    "tn": 120,
+    "fn": 24,
+    "precision": 0.75,
+    "recall": 0.8571428571428571,
+    "failures": [
+      {
+        "id": "test-event-1-0",
+        "label": 1,
+        "score": 0.23326063592942783,
+        "text": "Unser Zusteller klingelt heute zwischen 10 und 12 Uhr an Ihrer Tür."
+      },
+      {
+        "id": "test-event-1-1",
+        "label": 1,
+        "score": 0.25947161646056455,
+        "text": "Unser Zusteller klingelt morgen von 14:30 bis 16:15 Uhr an Ihrer Tür."
+      },
+      {
+        "id": "test-event-1-2",
+        "label": 1,
+        "score": 0.2775956494181308,
+        "text": "Unser Zusteller klingelt am 18. Dezember zwischen 20 und 21:20 Uhr an Ihrer Tür."
+      },
+      {
+        "id": "test-event-1-3",
+        "label": 1,
+        "score": 0.1999916604384113,
+        "text": "Unser Zusteller klingelt am kommenden Freitag between 2 and 4 pm an Ihrer Tür."
+      },
+      {
+        "id": "test-event-1-4",
+        "label": 1,
+        "score": 0.21391939213232067,
+        "text": "Unser Zusteller klingelt today from 10:30 am to 12:15 pm an Ihrer Tür."
+      },
+      {
+        "id": "test-event-1-5",
+        "label": 1,
+        "score": 0.23443020277476156,
+        "text": "Unser Zusteller klingelt tomorrow zwischen 10 und 12 Uhr an Ihrer Tür."
+      },
+      {
+        "id": "test-event-1-6",
+        "label": 1,
+        "score": 0.25896242043705814,
+        "text": "Unser Zusteller klingelt heute von 14:30 bis 16:15 Uhr an Ihrer Tür."
+      },
+      {
+        "id": "test-event-1-7",
+        "label": 1,
+        "score": 0.24555196229191845,
+        "text": "Unser Zusteller klingelt morgen zwischen 20 und 21:20 Uhr an Ihrer Tür."
+      },
+      {
+        "id": "test-event-1-8",
+        "label": 1,
+        "score": 0.20800981013906503,
+        "text": "Unser Zusteller klingelt am 18. Dezember between 2 and 4 pm an Ihrer Tür."
+      },
+      {
+        "id": "test-event-1-9",
+        "label": 1,
+        "score": 0.2306147532369852,
+        "text": "Unser Zusteller klingelt am kommenden Freitag from 10:30 am to 12:15 pm an Ihrer Tür."
+      },
+      {
+        "id": "test-event-1-10",
+        "label": 1,
+        "score": 0.23668734145858394,
+        "text": "Unser Zusteller klingelt today zwischen 10 und 12 Uhr an Ihrer Tür."
+      },
+      {
+        "id": "test-event-1-11",
+        "label": 1,
+        "score": 0.2602298867927678,
+        "text": "Unser Zusteller klingelt tomorrow von 14:30 bis 16:15 Uhr an Ihrer Tür."
+      },
+      {
+        "id": "test-event-1-12",
+        "label": 1,
+        "score": 0.24815422725479036,
+        "text": "Unser Zusteller klingelt heute zwischen 20 und 21:20 Uhr an Ihrer Tür."
+      },
+      {
+        "id": "test-event-1-13",
+        "label": 1,
+        "score": 0.1793210434662605,
+        "text": "Unser Zusteller klingelt morgen between 2 and 4 pm an Ihrer Tür."
+      },
+      {
+        "id": "test-event-1-14",
+        "label": 1,
+        "score": 0.2401075271592891,
+        "text": "Unser Zusteller klingelt am 18. Dezember from 10:30 am to 12:15 pm an Ihrer Tür."
+      },
+      {
+        "id": "test-event-1-15",
+        "label": 1,
+        "score": 0.24710753531951926,
+        "text": "Unser Zusteller klingelt am kommenden Freitag zwischen 10 und 12 Uhr an Ihrer Tür."
+      },
+      {
+        "id": "test-event-1-16",
+        "label": 1,
+        "score": 0.25855673629114817,
+        "text": "Unser Zusteller klingelt today von 14:30 bis 16:15 Uhr an Ihrer Tür."
+      },
+      {
+        "id": "test-event-1-17",
+        "label": 1,
+        "score": 0.2536543212329161,
+        "text": "Unser Zusteller klingelt tomorrow zwischen 20 und 21:20 Uhr an Ihrer Tür."
+      },
+      {
+        "id": "test-event-1-18",
+        "label": 1,
+        "score": 0.1821690619172693,
+        "text": "Unser Zusteller klingelt heute between 2 and 4 pm an Ihrer Tür."
+      },
+      {
+        "id": "test-event-1-19",
+        "label": 1,
+        "score": 0.21431842622942382,
+        "text": "Unser Zusteller klingelt morgen from 10:30 am to 12:15 pm an Ihrer Tür."
+      },
+      {
+        "id": "test-event-1-20",
+        "label": 1,
+        "score": 0.25637060334799006,
+        "text": "Unser Zusteller klingelt am 18. Dezember zwischen 10 und 12 Uhr an Ihrer Tür."
+      },
+      {
+        "id": "test-event-1-21",
+        "label": 1,
+        "score": 0.2702384904701461,
+        "text": "Unser Zusteller klingelt am kommenden Freitag von 14:30 bis 16:15 Uhr an Ihrer Tür."
+      },
+      {
+        "id": "test-event-1-22",
+        "label": 1,
+        "score": 0.24855242844830985,
+        "text": "Unser Zusteller klingelt today zwischen 20 und 21:20 Uhr an Ihrer Tür."
+      },
+      {
+        "id": "test-event-1-23",
+        "label": 1,
+        "score": 0.18093761999121946,
+        "text": "Unser Zusteller klingelt tomorrow between 2 and 4 pm an Ihrer Tür."
+      },
+      {
+        "id": "test-ignore-3-0",
+        "label": 0,
+        "score": 0.7940387785216646,
+        "text": "Wir haben Ihr Paket gestern zwischen 10 und 12 Uhr übergeben."
+      },
+      {
+        "id": "test-ignore-3-1",
+        "label": 0,
+        "score": 0.7592275881326369,
+        "text": "Wir haben Ihr Paket gestern von 14:30 bis 16:15 Uhr übergeben."
+      },
+      {
+        "id": "test-ignore-3-2",
+        "label": 0,
+        "score": 0.7748226967446805,
+        "text": "Wir haben Ihr Paket gestern zwischen 20 und 21:20 Uhr übergeben."
+      },
+      {
+        "id": "test-ignore-3-3",
+        "label": 0,
+        "score": 0.8106188136559217,
+        "text": "Wir haben Ihr Paket gestern between 2 and 4 pm übergeben."
+      },
+      {
+        "id": "test-ignore-3-4",
+        "label": 0,
+        "score": 0.7489222785442172,
+        "text": "Wir haben Ihr Paket gestern from 10:30 am to 12:15 pm übergeben."
+      },
+      {
+        "id": "test-ignore-3-5",
+        "label": 0,
+        "score": 0.7938917691115595,
+        "text": "Wir haben Ihr Paket gestern zwischen 10 und 12 Uhr übergeben."
+      },
+      {
+        "id": "test-ignore-3-6",
+        "label": 0,
+        "score": 0.759431408519266,
+        "text": "Wir haben Ihr Paket gestern von 14:30 bis 16:15 Uhr übergeben."
+      },
+      {
+        "id": "test-ignore-3-7",
+        "label": 0,
+        "score": 0.7738661640718847,
+        "text": "Wir haben Ihr Paket gestern zwischen 20 und 21:20 Uhr übergeben."
+      },
+      {
+        "id": "test-ignore-3-8",
+        "label": 0,
+        "score": 0.8107798407919379,
+        "text": "Wir haben Ihr Paket gestern between 2 and 4 pm übergeben."
+      },
+      {
+        "id": "test-ignore-3-9",
+        "label": 0,
+        "score": 0.749468062410291,
+        "text": "Wir haben Ihr Paket gestern from 10:30 am to 12:15 pm übergeben."
+      },
+      {
+        "id": "test-ignore-3-10",
+        "label": 0,
+        "score": 0.794142748357634,
+        "text": "Wir haben Ihr Paket gestern zwischen 10 und 12 Uhr übergeben."
+      },
+      {
+        "id": "test-ignore-3-11",
+        "label": 0,
+        "score": 0.7598750419526389,
+        "text": "Wir haben Ihr Paket gestern von 14:30 bis 16:15 Uhr übergeben."
+      },
+      {
+        "id": "test-ignore-3-12",
+        "label": 0,
+        "score": 0.7732571857845303,
+        "text": "Wir haben Ihr Paket gestern zwischen 20 und 21:20 Uhr übergeben."
+      },
+      {
+        "id": "test-ignore-3-13",
+        "label": 0,
+        "score": 0.8106115910234651,
+        "text": "Wir haben Ihr Paket gestern between 2 and 4 pm übergeben."
+      },
+      {
+        "id": "test-ignore-3-14",
+        "label": 0,
+        "score": 0.7495407189651213,
+        "text": "Wir haben Ihr Paket gestern from 10:30 am to 12:15 pm übergeben."
+      },
+      {
+        "id": "test-ignore-3-15",
+        "label": 0,
+        "score": 0.7937511406061827,
+        "text": "Wir haben Ihr Paket gestern zwischen 10 und 12 Uhr übergeben."
+      },
+      {
+        "id": "test-ignore-3-16",
+        "label": 0,
+        "score": 0.7598551220314869,
+        "text": "Wir haben Ihr Paket gestern von 14:30 bis 16:15 Uhr übergeben."
+      },
+      {
+        "id": "test-ignore-3-17",
+        "label": 0,
+        "score": 0.7729921452363616,
+        "text": "Wir haben Ihr Paket gestern zwischen 20 und 21:20 Uhr übergeben."
+      },
+      {
+        "id": "test-ignore-3-18",
+        "label": 0,
+        "score": 0.8106701903365345,
+        "text": "Wir haben Ihr Paket gestern between 2 and 4 pm übergeben."
+      },
+      {
+        "id": "test-ignore-3-19",
+        "label": 0,
+        "score": 0.7499745895822798,
+        "text": "Wir haben Ihr Paket gestern from 10:30 am to 12:15 pm übergeben."
+      },
+      {
+        "id": "test-ignore-3-20",
+        "label": 0,
+        "score": 0.7932975894080909,
+        "text": "Wir haben Ihr Paket gestern zwischen 10 und 12 Uhr übergeben."
+      },
+      {
+        "id": "test-ignore-3-21",
+        "label": 0,
+        "score": 0.7598682523564044,
+        "text": "Wir haben Ihr Paket gestern von 14:30 bis 16:15 Uhr übergeben."
+      },
+      {
+        "id": "test-ignore-3-22",
+        "label": 0,
+        "score": 0.7735938484274069,
+        "text": "Wir haben Ihr Paket gestern zwischen 20 und 21:20 Uhr übergeben."
+      },
+      {
+        "id": "test-ignore-3-23",
+        "label": 0,
+        "score": 0.8105079372396242,
+        "text": "Wir haben Ihr Paket gestern between 2 and 4 pm übergeben."
+      },
+      {
+        "id": "test-ignore-5-0",
+        "label": 0,
+        "score": 0.8776300328785722,
+        "text": "Für die Beantwortung Ihres Tickets benötigen wir 2 bis 3 Werktage."
+      },
+      {
+        "id": "test-ignore-5-1",
+        "label": 0,
+        "score": 0.8757408738193234,
+        "text": "Für die Beantwortung Ihres Tickets benötigen wir 1 bis 2 Werktage."
+      },
+      {
+        "id": "test-ignore-5-2",
+        "label": 0,
+        "score": 0.8769120767984883,
+        "text": "Für die Beantwortung Ihres Tickets benötigen wir 2 bis 3 Werktage."
+      },
+      {
+        "id": "test-ignore-5-3",
+        "label": 0,
+        "score": 0.8774256820933841,
+        "text": "Für die Beantwortung Ihres Tickets benötigen wir 1 bis 2 Werktage."
+      },
+      {
+        "id": "test-ignore-5-4",
+        "label": 0,
+        "score": 0.8773642365500481,
+        "text": "Für die Beantwortung Ihres Tickets benötigen wir 2 bis 3 Werktage."
+      },
+      {
+        "id": "test-ignore-5-5",
+        "label": 0,
+        "score": 0.8774205296584234,
+        "text": "Für die Beantwortung Ihres Tickets benötigen wir 1 bis 2 Werktage."
+      },
+      {
+        "id": "test-ignore-5-6",
+        "label": 0,
+        "score": 0.8770377326843513,
+        "text": "Für die Beantwortung Ihres Tickets benötigen wir 2 bis 3 Werktage."
+      },
+      {
+        "id": "test-ignore-5-7",
+        "label": 0,
+        "score": 0.8774366239956497,
+        "text": "Für die Beantwortung Ihres Tickets benötigen wir 1 bis 2 Werktage."
+      },
+      {
+        "id": "test-ignore-5-8",
+        "label": 0,
+        "score": 0.8776300328785722,
+        "text": "Für die Beantwortung Ihres Tickets benötigen wir 2 bis 3 Werktage."
+      },
+      {
+        "id": "test-ignore-5-9",
+        "label": 0,
+        "score": 0.8757408738193234,
+        "text": "Für die Beantwortung Ihres Tickets benötigen wir 1 bis 2 Werktage."
+      },
+      {
+        "id": "test-ignore-5-10",
+        "label": 0,
+        "score": 0.8769120767984883,
+        "text": "Für die Beantwortung Ihres Tickets benötigen wir 2 bis 3 Werktage."
+      },
+      {
+        "id": "test-ignore-5-11",
+        "label": 0,
+        "score": 0.8774256820933841,
+        "text": "Für die Beantwortung Ihres Tickets benötigen wir 1 bis 2 Werktage."
+      },
+      {
+        "id": "test-ignore-5-12",
+        "label": 0,
+        "score": 0.8773642365500481,
+        "text": "Für die Beantwortung Ihres Tickets benötigen wir 2 bis 3 Werktage."
+      },
+      {
+        "id": "test-ignore-5-13",
+        "label": 0,
+        "score": 0.8774205296584234,
+        "text": "Für die Beantwortung Ihres Tickets benötigen wir 1 bis 2 Werktage."
+      },
+      {
+        "id": "test-ignore-5-14",
+        "label": 0,
+        "score": 0.8770377326843513,
+        "text": "Für die Beantwortung Ihres Tickets benötigen wir 2 bis 3 Werktage."
+      },
+      {
+        "id": "test-ignore-5-15",
+        "label": 0,
+        "score": 0.8774366239956497,
+        "text": "Für die Beantwortung Ihres Tickets benötigen wir 1 bis 2 Werktage."
+      },
+      {
+        "id": "test-ignore-5-16",
+        "label": 0,
+        "score": 0.8776300328785722,
+        "text": "Für die Beantwortung Ihres Tickets benötigen wir 2 bis 3 Werktage."
+      },
+      {
+        "id": "test-ignore-5-17",
+        "label": 0,
+        "score": 0.8757408738193234,
+        "text": "Für die Beantwortung Ihres Tickets benötigen wir 1 bis 2 Werktage."
+      },
+      {
+        "id": "test-ignore-5-18",
+        "label": 0,
+        "score": 0.8769120767984883,
+        "text": "Für die Beantwortung Ihres Tickets benötigen wir 2 bis 3 Werktage."
+      },
+      {
+        "id": "test-ignore-5-19",
+        "label": 0,
+        "score": 0.8774256820933841,
+        "text": "Für die Beantwortung Ihres Tickets benötigen wir 1 bis 2 Werktage."
+      },
+      {
+        "id": "test-ignore-5-20",
+        "label": 0,
+        "score": 0.8773642365500481,
+        "text": "Für die Beantwortung Ihres Tickets benötigen wir 2 bis 3 Werktage."
+      },
+      {
+        "id": "test-ignore-5-21",
+        "label": 0,
+        "score": 0.8774205296584234,
+        "text": "Für die Beantwortung Ihres Tickets benötigen wir 1 bis 2 Werktage."
+      },
+      {
+        "id": "test-ignore-5-22",
+        "label": 0,
+        "score": 0.8770377326843513,
+        "text": "Für die Beantwortung Ihres Tickets benötigen wir 2 bis 3 Werktage."
+      },
+      {
+        "id": "test-ignore-5-23",
+        "label": 0,
+        "score": 0.8774366239956497,
+        "text": "Für die Beantwortung Ihres Tickets benötigen wir 1 bis 2 Werktage."
+      }
+    ]
+  }
+}

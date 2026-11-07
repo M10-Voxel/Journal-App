@@ -456,8 +456,9 @@
 
 /* ── The overview's calendar: the big calendar's switch beside its views, and focus ──────────────────────────── */
 .nebula-cal-panel { position: relative; }
-.nebula-cal-panel > .nebula-terminal-head { padding-right: 0; }
-.nebula-cal-panel > .nebula-terminal-head .nebula-prompt { min-width: 0; }
+/* The switch, the views and ◐ are one row of segments (no gaps), so the switch sits right against the views. */
+.nebula-cal-panel > .nebula-terminal-head { gap: 0; padding-right: 0; }
+.nebula-cal-panel > .nebula-terminal-head .nebula-prompt { min-width: 0; padding-right: 10px; }
 .nebula-cal-panel .nebula-calendar-toggle { flex: none; align-self: stretch; justify-content: center; width: 34px; height: auto; padding: 0; border-left: 1px solid var(--nb-ink); background: transparent; color: var(--nb-ink); }
 .nebula-cal-panel .nebula-calendar-toggle .icon { display: block; width: 15px; height: 15px; }
 .nebula-cal-panel .nebula-calendar-toggle:hover { background: var(--nb-ink); color: var(--nb-paper); }

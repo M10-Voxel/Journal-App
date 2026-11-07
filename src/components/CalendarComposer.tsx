@@ -1,5 +1,6 @@
 import { decodeMailContent } from '../mailContent';
 import { MailContent } from './MailContent';
+import { useDismissLayer } from './useDismissLayer';
 import { shiftDate } from '../dates';
 import { copyCalendarEntry } from '../calendarClipboard';
 import { t, useLanguage } from '../i18n';
@@ -121,18 +122,13 @@ export function CalendarComposer({ date, draft, entry, span, onSpanChange, tag: 
     const frame = requestAnimationFrame(() => { inputRef.current?.focus({ preventScroll: true }); if (editing) inputRef.current?.select(); });
     return () => cancelAnimationFrame(frame);
   }, []);
-  // A click outside the card discards it; clicks in the grid are left to the grid (they mark or adjust a range).
+  useDismissLayer({element:()=>cardRef.current,inside:target=>!!target.closest('.cal-selection, .shortcut-backdrop'),onDismiss:()=>latest.current.onCancel(false)});
+  // Selected-range handles stay interactive; another press only dismisses the card.
   useEffect(() => {
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target as Element;
-      // A press anywhere else discards the card (left or right); only the range's own handles keep it.
-      if (!target.closest('.cal-composer, .cal-selection, .popover, .shortcut-backdrop')) latest.current.onCancel(false);
-    };
     // Escape also discards while the focus is still elsewhere (right after marking).
     const onKey = (event: globalThis.KeyboardEvent) => { if (event.key === 'Escape' && !cardRef.current?.contains(event.target as Node)) { event.preventDefault(); latest.current.onCancel(true); } };
-    window.addEventListener('pointerdown', onPointerDown, true);
     window.addEventListener('keydown', onKey);
-    return () => { window.removeEventListener('pointerdown', onPointerDown, true); window.removeEventListener('keydown', onKey); };
+    return () => { window.removeEventListener('keydown', onKey); };
   }, []);
 
   const length = draft ? draft.end - draft.start : 0;

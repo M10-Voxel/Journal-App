@@ -33,3 +33,14 @@ Die letzte lokale Fassung vor einem Import bleibt als Sicherungsstand in der lok
 ## Prüfung
 
 `JOURNAL_UI_SCOPE=drive` prüft Einrichtung und verschlüsselte Übertragung in Klassisch und Pixel mit simuliertem Drive. Rust-Tests prüfen transaktionale Übernahme, Rollback, Fremdschlüssel und veraltete lokale Stände. Die Tests ersetzen keine Anmeldung an einem echten Google-Konto: OAuth, tatsächliche Drive-Antwortheader und die Übertragung zwischen zwei echten Geräten müssen nach Einrichtung der Client-ID geprüft werden.
+
+## Einen Stand bewusst ersetzen
+
+Unter Einstellungen > Google Drive > Einen Stand komplett ersetzen gibt es zwei getrennte Aktionen:
+
+- Cloud durch lokalen Stand ersetzen: Der aktuelle lokale Snapshot ersetzt den gesamten Inhalt des Tresors dieses Kontos und Geraeteschluessels. Cloud-exklusive Daten werden nicht gemischt. Die lokale Datenbank bleibt unveraendert.
+- Lokalen Stand durch Cloud ersetzen: Auf einem weiteren Geraet den neuen Cloud-Stand komplett uebernehmen. Dabei wird kein Upload durchgefuehrt. Der alte lokale Stand bleibt als lokale Sicherung erhalten.
+
+Erst danach auf allen Geraeten wieder normal synchronisieren. Beide Ersetzungen verlangen eine Bestaetigung; der ETag-Versionsschutz fuer Uploads bleibt aktiv. Andere Tresore mit anderen Schluesseln werden nicht entfernt.
+
+Ganze JSON-Zahlen werden beim lokalen Vergleich nach ihrem Wert verglichen: 1.0 aus SQLite und 1 aus dem JavaScript-IPC gelten als gleich. Echte Inhaltsaenderungen und unterschiedliche grosse Integer bleiben geschuetzt.

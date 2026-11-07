@@ -4,6 +4,19 @@ use std::{path::{Path, PathBuf}, sync::{Mutex, atomic::AtomicBool}, time::Durati
 use tauri::Manager;
 use crate::{mail::{Account, Secret, oauth, secrets}, storage::Store};
 type Result<T> = std::result::Result<T,String>;
+// JavaScript serializes whole-valued floats as integers. Settings may still contain
+// 1.0 (e.g. folder order), so compare JSON by value across the IPC round trip.
+fn same_sync_value(a:&Value,b:&Value)->bool {
+    match (a,b) {
+        (Value::Number(a),Value::Number(b)) => a==b || match (a.as_f64(),b.as_f64()) {
+            (Some(a),Some(b)) => a.abs()<=9_007_199_254_740_991.0 && b.abs()<=9_007_199_254_740_991.0 && a==b,
+            _=>false,
+        },
+        (Value::Array(a),Value::Array(b))=>a.len()==b.len()&&a.iter().zip(b).all(|(a,b)|same_sync_value(a,b)),
+        (Value::Object(a),Value::Object(b))=>a.len()==b.len()&&a.iter().all(|(key,a)|b.get(key).is_some_and(|b|same_sync_value(a,b))),
+        _=>a==b,
+    }
+}
 static OPERATION: Mutex<()> = Mutex::new(());
 static CANCEL: AtomicBool = AtomicBool::new(false);
 #[derive(Default, Serialize, Deserialize)]
@@ -165,7 +178,7 @@ impl Store {
     }
     pub fn sync_apply(&mut self,expected:Value,snapshot:Value) -> Result<()> { self.sync_import(expected,snapshot,true) }
     fn sync_import(&mut self,expected:Value,snapshot:Value,commit:bool) -> Result<()> {
-        if self.sync_snapshot()?!=expected{return Err("Lokale Daten wurden während der Synchronisierung geändert. Erneut versuchen.".into())}
+        if !same_sync_value(&self.sync_snapshot()?,&expected){return Err("Lokale Daten wurden während der Synchronisierung geändert. Erneut versuchen.".into())}
         if ![json!(11),json!(12)].contains(&snapshot["schema"]) || !snapshot["tables"].is_object(){return Err("Inkompatibler Cloud-Stand".into())}
         let backup=self.sync_snapshot()?;
         let revisions:std::collections::HashMap<String,i64>={let mut s=self.conn.prepare("SELECT date,revision FROM days").map_err(|e|e.to_string())?;let rows=s.query_map([],|r|Ok((r.get(0)?,r.get(1)?))).map_err(|e|e.to_string())?;rows.collect::<std::result::Result<_,_>>().map_err(|e|e.to_string())?};
@@ -308,6 +321,18 @@ mod tests {
         std::fs::remove_file(&p).unwrap();
         std::fs::remove_dir(p.parent().unwrap()).unwrap();
         std::fs::remove_dir(root).unwrap();
+    }
+    #[test] fn ipc_integer_float_round_trip_does_not_look_like_a_local_edit(){
+        let path=std::env::temp_dir().join(format!("journal-sync-numbers-{}.sqlite",uuid::Uuid::new_v4()));
+        let mut db=Store::open(&path).unwrap();
+        db.conn.execute("INSERT INTO settings(key,value) VALUES('board:folder:test',?1)",[r#"{"id":"test","order":1.0,"parent":null}"#]).unwrap();
+        let mut expected=db.sync_snapshot().unwrap();expected["settings"]["board:folder:test"]["order"]=json!(1);
+        db.sync_import(expected.clone(),expected.clone(),false).unwrap();
+        db.conn.execute("UPDATE settings SET value=?1 WHERE key='board:folder:test'",[r#"{"id":"test","order":2.0,"parent":null}"#]).unwrap();
+        assert!(db.sync_apply(expected.clone(),expected).unwrap_err().contains("Lokale Daten"));
+        assert!(!same_sync_value(&json!(9007199254740993u64),&json!(9007199254740992u64)));
+        assert!(!same_sync_value(&json!(1.5),&json!(1)));
+        drop(db);std::fs::remove_file(path).unwrap();
     }
     #[test] fn snapshots_round_trip_and_stale_or_invalid_imports_do_not_replace_local_data(){
         let p=std::env::temp_dir().join(format!("journal-drive-{}.sqlite",uuid::Uuid::new_v4()));

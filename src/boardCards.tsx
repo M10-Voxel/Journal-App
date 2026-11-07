@@ -78,11 +78,14 @@ export function disconnectCards(a: string, b: string) { return patchCards(discon
 /** Makes a note the main note (first page) of the notes tied to it, or takes that back. */
 export function togglePrimaryNote(id: string) { return patchCards(primaryPatches(cardStore.value, id)); }
 /** Removes a card for good; no thread keeps pointing at it. */
-export async function removeCard(id: string) {
-  const removed = removalIds(cardStore.value, id);
+export const removeCard = (id: string) => removeCards([id]);
+export async function removeCards(ids: string[]) {
+  if (!ids.length) return;
+  const id = ids[0], selected = new Set(ids);
+  const removed = new Set(ids.flatMap(id => [...removalIds(cardStore.value, id, selected)]));
   const affected = cardStore.value.filter(card => removed.has(card.id) || card.links?.some(other => removed.has(other))).map(card => card.id);
   set(cardStore, old => old.filter(card => !removed.has(card.id)).map(card => card.links ? { ...card, links: card.links.filter(other => !removed.has(other)) } : card));
-  const pending = enqueue([...affected, id, 'folders'], () => invoke('board_remove', { id, source }));
+  const pending = enqueue([...affected, id, 'folders'], () => invoke('board_remove', { id, ids, source }));
   void pending.catch(e => fail(cardStore, e)); return pending;
 }
 

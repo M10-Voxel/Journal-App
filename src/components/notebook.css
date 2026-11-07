@@ -321,3 +321,7 @@ button.notebook-folder-pick:hover, button.notebook-folder-pick[aria-expanded='tr
 :root[data-theme='nebula'] .notebook-note.is-chosen { background: color-mix(in srgb, var(--nb-violet, #7b2cbf) 30%, transparent); box-shadow: inset 2px 0 0 var(--paper), inset 0 0 0 1px var(--nb-violet-light, #b388ff); }
 :root[data-theme='nebula'] .notebook-chosen { border-radius: 0; background: #0c0c0e; box-shadow: inset 0 0 0 1px var(--nb-violet-light, #b388ff); font: 700 11px var(--mono); }
 :root[data-pixel] :is(.notebook-chosen, .notebook-note.is-chosen, .notebook-chosen-clear) { border-radius: 0; }
+
+.notebook-day-link { padding: 0; border: 0; background: transparent; color: var(--muted); font: inherit; text-align: left; cursor: pointer; text-decoration: underline; text-decoration-color: color-mix(in srgb, currentColor 35%, transparent); text-underline-offset: 3px; }
+.notebook-day-link:hover { color: var(--accent); }
+.notebook-chosen-delete:hover { color: var(--error); }

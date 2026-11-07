@@ -35,7 +35,7 @@ export function CalendarDrawer({ open, animated, width, resizer, resizable = tru
     aria-label={label ?? t('Kalender und Navigation')} aria-hidden={!open || undefined} inert={!open || disabled}
     onKeyDown={event => { if (event.key === 'Escape' && !event.defaultPrevented && !(event.target as Element).closest('input, textarea, select, [contenteditable="true"], [role="dialog"]')) { event.preventDefault(); onClose(); } }}>
     <div className={`${name}-sheet`}>
-      {children}
+      {open && children}
     </div>
     {open && resizable && resizer && <div className="sidebar-resizer" {...resizer} />}
   </aside>;

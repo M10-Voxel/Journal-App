@@ -110,15 +110,15 @@
 .activity-summary-card header { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
 .activity-summary-card h4 { display:flex; align-items:center; gap:8px; margin:0; color:var(--strong); font:500 14px var(--write); }
 .activity-summary-card h4 i { height:8px; width:8px; border-radius:50%; background:var(--activity-color); }
-.activity-metrics { display:flex; flex-direction:column; gap:5px; text-align:right; }
-.activity-metrics strong { display:flex; align-items:center; justify-content:flex-end; gap:6px; color:var(--activity-color); font:500 17px var(--write); }
+.activity-metrics { display:grid; grid-template-rows:minmax(1.2em,auto) auto; gap:5px; text-align:right; font-size:17px; }
+.activity-metrics strong { grid-row:1; display:flex; align-items:center; justify-content:flex-end; gap:6px; color:var(--activity-color); font:500 17px/1.2 var(--write); }
 .activity-metrics .icon { width:14px; height:14px; }
-.activity-metrics > span { color:var(--muted); font:11px var(--mono); }
+.activity-metrics > span { grid-row:2; color:var(--muted); font:11px var(--mono); }
 .activity-timeline { display:grid; grid-auto-flow:column; grid-auto-columns:minmax(24px,1fr); gap:6px; overflow-x:auto; padding-top:20px; }
 .activity-timeline.is-week { grid-template-columns:repeat(7,minmax(0,1fr)); }
 .activity-timeline-day { min-width:0; display:grid; justify-items:center; gap:6px; border-radius:4px; }
 .activity-timeline-day:focus-visible { outline:1px solid var(--activity-color); outline-offset:-1px; }
-.activity-day-value { color:var(--muted); font:10px var(--mono); min-height:13px; }
+.activity-day-value { color:var(--muted); font:10px/1.4 var(--mono); min-height:1.4em; }
 .activity-day-track { position:relative; display:flex; align-items:flex-end; height:56px; width:100%; max-width:38px; background:transparent; border-bottom:1px solid var(--divider); border-radius:0; overflow:hidden; }
 .activity-day-track > span { width:100%; background:var(--activity-color); opacity:.65; border-radius:3px 3px 0 0; min-height:0; }
 .activity-timeline-day:hover .activity-day-track > span { opacity:1; }
@@ -145,7 +145,7 @@
 .activity-settings-add button:disabled { opacity:.4; cursor:default; }
 
 /* Obsidian-style contribution graphs: calendar month, Monday-first week columns thereafter. */
-.activity-summary-grid.is-month, .activity-summary-grid.is-quarter { grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr)); align-items:start; }
+.activity-summary-grid.is-month, .activity-summary-grid.is-quarter { grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr)); align-items:stretch; }
 .activity-heatmap { margin-top:20px; min-width:0; }
 .heatmap-scroll { overflow-x:auto; overscroll-behavior-x:contain; padding:3px 2px 6px; }
 .heatmap-grid { display:grid; gap:4px; align-items:center; }

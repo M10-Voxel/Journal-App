@@ -5,6 +5,7 @@ import { localDate, monthGrid, shiftMonth } from '../dates';
 import { formatMonthName, formatWeekdayLong } from '../calendar';
 import { CompactMonth, useCalendarData, useNow } from './calendarShared';
 import { Icon } from './Icon';
+import { useDismissLayer } from './useDismissLayer';
 
 /** The existing compact calendar, used as a date picker without a native Windows popup. `children` replace the button's
  *  own label (weekday, date, icon), e.g. the book's page title. */
@@ -32,13 +33,12 @@ function PickerPanel({ date, rootRef, onPick, onClose }: {
   const { days, error } = useCalendarData(grid[0], grid[grid.length - 1]);
   const panelRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef(onClose); closeRef.current = onClose;
+  useDismissLayer({element:()=>panelRef.current,anchor:()=>rootRef.current,onDismiss:()=>closeRef.current(false)});
   useEffect(() => {
     const frame = requestAnimationFrame(() => panelRef.current?.querySelector<HTMLElement>('.cal-compact-day[tabindex="0"]')?.focus());
-    const outside = (event: PointerEvent) => { if (!rootRef.current?.contains(event.target as Node)) closeRef.current(false); };
     const escape = (event: KeyboardEvent) => { if (event.key === 'Escape' && !event.defaultPrevented) { event.preventDefault(); closeRef.current(true); } };
-    window.addEventListener('pointerdown', outside);
     window.addEventListener('keydown', escape);
-    return () => { cancelAnimationFrame(frame); window.removeEventListener('pointerdown', outside); window.removeEventListener('keydown', escape); };
+    return () => { cancelAnimationFrame(frame); window.removeEventListener('keydown', escape); };
   }, []);
   return <div ref={panelRef} className="mini-picker-panel" role="dialog" aria-label={t("Mini-Kalender")} id="journal-mini-calendar"
     onKeyDown={event => {

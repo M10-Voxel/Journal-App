@@ -1,5 +1,10 @@
 // Application-owned interface text. User content is never translated.
 const english: Record<string, string> = {
+  "Alle ausgewählten Zettel löschen": "Delete all selected notes",
+  "Alle ausgewählten Zettel löschen · Entf": "Delete all selected notes · Del",
+  "Tag mit dieser Notiz öffnen": "Open the day with this note",
+  "{0} ausgewählte Zettel endgültig löschen? Sie verschwinden auch von der Pinnwand.": "Permanently delete {0} selected notes? They will also disappear from the pinboard.",
+
   "Ziehen zum Verschieben · ⇧ beim Loslassen: ins Raster · aus dem Fenster ziehen: eigenes Fenster": "Drag to move · ⇧ on release: into the grid · drag out of the window: a window of its own",
   "Ziehen zum Umordnen · aus dem Raster ziehen: schweben · Doppelklick: minimieren": "Drag to rearrange · drag out of the grid: float · double click: minimize",
   "Breite ziehen · Doppelklick: ganze Reihe": "Drag the width · double click: whole row",
@@ -945,6 +950,24 @@ const english: Record<string, string> = {
   "„{0}“ endgültig löschen? Der Zettel verschwindet auch von der Pinnwand.": "Delete “{0}” for good? The note leaves the pinboard too.",
   "„{0}“ löschen": "Delete “{0}”",
   "„{0}“ umbenennen": "Rename “{0}”",
-  "„{0}“ vom Zettel lösen": "Take “{0}” off the note"
+  "„{0}“ vom Zettel lösen": "Take “{0}” off the note",
+  "Neuer Zettel hier": "New note here",
+  "Verschieben nach": "Move to",
+  "Einklappen": "Collapse",
+  "Ausklappen": "Expand",
+  "Alle verschieben nach": "Move all to",
+  "Auswahl aufheben": "Clear selection",
+  "Aus der Auswahl nehmen": "Remove from selection",
+  "Zur Auswahl hinzufügen": "Add to selection",
+  "Strg Klick": "Ctrl click",
+  "Papierfarbe": "Paper colour",
+  "Vergrößern": "Enlarge",
+  "Link öffnen": "Open link",
+  "Link kopieren": "Copy link",
+  "Ausgangsposition": "Starting position",
+  "Höhe automatisch": "Automatic height",
+  "Aus dem Raster lösen": "Float out of the grid",
+  "Speicherort": "Storage",
+  "Updates": "Updates"
 };
 export default english;

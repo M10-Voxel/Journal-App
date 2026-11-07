@@ -114,7 +114,7 @@ export function EntryText({ entry, label, strike, readOnly = false, rich = false
   return <div className="entry-edit" ref={containerRef} onKeyDown={onKeyDown} onBlur={event => { if (!(event.relatedTarget as Element | null)?.closest('.format-menu')) closeMenu(); }}
     aria-keyshortcuts="Control+B Control+I Control+Shift+X Control+Shift+H Alt+1 Alt+2 Alt+3 Alt+4 Alt+5 Alt+6 Alt+7 Alt+8 Alt+0"
     onContextMenu={event => {
-      // Only selected text gets the format menu; otherwise the system menu (copy, paste, spelling) stays.
+      // Only selected text (or a rich note) gets the format menu; otherwise no menu opens.
       const state = editor.current?.view.state;
       if (readOnly || !state || (state.selection.main.empty && !rich)) return;
       event.preventDefault();

@@ -2,6 +2,7 @@ import { t, useLanguage } from '../i18n';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
+import { useDismissLayer } from './useDismissLayer';
 import { Style, TextColor, textColors } from '../markdown';
 import type { BlockKind } from './noteBlocks';
 
@@ -23,6 +24,7 @@ export function FormatMenu({ x, y, active, color, onStyle, onColor, onClose, blo
 }) {
   useLanguage();
   const menuRef = useRef<HTMLDivElement>(null);
+  useDismissLayer({element:()=>menuRef.current,onDismiss:onClose});
   const [position, setPosition] = useState({ left: x, top: y });
   // Formatting may scroll the list a little to keep the cursor in view; that is no reason to close, only real scrolling is.
   const actedAt = useRef(0);
@@ -36,15 +38,12 @@ export function FormatMenu({ x, y, active, color, onStyle, onColor, onClose, blo
     setPosition({ left: Math.max(8, Math.min(x, innerWidth - width - 8)), top: y + height + 8 > innerHeight ? Math.max(8, y - height - 4) : y + 4 });
   }, [x, y]);
   useEffect(() => {
-    const close = (event: Event) => { if (!menuRef.current?.contains(event.target as Node)) onClose(); };
     const key = (event: KeyboardEvent) => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); onClose(); onReturn?.(); } };
-    window.addEventListener('pointerdown', close, true);
     window.addEventListener('keydown', key, true);
     const scroll = () => { if (performance.now() - actedAt.current > 400) onClose(); };
     window.addEventListener('blur', onClose);
     document.addEventListener('scroll', scroll, true);
     return () => {
-      window.removeEventListener('pointerdown', close, true);
       window.removeEventListener('keydown', key, true);
       window.removeEventListener('blur', onClose);
       document.removeEventListener('scroll', scroll, true);

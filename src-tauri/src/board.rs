@@ -51,8 +51,9 @@ pub fn board_patch_many(app:tauri::AppHandle,store:tauri::State<'_,Mutex<Store>>
 }
 /// Deleting a note, its private attachments and the threads is one undoable operation.
 #[tauri::command]
-pub fn board_remove(app:tauri::AppHandle,store:tauri::State<'_,Mutex<Store>>,id:String,source:String) -> Result<()> {
-    let (cards,removed)={let db=store.lock().map_err(|e|e.to_string())?;remove_card(&db,&id)?};
+pub fn board_remove(app:tauri::AppHandle,store:tauri::State<'_,Mutex<Store>>,id:String,ids:Option<Vec<String>>,source:String) -> Result<()> {
+    let ids=ids.unwrap_or_else(||vec![id]);
+    let (cards,removed)={let db=store.lock().map_err(|e|e.to_string())?;update_cards(&db,&json!({}),&ids)?};
     for card in cards {let _=app.emit("board:changed",json!({"card":card,"source":source}));}
     for id in removed {let _=app.emit("board:removed",json!({"id":id,"source":source}));}Ok(())
 }
@@ -156,7 +157,7 @@ fn remove_folder(db:&Store,id:&str)->Result<Vec<Value>>{
 }
 fn asset_path(app:&tauri::AppHandle,id:&str)->Result<std::path::PathBuf>{
     uuid::Uuid::parse_str(id).map_err(|_|"Ungültiges Bild")?;
-    Ok(app.path().app_local_data_dir().map_err(|e|e.to_string())?.join("board-images").join(format!("{id}.avif")))
+    Ok(crate::vault::directory(app).join("board-images").join(format!("{id}.avif")))
 }
 #[tauri::command]
 pub fn board_image_save(app:tauri::AppHandle,id:String,data:String)->Result<()> {
@@ -219,6 +220,11 @@ mod tests {
         assert!(kept.iter().all(|c|!c["links"].as_array().unwrap().contains(&json!(note))));
         crate::history::step(&mut db,false).unwrap();assert_eq!(state(&db),tied);
         crate::history::step(&mut db,true).unwrap();assert_eq!(state(&db),kept);
+        crate::history::step(&mut db,false).unwrap();
+        update_cards(&db,&json!({}),&[note.clone(),page.clone()]).unwrap();
+        assert!(state(&db).is_empty());
+        crate::history::step(&mut db,false).unwrap();assert_eq!(state(&db),tied);
+
         drop(db);std::fs::remove_file(path).unwrap();
     }
     #[test] fn cards_survive_restart_and_partial_edits_keep_their_links(){

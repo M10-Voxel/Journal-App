@@ -13,6 +13,7 @@ test('by default entries and data share the first row (7 + 5 columns, the same h
   assert.deepEqual([spanOf(layout, 'entries'), spanOf(layout, 'data'), spanOf(layout, 'board')], [7, 5, 12]);
   assert.equal(layout.heights.entries, layout.heights.data);
   assert(layout.heights.board > layout.heights.entries);
+  assert.deepEqual(rowsOf(layout, ['notes', 'activities']), [['notes', 'activities']]);
 });
 
 test('a stored layout is made whole: own windows always there, unknown ids and stray windows gone', () => {

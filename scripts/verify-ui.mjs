@@ -96,6 +96,13 @@ const bootstrap = `
   window.__uiTest.mail = mail;
   const mailChanged = () => { void window.__TAURI_INTERNALS__.invoke('plugin:event|emit', { event:'mail:changed', payload:null }); };
   mockIPC((command, payload) => {
+    if (command === 'vault_status') return {path:'C:/Test/Journal-A',legacy:true,preferences:null,error:null};
+    if (command === 'vault_choose') { invoked.push([command,payload]);return window.__uiTest.vaultChoice ?? null; }
+    if (command === 'vault_save_preferences' || command === 'vault_activate') { invoked.push([command,payload]);return null; }
+    if (command === 'plugin:app|version') return '0.1.0';
+    if (command === 'plugin:updater|check') { invoked.push([command,payload]);return window.__uiTest.updateAvailable ? {rid:100,currentVersion:'0.1.0',version:'0.1.1',body:'Release notes',rawJson:{}} : null; }
+    if (command === 'plugin:updater|download') { invoked.push([command,payload]);if(window.__uiTest.updateError)throw new Error(window.__uiTest.updateError);return 101; }
+    if (command === 'plugin:updater|install' || command === 'plugin:resources|close') { invoked.push([command,payload]);return null; }
     if (command === 'plugin:window|get_all_windows') return [label];
     if (command === 'history_step') {
       invoked.push([command,payload]);
@@ -128,8 +135,8 @@ const bootstrap = `
       sessionStorage.setItem('boardCards',JSON.stringify(cards.map(c=>({...c,...payload.patches[c.id]}))));return null;
     }
     if (command === 'board_remove') {
-      const cards=JSON.parse(sessionStorage.getItem('boardCards')||'[]'), note=cards.find(c=>c.id===payload.id), removed=new Set([payload.id]);
-      if(note?.kind==='note')for(const card of cards)if(card.kind!=='note'&&card.notebook&&!card.dates.length&&note.links?.includes(card.id)&&(card.links??[]).every(id=>id===payload.id))removed.add(card.id);
+      const cards=JSON.parse(sessionStorage.getItem('boardCards')||'[]'), note=cards.find(c=>c.id===payload.id), removed=new Set(payload.ids??[payload.id]);
+      for(const note of cards.filter(c=>removed.has(c.id)&&c.kind==='note'))for(const card of cards)if(card.kind!=='note'&&card.notebook&&!card.dates.length&&note.links?.includes(card.id)&&(card.links??[]).every(id=>(payload.ids??[payload.id]).includes(id)))removed.add(card.id);
       sessionStorage.setItem('boardCards',JSON.stringify(cards.filter(c=>!removed.has(c.id)).map(c=>({...c,links:(c.links??[]).filter(id=>!removed.has(id))}))));
       return null;
     }
@@ -146,7 +153,7 @@ const bootstrap = `
     if (command === 'drive_apply') {sessionStorage.setItem('driveApplied',JSON.stringify(payload.snapshot));return null;}
 
     // Activities bring their own tags; the tag checks start without any (localStorage 'test.noActivities').
-    if (command === 'load_period_data') return JSON.stringify({ definitions:localStorage.getItem('test.noActivities') ? [] : [{id:'reading',name:'Lesen'},{id:'sport',name:'Sport'}], notes:{}, days:Object.fromEntries(Array.from({length:28},(_,i)=>[shift(-i),{rating:i%4===0?undefined:4+i%7,items:{reading:{done:i%2===0,minutes:30},sport:{done:i%3===0,minutes:45}}}])) });
+    if (command === 'load_period_data') return JSON.stringify({ definitions:localStorage.getItem('test.noActivities') ? [] : [{id:'reading',name:'Lesen',trackTime:!localStorage.getItem('test.activitySizes')},{id:'sport',name:'Sport'},...(localStorage.getItem('test.activitySizes')?[{id:'binary-extra',name:'Magnesium',trackTime:false}]:[])], notes:{}, days:Object.fromEntries(Array.from({length:28},(_,i)=>[shift(-i),{rating:i%4===0?undefined:4+i%7,items:{reading:{done:i%2===0,minutes:30},sport:{done:i%3===0,minutes:45}}}])) });
     if (command === 'save_period_data') { if (window.__uiTest.failPeriodSave) { window.__uiTest.failPeriodSave=false; throw new Error('Timer save test failure'); } window.__uiTest.periodData=JSON.parse(payload.data); return; }
     if (command === 'mail_ml_status') return structuredClone(mail.model);
     if (command === 'mail_ml_install') { mail.model.installed=true; mail.model.enabled=true; void window.__uiTest.emit('mail:ml',null); mailChanged(); return; }
@@ -438,7 +445,8 @@ async function checkMailSettings() {
   await fill('Posteingangsserver','imap.example.org');
   await evaluate("document.querySelector('.mail-form button[type=submit]').focus()");
   await evaluate("document.querySelector('.mail-form').requestSubmit()");
-  await until("document.querySelectorAll('.mail-account').length === 1 && window.__uiTest.day(window.__uiTest.shift(1))?.entries.some(entry=>entry.text==='Lieferung' && entry.time==='10:00' && entry.end==='12:00' && entry.showInJournal===false)");
+  // A subject-only neural event name now falls back to the full subject instead of crossing into another sentence.
+  await until("document.querySelectorAll('.mail-account').length === 1 && window.__uiTest.day(window.__uiTest.shift(1))?.entries.some(entry=>entry.text.includes('Lieferung') && entry.time==='10:00' && entry.end==='12:00' && entry.showInJournal===false)");
   await until("Boolean(document.activeElement.closest('.settings'))");
   assert.equal(await evaluate("document.querySelector('.mail-settings input[type=password]')"), null, 'Credentials leave the form after saving.');
   assert.equal(await evaluate('window.__uiTest.mail.accounts[0].password'), undefined, 'Account metadata never exposes the password.');
@@ -791,6 +799,24 @@ async function checkDrive() {
     await until("document.querySelector('[data-drive=sync]')?.disabled===false");await evaluate("document.querySelector('[data-drive=sync]').click()");await until("sessionStorage.getItem('driveApplied')!==null && !document.querySelector('.settings')");
     assert.equal(await evaluate("JSON.parse(sessionStorage.getItem('driveApplied')).tables.days['2026-11-02'].body"),'Cloud edit','Remote offline edits are downloaded, decrypted and merged against the previous sync.');
 
+    const reopenDrive = async () => {
+      await until("document.querySelectorAll('.entry').length===5");
+      await evaluate("document.querySelector('.settings-button').click()");await until("Boolean(document.querySelector('#settings-drive-tab'))");
+      await evaluate("document.querySelector('#settings-drive-tab').click()");await until("Boolean(document.querySelector('.drive-key'))");
+      await evaluate(`(()=>{const f=document.querySelector('.drive-key');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(f,${JSON.stringify(keyText)});f.dispatchEvent(new Event('input',{bubbles:true}));sessionStorage.removeItem('driveApplied');})()`);
+    };
+    // Download replaces the local state without uploading anything to Drive.
+    const encryptedBefore=await evaluate("sessionStorage.driveEncrypted");
+    await reopenDrive();await evaluate("document.querySelector('[data-drive=download-cloud]').click()");
+    await until("sessionStorage.getItem('driveApplied')!==null && !document.querySelector('.settings')");
+    assert.equal(await evaluate("sessionStorage.driveEncrypted"),encryptedBefore);
+    assert.equal(await evaluate("JSON.parse(sessionStorage.driveApplied).tables.days['2026-11-02'].body"),'Cloud edit');
+    // Exact upload uses this device's current snapshot, with no local import or merge.
+    await reopenDrive();await evaluate("document.querySelector('[data-drive=upload-local]').click()");
+    await until("!document.querySelector('.settings')");
+    assert.equal(await evaluate("sessionStorage.getItem('driveApplied')"),null,'Upload does not replace the local database.');
+    const uploaded=await evaluate(`(async()=>{const e=JSON.parse(sessionStorage.driveEncrypted),bytes=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));const key=await crypto.subtle.importKey('raw',bytes(${JSON.stringify(keyText)}),'AES-GCM',false,['decrypt']);return JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({name:'AES-GCM',iv:bytes(e.iv)},key,bytes(e.cipher))));})()`);
+    assert.equal(uploaded.tables.days['2026-11-02'].body,'Geheim','Exact upload keeps local content instead of the remote edit.');
     assert.equal(await evaluate(`Object.values(localStorage).some(v=>v.includes(${JSON.stringify(keyText)}))`),false);
   }
   console.log('Drive UI passed: connection setup, key generation, encrypted exchange and application in Classic/Pixel (mock transport).');
@@ -1065,11 +1091,11 @@ async function checkPixelTheme() {
   await until("Boolean(document.querySelector('.cal-time-column'))");
   await pause(250);
   const point=await evaluate("(() => { const g=document.querySelector('.cal-time'), c=g.querySelector('.cal-time-column').getBoundingClientRect(), h=parseFloat(getComputedStyle(g).getPropertyValue('--hour')); return {x:c.left+c.width/2,y:c.top+9.25*h}; })()");
-  // Only dragging marks a range (a click alone does not).
+  // The right mouse button draws new entries; left clicks leave the empty grid alone.
   const dragTo={x:point.x,y:point.y+40};
-  await command('Input.dispatchMouseEvent',{type:'mousePressed',...point,button:'left',buttons:1,clickCount:1});
-  await command('Input.dispatchMouseEvent',{type:'mouseMoved',...dragTo,button:'left',buttons:1});
-  await command('Input.dispatchMouseEvent',{type:'mouseReleased',...dragTo,button:'left',buttons:0,clickCount:1});
+  await command('Input.dispatchMouseEvent',{type:'mousePressed',...point,button:'right',buttons:2,clickCount:1});
+  await command('Input.dispatchMouseEvent',{type:'mouseMoved',...dragTo,button:'right',buttons:2});
+  await command('Input.dispatchMouseEvent',{type:'mouseReleased',...dragTo,button:'right',buttons:0,clickCount:1});
   await until("Boolean(document.querySelector('.cal-composer.is-placed'))");
   await pause(400);
   assert(await evaluate("(() => {const r=document.querySelector('.cal-composer').getBoundingClientRect(); return r.left>=0 && r.right<=innerWidth && r.bottom<=innerHeight;})()"));
@@ -1481,18 +1507,22 @@ async function checkNebulaTheme() {
   await until("document.querySelector('.nebula-calendar').classList.contains('is-open')");
   await evaluate("document.querySelector('.nebula-calendar-close').click()");
   await until("!document.querySelector('.nebula-calendar').classList.contains('is-open')");
-  // Tickets: only entries tagged delivery, payment or appointments (the fixed mail tags); a click opens their day.
   const ticketEntry = (id, text, extra) => `{id:'30000000-0000-4000-8000-00000000000${id}',kind:'event',text:'${text}',done:false,cancelled:false,priority:false,time:null,reminder:false,plan:null,...${JSON.stringify(extra)}}`;
-  await evaluate(`window.__uiTest.store({date:${JSON.stringify(tomorrow)},title:'',body:'',revision:1,entries:[${ticketEntry(1, 'Kino ohne Tag', { time:'18:00' })}]})`);
+  // Tickets: entries tagged delivery, payment or appointments (the fixed mail tags) and events (Ereignisse); the foil
+  // tells which. An untagged task gets none; a click opens the day.
+  await evaluate(`window.__uiTest.store({date:${JSON.stringify(tomorrow)},title:'',body:'',revision:1,entries:[${ticketEntry(1, 'Kino ohne Tag', { kind:'task', time:'18:00' })}]})`);
   await pause(600);
-  assert.equal(await evaluate("document.querySelectorAll('.nebula-ticket').length"), 0, 'Untagged entries get no ticket.');
-  await evaluate(`window.__uiTest.store({date:${JSON.stringify(tomorrow)},title:'',body:'',revision:2,entries:[${ticketEntry(1, 'Kino ohne Tag', { time:'18:00' })},${ticketEntry(2, 'Konzert im Park', { time:'19:30', end:'22:00', tag:'f4c8191a-2d70-4b01-9d00-000000000003' })},${ticketEntry(3, 'Paket kommt', { kind:'task', tag:'f4c8191a-2d70-4b01-9d00-000000000001' })}]})`);
-  await until("document.querySelectorAll('.nebula-ticket').length===2");
-  assert.deepEqual(await evaluate("[...document.querySelectorAll('.nebula-ticket')].map(t => t.dataset.ticketTag)"), ['Lieferung', 'Termine']);
-  assert.match(await evaluate("document.querySelectorAll('.nebula-ticket')[1].textContent"), /Konzert im Park.*19:30/);
+  assert.equal(await evaluate(`document.querySelectorAll('.nebula-ticket[data-ticket-date="${tomorrow}"]').length`), 0, 'Untagged tasks get no ticket.');
+  await evaluate(`window.__uiTest.store({date:${JSON.stringify(tomorrow)},title:'',body:'',revision:2,entries:[${ticketEntry(1, 'Kino ohne Tag', { time:'18:00' })},${ticketEntry(2, 'Konzert im Park', { time:'19:30', end:'22:00', tag:'f4c8191a-2d70-4b01-9d00-000000000003' })},${ticketEntry(3, 'Paket kommt', { kind:'task', tag:'f4c8191a-2d70-4b01-9d00-000000000001' })},${ticketEntry(4, 'Miete überweisen', { kind:'task', tag:'f4c8191a-2d70-4b01-9d00-000000000002' })}]})`);
+  await until(`document.querySelectorAll('.nebula-ticket[data-ticket-date="${tomorrow}"]').length>=2`);
+  const ticketKinds = ['delivery', 'payment', 'event', 'appointment'];
+  const shownKinds = await evaluate(`[...document.querySelectorAll('.nebula-ticket[data-ticket-date="${tomorrow}"]')].map(t => t.dataset.ticketKind)`);
+  assert.deepEqual(shownKinds, ticketKinds.slice(0, shownKinds.length), 'Tickets in time order, each kind with its foil.');
+  assert(await evaluate("[...document.querySelectorAll('.nebula-ticket')].every(t => { const r=t.getBoundingClientRect(); return r.width / r.height > 2; })"), 'Tickets are flat.');
+  assert(await evaluate("[...document.querySelectorAll('.nebula-ticket')].some(t => t.dataset.ticketKind==='event')"), 'Events get tickets.');
   await evaluate("document.querySelector('.nebula-tickets').scrollIntoView({block:'end'})");
   await pause(300); await screenshot('nebula-tickets.png');
-  await evaluate("document.querySelector('.nebula-ticket').click()");
+  await evaluate(`document.querySelector('.nebula-ticket[data-ticket-date="${tomorrow}"]').click()`);
   await until(`${prompt}?.includes(${JSON.stringify(tomorrow)})`);
   await evaluate("document.activeElement?.blur()");
   await key('h', 'KeyH', 1);
@@ -2517,7 +2547,182 @@ try {
   await until("document.querySelectorAll('.entry').length === 5");
   await pause(250);
   await evaluate('document.fonts.ready.then(() => true)');
-  if (process.env.JOURNAL_UI_SCOPE === 'notebook') {
+  if (process.env.JOURNAL_UI_SCOPE === 'mail-header-themes') {
+    await command('Emulation.setFocusEmulationEnabled',{enabled:true});
+    const sampleTitle='Bald ist Ihr DPD Paket da';
+    const originalSubject='Ihre Sendung ist angekündigt – weitere Informationen zur Zustellung';
+    const sender='DPD <noreply@service.dpd.example>';
+    for(const [theme,pixel,style] of [['classic',false,'a'],['classic',false,'b'],['journal',false,'a'],['journal',false,'b'],['nebula',false,'a'],['nebula',false,'b'],['classic',true,'a'],['journal',true,'b']]){
+      await command('Emulation.setDeviceMetricsOverride',{width:1180,height:780,deviceScaleFactor:1,mobile:false});
+      await evaluate(`localStorage.setItem('journal.settings',JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'),theme:${JSON.stringify(theme)},pixel:${pixel},popupStyle:${JSON.stringify(style)}}));localStorage.setItem('journal.calendarDrawer','1');localStorage.setItem('journal.notebookDrawer','0');localStorage.removeItem('journal.calendar')`);
+      await command('Page.reload');await until("document.querySelectorAll('.entry').length===5 && Boolean(document.querySelector('.cal-item'))");
+      await evaluate(`window.__TAURI_INTERNALS__.invoke('save_tags',{tags:[{id:'50000000-0000-4000-8000-000000000001',name:'Lieferung',color:'#209657'}]})`);
+      const setMail=async subject=>evaluate(`(()=>{const d=window.__uiTest.day();Object.assign(d.entries[2],{text:${JSON.stringify(sampleTitle)},tag:'50000000-0000-4000-8000-000000000001',time:'00:00',end:'47:59',description:'journal-mail:v1\\n'+JSON.stringify({subject:${JSON.stringify(subject)},sender:${JSON.stringify(sender)},text:'Ihre Sendung stellen wir in 1–2 Werktagen zu.',html:'<h1 style="color:red">Guten Tag</h1><p>Ihre Sendung stellen wir in 1–2 Werktagen zu.</p>',notes:'Sendungsdetails aus dem Anhang.'})});window.__uiTest.store(d);})()`);
+      const openMail=async()=>{await evaluate("document.querySelector('.cal-item[data-calendar-entry=\"10000000-0000-4000-8000-000000000003\"]').click()");await until("Boolean(document.querySelector('.cal-details .mail-content-head')) && Number(getComputedStyle(document.querySelector('.cal-details')).opacity)>.95");};
+      await setMail(sampleTitle);await pause(100);await openMail();
+      assert.equal(await evaluate("document.querySelector('.cal-details-head strong').textContent"),sampleTitle);
+      assert.equal(await evaluate("Boolean(document.querySelector('.mail-content-subject-row'))"),false,'An identical mail subject is shown once in the entry heading.');
+      assert.equal(await evaluate("document.querySelector('.mail-content-sender-value').textContent"),sender);
+      assert.equal(await evaluate("document.querySelector('.cal-details-tag').textContent"),'Lieferung');
+      assert(await evaluate("document.querySelector('.cal-details-time').textContent.includes('00:00') && document.querySelector('.cal-details-time').textContent.includes('23:59')"));
+      const geometry=()=>evaluate(`(()=>{const head=document.querySelector('.mail-content-head'),b=head.getBoundingClientRect(),sender=head.querySelector('.mail-content-sender').getBoundingClientRect(),button=head.querySelector('.mail-content-remote').getBoundingClientRect(),p=document.querySelector('.cal-details').getBoundingClientRect(),actions=document.querySelector('.cal-details-actions').getBoundingClientRect();return {overflow:head.scrollWidth>head.clientWidth+1,overlap:sender.left<button.right&&sender.right>button.left&&sender.top<button.bottom&&sender.bottom>button.top,inside:button.left>=b.left&&button.right<=b.right&&button.top>=b.top&&button.bottom<=b.bottom,popup:p.bottom<=innerHeight&&p.left>=0&&p.right<=innerWidth,footer:actions.bottom<=innerHeight};})()`);
+      for(const width of [1180,420]){
+        await command('Emulation.setDeviceMetricsOverride',{width,height:780,deviceScaleFactor:1,mobile:false});await pause(130);
+        const g=await geometry();assert(!g.overflow&&!g.overlap&&g.inside&&g.popup&&g.footer,`${theme}/${style}/pixel=${pixel}/${width}: ${JSON.stringify(g)}`);
+      }
+      await command('Emulation.setDeviceMetricsOverride',{width:1180,height:780,deviceScaleFactor:1,mobile:false});await pause(100);
+      await evaluate("document.querySelector('.mail-content-remote').click()");
+      await until("document.querySelector('.mail-content-remote').getAttribute('aria-pressed')==='true'");
+      assert(await evaluate("document.querySelector('.mail-content iframe').srcdoc.includes('color:red')"),'Original inline mail styles remain present.');
+      await pause(350);
+      await screenshot(`mail-head-${theme}-${style}${pixel?'-pixel':''}.png`);
+      await key('Escape');await until("!document.querySelector('.cal-details')");
+      await setMail(originalSubject);await pause(100);await openMail();
+      assert.equal(await evaluate("document.querySelector('.mail-content-subject').textContent"),originalSubject,'A different original subject remains visible.');
+      assert.equal(await evaluate("document.querySelector('.mail-content-notes pre').textContent"),'Sendungsdetails aus dem Anhang.');
+      const g=await geometry();assert(!g.overflow&&!g.overlap&&g.footer,`Separate subject: ${theme}/${style}: ${JSON.stringify(g)}`);
+      await key('Escape');await until("!document.querySelector('.cal-details')");
+      if(theme==='classic' && style==='a'){
+        await setMail('');await pause(100);await openMail();
+        assert.equal(await evaluate("Boolean(document.querySelector('.mail-content-subject-row'))"),false,'An absent original subject leaves no empty labelled row.');
+        await key('Escape');await until("!document.querySelector('.cal-details')");
+      }
+      console.log(`Mail header passed: ${theme}/${style}, pixel=${pixel}`);
+    }
+    assert.deepEqual(errors,[]);
+  } else if (process.env.JOURNAL_UI_SCOPE === 'activity-sizes') {
+    for(const [theme,pixel] of [['classic',false],['classic',true],['journal',false],['nebula',false]]){
+      await evaluate(`localStorage.setItem('test.activitySizes','1');localStorage.setItem('journal.settings',JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'),theme:${JSON.stringify(theme)},pixel:${pixel}}));localStorage.setItem('journal.calendarDrawer','0');localStorage.setItem('journal.notebookDrawer','0')`);
+      await command('Page.reload');await until("document.querySelectorAll('.entry').length===5");
+      for(const [mode,number] of [['week',2],['month',3],['quarter',4],['year',5]]){
+        await key(String(number),'Digit'+number,2);await until("document.querySelectorAll('.activity-summary-card').length===3");await pause(100);
+        const sizes=await evaluate(`(()=>{
+          const cards=[...document.querySelectorAll('.activity-summary-card')];
+          return cards.map(card=>{
+            const r=card.getBoundingClientRect(),chart=card.querySelector('.heatmap-grid,.activity-timeline').getBoundingClientRect(),count=card.querySelector('.activity-metrics > span').getBoundingClientRect();
+            return {height:r.height,width:r.width,chartTop:chart.top-r.top,countTop:count.top-r.top};
+          });
+        })()`);
+        for(const size of sizes){assert(Math.abs(size.height-sizes[1].height)<1,`${theme}/${mode}: timed and untimed card heights: ${JSON.stringify(sizes)}`);assert(Math.abs(size.chartTop-sizes[1].chartTop)<1,`${theme}/${mode}: charts align`);assert(Math.abs(size.countTop-sizes[1].countTop)<1,`${theme}/${mode}: day counts align`);}
+      }
+      console.log(`Activity card sizes passed: ${theme}, pixel=${pixel}`);
+    }
+    assert.deepEqual(errors,[]);
+  } else if (process.env.JOURNAL_UI_SCOPE === 'popup-dismissal') {
+    await command('Emulation.setDeviceMetricsOverride',{width:1540,height:1000,deviceScaleFactor:1,mobile:false});
+    const pointerClick=async(point,button='left')=>{
+      await command('Input.dispatchMouseEvent',{type:'mouseMoved',...point});
+      await command('Input.dispatchMouseEvent',{type:'mousePressed',...point,button,buttons:button==='right'?2:1,clickCount:1});
+      await command('Input.dispatchMouseEvent',{type:'mouseReleased',...point,button,buttons:0,clickCount:1});
+      await pause(80);
+    };
+    const pointAt=async(selector)=>evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});e.scrollIntoView({block:'nearest'});const r=e.getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};})()`);
+    const outsideDay=async()=>evaluate(`(()=>{
+      const boxes=[...document.querySelectorAll('.popover,.cal-composer,.mini-picker-panel,.cal-transfer-panel,.ctx-menu,.format-menu,.entry-dock-shell.is-open .entry-dock')].map(e=>e.getBoundingClientRect());
+      for(const e of document.querySelectorAll('.cal-month-day')){
+        if(e.dataset.date===window.__uiTest.date)continue;
+        const r=e.getBoundingClientRect();
+        for(const [dx,dy] of [[.5,.7],[.2,.5],[.8,.2]]){
+          const x=r.left+r.width*dx,y=r.top+r.height*dy;
+          if(x<2||y<2||x>=innerWidth-2||y>=innerHeight-2||boxes.some(p=>x>=p.left&&x<=p.right&&y>=p.top&&y<=p.bottom))continue;
+          if(document.elementFromPoint(x,y)?.closest('.cal-month-day')===e)return {x,y};
+        }
+      }
+      throw new Error('No visible month day outside popup');
+    })()`);
+    for(const [theme,pixel,popupStyle] of [['classic',false,'a'],['classic',true,'b'],['journal',false,'a'],['journal',true,'b'],['nebula',false,'a'],['nebula',false,'b']]){
+      await evaluate(`localStorage.setItem('journal.settings',JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'),theme:${JSON.stringify(theme)},pixel:${pixel},popupStyle:${JSON.stringify(popupStyle)}}));localStorage.setItem('journal.calendarDrawer','1');localStorage.setItem('journal.notebookDrawer','0');localStorage.removeItem('journal.calendar')`);
+      await command('Page.reload');await until("document.querySelectorAll('.entry').length===5 && Boolean(document.querySelector('.cal-month-day'))");
+      if(theme==='classic'){
+        await pointerClick(await pointAt('.entry .entry-symbol'));await until("Boolean(document.querySelector('.entry-dock-shell.is-open'))");
+        await pointerClick(await outsideDay());await until("!document.querySelector('.entry-dock-shell.is-open')");
+        assert(await evaluate("document.querySelectorAll('.entry').length===5 && Boolean(document.querySelector('.cal-month-day'))"),'Floating entry actions also consume their dismissing click.');
+      }
+      await evaluate(`(()=>{const d=window.__uiTest.day();d.entries[2].description='journal-mail:v1\\n'+JSON.stringify({subject:'Lieferung',sender:'demo@example.org',text:'Heute zwischen 10 und 12 Uhr',html:'<h1>Lieferung</h1><p>Heute zwischen 10 und 12 Uhr</p>'});window.__uiTest.store(d);})()`);
+      const mailSelector='.cal-item[data-calendar-entry="10000000-0000-4000-8000-000000000003"]';
+      await until(`Boolean(document.querySelector(${JSON.stringify(mailSelector)}))`);
+      const originalEntries=await evaluate("[...document.querySelectorAll('.entry')].map(e=>e.dataset.entryId)");
+      await pointerClick(await pointAt(mailSelector));await until("Boolean(document.querySelector('.cal-details .mail-content'))");
+      if(theme==='nebula'){
+        await pointerClick(await pointAt('.cal-details .chrome-close'));
+        await until("!document.querySelector('.cal-details')");await pause(150);
+        assert(!await evaluate("Boolean(document.querySelector('.cal-details'))"),'Header X stays closed and does not reopen its owning entry.');
+        await pointerClick(await pointAt(mailSelector));await until("Boolean(document.querySelector('.cal-details .mail-content'))");
+      }
+      const dayPoint=await outsideDay();
+      await pointerClick(dayPoint);await until("!document.querySelector('.cal-details')");
+      assert.deepEqual(await evaluate("[...document.querySelectorAll('.entry')].map(e=>e.dataset.entryId)"),originalEntries,'Dismiss click does not navigate to the day behind the mail.');
+      assert(await evaluate("Boolean(document.querySelector('.cal-month-day')) && !document.querySelector('.cal-composer')"),'Only the popup closes; calendar stays open.');
+      await pointerClick(dayPoint);
+      await until("!document.querySelector('.entry[data-entry-id=\"10000000-0000-4000-8000-000000000001\"]')");
+      console.log(`Popup dismissal passed: ${theme}, pixel=${pixel}, style=${popupStyle}`);
+    }
+    await evaluate("localStorage.setItem('journal.calendarDrawer','1')");
+    await command('Page.reload');await until("document.querySelectorAll('.entry').length===5 && Boolean(document.querySelector('.cal-month-day'))");
+    const entrySelector='.cal-item[data-calendar-entry="10000000-0000-4000-8000-000000000003"]';
+    await pointerClick(await pointAt(entrySelector),'right');await until("Boolean(document.querySelector('.cal-composer.is-placed'))");
+    await pointerClick(await pointAt('.cal-composer-tag'));await until("Boolean(document.querySelector('.popover.tag-picker'))");
+    const target=await outsideDay();
+    await pointerClick(target);await until("!document.querySelector('.popover.tag-picker')");
+    assert(await evaluate("Boolean(document.querySelector('.cal-composer')) && document.querySelectorAll('.entry').length===5"),'Outside press closes the nested tag popup only.');
+    await pointerClick(target);await until("!document.querySelector('.cal-composer')");
+    assert(await evaluate("Boolean(document.querySelector('.cal-month-day')) && document.querySelectorAll('.entry').length===5"),'Second press dismisses the editor without calendar navigation.');
+    await pointerClick(await pointAt('.mini-calendar-picker > button'));await until("Boolean(document.querySelector('.mini-picker-panel'))");
+    await pointerClick(await outsideDay());await until("!document.querySelector('.mini-picker-panel')");
+    assert(await evaluate("Boolean(document.querySelector('.cal-month-day')) && document.querySelectorAll('.entry').length===5"),'Mini calendar dismiss does not activate the month day underneath.');
+    console.log('Nested popup, calendar editor and mini calendar dismissal passed.');
+    assert.deepEqual(errors,[]);
+  } else if (process.env.JOURNAL_UI_SCOPE === 'vault-updates') {
+    for (const [theme,pixel] of [['classic',false],['classic',true],['nebula',false]]) {
+      await evaluate(`localStorage.setItem('journal.settings',JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'),theme:${JSON.stringify(theme)},pixel:${pixel}}))`);
+      await command('Page.reload');await until("document.querySelectorAll('.entry').length===5");
+      await evaluate("document.querySelector('.settings-button').click()");await until("Boolean(document.querySelector('#settings-storage-tab'))");
+      await evaluate("document.querySelector('#settings-storage-tab').click()");await until("document.querySelector('[data-vault-path]')?.textContent.includes('Journal-A')");
+      assert(await evaluate("[...document.querySelectorAll('.system-actions button')].every(b=>b.scrollWidth<=b.clientWidth+2)"),'Vault buttons fit their labels.');
+      await evaluate("window.__uiTest.vaultChoice={path:'C:/Test/Journal-B'};document.querySelector('[data-vault-copy]').click()");
+      await until("Boolean(document.querySelector('[data-vault-confirm]'))");
+      assert(!await evaluate("window.__uiTest.invoked.some(([c])=>c==='vault_activate')"),'Folder choice alone does not switch vaults.');
+      await evaluate("document.querySelector('.system-confirm .system-actions button:last-child').click();document.querySelector('#settings-updates-tab').click()");
+      await until("Boolean(document.querySelector('[data-update-check]'))");
+      await evaluate("document.querySelector('[data-update-check]').click()");
+      await until("document.querySelector('#settings-updates [role=status]')?.textContent.includes('aktuelle Version')");
+      await evaluate("window.__uiTest.updateAvailable=true;document.querySelector('[data-update-check]').click()");
+      await until("document.querySelector('[data-update-version]')?.textContent.includes('0.1.1')");
+      await evaluate("document.querySelector('[data-update-download]').click()");await until("Boolean(document.querySelector('[data-update-install]'))");
+      await evaluate("document.querySelector('[data-update-install]').click()");
+      await until("window.__uiTest.invoked.some(([c])=>c==='plugin:updater|install')");
+      assert(await evaluate("(()=>{const c=window.__uiTest.invoked.map(([c])=>c);return c.lastIndexOf('vault_save_preferences')<c.lastIndexOf('plugin:updater|install')&&c.includes('vault_save_preferences')})()"),'Vault browser state is saved before installation.');
+      await until("document.querySelector('#settings-storage-tab').closest('[role=tablist]').inert===false");
+      await evaluate("document.querySelector('#settings-storage-tab').click()");await until("Boolean(document.querySelector('[data-vault-copy]'))");
+      await evaluate("document.querySelector('[data-vault-copy]').click()");await until("Boolean(document.querySelector('[data-vault-confirm]'))");
+      await evaluate("document.querySelector('[data-vault-confirm]').click()");
+      await until("window.__uiTest.invoked.some(([c])=>c==='vault_activate')");
+      assert.deepEqual(await evaluate("window.__uiTest.invoked.find(([c])=>c==='vault_activate')[1]"),{path:'C:/Test/Journal-B',mode:'copy'});
+    }
+    assert.deepEqual(errors,[]);console.log('Vault selection/confirmation and update check/download/install passed in Classic, Pixel and Nebula.');
+  } else if (process.env.JOURNAL_UI_SCOPE === 'performance') {
+    await evaluate("localStorage.setItem('journal.settings',JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'),theme:'nebula'}));localStorage.setItem('journal.calendarDrawer','0');localStorage.setItem('journal.notebookDrawer','0')");
+    await command('Page.reload');await until("Boolean(document.querySelector('.nebula-stage'))");
+    assert.equal(await evaluate("document.querySelector('.nebula-calendar .cal')"),null,'Closed calendar holds no calendar DOM.');
+    assert.equal(await evaluate("document.querySelector('.nebula-notebook .cm-editor')"),null,'Closed notebook holds no editors.');
+    await evaluate("document.querySelector('.nebula-notebook-toggle').click()");
+    await until("Boolean(document.querySelector('.nebula-notebook .notebook'))");
+    await evaluate("document.querySelector('.nebula-notebook-toggle').click()");
+    await until("!document.querySelector('.nebula-notebook .notebook')");
+    await evaluate("document.querySelector('.nebula-calendar-toggle').click()");
+    await until("Boolean(document.querySelector('.nebula-calendar .cal'))");
+    await evaluate("document.querySelector('.nebula-calendar-toggle').click()");
+    await until("!document.querySelector('.nebula-calendar .cal')");
+    await evaluate("window.dispatchEvent(new Event('blur'))");
+    // A blur event with actual browser focus may report focused; emulate a hidden document explicitly.
+    await evaluate("Object.defineProperty(document,'hidden',{configurable:true,value:true});document.dispatchEvent(new Event('visibilitychange'))");
+    assert(await evaluate("document.documentElement.hasAttribute('data-window-idle')"));
+    assert.equal(await evaluate("getComputedStyle(document.querySelector('.nebula-orbit-a')).animationPlayState"),'paused');
+    await evaluate("Object.defineProperty(document,'hidden',{configurable:true,value:false});Object.defineProperty(document,'hasFocus',{configurable:true,value:()=>true});window.dispatchEvent(new Event('focus'))");
+    assert.equal(await evaluate("document.documentElement.hasAttribute('data-window-idle')"),false);
+    assert.equal(await evaluate("getComputedStyle(document.querySelector('.nebula-orbit-a')).animationPlayState"),'running');
+    assert.deepEqual(errors,[]);console.log('Performance UI passed: closed views release their DOM, hidden windows pause animations, focus resumes them.');
+  } else if (process.env.JOURNAL_UI_SCOPE === 'notebook') {
     const fill = (label, value) => evaluate(`(() => {const input=[...document.querySelectorAll('.notebook input')].find(input=>input.getAttribute('aria-label')===${JSON.stringify(label)});Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,${JSON.stringify(value)});input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
     await evaluate(`(() => {
       const card=(id,title,extra={})=>({id,kind:'note',title,text:'Notiz mit **Markdown**',dates:[],order:1,created:window.__uiTest.date,notebook:true,...extra});
@@ -2535,12 +2740,37 @@ try {
     await evaluate("document.querySelectorAll('.notebook-note')[0].click()");
     await evaluate("document.querySelectorAll('.notebook-note')[2].dispatchEvent(new MouseEvent('click',{bubbles:true,shiftKey:true}))");
     await until("document.querySelectorAll('.notebook-note.is-chosen').length===3");
+    assert(await evaluate("Boolean(document.querySelector('.notebook-chosen-delete .icon'))"));
+    await evaluate("document.querySelector('.notebook-note.is-chosen').click()");
+    await until("document.querySelectorAll('.notebook-note.is-chosen').length===3");
     await evaluate("document.querySelector('.notebook-chosen .notebook-folder-pick').click()");
     await until("Boolean(document.querySelector('.folder-pick-option'))");
     await evaluate("[...document.querySelectorAll('.folder-pick-option')].find(b=>b.textContent.includes('Privat')).click()");
     await until("JSON.parse(sessionStorage.boardCards).filter(c=>c.kind==='note').every(c=>c.folder==='home')");
     await evaluate("sessionStorage.boardCards=window.__notebookBeforeMove;window.__uiTest.emit('board:reset',null)");
     await until("!document.querySelector('.notebook-chosen')");
+
+    await evaluate("document.querySelectorAll('.notebook-note')[0].click()");
+    await evaluate("document.querySelectorAll('.notebook-note')[1].dispatchEvent(new MouseEvent('click',{bubbles:true,ctrlKey:true}));document.querySelectorAll('.notebook-note')[0].focus()");
+    await evaluate("document.querySelector('.notebook-note.is-chosen').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:450,clientY:200}))");
+    await until("Boolean(document.querySelector('.ctx-menu [data-item=delete-all]'))");
+    await key('Escape');
+    await key('Delete');
+    await until("JSON.parse(sessionStorage.boardCards).filter(c=>c.kind==='note').length===1");
+    await evaluate("sessionStorage.boardCards=window.__notebookBeforeMove;window.__uiTest.emit('board:reset',null)");
+    await until("document.querySelectorAll('.notebook-note').length===3");
+    await evaluate("(() => {const cards=JSON.parse(sessionStorage.boardCards),id=document.querySelector('.notebook-page').dataset.pageId;cards.find(c=>c.id===id).dates=[window.__uiTest.date];sessionStorage.boardCards=JSON.stringify(cards);window.__uiTest.emit('board:reset',null);})()");
+    await until("Boolean(document.querySelector('.notebook-day-link'))");
+    await evaluate("document.querySelector('.notebook-day-link').click()");
+    await until("!document.querySelector('.notebook-view')");
+    await evaluate("document.querySelector('.journal-tab.is-notebook').click()");
+    await until("Boolean(document.querySelector('.notebook-title'))");
+    await evaluate("document.querySelector('.notebook-page').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:600,clientY:240}))");
+    await until("Boolean(document.querySelector('.ctx-menu [data-item=open-day]:not(:disabled)'))");
+    await evaluate("document.querySelector('.ctx-menu [data-item=open-day]').click()");
+    await until("!document.querySelector('.notebook-view')");
+    await evaluate("document.querySelector('.journal-tab.is-notebook').click()");
+    await until("Boolean(document.querySelector('.notebook-title'))");
 
     await evaluate("document.querySelector('[data-folder=home] .notebook-folder-name').click()");
     await until("document.querySelector('.notebook-title')?.value==='Urlaubsplan'");
@@ -3079,7 +3309,7 @@ try {
     const computed=await command('Runtime.evaluate',{...(contextId?{contextId}:{}),expression:"(() => {const h=document.querySelector('h1');const style=getComputedStyle(h);return {color:style.color,background:style.backgroundColor,size:style.fontSize,body:getComputedStyle(document.body).backgroundColor};})()",returnByValue:true},mailSession);
     assert.deepEqual(computed.result.value,{color:'rgb(255, 0, 0)',background:'rgb(12, 34, 56)',size:'26px',body:'rgb(230, 240, 250)'},'Inline CSS and embedded styles apply under the real nonce-based CSP.');
     await key('Escape');
-    // A mail with a PDF: a long subject and sender, the attachment's notes in a box; the switch stays at the top right.
+    // A mail with a PDF: long subjects and senders fit in the unified head; attachments keep their own box.
     for (const subject of ['Kurz', 'Ihre Rechnung Nr. 2026-11-0042 für den Zeitraum Oktober bis November – bitte bis zum 20. November begleichen']) {
       const mail = { subject, sender:'Buchhaltung Beispiel GmbH <rechnungen-und-mahnungen@buchhaltung.example.org>', html:'<p>Siehe Anhang.</p>', text:'Siehe Anhang.', notes:'Rechnung.pdf · Betrag 42,00 € · fällig am 20.11.2026\nKundennummer 4711 · IBAN DE00 1234 5678 9000' };
       await evaluate(`(() => {const d=window.__uiTest.day();d.entries[0].description=${JSON.stringify('journal-mail:v1\n' + JSON.stringify(mail))};return window.__uiTest.store(d);})()`);
@@ -3087,14 +3317,16 @@ try {
       await evaluate("[...document.querySelectorAll('.cal-item')].find(e=>e.textContent.includes('Eine Runde')).click()");
       await until("Boolean(document.querySelector('.mail-content-remote')) && Boolean(document.querySelector('.mail-content-notes pre'))");
       const place = await evaluate("(() => { const h=document.querySelector('.mail-content-head').getBoundingClientRect(), b=document.querySelector('.mail-content-remote').getBoundingClientRect(); return { right:h.right-b.right, top:b.top-h.top }; })()");
-      assert(place.right < 2 && place.top < 2, 'The switch sits at the top right whatever the subject: '+JSON.stringify(place));
+      assert(place.right >= 0 && place.top >= 0, 'The switch stays inside the organized head whatever the subject: '+JSON.stringify(place));
       if (subject !== 'Kurz') { await pause(200); await screenshot('mail-content-pdf.png'); }
       await key('Escape'); await until("!document.querySelector('.mail-content')");
     }
     const origin=await evaluate('window.__uiTest.shift(-1)');const next=await evaluate('window.__uiTest.date');
     await evaluate("(() => {const d=window.__uiTest.day();const e={...d.entries[0],id:'40000000-0000-4000-8000-000000000001',text:'Two-day delivery',time:'00:00',end:'47:59',description:''};window.__uiTest.store({date:window.__uiTest.shift(-1),title:'',revision:1,entries:[e]});window.__uiTest.emit('history:restored',null);})()");
-    await until("[...document.querySelectorAll('.cal-month-day[data-date=\""+next+"\"] .cal-item')].some(e=>e.textContent.includes('Two-day delivery'))");
-    await evaluate("[...document.querySelectorAll('.cal-month-day[data-date=\""+next+"\"] .cal-item')].find(e=>e.textContent.includes('Two-day delivery')).click()");
+    // Multi-day entries occupy one spanning bar above the individual day cells.
+    const continuedBar="document.querySelector('.cal-month-day[data-date=\""+next+"\"]').closest('.cal-month-week').querySelector('.cal-month-span[data-span-entry=\"40000000-0000-4000-8000-000000000001\"] .cal-item')";
+    await until("Boolean("+continuedBar+")");
+    await evaluate(continuedBar+".click()");
     await until("Boolean(document.querySelector('.cal-details'))");
     assert(await evaluate("document.querySelector('.cal-details-meta').textContent.includes('"+Number(origin.slice(8))+".')"),'Continued entry opens with the original start date.');
     await key('Escape');
@@ -3184,6 +3416,74 @@ try {
     await pause(300); await screenshot('review-night-edit.png');
     await key('Escape');
     console.log('Review screenshots taken.');
+  } else if (process.env.JOURNAL_UI_SCOPE === 'context-menus') {
+    // Right-click menus in all six popup looks: the notebook's folders and notes (with submenus), the board's cards and cork.
+    const rightClick = async expression => {
+      const point = await evaluate(`(() => { const e=(${expression}); e.scrollIntoView({block:'center'}); const r=e.getBoundingClientRect(); return { x:r.left+Math.min(40,r.width/2), y:r.top+Math.min(14,r.height/2) }; })()`);
+      await command('Input.dispatchMouseEvent', { type:'mouseMoved', x:point.x, y:point.y });
+      await command('Input.dispatchMouseEvent', { type:'mousePressed', x:point.x, y:point.y, button:'right', buttons:2, clickCount:1 });
+      await command('Input.dispatchMouseEvent', { type:'mouseReleased', x:point.x, y:point.y, button:'right', buttons:0, clickCount:1 });
+      return point;
+    };
+    for (const [theme, popups] of [['classic','a'],['classic','b'],['journal','a'],['journal','b'],['nebula','a'],['nebula','b']]) {
+      const look = `${theme}-${popups}`;
+      await evaluate(`(() => {
+        localStorage.setItem('journal.settings', JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'), theme:'${theme}', popupStyle:'${popups}', colorTheme:'${theme === 'journal' ? 'paper' : 'original'}'}));
+        const card=(id,title,extra={})=>({id,kind:'note',title,text:'Notiz',dates:[],order:1,created:window.__uiTest.date,notebook:true,...extra});
+        sessionStorage.setItem('boardFolders',JSON.stringify([{id:'work',name:'Arbeit',parent:null,order:1},{id:'sub',name:'Projekte',parent:'work',order:1},{id:'home',name:'Privat',parent:null,order:2}]));
+        sessionStorage.setItem('boardCards',JSON.stringify([card('work-note','Projektplan',{folder:'work'}),card('home-note','Urlaubsplan',{folder:'home'}),card('board-note','Am Tag',{dates:[window.__uiTest.date],notebook:false,boardX:20,y:20})]));
+        localStorage.setItem('journal.notebookNote','work-note'); localStorage.setItem('journal.notebookFolder','work'); localStorage.setItem('journal.notebookDrawer','1');
+      })()`);
+      await command('Page.reload');
+      await until("Boolean(document.querySelector('.notebook [data-folder=work] .notebook-folder-name'))");
+      await pause(400);
+      // A folder: its menu in the look's build, the move submenu beside it.
+      await rightClick("document.querySelector('.notebook [data-folder=work] .notebook-folder-name')");
+      await until(`Boolean(document.querySelector('.ctx-menu.is-${look}'))`);
+      await evaluate("[...document.querySelectorAll('.ctx-menu .ctx-item')].find(b => b.dataset.item==='move').click()");
+      await until("Boolean(document.querySelector('.ctx-menu.is-sub'))");
+      // The folder cannot go into itself or its subfolder.
+      assert(await evaluate("(() => { const sub=document.querySelector('.ctx-menu.is-sub'); return sub.querySelector('[data-item=to-work]').disabled && sub.querySelector('[data-item=to-sub]').disabled && !sub.querySelector('[data-item=to-home]').disabled; })()"), 'A folder cannot move into itself.');
+      await pause(250); await screenshot(`context-${look}-folder.png`);
+      await key('Escape'); await key('Escape');
+      await until("!document.querySelector('.ctx-menu')");
+      // A note: the paper colour from a submenu by keys (→, ↓, Enter).
+      await rightClick("document.querySelector('.notebook [data-note-id=work-note]')");
+      await until("Boolean(document.querySelector('.ctx-menu [data-item=paper]'))");
+      await evaluate("document.querySelector('.ctx-menu [data-item=paper]').focus()");
+      await key('ArrowRight', 'ArrowRight');
+      await until("document.activeElement?.closest('.ctx-menu.is-sub') && document.activeElement.dataset.item==='paper-yellow'");
+      await key('ArrowDown', 'ArrowDown');
+      await pause(200); await screenshot(`context-${look}-note.png`);
+      await key('Enter', 'Enter');
+      await until("JSON.parse(sessionStorage.boardCards).find(c=>c.id==='work-note').paper==='blue' && !document.querySelector('.ctx-menu')");
+      // The empty side: a new folder from there.
+      await rightClick("document.querySelector('.notebook-tree-head')");
+      await until("Boolean(document.querySelector('.ctx-menu [data-item=new-folder]'))");
+      await evaluate("document.querySelector('.ctx-menu [data-item=new-folder]').click()");
+      await until("Boolean(document.querySelector('.notebook-rename'))");
+      await key('Escape');
+      // The board: a card's menu, and a note made where the cork was clicked.
+      await key('N', 'KeyN', 10);
+      await pause(300);
+      if (await evaluate("Boolean(document.querySelector('.board-card[data-board-id=board-note]')) && document.querySelector('.board-card[data-board-id=board-note]').getBoundingClientRect().width > 0")) {
+        await rightClick("document.querySelector('.board-card[data-board-id=board-note] .board-pin')");
+        await until(`Boolean(document.querySelector('.ctx-menu.is-${look} [data-item=paper]'))`);
+        await pause(200); await screenshot(`context-${look}-card.png`);
+        await key('Escape');
+        await until("!document.querySelector('.ctx-menu')");
+        const at = await evaluate("(() => { const r=document.querySelector('.board-viewport').getBoundingClientRect(); return { x:r.right-60, y:r.top+Math.min(r.height-30, 140) }; })()");
+        await command('Input.dispatchMouseEvent', { type:'mouseMoved', ...at });
+        await command('Input.dispatchMouseEvent', { type:'mousePressed', ...at, button:'right', buttons:2, clickCount:1 });
+        await command('Input.dispatchMouseEvent', { type:'mouseReleased', ...at, button:'right', buttons:0, clickCount:1 });
+        await until("Boolean(document.querySelector('.ctx-menu [data-item=note]'))");
+        await pause(200); await screenshot(`context-${look}-board.png`);
+        await evaluate("document.querySelector('.ctx-menu [data-item=note]').click()");
+        await until("JSON.parse(sessionStorage.boardCards).filter(c=>c.dates.includes(window.__uiTest.date)).length===2");
+        assert(await evaluate("JSON.parse(sessionStorage.boardCards).some(c => c.id!=='board-note' && c.dates.includes(window.__uiTest.date) && c.boardX > 100)"), 'The new note lies where the cork was clicked.');
+      } else console.log(`(${look}: no board on screen, card menu skipped)`);
+    }
+    console.log('Context menu checks passed.');
   } else if (process.env.JOURNAL_UI_SCOPE === 'looks') {
     // Each popup look builds an entry's actions its own way (ActionSheet); Normal · Karte keeps the orbit.
     for (const [theme, popups] of [['classic','a'],['classic','b'],['journal','a'],['journal','b'],['nebula','a'],['nebula','b']]) {

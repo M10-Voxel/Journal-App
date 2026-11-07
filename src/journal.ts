@@ -55,13 +55,23 @@ export interface Reminder { id: string; date: string; kind: 'task' | 'event' | '
 const cache = new Map<string, Promise<Day>>();
 const settled = new Map<string, Day>();
 
+const maxCachedDays = 32;
+function cacheDay(date: string, request: Promise<Day>) {
+  cache.delete(date); cache.set(date, request);
+  while (cache.size > maxCachedDays) {
+    const oldest = cache.keys().next().value!;
+    cache.delete(oldest); settled.delete(oldest);
+  }
+}
+
 function fetchDay(date: string): Promise<Day> {
   let request = cache.get(date);
   if (!request) {
     request = ensureSeries(date).then(() => invoke<Day>('load_day', { date }));
-    cache.set(date, request);
+    cacheDay(date, request);
     request.then(day => { if (cache.get(date) === request) settled.set(date, day); }, () => { if (cache.get(date) === request) cache.delete(date); });
   }
+  cache.delete(date); cache.set(date, request);
   return request;
 }
 
@@ -99,7 +109,7 @@ export const journal = {
   },
   async save(day: Day): Promise<Day> {
     const saved = await invoke<Day>('save_day', { day });
-    cache.set(saved.date, Promise.resolve(saved));
+    cacheDay(saved.date, Promise.resolve(saved));
     settled.set(saved.date, saved);
     // Planned entries are created and edits passed on to linked entries on other days, so their cached state is outdated.
     for (const date of saved.touched ?? []) if (date !== saved.date) { cache.delete(date); settled.delete(date); }
@@ -139,5 +149,5 @@ function ensureSeries(date: string): Promise<void> {
   return ensuring;
 }
 
-export { formatDate, formatShortDate, formatWeekday, localDate, shiftDate, weekDates } from './dates';
+export { formatDate, formatShortDate, formatWeekday, localDate, shiftDate, weekDates } from './dates.ts';
 export type { RepeatRule } from './repeat.ts';

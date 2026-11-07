@@ -4,6 +4,8 @@ import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { Icon } from './Icon';
 import { Popover } from './Popover';
+import { contextMenu, openMenuAt } from './ContextMenu';
+import type { MenuEntry, MenuItem, MenuSpec } from './ContextMenu';
 import { useLanguage } from '../i18n';
 import { BoardImage, Lightbox, Note, connectCards, disconnectCards, togglePrimaryNote, hostOf, httpsLink, linkPreview, nextOrder, source, storeImage, useCards, useFolders, usePixelTheme, waitForCard } from '../boardCards';
 import type { Card, Paper } from '../boardCards';
@@ -325,6 +327,64 @@ export function BulletinBoard({ date }: { date: string }) {
     void patch(card.id, { boardX: Math.round(x + dx), y: Math.round(y + dy), z: topZ + 1 });
   }
 
+  // Right-click menus (ContextMenu.tsx): a card (also from its ⋯ button), the free cork (a new note right there), a thread.
+  const startPicking = (card: Card) => {
+    if (!others(card.id).length) { setMessage(tr('Für einen Faden braucht es eine zweite Karte.', 'A thread needs a second card.')); return; }
+    boardRef.current?.querySelector<HTMLElement>(`[data-board-id="${CSS.escape(card.id)}"]`)?.focus({ preventScroll: true });
+    setPicking({ from: card.id, index: 0 });
+    setMessage(tr('Faden: Karte mit den Pfeiltasten wählen, Enter verbindet, Esc bricht ab.', 'Thread: pick a card with the arrow keys, Enter ties, Esc cancels.'));
+  };
+  const takeDown = (card: Card) => { const dates = card.dates.filter(d => d !== date); void run(() => patch(card.id, { dates, ...card.onDay && !dates.length ? { onDay: false } : {} })); };
+  const paperNames: [Paper, string][] = [['yellow', tr('Gelb', 'Yellow')], ['blue', tr('Blau', 'Blue')], ['green', tr('Grün', 'Green')], ['pink', tr('Rosa', 'Pink')]];
+  function cardMenu(card: Card, x: number): MenuSpec {
+    const tied = (card.links ?? []).map(id => cards.find(other => other.id === id)).filter((other): other is Card => !!other);
+    const hasNotes = tied.some(other => other.kind === 'note');
+    const kindItems: MenuEntry[] = card.kind === 'note' ? [
+      { id: 'notebook', command: 'notes --open', label: tr('Im Notizblock öffnen', 'Open in the notebook'), icon: 'note', run: () => window.dispatchEvent(new CustomEvent('journal:show-note', { detail: card.id })) },
+      { id: 'float', command: 'detach', label: tr('Als schwebende Notiz öffnen', 'Open floating note'), icon: 'pin', run: () => void run(() => invoke('board_detach', { id: card.id })) },
+      { id: 'paper', command: 'color', label: tr('Papierfarbe', 'Paper colour'), icon: 'pipette', items: paperNames.map(([paper, name]) => ({ id: `paper-${paper}`, command: paper, label: name, swatch: `paper-${paper}`, checked: (card.paper ?? 'yellow') === paper, run: () => void patch(card.id, { paper }) })) },
+      ...(hasNotes ? [{ id: 'primary', command: 'primary', label: tr('Hauptnotiz', 'Main note'), icon: 'priority', checked: !!card.primary, run: () => void run(() => togglePrimaryNote(card.id)) } as MenuItem] : []),
+    ] : card.kind === 'image' ? [
+      { id: 'open', command: 'open', label: tr('Vergrößern', 'Enlarge'), icon: 'search', run: () => setOpen(card) },
+      ...(pixelTheme ? [{ id: 'pixel', command: 'pixelate', label: tr('Verpixelt zeigen', 'Show pixelated'), icon: 'month', checked: !!card.pixel, run: () => void patch(card.id, { pixel: !card.pixel }) } as MenuItem] : []),
+    ] : [
+      { id: 'open', command: 'open', label: tr('Link öffnen', 'Open link'), icon: 'jump', run: () => void run(() => invoke('board_open_link', { url: card.url })) },
+      { id: 'copy', command: 'copy', label: tr('Link kopieren', 'Copy link'), icon: 'copy', run: () => void navigator.clipboard?.writeText(card.url ?? '') },
+    ];
+    return { title: titleOf(card), command: card.kind, items: [
+      ...kindItems,
+      '-',
+      { id: 'tie', command: 'tie', positive: true, label: tr('Verbinden mit …', 'Tie to …'), icon: 'jump', keys: 'Alt L', disabled: !others(card.id).length, run: () => startPicking(card) },
+      ...(tied.length ? [{ id: 'untie', command: 'untie', label: tr('Faden lösen', 'Untie thread'), icon: 'cancel', items: tied.map(other => ({ id: `untie-${other.id}`, command: other.kind, label: titleOf(other), icon: other.kind === 'note' ? 'note' : other.kind === 'image' ? 'layout' : 'jump', run: () => void run(() => disconnectCards(card.id, other.id)) })) } as MenuItem] : []),
+      { id: 'front', command: 'raise', label: tr('Nach vorne holen', 'Bring to front'), icon: 'up', disabled: (card.z ?? 0) >= topZ && visible.filter(other => (other.z ?? 0) === topZ).length === 1, run: () => void patch(card.id, { z: topZ + 1 }) },
+      { id: 'size', command: 'resize --reset', label: tr('Größe zurücksetzen', 'Reset size'), icon: 'layout', disabled: !card.w && !card.h, run: () => void patch(card.id, { w: defaultWidth(card.kind), h: 0, boardX: x }) },
+      '-',
+      { id: 'remove', command: 'rm', label: tr('Abnehmen', 'Take down'), icon: 'trash', danger: true, keys: undefined, run: () => takeDown(card) },
+    ] };
+  }
+  const surfaceMenu = contextMenu(event => {
+    if ((event.target as Element).closest('.board-card, .board-thread-hit')) return null;
+    const viewport = viewportRef.current!, box = viewport.getBoundingClientRect(), ratio = viewport.clientWidth / box.width;
+    const byPointer = event.button === 2;
+    const here = byPointer ? { boardX: Math.round(((event.clientX - box.left) * ratio - pan.x) / scale), y: Math.round(((event.clientY - box.top) * ratio - pan.y) / scale) } : {};
+    return { title: tr('Pinnwand', 'Pinboard'), command: 'board', items: [
+      { id: 'note', command: 'touch', positive: true, label: byPointer ? tr('Neuer Zettel hier', 'New note here') : tr('Neuer Zettel', 'New note'), icon: 'pencil', disabled: busy, run: () => void run(() => add('note', here)) },
+      { id: 'image', command: 'upload', positive: true, label: tr('Bild hochladen …', 'Upload image …'), icon: 'layout', disabled: busy, run: () => upload.current?.click() },
+      { id: 'link', command: 'link', positive: true, label: tr('Link anpinnen …', 'Pin a link …'), icon: 'jump', disabled: busy, run: () => setLink('') },
+      { id: 'existing', command: 'ls', label: tr('Vorhandene Zettel …', 'Existing notes …'), icon: 'search', run: () => setPicker(true) },
+      '-',
+      { id: 'view', command: 'zoom --reset', label: tr('Ansicht zurücksetzen', 'Reset view'), icon: 'month', disabled: zoom === 1 && !pan.x && !pan.y, run: () => { setZoom(1); setPan({ x: 0, y: 0 }); resizeReference.current = { ...viewportSize.current, scale: 1 }; } },
+    ] };
+  });
+  const threadItems = (a: string, b: string): MenuSpec => {
+    const first = cards.find(c => c.id === a), second = cards.find(c => c.id === b), kind = first && second ? threadKind(first, second) : null;
+    return { title: `${titleOf(first)} ↔ ${titleOf(second)}`, command: 'thread', items: [
+      ...(kind === 'page' ? [first!, second!].map(note => ({ id: `primary-${note.id}`, command: 'primary', label: tr('{0} als Hauptnotiz', '{0} as main note').replace('{0}', titleOf(note)), icon: 'priority', checked: !!note.primary, run: () => void run(() => togglePrimaryNote(note.id)) } as MenuItem)) : []),
+      '-',
+      { id: 'cut', command: 'untie', label: tr('Lösen', 'Untie'), icon: 'cancel', danger: true, run: () => void run(() => disconnectCards(a, b)) },
+    ] };
+  };
+
   return <section className={`bulletin-board${pixelTheme ? ' is-pixel' : ''}`} aria-label={tr('Pinnwand', 'Pinboard')} onKeyDown={e => { if (!(e.ctrlKey && e.shiftKey && e.code === 'KeyN')) e.stopPropagation(); }}>
     <div className="board-head">
       <div><h3>{tr('Pinnwand', 'Pinboard')}</h3><p className="page-hint">{tr('Zettel, Bilder und Links – frei anpinnen und verschieben.', 'Notes, images and links – pin and move them freely.')}</p></div>
@@ -348,7 +408,7 @@ export function BulletinBoard({ date }: { date: string }) {
       })}
       <p className="page-hint">{tr('Zettel von anderen Tagen und abgenommene Zettel. Derselbe Zettel – Änderungen erscheinen überall.', 'Notes from other days and taken-down notes. The same note – edits show everywhere.')}</p></div>}
     {(busy || error || message) && <p role="status" className="board-status">{busy ? tr('Wird verarbeitet …', 'Working …') : message || error}</p>}
-    <div ref={viewportRef} className={`board-viewport board-surface${panning ? ' is-panning' : ''}${linking ? ' is-linking' : ''}`} onPointerDown={startPan}
+    <div ref={viewportRef} className={`board-viewport board-surface${panning ? ' is-panning' : ''}${linking ? ' is-linking' : ''}`} onPointerDown={startPan} onContextMenu={surfaceMenu}
       style={{ height: Math.max(viewportHeight, Math.ceil(pan.y + boardHeight * scale)), '--board-scale': scale, '--board-pan-x': `${pan.x}px`, '--board-pan-y': `${pan.y}px` } as CSSProperties}>
     <div ref={boardRef} className={`board-world${linking ? ' is-linking' : ''}`} style={{ height: boardHeight, width, transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})` }}>
       {!visible.length && <p className="board-empty">{tr('Noch leer.', 'Still empty.')}<span className="page-hint"> {tr('Pinne einen Zettel, ein Bild oder einen Link an.', 'Pin a note, an image or a link.')}</span></p>}
@@ -356,7 +416,7 @@ export function BulletinBoard({ date }: { date: string }) {
         className={`board-card is-${card.kind}${card.kind === 'note' ? ` paper-${card.paper ?? 'yellow'}` : ''}${dragging?.id === card.id ? ' is-moving' : ''}${sizing?.id === card.id ? ' is-sizing' : ''}${card.h ? ' has-height' : ''}${target === card.id ? ' is-link-target' : ''}${linking?.from === card.id || picking?.from === card.id ? ' is-link-source' : ''}${card.kind === 'note' && card.primary ? ' is-primary' : ''}`}
         style={{ left: x, top: y, zIndex: 1 + z, width: sizing?.id === card.id ? sizing.w : widthOf(card), height: card.kind === 'note' ? (sizing?.id === card.id ? sizing.h : card.h || undefined) : undefined, '--tilt': `${tiltOf(card.id)}deg` } as CSSProperties}
         aria-label={`${card.kind === 'note' ? tr('Zettel', 'Note') : card.kind === 'image' ? tr('Bild', 'Image') : 'Link'}: ${card.title}`}
-        onPointerDown={e => grab(e, card, x, y)}
+        onPointerDown={e => grab(e, card, x, y)} onContextMenu={contextMenu(() => cardMenu(card, x))}
         onBlur={e => { if (picking?.from === card.id && !e.currentTarget.contains(e.relatedTarget as Node)) setPicking(null); }}
         onKeyDown={e => {
           if (e.target !== e.currentTarget) return;
@@ -381,8 +441,8 @@ export function BulletinBoard({ date }: { date: string }) {
               title={card.primary ? tr('Hauptnotiz (erste Seite im Notizblock) · aufheben', 'Main note (first page in the notebook) · undo') : tr('Als Hauptnotiz markieren: erste Seite im Notizblock', 'Mark as main note: first page in the notebook')}
               aria-label={tr('Hauptnotiz', 'Main note')} onClick={() => void run(() => togglePrimaryNote(card.id))}><Icon name="priority" /></button>}
             {card.kind === 'note' && <button type="button" className="board-detach" title={tr('Als schwebende Notiz öffnen', 'Open floating note')} aria-label={tr('Als schwebende Notiz öffnen', 'Open floating note')} onClick={() => void run(() => invoke('board_detach', { id: card.id }))}><Icon name="pin" /></button>}
-            {/* Reserved for a function every card will get; it does nothing yet. */}
-            <button type="button" className="board-extra" title={tr('Weitere Funktion (folgt)', 'More (coming)')} aria-label={tr('Weitere Funktion', 'More')}><Icon name="details" /></button>
+            {/* The card's menu, the same as on a right click. */}
+            <button type="button" className="board-extra" title={tr('Mehr · Rechtsklick', 'More · right click')} aria-label={tr('Mehr', 'More')} aria-haspopup="menu" onClick={e => openMenuAt(e.currentTarget, cardMenu(card, x), e.detail === 0)}><Icon name="details" /></button>
             <button type="button" className="board-remove" title={tr('Abnehmen (Zettel bleiben unter „Vorhandene“)', 'Take down (notes stay under “Existing”)')} aria-label={tr('Abnehmen', 'Take down')} onClick={() => { const dates = card.dates.filter(d => d !== date); void run(() => patch(card.id, { dates, ...card.onDay && !dates.length ? { onDay: false } : {} })); }}><Icon name="trash" /></button>
           </div>
         </header>
@@ -405,6 +465,7 @@ export function BulletinBoard({ date }: { date: string }) {
             <path className="board-thread" d={path} />
             <circle className="board-thread-knot" cx={from.x} cy={from.y} r={2.4} /><circle className="board-thread-knot" cx={to.x} cy={to.y} r={2.4} />
             <path className="board-thread-hit" d={path} tabIndex={0} role="button" aria-label={label} onClick={e => openMenu(e.currentTarget)}
+              onContextMenu={contextMenu(() => threadItems(a, b))}
               onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openMenu(e.currentTarget); } }}><title>{label}</title></path>
           </g>;
         })}

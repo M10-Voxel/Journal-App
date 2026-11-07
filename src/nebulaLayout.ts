@@ -25,7 +25,7 @@ export interface NebulaLayout {
 export const own: Record<Family, PanelId[]> = { day: ['entries', 'data', 'board'], period: ['notes', 'activities'] };
 export const windows: readonly WindowId[] = ['calendar', 'notebook'];
 export const columns = 12, minSpan = 3;
-export const defaultLayout = (): NebulaLayout => ({ order: { day: [...own.day], period: [...own.period] }, minimized: [], spans: { entries: 7, data: 5 }, docked: [], floating: [], heights: { entries: 520, data: 520, board: 620 } });
+export const defaultLayout = (): NebulaLayout => ({ order: { day: [...own.day], period: [...own.period] }, minimized: [], spans: { entries: 7, data: 5, notes: 6, activities: 6 }, docked: [], floating: [], heights: { entries: 520, data: 520, board: 620 } });
 export const spanOf = (layout: NebulaLayout, id: PanelId) => layout.spans[id] ?? columns;
 const isOwn = (id: PanelId) => !windows.includes(id as WindowId);
 

@@ -21,6 +21,7 @@ import type { TextField } from './entryEditor';
 import type { EntryDragHandlers } from './useEntryDrag';
 import { TagPicker } from './TagPicker';
 import { filterKey } from '../tags';
+import { useDismissLayer } from './useDismissLayer';
 import type { Tag } from '../tags';
 
 export const entryLabels = () => ({ task: t("Aufgabe"), event: t("Ereignis"), note: t("Notiz") });
@@ -54,6 +55,7 @@ export const JournalEntry = memo(function JournalEntry({ layout, entry, day, tag
   const [pop, setPop] = useState<{ key: number; status: TaskStatus | 'planned' } | null>(null);
   const [leaving, setLeaving] = useState(false);
   const [planning, setPlanning] = useState(false);
+  useDismissLayer({element:()=>rootRef.current?.querySelector<HTMLElement>(planning?'.planner':'.entry-dock')??null,anchor:()=>triggerRef.current,ignore:()=>!!document.querySelector('.shortcut-backdrop'),onDismiss:()=>onOpenChange(entry.id,false)},isOpen&&(planning||layout!=='swipe'));
   const [planDate, setPlanDate] = useState<string | null>(null);
   const [plannerView, setPlannerView] = useState<PlannerView>('date');
   const [planCount, setPlanCount] = useState(1);

@@ -17,6 +17,8 @@ import { usePeriodData } from '../periodStore';
 import { periodTitle } from './PeriodNotes';
 import { CompactMonth, useCalendarData, useNow } from './calendarShared';
 import { Icon } from './Icon';
+import { contextMenu } from './ContextMenu';
+import type { MenuItem } from './ContextMenu';
 import { useFloatingWindow, windowGrips, writeWindowRect } from './useFloatingWindow';
 import type { FloatingDrag } from './useFloatingWindow';
 import { columns, defaultLayout, displaySpans, dropTarget, floatPanel, leaveRow, minSpan, normalizeLayout, own, placePanel, resizeInRow, rowsOf, setHeight, setSpan, spanOf, toggleHalf, toggleMinimized, visiblePanels } from '../nebulaLayout';
@@ -53,32 +55,35 @@ function Marquee({ words }: { words: string[] }) {
 
 const timeOf = (now: Date) => `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
-type Upcoming = { date: string; entry: Entry; tag: string };
+/** What a ticket is for, which also picks its foil: delivery orange, payment green, appointments lilac, events sky. */
+type TicketKind = 'delivery' | 'payment' | 'appointment' | 'event';
+type Upcoming = { date: string; entry: Entry; tag: string; kind: TicketKind };
 /** The tickets' tags: delivery, payment and appointments (the mail tags, by their fixed ids or their names). */
-const ticketTags = Object.values(mailTagDefinitions);
+const ticketTags = Object.entries(mailTagDefinitions) as [Exclude<TicketKind, 'event'>, (typeof mailTagDefinitions)[keyof typeof mailTagDefinitions]][];
 /**
- * What comes next among the entries with a ticket tag (any kind, with or without a time), from today on; open ones
- * only, and today's timed ones only until they are over.
+ * What comes next among the entries with a ticket tag (any kind, with or without a time) and the events (Ereignisse),
+ * from today on; open ones only, and today's timed ones only until they are over.
  */
 function useUpcoming(today: string, count: number): Upcoming[] {
   const now = useNow();
   const tags = useTags();
   const { days } = useCalendarData(today, shiftDate(today, 60));
   const time = timeOf(now);
-  const ticketTag = (id: string | null | undefined): string | null => {
+  const ticketTag = (id: string | null | undefined): { tag: string; kind: TicketKind } | null => {
     if (!id) return null;
     const own = tagOf(tags, id);
-    const fixed = ticketTags.find(tag => tag.id === id || (own && [tag.de, tag.en].some(name => name.toLowerCase() === own.name.trim().toLowerCase())));
-    return fixed ? own?.name ?? fixed.de : null;
+    const fixed = ticketTags.find(([, tag]) => tag.id === id || (own && [tag.de, tag.en].some(name => name.toLowerCase() === own.name.trim().toLowerCase())));
+    return fixed ? { tag: own?.name ?? fixed[1].de, kind: fixed[0] } : null;
   };
   const list: Upcoming[] = [];
   for (const [date, day] of days) {
     if (date < today) continue;
     for (const entry of day.entries) {
-      const tag = ticketTag(entry.tag);
-      if (!tag || entry.done || entry.cancelled) continue;
+      const tagged = ticketTag(entry.tag);
+      const ticket = tagged ?? (entry.kind === 'event' ? { tag: tagOf(tags, entry.tag)?.name ?? t('Ereignis'), kind: 'event' as const } : null);
+      if (!ticket || entry.done || entry.cancelled) continue;
       if (date === today && entry.time && (entry.end ?? entry.time) < time) continue;
-      list.push({ date, entry, tag });
+      list.push({ date, entry, ...ticket });
     }
   }
   return list.sort((a, b) => `${a.date} ${a.entry.time ?? ''}`.localeCompare(`${b.date} ${b.entry.time ?? ''}`)).slice(0, count);
@@ -90,8 +95,8 @@ function Ticket({ item, index, onOpen }: { item: Upcoming; index: number; onOpen
   // A serial like a printed ticket's: five digits from the entry (the same entry keeps its number).
   const serial = String([...item.entry.id].reduce((sum, char) => (sum * 31 + char.charCodeAt(0)) % 100000, 7)).padStart(5, '0');
   const weekday = dateFormat({ weekday: 'short' }).format(noon(item.date)).replace('.', '');
-  // Peach and mint foil take turns, like the two tickets the design comes from.
-  return <button type="button" className={`nebula-ticket is-${item.entry.kind} is-${index % 2 ? 'mint' : 'peach'}`} style={{ '--ticket': index } as CSSProperties} data-ticket-date={item.date} data-ticket-tag={item.tag}
+  // The foil tells the kind (nebula-ticket.css); each ticket shows another piece of it.
+  return <button type="button" className={`nebula-ticket foil-${item.kind}`} style={{ '--ticket': index, '--foil-x': `${(index * 37 + 11) % 101}%`, '--foil-y': `${(index * 59 + 23) % 101}%` } as CSSProperties} data-ticket-date={item.date} data-ticket-tag={item.tag} data-ticket-kind={item.kind}
     title={t('{0} · Tag öffnen', text)} onClick={() => onOpen(item.date, item.entry.id)}>
     <span className="nebula-ticket-band" aria-hidden="true" />
     {/* Above the band the tag and the serial; on it the entry (the mail's subject); below it, under a rule, the day and
@@ -168,7 +173,7 @@ function NebulaCalendarPanel({ mode, date, today, onPick, dayCalendar, calendarO
  * it, a click brings it to the front. Released with Shift over the grid it joins the grid; released outside the journal's
  * window it becomes a window of its own (calendar, notebook, board). Focus darkens everything else.
  */
-function usePanelScroll(body: React.RefObject<HTMLDivElement | null>) {
+function usePanelScroll(body: React.RefObject<HTMLDivElement | null>, active = true) {
   useEffect(() => {
     const element = body.current;
     if (!element) return;
@@ -178,7 +183,7 @@ function usePanelScroll(body: React.RefObject<HTMLDivElement | null>) {
     for (const child of element.children) observer.observe(child);
     update();
     return () => observer.disconnect();
-  }, []);
+  }, [active]);
 }
 
 function DeskWindow({ id, stage, open, front, focused, dimmed = false, command, label, closeLabel, className, bodyClass, disabled, sectionRef, drag, onClose, onFront, onFocus, onDock, children }: {
@@ -190,12 +195,18 @@ function DeskWindow({ id, stage, open, front, focused, dimmed = false, command, 
   const ownRef = useRef<HTMLElement>(null);
   const frame = sectionRef ?? ownRef;
   const scrollBody = useRef<HTMLDivElement>(null);
-  usePanelScroll(scrollBody);
+  usePanelScroll(scrollBody, open);
   const place = useFloatingWindow(`journal.nebulaWindow.${id}`, stage, frame, drag);
   return <section ref={frame} className={`${className}${open ? ' is-open' : ''}${place.floating ? ' is-floating' : ''}${place.dragging ? ' is-dragging' : ''}${front ? ' is-front' : ''}${focused ? ' is-focused' : ''}${dimmed ? ' is-dimmed' : ''}`}
     style={place.style} data-window={id} aria-label={label} aria-hidden={!open || undefined} inert={!open || disabled} onPointerDownCapture={onFront}
     onKeyDown={event => { if (onClose && event.key === 'Escape' && !event.defaultPrevented && !(event.target as Element).closest('input, textarea, select, [contenteditable="true"], [role="dialog"]')) { event.preventDefault(); onClose(); } }}>
     <header className="nebula-terminal-head nebula-window-head" onPointerDown={place.startMove} onDoubleClick={event => { if (!(event.target as Element).closest('button')) place.dock(); }}
+      onContextMenu={contextMenu(() => ({ title: label, command: command.replace(/^\.\//, '').replace(/\.sh.*$/, '') || 'window', items: [
+        { id: 'focus', command: 'focus', label: focused ? t('Fokus beenden') : t('Fokus: Hintergrund abdunkeln'), icon: 'search', checked: focused, run: onFocus },
+        ...(place.floating ? [{ id: 'home', command: 'mv --home', label: t('Ausgangsposition'), icon: 'undo', run: place.dock } as MenuItem] : []),
+        { id: 'grid', command: 'dock', label: t('Ins Raster andocken'), icon: 'layout', run: onDock },
+        ...(onClose && closeLabel ? ['-' as const, { id: 'close', command: 'exit', label: closeLabel, icon: 'done', keys: 'Esc', run: onClose } as MenuItem] : []),
+      ] }))}
       title={t('Ziehen zum Verschieben · ⇧ beim Loslassen: ins Raster · aus dem Fenster ziehen: eigenes Fenster')}>
       <span className="nebula-prompt" aria-hidden="true"><b>[journal@~]$</b> {command}</span>
       <span className="nebula-window-tools">
@@ -205,7 +216,7 @@ function DeskWindow({ id, stage, open, front, focused, dimmed = false, command, 
         {onClose && closeLabel && <button type="button" className="nebula-calendar-close" aria-label={closeLabel} title={`${closeLabel} · Esc`} onClick={onClose}>×</button>}
       </span>
     </header>
-    <div ref={scrollBody} className={bodyClass}>{children}</div>
+    <div ref={scrollBody} className={bodyClass}>{open && children}</div>
     {open && windowGrips.map(grip => <span key={grip.name} className={`nebula-grip is-${grip.name}`} aria-hidden="true" onPointerDown={place.startResize(grip.edges)} />)}
   </section>;
 }
@@ -234,7 +245,7 @@ function Panel({ id, command, label, minimized, span, shownSpan = span, upright 
 }) {
   useLanguage();
   const root = useRef<HTMLElement>(null), body = useRef<HTMLDivElement>(null);
-  usePanelScroll(body);
+  usePanelScroll(body, !minimized);
   function resizeHeight(event: React.PointerEvent<HTMLElement>) {
     if (event.button !== 0 || !body.current) return;
     event.preventDefault();
@@ -284,6 +295,14 @@ function Panel({ id, command, label, minimized, span, shownSpan = span, upright 
   return <section ref={root} className={`nebula-terminal nebula-panel is-${id}${height ? ' is-custom-height' : ''}${shownSpan < columns ? ' is-part' : ''}${shownSpan === columns / 2 ? ' is-half' : ''}${minimized ? ' is-minimized' : ''}${upright ? ` is-upright${pull && pull[1] >= 0 ? ' is-before' : ''}` : ''}${rowStart ? ' is-row-start' : ''}${held ? ' is-held' : ''}${dropBefore ? ` is-drop-${dropBefore}` : ''}${focused ? ' is-focused' : ''}${dimmed ? ' is-dimmed' : ''}`}
     data-panel={id} data-span={shownSpan} aria-label={label} style={{ '--span': shownSpan, ...pull ? { '--pull-left': Math.max(0, pull[0]), '--pull-right': Math.max(0, pull[1]) } : {}, ...held ? { transform: `translate(${held.dx}px, ${held.dy}px) rotate(-.6deg)` } : {} } as CSSProperties}>
     <header className="nebula-terminal-head nebula-panel-head" onPointerDown={onGrab} onDoubleClick={event => { if (!(event.target as Element).closest('button')) onMinimize(); }}
+      onContextMenu={contextMenu(() => ({ title: label, command: command.replace(/^\.\//, '').replace(/\.sh.*$/, '') || 'window', items: [
+        ...(!minimized && onFocus ? [{ id: 'focus', command: 'focus', label: focused ? t('Fokus beenden') : t('Fokus: Hintergrund abdunkeln'), icon: 'search', checked: focused, run: onFocus } as MenuItem] : []),
+        { id: 'minimize', command: minimized ? 'restore' : 'minimize', label: minimized ? t('Wiederherstellen') : t('Minimieren'), icon: minimized ? 'up' : 'down', run: onMinimize },
+        ...(!upright ? [{ id: 'half', command: 'resize --half', label: t('Halbe Breite'), icon: 'layout', checked: span === columns / 2, run: onHalf } as MenuItem] : []),
+        ...(height ? [{ id: 'height', command: 'resize --auto', label: t('Höhe automatisch'), icon: 'transfer', run: () => onHeight(null) } as MenuItem] : []),
+        ...(onFloat ? [{ id: 'float', command: 'float', label: t('Aus dem Raster lösen'), icon: 'pin', run: onFloat } as MenuItem] : []),
+        ...(onClose ? ['-' as const, { id: 'close', command: 'exit', label: t('Schließen'), icon: 'done', run: onClose } as MenuItem] : []),
+      ] }))}
       title={t('Ziehen zum Umordnen · aus dem Raster ziehen: schweben · Doppelklick: minimieren')}>
       <span className="nebula-prompt" aria-hidden="true">{!upright && <><b>[journal@~]$</b> </>}{command}</span>
       <span className="visually-hidden">{label}</span>
@@ -297,7 +316,7 @@ function Panel({ id, command, label, minimized, span, shownSpan = span, upright 
         {onClose && <button type="button" className="nebula-calendar-close" aria-label={t('{0} schließen', label)} title={t('Schließen')} onClick={onClose}>×</button>}
       </span>
     </header>
-    <div ref={body} className={`nebula-terminal-body nebula-panel-body${height ? ' has-height' : ''}`} hidden={minimized} style={height ? { height } : undefined}>{children}</div>
+    <div ref={body} className={`nebula-terminal-body nebula-panel-body${height ? ' has-height' : ''}`} hidden={minimized} style={height ? { height } : undefined}>{!minimized && children}</div>
     {!minimized && <span className="nebula-panel-resize" aria-hidden="true" title={t('Höhe ziehen · Doppelklick: automatisch')} onPointerDown={resizeHeight} onDoubleClick={() => onHeight(null)} />}
     {!upright && <span className="nebula-panel-width" aria-hidden="true" title={t('Breite ziehen · Doppelklick: ganze Reihe')} onPointerDown={resizeWidth} onDoubleClick={() => onSpan(null)} />}
   </section>;
@@ -608,7 +627,7 @@ export function NebulaDesk({ mode, date, today, modes, modeLabels, dirty, title,
 
     {/* Focus: everything but the focused window lies under a dark veil; a click on it ends the focus. */}
     {focusOpen && <div className="nebula-dim" aria-hidden="true" onPointerDown={() => setFocused([])} />}
-    {/* The calendar and the notebook as windows of their own over the desk; they stay mounted (closed: inert and hidden). */}
+    {/* The calendar and the notebook as windows of their own over the desk; closed window frames keep their geometry, but release their contents. */}
     {!docked('calendar') && <DeskWindow id="calendar" stage={stageRef} sectionRef={calendarRef} open={calendarOpen} front={front === 'calendar'} focused={isFocused('calendar')} dimmed={dimmedNow('calendar')} command="./calendar.sh"
       label={t('Kalender und Navigation')} closeLabel={t('Kalender schließen')} className="nebula-calendar" bodyClass="nebula-calendar-body" disabled={disabled} drag={floatingDrag('calendar')}
       onClose={onCalendarClose} onFront={() => setFront('calendar')} onFocus={() => toggleFocus('calendar')} onDock={() => dockAtEnd('calendar')}>{calendar}</DeskWindow>}

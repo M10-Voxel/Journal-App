@@ -233,10 +233,16 @@ fn sync_one(app: &tauri::AppHandle, mut account: Account) -> Result<()> {
     result
 }
 pub fn start(app: tauri::AppHandle) {
+    if let Err(error) = ml::resume(&app) { eprintln!("Mail recognition upgrade: {error}"); }
+    // Release the inference process promptly, independently of the five-minute mail poll.
+    let cleanup_app = app.clone();
+    std::thread::spawn(move || loop {
+        std::thread::sleep(Duration::from_secs(15));
+        ml::release_idle(&cleanup_app);
+    });
     std::thread::spawn(move || {
         std::thread::sleep(Duration::from_secs(15));
         loop {
-            ml::release_idle(&app);
             let state = app.state::<MailState>();
             if let Ok(_guard) = state.operation.try_lock() {
                 if let Ok(accounts) = state.accounts() { for account in accounts.into_iter().filter(|a| a.enabled) { let _ = sync_one(&app, account); } }

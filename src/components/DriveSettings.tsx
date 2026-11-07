@@ -44,7 +44,7 @@ export function DriveSettings({beforeSync,onBusy}:{beforeSync:()=>Promise<void>;
     try {await action();}catch(e){setMessage(String(e instanceof Error?e.message:e));}
     finally {setBusy(false);onBusy(false);}
   }
-  async function finish(p:Pending,value:Json|undefined) {
+  async function finish(p:Pending,value:Json|undefined,mode:'merge'|'upload'|'download'='merge') {
     if(!value || typeof value!=='object') throw new Error('Ungültiger Abgleich.');
     await flushPeriodData();await flushBoardData();
     const snapshot=upgradeSnapshot(value);
@@ -54,16 +54,20 @@ export function DriveSettings({beforeSync,onBusy}:{beforeSync:()=>Promise<void>;
       if(typeof data!=='string')throw new Error('Ungültiges Pinnwandbild');
       await invoke('board_image_save',{id,data});
     }
-    const data=await encrypt(value,p.key);
-    await invoke('drive_write',{vault:p.vault,id:p.remote.id,etag:p.remote.etag,data});
-    await invoke('drive_apply',{expected:databaseSnapshot(p.local),snapshot:databaseSnapshot(snapshot)});
-    await invoke('mail_drive_apply',{expected:(p.local as Record<string,Json>).mailAccounts,accounts:snapshot.mailAccounts});
+    if(mode!=='download'){
+      const data=await encrypt(value,p.key);
+      await invoke('drive_write',{vault:p.vault,id:p.remote.id,etag:p.remote.etag,data});
+    }
+    if(mode!=='upload'){
+      await invoke('drive_apply',{expected:databaseSnapshot(p.local),snapshot:databaseSnapshot(snapshot)});
+      await invoke('mail_drive_apply',{expected:(p.local as Record<string,Json>).mailAccounts,accounts:snapshot.mailAccounts});
+    }
     if(snapshot.preferences)localStorage.setItem('journal.settings',JSON.stringify(snapshot.preferences));
     localStorage.setItem(`journal.drive.base.${p.vault}`,await encrypt({...snapshot,images:{}},p.key));
     setPending(null);
     location.reload();
   }
-  async function sync() {
+  async function sync(mode:'merge'|'upload'|'download'='merge') {
     const bytes=new Uint8Array(parseDeviceKey(keyText,en));
     setPending(null);await beforeSync();
     const key=await encryptionKey(bytes);
@@ -83,12 +87,13 @@ export function DriveSettings({beforeSync,onBusy}:{beforeSync:()=>Promise<void>;
     const remote=await invoke<Remote>('drive_read',{vault});
     const cloud=remote.data?upgradeSnapshot(await decrypt(remote.data,key)):empty;
     const previous=localStorage.getItem(`journal.drive.base.${vault}`);
-    if(previous && !remote.data) throw new Error('Die bisherige Cloud-Datei fehlt. Zum Schutz vor Datenverlust wurde nichts gelöscht.');
+    if(mode==='download' && !remote.data) throw new Error(en?'No cloud data found.':'Kein Cloud-Stand vorhanden.');
+    if(mode==='merge' && previous && !remote.data) throw new Error('Die bisherige Cloud-Datei fehlt. Zum Schutz vor Datenverlust wurde nichts gelöscht.');
     const base=previous?upgradeSnapshot(await decrypt(previous,key)):empty;
-    const result=mergeThreeWay(base,local,cloud);
+    const result=mode==='merge'?mergeThreeWay(base,local,cloud):{value:mode==='upload'?local:cloud,conflicts:[]};
     const p={local,remote,result,key,vault};
     if(result.conflicts.length){setPending(p);return;}
-    await finish(p,result.value);
+    await finish(p,result.value,mode);
   }
   async function resolve(side:'local'|'remote') {
     if(!pending)return;
@@ -113,7 +118,14 @@ export function DriveSettings({beforeSync,onBusy}:{beforeSync:()=>Promise<void>;
     <p id="drive-key-hint" className="settings-hint" role="status">{keyHint||(en?'Use the same Journal-generated key on all devices, not your Google password.':'Auf allen Geräten denselben von Journal erzeugten Schlüssel verwenden, nicht dein Google-Passwort.')}</p>
     <div className="mail-actions"><button data-drive="generate" className="mail-button" disabled={busy||!!keyText} onClick={()=>setKeyText(encode(crypto.getRandomValues(new Uint8Array(32))))}>{en?'Generate new key':'Neuen Schlüssel erzeugen'}</button><button className="mail-button" disabled={!keyText||busy} onClick={()=>void navigator.clipboard.writeText(keyText).then(()=>setMessage(en?'Key copied.':'Schlüssel kopiert.')).catch(()=>setMessage(en?'Clipboard unavailable.':'Zwischenablage nicht verfügbar.'))}>{en?'Copy key':'Schlüssel kopieren'}</button></div>
     <p className="settings-hint">{en?'Keep this key safe and enter it on every device. It is not stored here. Without it, your encrypted Drive data cannot be recovered.':'Diesen Schlüssel sicher aufbewahren und auf jedem Gerät eingeben. Er wird hier nicht gespeichert. Ohne ihn können die verschlüsselten Drive-Daten nicht wiederhergestellt werden.'}</p>
-    <button data-drive="sync" className="mail-button is-primary" disabled={busy||!connected||!keyText} onClick={()=>void run(sync)}>{busy?(en?'Working …':'Wird verarbeitet …'):(en?'Synchronise now':'Jetzt synchronisieren')}</button>
+    <button data-drive="sync" className="mail-button is-primary" disabled={busy||!connected||!keyText} onClick={()=>void run(()=>sync())}>{busy?(en?'Working …':'Wird verarbeitet …'):(en?'Synchronise now':'Jetzt synchronisieren')}</button>
+    <details className="drive-replace"><summary>{en?'Replace an entire sync state':'Einen Stand komplett ersetzen'}</summary>
+      <p className="settings-hint">{en?'These actions replace data instead of combining it. Use the same account and device key on each device.':'Diese Aktionen ersetzen Daten, statt sie zusammenzuführen. Auf allen Geräten dasselbe Konto und denselben Geräteschlüssel verwenden.'}</p>
+      <div className="mail-actions">
+        <button data-drive="upload-local" className="mail-button" disabled={busy||!connected||!keyText} onClick={()=>{if(window.confirm(en?'Replace all cloud data for this device key with this local journal? Cloud-only entries will be removed.':'Den Cloud-Stand für diesen Geräteschlüssel komplett durch dieses lokale Journal ersetzen? Nur in der Cloud vorhandene Einträge werden entfernt.'))void run(()=>sync('upload'));}}>{en?'Replace cloud with local state':'Cloud durch lokalen Stand ersetzen'}</button>
+        <button data-drive="download-cloud" className="mail-button" disabled={busy||!connected||!keyText} onClick={()=>{if(window.confirm(en?'Replace this device’s journal with the cloud state? A local backup is kept.':'Das Journal auf diesem Gerät komplett durch den Cloud-Stand ersetzen? Der bisherige lokale Stand wird gesichert.'))void run(()=>sync('download'));}}>{en?'Replace local state with cloud':'Lokalen Stand durch Cloud ersetzen'}</button>
+      </div>
+    </details>
     {pending&&<div role="alert"><p>{en?'Conflicting changes were found. Choose which values to keep for the conflicting fields; independent changes are combined.':'Widersprüchliche Änderungen gefunden. Wähle, welche Werte bei den betroffenen Feldern gelten sollen. Unabhängige Änderungen werden zusammengeführt.'}</p>{pending.result.conflicts.map(c=><details key={c.path}><summary>{c.path}</summary><pre>{JSON.stringify({local:c.local,cloud:c.remote},null,2)}</pre></details>)}<div className="mail-actions"><button className="mail-button" disabled={busy} onClick={()=>void run(()=>resolve('local'))}>{en?'Use local values':'Lokale Werte übernehmen'}</button><button className="mail-button" disabled={busy} onClick={()=>void run(()=>resolve('remote'))}>{en?'Use cloud values':'Cloud-Werte übernehmen'}</button></div></div>}
     <p><button className="mail-button" disabled={busy} onClick={()=>void run(async()=>{await beforeSync();await invoke('drive_restore');location.reload();})}>{en?'Restore last local pre-sync state':'Letzten lokalen Stand vor dem Abgleich wiederherstellen'}</button></p>
     {message&&<p role="status" className="mail-error">{message}</p>}

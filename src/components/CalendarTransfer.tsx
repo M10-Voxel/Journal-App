@@ -4,18 +4,17 @@ import { invoke } from '@tauri-apps/api/core';
 import type { CalendarDay, CalendarImport } from '../journal';
 import type { CalendarPreview } from '../ical';
 import { Icon } from './Icon';
+import { useDismissLayer } from './useDismissLayer';
 
 export function CalendarTransfer({ onExport, onImport }: { onExport: () => Promise<CalendarDay[]>; onImport: (entries: CalendarImport[]) => Promise<void> }) {
   useLanguage();
   const [open, setOpen] = useState(false), [busy, setBusy] = useState(false), [message, setMessage] = useState(''), [error, setError] = useState('');
   const [preview, setPreview] = useState<CalendarPreview | null>(null);
   const ref = useRef<HTMLDivElement>(null), trigger = useRef<HTMLButtonElement>(null);
+  useDismissLayer({element:()=>ref.current,ignore:()=>busy,onDismiss:()=>{setOpen(false);setPreview(null);}},open);
   useEffect(() => {
     if (!open) return;
-    const outside = (event: PointerEvent) => { if (!ref.current?.contains(event.target as Node) && !busy) { setOpen(false); setPreview(null); } };
-    window.addEventListener('pointerdown', outside);
     ref.current?.querySelector<HTMLElement>('.cal-transfer-panel button')?.focus();
-    return () => window.removeEventListener('pointerdown', outside);
   }, [open, busy]);
   async function run(action: () => Promise<void>) {
     if (busy) return;

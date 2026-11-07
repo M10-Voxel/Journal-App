@@ -1,0 +1,22 @@
+[
+  {"id":"challenge-delivery-paraphrase","subject":"Gute Nachrichten zu Ihrem Einkauf","text":"Der Zusteller klingelt morgen zwischen 09:45 und 11:15 Uhr an Ihrer Haustür.","expected":[["2026-11-10","09:45","11:15"]]},
+  {"id":"challenge-time-table","subject":"Ihr Paket","text":"Voraussichtliche Zustellung\nMorgen\n12:00–14:00 Uhr","expected":[["2026-11-10","12:00","14:00"]]},
+  {"id":"challenge-contact-details","subject":"Informationen zu Ihrem Auftrag","text":"Unsere Telefonzentrale ist heute von 07:30 bis 19:00 Uhr besetzt. Lieferzeiten sehen Sie im Kundenportal.","expected":[]},
+  {"id":"challenge-help-footer","subject":"Sendungsverfolgung","text":"Sie erreichen die Kundenbetreuung am Dienstag zwischen 8 und 16 Uhr. Ein Zustelltag wurde noch nicht festgelegt.","expected":[]},
+  {"id":"challenge-split-date-clock","subject":"Ihre Lieferung kommt morgen","text":"Ihr persönliches Zustellfenster: 13:30 bis 15:00 Uhr. Bitte sorgen Sie dafür, dass die Klingel funktioniert.","expected":[["2026-11-10","13:30","15:00"]]},
+  {"id":"challenge-explicit-appointment","subject":"Besuchsbestätigung","text":"Gerne bestätige ich unseren Besuch am 18. November um 15:45 Uhr.","expected":[["2026-11-18","15:45",null]]},
+  {"id":"challenge-advisory-call","subject":"Beratung zu Ihrer Anfrage","text":"Für Sie ist morgen zwischen 10 und 11 Uhr ein Telefontermin gebucht.","expected":[["2026-11-10","10:00","11:00"]]},
+  {"id":"challenge-bare-today","subject":"Paketankündigung","text":"Heute zwischen 18 und 20 Uhr","expected":[["2026-11-09","18:00","20:00"]]},
+  {"id":"challenge-price-next-to-meeting","subject":"Unser Treffen","text":"Wir treffen uns morgen um 18 Uhr. Das Essen kostet ungefähr 20 bis 30 Euro.","expected":[["2026-11-10","18:00",null]]},
+  {"id":"challenge-newsletter","subject":"Dein Paket ist das beste Geschenk","text":"Morgen zwischen 10 und 16 Uhr bekommst du kostenlosen Versand im Shop. Bestelle jetzt dein Wunschpaket!","expected":[]},
+  {"id":"challenge-historical-timestamp","subject":"Paketstatus","text":"Gestern zwischen 9 und 10 Uhr haben wir Ihr Paket an der Haustür übergeben. Danke für Ihren Einkauf.","expected":[]},
+  {"id":"challenge-timeout-date","subject":"Ihr Kundenkonto","text":"Die letzte Anmeldung war heute um 08:10 Uhr. Falls Sie das nicht waren, ändern Sie bitte Ihr Passwort.","expected":[]},
+  {"id":"challenge-response-business-days","subject":"Versanddetails","text":"Für die Beantwortung Ihres Tickets benötigen wir 2 bis 3 Werktage. Das ist keine Aussage zum Liefertermin.","expected":[]},
+  {"id":"challenge-refund-business-days","subject":"Ihre Bestellung","text":"Für Retouren rechnen Sie bitte mit 1 bis 2 Werktagen. Die Ware wurde bereits zurückgesandt.","expected":[]},
+  {"id":"challenge-English-opening","subject":"Your order has shipped","text":"Our customer helpline is open tomorrow between 8:30 am and 5 pm for questions about your shipment.","expected":[]},
+  {"id":"challenge-English-noon","subject":"Your delivery is confirmed","text":"Your parcel will reach you tomorrow between 11 am and 1 pm.","expected":[["2026-11-10","11:00","13:00"]]},
+  {"id":"challenge-negative-new-date","subject":"Update zur Bestellung","text":"Morgen kommt Ihr Paket nicht. Wir kündigen einen neuen Liefertermin gesondert an.","expected":[]},
+  {"id":"challenge-double-header","subject":"Heute ist Ihre Zustellung","text":"Heute stellt der Zusteller Ihre Sendung zwischen 11 und 14 Uhr zu. Der Kundenservice ist heute zwischen 8 und 18 Uhr besetzt.","expected":[["2026-11-09","11:00","14:00"]]},
+  {"id":"challenge-numeric-date","subject":"Ihr Termin","text":"Wir sehen uns am 12.11.2026 um 17:30 Uhr.","expected":[["2026-11-12","17:30",null]]},
+  {"id":"challenge-relative-reference","subject":"Ihr Paket kommt bald","text":"Ihr Paket erreicht Sie heute zwischen 13 und 15 Uhr. Diese Nachricht wurde automatisch erzeugt.","expected":[["2026-11-09","13:00","15:00"]]}
+]

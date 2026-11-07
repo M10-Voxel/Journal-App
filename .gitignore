@@ -12,3 +12,6 @@ graphify-out/
 
 # Temporary verification scripts.
 scripts/*.tmp.mjs
+
+# Private updater signing material (back up separately; never commit).
+.release-keys/

@@ -3,6 +3,7 @@ import type { CSSProperties, ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { PopupHead } from './PopupChrome';
 import { usePopupLook } from '../popupLook';
+import { useDismissLayer } from './useDismissLayer';
 
 /**
  * A small floating panel at an element (tag picker, tag filter, colour picker): below it when there is room, else above,
@@ -19,6 +20,7 @@ export function Popover({ anchor, onClose, className = '', label, children, alig
   const [place, setPlace] = useState<{ left: number; top: number; above: boolean } | null>(null);
   const close = useRef(onClose);
   close.current = onClose;
+  useDismissLayer({element:()=>ref.current,anchor:()=>anchor?.matches('button,input,select,textarea,[role="button"],[role="combobox"]')?anchor:null,ignore:()=>!!document.querySelector('.shortcut-backdrop')&&!anchor?.closest('.shortcut-backdrop'),onDismiss:()=>close.current(false)});
   useLayoutEffect(() => {
     const position = () => {
       const panel = ref.current;
@@ -41,20 +43,16 @@ export function Popover({ anchor, onClose, className = '', label, children, alig
   useLayoutEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
     if (focus) ref.current?.querySelector<HTMLElement>('[data-autofocus], input, button:not(:disabled)')?.focus({ preventScroll: true });
-    const outside = (event: PointerEvent) => {
-      const target = event.target as Node;
-      if (document.querySelector('.shortcut-backdrop') && !anchor?.closest('.shortcut-backdrop')) return;
-      if (!ref.current?.contains(target) && !anchor?.contains(target)) close.current(false);
-    };
-    window.addEventListener('pointerdown', outside, true);
     return () => {
-      window.removeEventListener('pointerdown', outside, true);
       if (ref.current?.contains(document.activeElement) || document.activeElement === document.body) previous?.focus({ preventScroll: true });
     };
   }, []);
   return createPortal(<div ref={ref} className={`popover ${className}${place?.above ? ' is-above' : ''}`} role="dialog" aria-label={label}
     style={{ left: place?.left ?? -9999, top: place?.top ?? 0 } as CSSProperties}
     onPointerDown={event => event.stopPropagation()}
+    onClick={event => event.stopPropagation()}
+    onDoubleClick={event => event.stopPropagation()}
+    onContextMenu={event => event.stopPropagation()}
     onWheel={event => event.stopPropagation()}
     onKeyDown={event => {
       if (event.key === 'Escape' && !event.defaultPrevented) { event.preventDefault(); close.current(true); }

@@ -6,6 +6,7 @@ mod history;
 mod storage;
 mod mail;
 mod ui_language;
+mod vault;
 
 use std::sync::{atomic::{AtomicBool, Ordering}, Mutex};
 use tauri::{menu::{Menu, MenuItem}, tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
@@ -232,13 +233,26 @@ fn main() {
         return;
     }
     tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .on_page_load(|webview, _| {
+            // Disable only WebView2's built-in menus, including those inside sandboxed mail frames.
+            // DOM contextmenu events still reach the app's own menus and editors.
+            #[cfg(windows)]
+            if let Err(error) = webview.with_webview(|platform| unsafe {
+                let result = platform.controller().CoreWebView2()
+                    .and_then(|view| view.Settings())
+                    .and_then(|settings| settings.SetAreDefaultContextMenusEnabled(false));
+                if let Err(error) = result { eprintln!("Could not disable default context menus: {error}"); }
+            }) { eprintln!("Could not configure webview context menus: {error}"); }
+        })
         // Started again, Journal brings back the running one instead of opening the database twice.
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show_main(app)))
         .manage(reminders::popup::Popup::default())
         .manage(mail::ml::MlState::default())
         .setup(|app| {
-            let dir = app.path().app_local_data_dir()?;
-            std::fs::create_dir_all(&dir)?;
+            let vault = vault::Vault::load_or_choose(app.path().app_local_data_dir()?).map_err(std::io::Error::other)?;
+            let dir = vault.path.clone();
+            app.manage(vault);
             let store=Store::open(&dir.join("journal.sqlite3"))?;
             ui_language::initialize(&store);
             app.manage(Mutex::new(store));
@@ -258,8 +272,21 @@ fn main() {
         })
         // The calendars only show the journal; without its window they have nothing to open, so they close with it.
         .on_window_event(|window, event| {
+            #[cfg(windows)]
+            if let tauri::WindowEvent::Focused(active) = event {
+                if let Some(webview) = window.app_handle().get_webview_window(window.label()) {
+                    let active = *active;
+                    let _ = webview.with_webview(move |platform| unsafe {
+                        use windows::core::Interface;
+                        use webview2_com::Microsoft::Web::WebView2::Win32::{ICoreWebView2_19,COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW,COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL};
+                        if let Ok(view) = platform.controller().CoreWebView2().and_then(|view|view.cast::<ICoreWebView2_19>()) {
+                            let _ = view.SetMemoryUsageTargetLevel(if active {COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL}else{COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW});
+                        }
+                    });
+                }
+            }
             if window.label() == "main" && matches!(event, tauri::WindowEvent::Destroyed) { window.app_handle().exit(0); }
         })
-        .invoke_handler(tauri::generate_handler![move_calendar_entry, panel_detach, history::history_step,board::board_list, board::board_patch, board::board_patch_many, board::board_image_save, board::board_image_load, board::board_link_preview, board::board_open_link, board::board_detach, board::board_remove, board::board_folders, board::board_folder_save, board::board_folder_remove,drive::drive_help, drive::drive_validate, drive::drive_restore, drive::drive_status, drive::drive_connect, drive::drive_cancel, drive::drive_disconnect, drive::drive_read, drive::drive_write, drive::drive_snapshot, drive::drive_apply,load_period_data, save_period_data, ui_language::set_ui_language, load_day, load_range, save_day, load_linked, change_linked, edit_linked, load_series, extend_series, load_tags, save_tags, search_entries, snooze_reminder, quit_app, popup_reminders, fit_popup, reminder_action, background_hint, open_window, show_day, export_calendar, import_calendar, read_calendar_file, write_calendar_file, mail::mail_drive_snapshot, mail::mail_drive_validate, mail::mail_drive_apply, mail::mail_accounts, mail::mail_save, mail::mail_cancel, mail::mail_sync, mail::mail_remove, mail::mail_pending, mail::mail_stage, mail::mail_candidates, mail::mail_resolve, mail::mail_enabled, mail::mail_notices, mail::mail_help, mail::ml::mail_ml_status, mail::ml::mail_ml_enabled, mail::ml::mail_ml_install, mail::ml::mail_ml_analyze])
+        .invoke_handler(tauri::generate_handler![vault::vault_status, vault::vault_choose, vault::vault_save_preferences, vault::vault_activate, move_calendar_entry, panel_detach, history::history_step,board::board_list, board::board_patch, board::board_patch_many, board::board_image_save, board::board_image_load, board::board_link_preview, board::board_open_link, board::board_detach, board::board_remove, board::board_folders, board::board_folder_save, board::board_folder_remove,drive::drive_help, drive::drive_validate, drive::drive_restore, drive::drive_status, drive::drive_connect, drive::drive_cancel, drive::drive_disconnect, drive::drive_read, drive::drive_write, drive::drive_snapshot, drive::drive_apply,load_period_data, save_period_data, ui_language::set_ui_language, load_day, load_range, save_day, load_linked, change_linked, edit_linked, load_series, extend_series, load_tags, save_tags, search_entries, snooze_reminder, quit_app, popup_reminders, fit_popup, reminder_action, background_hint, open_window, show_day, export_calendar, import_calendar, read_calendar_file, write_calendar_file, mail::mail_drive_snapshot, mail::mail_drive_validate, mail::mail_drive_apply, mail::mail_accounts, mail::mail_save, mail::mail_cancel, mail::mail_sync, mail::mail_remove, mail::mail_pending, mail::mail_stage, mail::mail_candidates, mail::mail_resolve, mail::mail_enabled, mail::mail_notices, mail::mail_help, mail::ml::mail_ml_status, mail::ml::mail_ml_enabled, mail::ml::mail_ml_install, mail::ml::mail_ml_analyze])
         .run(tauri::generate_context!()).expect("Journal konnte nicht gestartet werden");
 }

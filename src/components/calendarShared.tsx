@@ -32,16 +32,15 @@ import '../calendar.css';
 // Shared by the calendar (in the journal's sidebar or its own window) and the compact month window. They only read the
 // journal: a click shows the day (or the entry) in the journal, which stays the only place where entries are edited.
 
-/** Days with content between `from` and `to`, reloaded whenever the journal saves one of them. Days loaded before stay
- *  (and are replaced as their range loads again), so stepping back to a page shows its entries at once. */
+/** Days with content between `from` and `to`, reloaded whenever the journal saves one of them. Only the current requested range is retained, so browsing does not grow memory indefinitely. */
 export function useCalendarData(from: string, to: string) {
   const [days, setDays] = useState<Map<string, CalendarDay>>(() => new Map());
   const [error, setError] = useState('');
   useEffect(() => {
     let active = true;
     const fetch = () => Promise.all(Array.from({length:Math.ceil((Date.parse(to)-Date.parse(from))/86400000/390)+1},(_,i)=>{const start=shiftDate(from,i*390);return start>to ? Promise.resolve([]) : loadRange(start,shiftDate(start,389)<to?shiftDate(start,389):to);})).then(parts=>parts.flat())
-      .then(list => { if (active) { setDays(previous => {
-        const next = new Map([...previous].filter(([date]) => date < from || date > to));
+      .then(list => { if (active) { setDays(() => {
+        const next = new Map<string, CalendarDay>();
         for (const day of list) next.set(day.date, day);
         return next;
       }); setError(''); } })
@@ -168,6 +167,15 @@ export function CalendarItem({ entry, date, variant = 'line', short = false, sty
     window.addEventListener('keydown',key,true);return()=>window.removeEventListener('keydown',key,true);
   },[details,entry,date,remove,deleting,options]);
   const mail=decodeMailContent(entry.description);
+  const detailTitle=details ? plainText(entry.text) || t("ohne Text") : '';
+  const overview=details ? <div className="cal-details-overview">
+    <div className="cal-details-head"><span className="cal-details-kind"><Icon name={entrySymbol(entry)} /></span><strong>{detailTitle}</strong></div>
+    <div className="cal-details-meta">
+      <span className="cal-details-date"><Icon name="calendar" />{formatShortDate(date)}</span>
+      {entry.time && <span className="cal-details-time"><Icon name="clock" />{formatSpan(entry.time,entry.end)}</span>}
+      {tag && <span className="cal-details-tag"><span className="tag-dot" />{tag.name}</span>}
+    </div>
+  </div> : null;
   const spanning=Boolean(entry.end && Number(entry.end.split(':')[0])>=24);
   const state = entry.done ? ' is-done' : entry.cancelled ? ' is-cancelled' : '';
   return <button type="button" className={`cal-item is-${entry.kind} is-${variant}${short ? ' is-short' : ''}${spanning ? ' is-multiday' : ''}${state}${entry.priority ? ' is-priority' : ''}${tag ? ' has-tag' : ''}${editingId === entry.id ? ' is-editing' : ''}${chosen ? ' is-selected' : ''}${night ? ` is-night-${night}` : ''}`}
@@ -186,16 +194,9 @@ export function CalendarItem({ entry, date, variant = 'line', short = false, sty
     {error && <Popover anchor={noteRef.current} label={t("Fehler")} onClose={()=>setError('')}><p role="alert">{error}</p></Popover>}
     {details && <Popover anchor={noteRef.current} className={`cal-details${mail ? ' has-mail' : ''}`} label={t("Beschreibung")} onClose={() => setDetails(false)}>
       {/* Clicks in here stay here: the entry around it would otherwise open the journal. */}
-      <div onClick={event => event.stopPropagation()} onDoubleClick={event => event.stopPropagation()} onContextMenu={event => event.stopPropagation()} style={tag ? { '--tag': tag.color } as CSSProperties : undefined}>
-        <div className="cal-details-head">
-          <Icon name={entrySymbol(entry)} /><strong>{plainText(entry.text) || t("ohne Text")}</strong>
-        </div>
-        <div className="cal-details-meta">
-          <span>{formatShortDate(date)}{entry.time ? ` · ${formatSpan(entry.time, entry.end)}` : ''}</span>
-          {tag && <span className="cal-details-tag"><span className="tag-dot" />{tag.name}</span>}
-        </div>
-        {mail ? <MailContent mail={mail}/> : <p className="cal-details-text">{entry.description}</p>}
-        <div className="tag-picker-foot"><button type="button" onClick={() => copyCalendarEntry(entry)}><Icon name="copy" />{t("Kopieren")}<kbd>{t("Strg")} C</kbd></button><button type="button" onClick={() => {setDetails(false);if(noteRef.current)edit?.(entry,date,noteRef.current);}}>{t("Bearbeiten")}</button><span>Esc</span><button type="button" onClick={() => { setDetails(false); open(date, entry.id); }}>{t("Im Journal zeigen")}</button></div>
+      <div className="cal-details-body" onClick={event => event.stopPropagation()} onDoubleClick={event => event.stopPropagation()} onContextMenu={event => event.stopPropagation()} style={tag ? { '--tag': tag.color } as CSSProperties : undefined}>
+        {mail ? <MailContent mail={mail} heading={overview} entryTitle={detailTitle}/> : <>{overview}<p className="cal-details-text">{entry.description}</p></>}
+        <div className="tag-picker-foot cal-details-actions"><button type="button" onClick={() => copyCalendarEntry(entry)}><Icon name="copy" />{t("Kopieren")}<kbd>{t("Strg")} C</kbd></button><button type="button" onClick={() => {setDetails(false);if(noteRef.current)edit?.(entry,date,noteRef.current);}}><Icon name="pencil" />{t("Bearbeiten")}</button><span className="cal-details-escape"><kbd>Esc</kbd></span><button type="button" onClick={() => { setDetails(false); open(date, entry.id); }}><Icon name="journal" />{t("Im Journal zeigen")}</button></div>
       </div>
     </Popover>}
     </button>;

@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
 import type { MailContent as Content } from '../mailContent';
 import { useLanguage } from '../i18n';
 import { Icon } from './Icon';
-export function MailContent({mail}:{mail:Content}) {
+export function MailContent({mail,heading,entryTitle}:{mail:Content;heading?:ReactNode;entryTitle?:string}) {
  const en=useLanguage()==='en';const [images,setImages]=useState(false);
  const document=useMemo(()=>{
   const nonce=window.document.querySelector<HTMLElement>('style[nonce],script[nonce]')?.nonce || '';
@@ -16,10 +17,14 @@ export function MailContent({mail}:{mail:Content}) {
   const opening=parsed.documentElement.cloneNode(false) as HTMLElement;
   return `<!doctype html>${opening.outerHTML.slice(0,-7)}<head><meta http-equiv="Content-Security-Policy" content="${policy}"><meta name="referrer" content="no-referrer"><style nonce="${nonce}">body{margin:12px;background:white;color:#222;font:14px/1.5 Arial,sans-serif;overflow-wrap:anywhere}img{max-width:100%;height:auto}table{max-width:100%}</style>${parsed.head.innerHTML}</head>${parsed.body.outerHTML}</html>`;
  },[mail.html,images]);
- // The head is a grid: subject and sender on the left, the remote-content switch fixed at the top right whatever their
- // length. Notes read from attachments (PDF) get a box of their own above the mail, folded to a few lines.
+ const sameSubject=!!heading && mail.subject.trim().replace(/\s+/g,' ')===entryTitle?.trim().replace(/\s+/g,' ');
  return <section className="mail-content"><header className="mail-content-head">
-   <strong className="mail-content-subject">{mail.subject}</strong><small className="mail-content-sender">{mail.sender}</small>
+   <div className="mail-content-overview">{heading}
+     {!!mail.subject.trim() && !sameSubject && <div className={`mail-content-subject-row${heading?' is-secondary':''}`}>
+       {heading && <span className="mail-content-label">{en?'Subject':'Betreff'}</span>}<strong className="mail-content-subject">{mail.subject}</strong>
+     </div>}
+   </div>
+   <div className="mail-content-sender"><Icon name="mail"/><span className="mail-content-label">{en?'From':'Von'}</span><span className="mail-content-sender-value">{mail.sender}</span></div>
    {mail.html && <button type="button" className={`mail-content-remote${images?' is-on':''}`} aria-pressed={images} onClick={()=>setImages(v=>!v)}><Icon name={images?'cancel':'layout'}/><span>{images?(en?'Hide remote content':'Externe Inhalte ausblenden'):(en?'Load images and styles':'Externe Bilder und Styles laden')}</span></button>}
   </header>
   {mail.html && mail.notes && <details className="mail-content-notes" open><summary><Icon name="note"/>{en?'From the attachments':'Aus den Anhängen'}</summary><pre>{mail.notes}</pre></details>}

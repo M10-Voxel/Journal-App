@@ -4,6 +4,8 @@ import { t } from './i18n.ts';
 import type { CalendarImport, Entry } from './journal.ts';
 import { localDate } from './dates.ts';
 import type { MailAnalyzer } from './mailMl.ts';
+import { mailSentences } from './mailSentences.ts';
+import { calendarContextThreshold } from './mailContext.ts';
 
 export interface MailAccount {
   id: string; provider: string; label: string; email: string; protocol: 'imap' | 'pop3' | 'gmail' | 'microsoft';
@@ -72,17 +74,22 @@ function isoParts(value: string): { date: string; time: string | null } | null {
 
 /** Delivery windows count from the sending date, never the date of the sync. */
 export function deliveryWorkdayWindow(subject:string,content:string,sentAt:number,includeSaturday=false):{date:string;time:string|null;end:string|null;evidence:string}|null {
- const text=`${subject}\n${content}`;
+ const text=`${subject}\n\n${content}`;
  const pattern=/\b(\d{1,2})(?:\s*(?:bis|to|[-\u2013\u2014])\s*(\d{1,2}))?\s*(?:werktag(?:e|en|es)?|business\s+days?|working\s+days?)\b/gi;
- for(const match of text.matchAll(pattern)){
-  if(/(?:vor|seit|ago)\s*$/i.test(text.slice(Math.max(0,match.index!-15),match.index!)))continue;
-  const nearby=text.slice(Math.max(0,match.index!-90),match.index!+match[0].length+60);
-  if(!/(liefer|zustell|versand|paket|sendung|delivery|shipping|shipment|arriv|dispatch)/i.test(nearby) || /(retour|widerruf|rückgabe|rueckgabe|erstattung|refund|return policy)/i.test(nearby))continue;
+ for(const sentence of mailSentences(text,subject)){
+  if(sentence.score<calendarContextThreshold)continue;
+  for(const match of sentence.text.matchAll(pattern)){
+  if(/(?:vor|seit|ago)\s*$/i.test(sentence.text.slice(Math.max(0,match.index!-15),match.index!)))continue;
+  // The duration must describe delivery in this sentence, not a support reply in a nearby footer.
+  const delivery=/(liefer|zustell|versand|paket|sendung|delivery|shipping|shipment|arriv|dispatch)/i;
+  const bare=/^\s*\d{1,2}(?:\s*(?:bis|to|[-–—])\s*\d{1,2})?\s*(?:werktag(?:e|en|es)?|business\s+days?|working\s+days?)[.!]?\s*$/i.test(sentence.text);
+  if(!(delivery.test(sentence.text)||bare&&delivery.test(subject)) || /(retour|widerruf|rückgabe|rueckgabe|erstattung|refund|return policy)/i.test(sentence.text))continue;
   const first=Number(match[1]),last=Number(match[2] ?? match[1]);if(first<1 || last<first || last>60)continue;
   const base=new Date(sentAt*1000);if(!Number.isFinite(+base))return null;
   const add=(count:number)=>{let date=localDate(base);while(count>0){date=shiftDate(date,1);const weekday=new Date(`${date}T12:00`).getDay();if(weekday!==0 && (includeSaturday || weekday!==6))count--;}return date;};
   const date=add(first),endDate=add(last),days=Math.round((Date.parse(endDate)-Date.parse(date))/86400000);
   return {date,time:days?'00:00':null,end:days?`${String(days*24+23).padStart(2,'0')}:59`:null,evidence:`${match[0]} · Maildatum ${localDate(base)} · ${includeSaturday?'Mo–Sa':'Mo–Fr'}, ohne Feiertagskalender`};
+  }
  }
  return null;
 }
@@ -103,7 +110,7 @@ export async function recognizeMail({ account, message }: MailPending, today = l
   }
   const event = (text: string, time: string | null, end: string | null): Entry => ({ id: '', kind: 'event', text, time, end: time && end && end > time ? end : null, done: false, cancelled: false, priority: false, reminder: false, plan: null });
   const content = message.text || mailText(message.html);
-  if (/\b(?:abgesagt|storniert|cancelled|canceled)\b/i.test(message.subject) || message.calendars.some(ics => /(?:METHOD:CANCEL|STATUS:CANCELLED)/i.test(ics))) {
+  if ((!analyzer && /\b(?:abgesagt|storniert|cancelled|canceled)\b/i.test(message.subject)) || message.calendars.some(ics => /(?:METHOD:CANCEL|STATUS:CANCELLED)/i.test(ics))) {
     return { candidates, notice: 'Mögliche Absage erkannt. Vorhandenen Termin bitte im Kalender prüfen; es wurde kein neuer Eintrag angelegt.' };
   }
   for (const calendar of message.calendars) {
