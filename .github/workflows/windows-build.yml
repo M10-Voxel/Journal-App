@@ -21,17 +21,18 @@ jobs:
     env:
       CARGO_TERM_COLOR: always
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
         with:
-          node-version: 22
+          node-version: 24
+          check-latest: true
           cache: npm
       - name: Set up Rust
         shell: pwsh
         run: |
           rustup toolchain install stable --profile minimal
           rustup default stable
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6.1.0
         with:
           path: |
             ~/.cargo/registry
@@ -53,7 +54,7 @@ jobs:
           $short = '${{ github.sha }}'.Substring(0, 7)
           "label=$version-$short" >> $env:GITHUB_OUTPUT
       - name: Upload EXE
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: Journal-${{ steps.version.outputs.label }}-windows-exe
           path: src-tauri/target/release/journal-app.exe
@@ -61,7 +62,7 @@ jobs:
           retention-days: 30
           compression-level: 0
       - name: Upload installer
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: Journal-${{ steps.version.outputs.label }}-windows-installer
           path: src-tauri/target/release/bundle/nsis/*_x64-setup.exe
