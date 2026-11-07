@@ -22,7 +22,19 @@ Quelle: `https://github.com/M10-Voxel/Journal-App/releases/latest/download/lates
 
 Tauri prüft sowohl die Signatur der heruntergeladenen Datei als auch die darin authentifizierte Versionsnummer (`requireSignedVersion`). Der öffentliche Schlüssel steht in `src-tauri/tauri.conf.json`. Dokumentation: https://v2.tauri.app/plugin/updater/
 
-## Ein Update bereitstellen
+## Automatische Updates aus Actions
+
+Ein Push auf `WIP` startet den Workflow **Windows builds**. Nach erfolgreichen Tests erzeugt er automatisch eine höhere Versionsnummer, baut und signiert den Windows-Installer und veröffentlicht ein reguläres Release mit EXE, Installer, Signatur und `latest.json`. Auch ein manueller Workflow-Start auf `WIP` veröffentlicht ein Update. Andere Branches und Pull Requests erzeugen ausschließlich Test-Downloads.
+
+Die App verwendet weiterhin dieselbe öffentliche Release-Adresse. Für ein neues Update genügt jetzt ein normaler Code-Push auf `WIP`; Versionsnummern, Signieren und das Anlegen des Releases müssen nicht mehr manuell erledigt werden. Es wird kein GitHub-Zugang in der App benötigt.
+
+Die Versionsnummer wird nur im Build-Verzeichnis des Runners in npm-, Cargo- und Tauri-Dateien gesetzt, nicht zurückcommittet. Sie ist höher als bereits vergebene reguläre Release- und Entwurfsversionen. Eine bewusst erhöhte Basisversion im Quellcode wird berücksichtigt. Abgebrochene Läufe können deshalb Lücken in den Versionsnummern hinterlassen.
+
+Der Build-Job besitzt nur Leserechte am Repository. Der getrennte Veröffentlichungsjob erhält Schreibrechte, prüft erneut die Signatur und bestätigt nach jedem Upload Größe und SHA-256. Erst wenn alle vier Dateien vollständig vorliegen, wird der Release-Entwurf öffentlich zum neuesten Update. Neuere bereits veröffentlichte Versionen werden nicht durch ältere Builds ersetzt. WIP-Läufe werden nacheinander ausgeführt, damit ein Push keine laufende Veröffentlichung unterbricht. Tags erzeugen keine neue Build-Schleife.
+
+Für die Signierung sind im Repository die Actions-Secrets `TAURI_SIGNING_PRIVATE_KEY` und `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` eingerichtet. Der Schlüssel stimmt mit dem öffentlichen Schlüssel der bisherigen App überein. Die Secret-Werte werden nur dem Signierungsschritt vertrauenswürdiger WIP-Läufe übergeben. Sie gehören niemals in Git, Artefakte oder Logs. Der lokale, verschlüsselte Schlüssel bleibt als Sicherung erhalten.
+
+## Ein Update manuell bereitstellen
 
 1. Eine höhere Version in `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` und `package.json` eintragen, zum Beispiel `0.1.1`. Lockfiles ebenfalls aktualisieren. Gleiche oder ältere Versionen werden nicht angeboten.
 2. `npm run release` aus einer Windows-Entwicklungsumgebung mit Rust/MSVC ausführen. Optional: `npm run release -- -NotesFile RELEASE_NOTES.md`.
@@ -46,4 +58,4 @@ Der private Schlüssel muss bei zukünftigen Releases derselbe bleiben, damit be
 
 Der Workflow [Windows builds](../.github/workflows/windows-build.yml) läuft bei Pushes, Pull Requests und manuell über **Actions → Windows builds → Run workflow**. Er prüft Frontend und Backend und baut die EXE sowie den NSIS-Installer mit WebView2-Offlinelaufzeit. Unter **Artifacts** des erfolgreichen Laufs stehen beide Downloads getrennt als ZIP bereit, mit Version und Commit im Namen. Für diese Downloads ist eine GitHub-Anmeldung nötig; die Aufbewahrungszeit beträgt 30 Tage.
 
-Actions benötigt keinen privaten Signierschlüssel. Diese Entwicklungsbuilds veröffentlichen keine App-Updates und ändern `latest.json` nicht. Dauerhaft verfügbare, signierte Updates werden lokal mit `npm run release` gebaut und unter **Releases** veröffentlicht. Damit bleibt der bestehende private Schlüssel auf diesem Rechner.
+Erfolgreiche WIP-Builds werden zusätzlich automatisch als signierte Updates unter **Releases** veröffentlicht. Ihr Installer-Artefakt enthält auch die Signatur und `latest.json`. Builds anderer Branches und Pull Requests erhalten keinen Signierschlüssel und verändern die Updatequelle nicht. Unter **Releases** bleiben veröffentlichte Versionen unabhängig von der Aufbewahrungszeit der Actions-Artefakte abrufbar.

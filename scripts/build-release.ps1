@@ -1,4 +1,4 @@
-param([string]$NotesFile)
+param([string]$NotesFile, [switch]$Ci)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $projectRoot = Split-Path -Parent $PSScriptRoot
@@ -32,7 +32,9 @@ try {
     finally { [Array]::Clear($passwordBytes, 0, $passwordBytes.Length) }
   }
   # Tauri adds the app version to the signature's authenticated trusted comment.
-  & npm.cmd run tauri build -- --config src-tauri/tauri.updater.conf.json
+  $buildArguments = @('run', 'tauri', 'build', '--', '--config', 'src-tauri/tauri.updater.conf.json')
+  if ($Ci) { $buildArguments += '--ci' }
+  & npm.cmd @buildArguments
   if ($LASTEXITCODE -ne 0) { throw "Release-Build fehlgeschlagen ($LASTEXITCODE)." }
   $installers = @(Get-ChildItem -LiteralPath 'src-tauri/target/release/bundle/nsis' -Filter "*_${version}_x64-setup.exe" -File)
   if ($installers.Count -ne 1) { throw 'Kein eindeutiger x64-Installer für diese Version gefunden.' }

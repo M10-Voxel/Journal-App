@@ -5,11 +5,13 @@ import { createHash, createPublicKey, verify } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
-const directory = resolve(process.argv[2] || 'src-tauri/target/release/update');
-const config = JSON.parse(await readFile('src-tauri/tauri.conf.json', 'utf8'));
+export async function verifyUpdate(directory, {configPath = 'src-tauri/tauri.conf.json', expectedVersion} = {}) {
+directory = resolve(directory);
+const config = JSON.parse(await readFile(configPath, 'utf8'));
 const manifest = JSON.parse(await readFile(join(directory, 'latest.json'), 'utf8'));
-assert.equal(manifest.version, config.version, 'The manifest must match the app version.');
+assert.equal(manifest.version, expectedVersion ?? config.version, 'The manifest must match the app version.');
 assert.equal(typeof manifest.notes, 'string', 'Release notes must be plain text.');
 assert(Number.isFinite(Date.parse(manifest.pub_date)), 'A valid publication date is required.');
 const platform = manifest.platforms['windows-x86_64'];
@@ -18,6 +20,7 @@ assert.equal(download.origin, 'https://github.com');
 assert(download.pathname.startsWith(`/M10-Voxel/Journal-App/releases/download/v${manifest.version}/`));
 const file = decodeURIComponent(basename(download.pathname));
 assert.equal(basename(file), file);
+assert.equal(file, `${config.productName}_${manifest.version}_x64-setup.exe`);
 const signature = (await readFile(join(directory, file + '.sig'), 'utf8')).trim();
 assert.equal(platform.signature, signature, 'Manifest and detached signature must match.');
 
@@ -38,4 +41,10 @@ const hash = createHash('blake2b512');
 for await (const chunk of createReadStream(join(directory, file))) hash.update(chunk);
 assert(verify(null, hash.digest(), key, signed.subarray(10)), 'Installer signature verification failed.');
 assert(verify(null, Buffer.concat([signed.subarray(10), Buffer.from(comment)]), key, Buffer.from(lines[3], 'base64')), 'Signed version comment verification failed.');
-console.log(`Verified Journal ${manifest.version}: installer signature, signed version, public key and manifest.`);
+return { directory, manifest, files:[file, file + '.sig', 'latest.json', 'journal-app.exe'] };
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+ const {manifest} = await verifyUpdate(process.argv[2] || 'src-tauri/target/release/update');
+ console.log(`Verified Journal ${manifest.version}: installer signature, signed version, public key and manifest.`);
+}
