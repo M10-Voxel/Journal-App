@@ -62,6 +62,12 @@ pub(crate) fn step(store:&mut Store,redo:bool)->rusqlite::Result<bool>{
   if (if redo{a}else{b}).is_none(){(0,1-rank)}else{(1,rank)}
  });
  tx.execute_batch("UPDATE undo_state SET replaying=1; PRAGMA defer_foreign_keys=ON;")?;
+ // Uniqueness cannot be deferred like foreign keys. Free only changing UIDs before replaying
+ // the group, so swaps and a delete/recreate using the same UID work in either direction.
+ tx.execute("UPDATE entries SET calendar_uid=NULL WHERE calendar_uid IS NOT NULL
+  AND id IN (SELECT k FROM undo_rows WHERE g=?1 AND t='entries' AND b IS NOT a)
+  AND calendar_uid IS NOT (SELECT json_extract(CASE WHEN ?2 THEN a ELSE b END,'$.calendar_uid')
+    FROM undo_rows WHERE g=?1 AND t='entries' AND k=entries.id)",params![group,redo])?;
  for (table,key,b,a) in &rows {
   let pk=if table=="days"{"date"}else if table=="settings"{"key"}else{"id"};
   let target=if redo{a}else{b};

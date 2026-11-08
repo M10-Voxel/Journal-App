@@ -3,7 +3,6 @@ export interface ActivityRecord { done: boolean; minutes?: number; text?: string
 export interface PeriodDay { rating?: number; items: Record<string, ActivityRecord> }
 /** `calendarTime`: the days' minutes hold only typed time; the timer's time lives in the calendar (see activityCalendar.ts). */
 export interface PeriodData { definitions: ActivityDefinition[]; days: Record<string, PeriodDay>; notes: Record<string, string>; calendarTime?: boolean }
-export const emptyPeriodData = (): PeriodData => ({ definitions: [], days: {}, notes: {} });
 export function moveActivity(definitions: ActivityDefinition[], id: string, target: string) {
   const from = definitions.findIndex(item => item.id === id), to = definitions.findIndex(item => item.id === target);
   if (from < 0 || to < 0) return definitions;

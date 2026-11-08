@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { emit, listen } from '@tauri-apps/api/event';
 import { getAllWindows, getCurrentWindow } from '@tauri-apps/api/window';
-import { flushBoardData } from './BulletinBoard';
+import { flushBoardData } from '../boardCards';
 import { flushPeriodData } from '../periodStore';
 
 /** Drain every window's pending writes before replaying the database transaction. */

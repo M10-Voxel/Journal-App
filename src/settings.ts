@@ -67,9 +67,6 @@ export function applyTheme({ theme, pixel, popupStyle }: Pick<Settings, 'theme' 
   root.dataset.popups = popupStyle === 'b' ? 'b' : 'a';
   if (pixelActive({ theme, pixel })) root.dataset.pixel = ''; else delete root.dataset.pixel;
 }
-/** Whether the pixel look is on in this window. */
-export const pixelOn = () => document.documentElement.dataset.pixel !== undefined;
-
 /**
  * Choosing a style. The journal style brings its paper palette (only when switching to it, and only if none of its own
  * palettes is chosen; the palette stays free to change afterwards). Leaving it with one of its palettes still chosen

@@ -6,26 +6,9 @@ import { useLanguage } from '../i18n';
 import { parseDeviceKey } from '../sync/deviceKey';
 import { upgradeSnapshot, databaseSnapshot } from '../sync/snapshot';
 import { flushPeriodData } from '../periodStore';
-import { flushBoardData } from './BulletinBoard';
-
-const encode = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
-const decode = (s: string) => Uint8Array.from(atob(s),c=>c.charCodeAt(0));
-async function encryptionKey(bytes: Uint8Array<ArrayBuffer>) {
-  return crypto.subtle.importKey('raw',bytes,'AES-GCM',false,['encrypt','decrypt']);
-}
-async function encrypt(data: Json,key: CryptoKey) {
-  const iv=crypto.getRandomValues(new Uint8Array(12));
-  const cipher=await crypto.subtle.encrypt({name:'AES-GCM',iv},key,new TextEncoder().encode(JSON.stringify(data)));
-  // Avoid spreading a large ciphertext into a function's argument list.
-  let binary='';for(const b of new Uint8Array(cipher)) binary+=String.fromCharCode(b);
-  return JSON.stringify({version:1,iv:encode(iv),cipher:btoa(binary)});
-}
-async function decrypt(data: string,key: CryptoKey): Promise<Json> {
-  const envelope=JSON.parse(data);
-  if(envelope.version!==1 || typeof envelope.iv!=='string' || typeof envelope.cipher!=='string') throw new Error('Unbekanntes Cloud-Format.');
-  try {return JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({name:'AES-GCM',iv:decode(envelope.iv)},key,decode(envelope.cipher))));}
-  catch {throw new Error('Cloud-Daten konnten nicht entschlüsselt werden. Geräteschlüssel prüfen.');}
-}
+import { flushBoardData } from '../boardCards';
+import { encodeBase64 as encode } from '../base64';
+import { decrypt, encrypt, encryptionKey } from '../sync/crypto';
 const empty:Json={schema:13,tables:{days:{},entries:{},tags:{},series:{}},settings:{},images:{},mailAccounts:{}};
 type Remote={id:string|null;etag:string|null;data:string|null};
 type Pending={local:Json;remote:Remote;result:MergeResult;key:CryptoKey;vault:string};

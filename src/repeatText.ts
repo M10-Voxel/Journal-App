@@ -4,7 +4,7 @@
 import { shiftDate } from './dates.ts';
 import { getLanguage, t } from './i18n.ts';
 import type { Language } from './i18n.ts';
-import { cleanRule, daysBetween, easter, weekdayIndex, weekdayOf } from './repeat.ts';
+import { cleanRule, easter, weekdayIndex, weekdayOf } from './repeat.ts';
 import type { RepeatOn, RepeatRule, RepeatUnit } from './repeat.ts';
 
 export interface ParsedRepeat {
@@ -271,9 +271,6 @@ function positionFrom(from: string, nth: number, weekday: number, month?: number
     && (nth === -1 ? Number(date.slice(8)) + 7 > daysIn(Number(date.slice(0, 4)), Number(date.slice(5, 7))) : weekdayIndex(date) === nth);
   return firstFrom(from, fits, month === undefined ? 400 : 3 * 366) ?? from;
 }
-// Kept for callers that want to know how far a written start moved.
-export const movedBy = (rule: RepeatRule, from: string) => daysBetween(from, rule.start);
-
 // Complete in the display language first; the other language is a fallback only.
 const german = ['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag', 'Sonntag', 'montags', 'dienstags', 'mittwochs', 'donnerstags', 'freitags', 'samstags', 'sonntags',
   'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember',

@@ -27,30 +27,32 @@ import { beginCalendarDrag } from '../calendarDrag';
 import { calendarSelection, chosenElements, registerCalendarItem, rememberMoved, unregisterCalendarItem, useCalendarSelected } from '../calendarSelection';
 import { minutesOf } from '../calendar';
 import { timeOfMinutes } from '../planning';
+import { createRefreshQueue } from '../refreshQueue';
 import '../calendar.css';
 
 // Shared by the calendar (in the journal's sidebar or its own window) and the compact month window. They only read the
 // journal: a click shows the day (or the entry) in the journal, which stays the only place where entries are edited.
 
 /** Days with content between `from` and `to`, reloaded whenever the journal saves one of them. Only the current requested range is retained, so browsing does not grow memory indefinitely. */
-export function useCalendarData(from: string, to: string) {
+export function useCalendarData(from: string, to: string, enabled = true) {
   const [days, setDays] = useState<Map<string, CalendarDay>>(() => new Map());
   const [error, setError] = useState('');
+  const [resolved, setResolved] = useState('');
+  const range = `${from}:${to}`;
   useEffect(() => {
-    let active = true;
-    const fetch = () => Promise.all(Array.from({length:Math.ceil((Date.parse(to)-Date.parse(from))/86400000/390)+1},(_,i)=>{const start=shiftDate(from,i*390);return start>to ? Promise.resolve([]) : loadRange(start,shiftDate(start,389)<to?shiftDate(start,389):to);})).then(parts=>parts.flat())
-      .then(list => { if (active) { setDays(() => {
+    if (!enabled) { setDays(current => current.size ? new Map() : current); setError(''); setResolved(''); return; }
+    const refresh = createRefreshQueue(() => Promise.all(Array.from({length:Math.ceil((Date.parse(to)-Date.parse(from))/86400000/390)+1},(_,i)=>{const start=shiftDate(from,i*390);return start>to ? Promise.resolve([]) : loadRange(start,shiftDate(start,389)<to?shiftDate(start,389):to);})).then(parts=>parts.flat()),
+      list => { setDays(() => {
         const next = new Map<string, CalendarDay>();
         for (const day of list) next.set(day.date, day);
         return next;
-      }); setError(''); } })
-      .catch(reason => { if (active) setError(String(reason)); });
-    void fetch();
-    const stop = listen<string[]>('journal:changed', event => { if (event.payload.some(date => date >= from && date <= to)) void fetch(); });
-    const restored = listen('history:restored', () => { void fetch(); });
-    return () => { active = false; void stop.then(unlisten => unlisten()); void restored.then(unlisten => unlisten()); };
-  }, [from, to]);
-  return { days, error };
+      }); setError(''); setResolved(range); }, reason => { setError(String(reason)); setResolved(range); });
+    void refresh.request();
+    const stop = listen<string[]>('journal:changed', event => { if (event.payload.some(date => date >= from && date <= to)) void refresh.request(); });
+    const restored = listen('history:restored', () => { void refresh.request(); });
+    return () => { refresh.dispose(); void stop.then(unlisten => unlisten()); void restored.then(unlisten => unlisten()); };
+  }, [from, to, enabled]);
+  return { days, error, ready: !enabled || resolved === range };
 }
 
 /** The day the journal window shows. A new window asks for it once; afterwards the journal announces every change. */

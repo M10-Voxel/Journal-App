@@ -12,7 +12,6 @@ import type { Card, Paper } from '../boardCards';
 import { folderPath, threadKind, threads } from '../notebook';
 import { resizeBoardView } from '../boardViewport';
 import './bulletinBoard.css';
-export { flushBoardData } from '../boardCards';
 
 // The board under the checklist: notes (small paper slips with Markdown), images (compressed to AVIF, as polaroids)
 // and links (index cards with the page's title and preview) pinned anywhere on a cork surface. Cards are dragged by

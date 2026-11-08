@@ -1,9 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { activityTags, calendarMinutes, entryMinutes, withCalendarMinutes } from '../src/activityCalendar.ts';
+import { activityTags, activityMinutesById, calendarMinutes, entryMinutes, withCalendarMinutes } from '../src/activityCalendar.ts';
 
 const definitions = [{ id:'read', name:'Lesen', color:'#569eff', trackTime:true, textField:false, active:true, calendarTagId:'tag-read' }, { id:'sport', name:'Sport', color:'#76d982', trackTime:true, textField:false, active:true }];
 const entry = (extra) => ({ id:'x', kind:'event', text:'', done:false, cancelled:false, priority:false, ...extra });
+
+test('native tag totals map identically to calendar entries, including reused or missing tags',()=>{
+  const definitions=[{id:'reading',calendarTagId:'tag-read'},{id:'old',calendarTagId:'shared'},{id:'new',calendarTagId:'shared'},{id:'reading',calendarTagId:'tag-extra'}];
+  const days=[{date:'2026-11-08',entries:[entry({tag:'tag-read',time:'09:00',end:'10:00'}),entry({tag:'tag-extra',time:'11:00',end:'11:30'}),entry({tag:'shared',time:'23:00',end:'25:00'}),entry({tag:'not-an-activity',time:'13:00',end:'14:00'})]}];
+  const native={'2026-11-08':{'tag-read':60,'tag-extra':30,shared:120,'not-an-activity':60}};
+  assert.deepEqual(activityMinutesById(native,definitions),calendarMinutes(days,definitions));
+  assert.deepEqual(activityMinutesById(native,[]),{});
+});
 
 test('timed entries count with their length; open ends and cancelled tasks do not', () => {
   assert.equal(entryMinutes({ time:'09:15', end:'10:00' }), 45);

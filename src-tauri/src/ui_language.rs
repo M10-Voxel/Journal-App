@@ -10,11 +10,13 @@ pub fn text<'a>(german: &'a str, english: &'a str) -> &'a str { if ENGLISH.load(
 pub fn set_ui_language(app: tauri::AppHandle, language: String) -> Result<(), String> {
     if !matches!(language.as_str(), "de" | "en") { return Err("Unsupported language".into()); }
     app.state::<Mutex<Store>>().lock().map_err(|e|e.to_string())?.set_interface_language(&language).map_err(|e|e.to_string())?;
-    ENGLISH.store(language == "en", Ordering::Relaxed);
+    let english=language=="en";
+    if ENGLISH.load(Ordering::Relaxed)==english { return Ok(()); }
     if let Some(tray) = app.tray_by_id("journal") {
-        let open=MenuItem::with_id(&app,"open",text("Journal öffnen","Open Journal"),true,None::<&str>).map_err(|e|e.to_string())?;
-        let quit=MenuItem::with_id(&app,"quit",text("Beenden","Quit"),true,None::<&str>).map_err(|e|e.to_string())?;
+        let open=MenuItem::with_id(&app,"open",if english {"Open Journal"} else {"Journal öffnen"},true,None::<&str>).map_err(|e|e.to_string())?;
+        let quit=MenuItem::with_id(&app,"quit",if english {"Quit"} else {"Beenden"},true,None::<&str>).map_err(|e|e.to_string())?;
         tray.set_menu(Some(Menu::with_items(&app,&[&open,&quit]).map_err(|e|e.to_string())?)).map_err(|e|e.to_string())?;
     }
+    ENGLISH.store(english, Ordering::Relaxed);
     Ok(())
 }

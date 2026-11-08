@@ -10,6 +10,8 @@ import { useTags } from '../tagStore';
 import { useCards } from '../boardCards';
 import { useCalendarData } from './calendarShared';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
+import { createRefreshQueue } from '../refreshQueue';
 import { useEffect } from 'react';
 import type { Entry } from '../journal';
 import type { ParsedQuery } from '../search';
@@ -46,28 +48,39 @@ type Hit = { date: string; title?: string; entry?: Entry };
 
 /**
  * Entries and day titles come from the store's search over every day (search_entries), asked again a moment after the
- * query changes; until it answers (or where it cannot, as in the UI checks) the days at hand – a year back, three
- * months ahead – stand in. Board and notebook cards are searched here, where they are.
+ * query changes. The calendar fallback is loaded only if native search is unavailable, and released on closing.
+ * Board and notebook cards are searched here, where they are.
  */
-function useSearchItems(parsed: ParsedQuery): SearchItem[] {
+function useSearchItems(parsed: ParsedQuery, active: boolean): { items: SearchItem[]; pending: boolean } {
   const today = localDate();
-  const { days } = useCalendarData(shiftDate(today, -365), shiftDate(today, 90));
   const { cards } = useCards();
   const [stored, setStored] = useState<SearchItem[] | null>(null);
+  const [fallback, setFallback] = useState(false), [completed, setCompleted] = useState('');
   const entryTypes = parsed.types.filter(type => ['task', 'event', 'note', 'calendar', 'title'].includes(type));
   const onlyCards = parsed.types.length > 0 && !entryTypes.length;
+  const hasTerms = Boolean(parsed.rawWords.length || parsed.types.length || parsed.tags.length);
   const key = JSON.stringify([parsed.rawWords, entryTypes, parsed.tags]);
+  const { days, ready } = useCalendarData(shiftDate(today, -365), shiftDate(today, 90), active && hasTerms && !onlyCards && fallback);
   useEffect(() => {
-    if (onlyCards || (!parsed.rawWords.length && !parsed.types.length && !parsed.tags.length)) { setStored(null); return; }
-    let active = true;
+    if (!active || onlyCards || !hasTerms) { setStored(null); setFallback(false); setCompleted(''); return; }
+    let started = false;
+    const refresh = createRefreshQueue(async () => {
+      const hits = await invoke<Hit[]>('search_entries', { words: parsed.rawWords, kinds: entryTypes, tags: parsed.tags, limit: 200 });
+      if (!Array.isArray(hits)) throw new Error('Search unavailable');
+      return hits;
+    }, hits => {
+      setStored(hits.map(hit => hit.entry ? entryItem(hit.date, hit.entry) : titleItem(hit.date, hit.title ?? '')));
+      setFallback(false); setCompleted(key);
+    }, () => { setStored(null); setFallback(true); setCompleted(key); });
     const timer = window.setTimeout(() => {
-      invoke<Hit[]>('search_entries', { words: parsed.rawWords, kinds: entryTypes, tags: parsed.tags, limit: 200 })
-        .then(hits => { if (active) setStored(Array.isArray(hits) ? hits.map(hit => hit.entry ? entryItem(hit.date, hit.entry) : titleItem(hit.date, hit.title ?? '')) : null); })
-        .catch(() => { if (active) setStored(null); });
+      started = true; void refresh.request();
     }, 140);
-    return () => { active = false; window.clearTimeout(timer); };
-  }, [key]);
-  return useMemo(() => {
+    const stop = listen('journal:changed', () => { if (started) void refresh.request(); });
+    const restored = listen('history:restored', () => { if (started) void refresh.request(); });
+    return () => { refresh.dispose(); window.clearTimeout(timer); void stop.then(fn => fn()); void restored.then(fn => fn()); };
+  }, [key, active, onlyCards, hasTerms]);
+  const items = useMemo(() => {
+    if (!active || !hasTerms) return [];
     const items: SearchItem[] = [];
     if (stored) items.push(...stored);
     else for (const day of days.values()) {
@@ -81,7 +94,8 @@ function useSearchItems(parsed: ParsedQuery): SearchItem[] {
       items.push({ key: `card:${card.id}`, type, title: card.title || t('Ohne Titel'), snippet: `${plainText(card.text ?? '')} ${card.url ?? ''}`.trim(), date, tag: null, target: { kind: 'card', id: card.id, date: card.dates?.[0] ?? null, notebook } });
     }
     return items;
-  }, [days, cards, stored]);
+  }, [days, cards, stored, active, hasTerms]);
+  return { items, pending: active && hasTerms && !onlyCards && (completed !== key || (fallback && !ready)) };
 }
 
 function Marked({ text, words }: { text: string; words: string[] }) {
@@ -104,7 +118,7 @@ export function SearchBox({ variant, onOpen, autoFocus = false, onClose }: { var
   const [pick, setPick] = useState(0);
   const input = useRef<HTMLInputElement>(null);
   const parsed = parseQuery(query, cursor, tags);
-  const items = useSearchItems(parsed);
+  const { items, pending } = useSearchItems(parsed, focused);
   // Tags are offered by kind like everywhere else: your own, the checklist's, the mail import's (each kind set apart).
   const activityIds = useActivityTagIds();
   const kindOf = (id?: string) => id ? kindOfTag(id, activityIds) : null;
@@ -185,7 +199,7 @@ export function SearchBox({ variant, onOpen, autoFocus = false, onClose }: { var
       <h4 className="search-section-title">{variant === 'nebula' ? `# ${section.title.toLowerCase()}` : section.title}</h4>
       {section.results.map(result => resultRow(result, flat.indexOf(result)))}
     </section>)}
-    {!suggestions.length && query.trim() && !results.length && <p className="search-empty">{variant === 'nebula' ? t('grep: keine Treffer') : t('Nichts gefunden.')}</p>}
+    {!pending && !suggestions.length && query.trim() && !results.length && <p className="search-empty">{variant === 'nebula' ? t('grep: keine Treffer') : t('Nichts gefunden.')}</p>}
     {variant !== 'nebula' && <div className="search-foot"><span><kbd>↑</kbd><kbd>↓</kbd> {t('wählen')}</span><span><kbd>Enter</kbd> {t('öffnen')}</span><span><kbd>@</kbd> {t('Typ')}</span><span><kbd>\</kbd> {t('Tag')}</span></div>}
   </div>;
 

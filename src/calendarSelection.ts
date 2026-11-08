@@ -42,6 +42,3 @@ export const calendarSelection = (): ReadonlyMap<string, Picked> => selected;
 export function useCalendarSelected(id: string): boolean {
   return useSyncExternalStore(subscribe, () => selected.has(id));
 }
-export function useCalendarSelectionSize(): number {
-  return useSyncExternalStore(subscribe, () => selected.size);
-}

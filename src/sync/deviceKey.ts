@@ -1,3 +1,5 @@
+import { decodeBase64, encodeBase64 } from '../base64.ts';
+
 /** Decode the original device key; formatting changes must not change the vault ID. */
 export function parseDeviceKey(text:string,en=false):Uint8Array {
   const invalid=()=>new Error(en
@@ -6,9 +8,9 @@ export function parseDeviceKey(text:string,en=false):Uint8Array {
   const normalized=text.replace(/[\s\u200B-\u200D\uFEFF]/gu,'').replace(/-/g,'+').replace(/_/g,'/');
   if(!/^[A-Za-z0-9+/]{43}=?$/.test(normalized))throw invalid();
   try {
-    const bytes=Uint8Array.from(atob(normalized),c=>c.charCodeAt(0));
+    const bytes=decodeBase64(normalized);
     // Canonical padding bits prevent accepting a mistyped final character.
-    if(bytes.length!==32||btoa(String.fromCharCode(...bytes)).replace(/=+$/,'')!==normalized.replace(/=+$/,''))throw invalid();
+    if(bytes.length!==32||encodeBase64(bytes).replace(/=+$/,'')!==normalized.replace(/=+$/,''))throw invalid();
     return bytes;
   }catch{throw invalid();}
 }

@@ -8,7 +8,6 @@ export interface Schedule { time: string | null; end?: string | null; reminder: 
 type PlanChange = Partial<Pick<Entry, 'time' | 'end' | 'reminder' | 'plan' | 'repeat'>>;
 
 export const canPlan = (entry: Entry) => entry.kind !== 'note' && !entry.plan;
-export const isTrace = (entry: Entry) => Boolean(entry.plan);
 /** Notes have no time, reminder, planning or repetition, so only an entry without them can become one. */
 export const canBeNote = (entry: Entry) => !entry.time && !entry.end && !entry.reminder && !entry.plan && !entry.repeat?.rule;
 

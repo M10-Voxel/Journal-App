@@ -52,3 +52,4 @@ EXE und Installer entstehen unter `src-tauri/target/release/` bzw. `src-tauri/ta
 - [Notizblock](docs/notebook.md) und [Pinnwand](docs/bulletin-board.md)
 - [Kalenderimport](docs/ics-import.md) und [mehrtägige Einträge](docs/multiday-calendar.md)
 - [Journal-Stil](docs/journal-style.md), [Nebula-Stil](docs/nebula-style.md) und [Popup-Stile](docs/popup-styles.md)
+- [Ressourcenverwaltung und Backend-Optimierungen](docs/performance.md)

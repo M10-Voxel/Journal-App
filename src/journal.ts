@@ -54,14 +54,34 @@ export interface Reminder { id: string; date: string; kind: 'task' | 'event' | '
 // Persisted state per date. This window is the only writer, so a cached day stays valid until it is saved here.
 const cache = new Map<string, Promise<Day>>();
 const settled = new Map<string, Day>();
+const cachedTextBytes = new Map<string, number>();
+let totalCachedTextBytes = 0;
 
 const maxCachedDays = 32;
-function cacheDay(date: string, request: Promise<Day>) {
-  cache.delete(date); cache.set(date, request);
-  while (cache.size > maxCachedDays) {
+const maxCachedTextBytes = 16 * 1024 * 1024;
+// A cheap UTF-16 estimate of the dominant text fields, without serializing/copying large mail bodies.
+const dayTextBytes = (day: Day) => 2 * (day.title.length + day.body.length + day.entries.reduce((sum, entry) => sum + entry.text.length + (entry.description?.length ?? 0), 0));
+function forgetDay(date: string) {
+  cache.delete(date); settled.delete(date);
+  totalCachedTextBytes -= cachedTextBytes.get(date) ?? 0;
+  cachedTextBytes.delete(date);
+}
+function trimCache() {
+  // An oversized newest day remains usable in full; only older cached days are evicted.
+  while (cache.size > maxCachedDays || (totalCachedTextBytes > maxCachedTextBytes && cache.size > 1)) {
     const oldest = cache.keys().next().value!;
-    cache.delete(oldest); settled.delete(oldest);
+    forgetDay(oldest);
   }
+}
+function rememberDay(date: string, day: Day) {
+  totalCachedTextBytes -= cachedTextBytes.get(date) ?? 0;
+  const bytes = dayTextBytes(day);
+  cachedTextBytes.set(date, bytes); totalCachedTextBytes += bytes; settled.set(date, day);
+  trimCache();
+}
+function cacheDay(date: string, request: Promise<Day>, value?: Day) {
+  forgetDay(date); cache.set(date, request);
+  if (value) rememberDay(date, value); else trimCache();
 }
 
 function fetchDay(date: string): Promise<Day> {
@@ -69,7 +89,7 @@ function fetchDay(date: string): Promise<Day> {
   if (!request) {
     request = ensureSeries(date).then(() => invoke<Day>('load_day', { date }));
     cacheDay(date, request);
-    request.then(day => { if (cache.get(date) === request) settled.set(date, day); }, () => { if (cache.get(date) === request) cache.delete(date); });
+    request.then(day => { if (cache.get(date) === request) rememberDay(date, day); }, () => { if (cache.get(date) === request) forgetDay(date); });
   }
   cache.delete(date); cache.set(date, request);
   return request;
@@ -79,15 +99,15 @@ export const journal = {
   exportCalendar: () => invoke<CalendarDay[]>('export_calendar'),
   async importCalendar(entries: CalendarImport[]): Promise<string[]> {
     const touched = await invoke<string[]>('import_calendar', { entries });
-    for (const date of touched) { cache.delete(date); settled.delete(date); }
+    for (const date of touched) forgetDay(date);
     return touched;
   },
   load: fetchDay,
-  invalidate() { cache.clear(); settled.clear(); },
+  invalidate() { cache.clear(); settled.clear(); cachedTextBytes.clear(); totalCachedTextBytes = 0; },
   cached: (date: string): Day | undefined => settled.get(date),
   async moveCalendarEntry(id: string, from: string, to: string, time: string | null, end: string | null): Promise<string[]> {
     const touched = await invoke<string[]>('move_calendar_entry', { id, from, to, time, end });
-    for (const date of touched) { cache.delete(date); settled.delete(date); }
+    for (const date of touched) forgetDay(date);
     return touched;
   },
   prefetch(dates: readonly string[]) { for (const date of dates) fetchDay(date).catch(() => {}); },
@@ -98,21 +118,20 @@ export const journal = {
   /** Removes entries or sets task states on other days; their cached state is dropped. */
   async changeLinked(changes: { id: string; action: LinkedAction }[]): Promise<string[]> {
     const touched = await invoke<string[]>('change_linked', { changes });
-    for (const date of touched) { cache.delete(date); settled.delete(date); }
+    for (const date of touched) forgetDay(date);
     return touched;
   },
   /** Gives chosen entries of a group on other days the kind, text, details and (when moved) times of an edited one. */
   async editLinked(ids: string[], edit: LinkedEdit): Promise<string[]> {
     const touched = await invoke<string[]>('edit_linked', { ids, edit });
-    for (const date of touched) { cache.delete(date); settled.delete(date); }
+    for (const date of touched) forgetDay(date);
     return touched;
   },
   async save(day: Day): Promise<Day> {
     const saved = await invoke<Day>('save_day', { day });
-    cacheDay(saved.date, Promise.resolve(saved));
-    settled.set(saved.date, saved);
+    cacheDay(saved.date, Promise.resolve(saved), saved);
     // Planned entries are created and edits passed on to linked entries on other days, so their cached state is outdated.
-    for (const date of saved.touched ?? []) if (date !== saved.date) { cache.delete(date); settled.delete(date); }
+    for (const date of saved.touched ?? []) if (date !== saved.date) forgetDay(date);
     return saved;
   },
 };
@@ -127,6 +146,9 @@ export type LinkedAction = 'remove' | 'done' | 'cancelled' | 'open';
 
 /** The calendar windows only read; they hear about saves through the `journal:changed` event. */
 export const loadRange = (from: string, to: string) => ensureSeries(to).then(() => invoke<CalendarDay[]>('load_range', { from, to }));
+export type ActivityMinutesByTag = Record<string, Record<string, number>>;
+/** Use the same recurring-series horizon as the calendar, but return only the needed minute totals. */
+export const loadActivityMinutes = (from: string, to: string, tags: string[]) => ensureSeries(to).then(() => invoke<ActivityMinutesByTag>('load_activity_minutes', { from, to, tags }));
 
 // Series have occurrences up to their horizon. Before a day beyond it is shown, the series are extended to the end of
 // that year (at least to the default horizon, at most ten years ahead). Every window does so once per year it reaches;
@@ -144,7 +166,7 @@ function ensureSeries(date: string): Promise<void> {
       .map(item => ({ series: item.series, from: item.horizon, to: wanted, dates: occurrences(item.rule, shiftDate(item.horizon, 1), wanted) }));
     if (!extensions.length) return;
     const touched = await invoke<string[]>('extend_series', { extensions });
-    for (const date of touched) { cache.delete(date); settled.delete(date); }
+    for (const date of touched) forgetDay(date);
   }).catch(() => { ensured = ''; });
   return ensuring;
 }

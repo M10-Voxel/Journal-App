@@ -13,6 +13,16 @@ export function entryMinutes(entry: Pick<Entry, 'time' | 'end' | 'cancelled'>): 
   return Math.max(0, clockMinutes(entry.end) - clockMinutes(entry.time));
 }
 export type CalendarMinutes = Record<string, Record<string, number>>;
+/** Map the native tag-based totals to the activity IDs used by the checklist; shared tags keep last-definition precedence. */
+export function activityMinutesById(minutes: CalendarMinutes, definitions: readonly ActivityDefinition[]): CalendarMinutes {
+  const byTag = new Map(definitions.filter(item => item.calendarTagId).map(item => [item.calendarTagId!, item.id]));
+  const result: CalendarMinutes = {};
+  for (const [date, items] of Object.entries(minutes)) for (const [tag, value] of Object.entries(items)) {
+    const id = byTag.get(tag);
+    if (id && value > 0) { const items = result[date] ??= {}; items[id] = (items[id] ?? 0) + value; }
+  }
+  return result;
+}
 /** Minutes per date and activity ID from the calendar entries tagged with an activity's tag. */
 export function calendarMinutes(days: readonly CalendarDay[], definitions: readonly ActivityDefinition[]): CalendarMinutes {
   const byTag = new Map(definitions.filter(item => item.calendarTagId).map(item => [item.calendarTagId!, item.id]));

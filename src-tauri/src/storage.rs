@@ -4,6 +4,13 @@ use serde::{Deserialize, Serialize};
 use std::{collections::{BTreeSet, HashMap, HashSet, VecDeque}, error::Error, path::Path};
 use uuid::Uuid;
 
+mod schema;
+mod read;
+#[cfg(test)]
+mod performance_tests;
+
+pub type ActivityMinutes = std::collections::BTreeMap<String, std::collections::BTreeMap<String, i64>>;
+
 fn default_true() -> bool { true }
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
@@ -116,16 +123,7 @@ impl Store {
         tx.commit()?;
         Ok(())
     }
-    pub fn set_interface_language(&self, language: &str) -> Result<()> { self.conn.execute("INSERT INTO settings(key,value) VALUES('ui-language',?1) ON CONFLICT(key) DO UPDATE SET value=excluded.value",[language])?; Ok(()) }
-    /// Export every task and event, including calendar-only entries, without the UI's range limit.
-    pub fn export_calendar(&self) -> Result<Vec<CalendarDay>> {
-        let mut stmt = self.conn.prepare("SELECT DISTINCT day_date FROM entries WHERE plan IS NULL AND kind <> 'note' ORDER BY day_date")?;
-        let dates = stmt.query_map([], |r| r.get::<_, String>(0))?.collect::<rusqlite::Result<Vec<_>>>()?;
-        dates.into_iter().map(|date| {
-            let day = self.load(&date)?;
-            Ok(CalendarDay { date, has_journal: !day.title.trim().is_empty() || !day.body.trim().is_empty() || day.entries.iter().any(|e|e.show_in_journal), title: day.title, entries: day.entries.into_iter().filter(|e| e.plan.is_none() && e.kind != "note").collect() })
-        }).collect()
-    }
+    pub fn set_interface_language(&self, language: &str) -> Result<()> { self.conn.prepare_cached("INSERT INTO settings(key,value) VALUES('ui-language',?1) ON CONFLICT(key) DO UPDATE SET value=excluded.value WHERE settings.value IS NOT excluded.value")?.execute([language])?; Ok(()) }
     /// An import is atomic. Matching UIDs update the occurrence, even when it moved to another day.
     pub fn import_calendar(&mut self, entries: Vec<CalendarImport>) -> Result<Vec<String>> {
         if entries.len() > 5000 { return Err("Zu viele Kalendereinträge (höchstens 5000 pro Import)".into()); }
@@ -201,173 +199,6 @@ impl Store {
         for date in &touched { tx.execute("UPDATE days SET revision=revision+1 WHERE date=?1", [date])?; }
         tx.commit()?; Ok(touched.into_iter().collect())
     }
-    pub fn open(path: &Path) -> Result<Self> { Self::from_connection(Connection::open(path)?) }
-    fn from_connection(mut conn: Connection) -> Result<Self> {
-        conn.execute_batch("PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;")?;
-        // WAL needs fewer syncs per save than the rollback journal and keeps reads independent of writes.
-        conn.pragma_update_and_check(None, "journal_mode", "WAL", |r| r.get::<_, String>(0))?;
-        let version: i64 = conn.pragma_query_value(None, "user_version", |r| r.get(0))?;
-        if version > 12 { return Err("Die Datenbank wurde mit einer neueren Version erstellt".into()); }
-        if version == 0 {
-            let tx = conn.transaction()?;
-            tx.execute_batch("CREATE TABLE days (date TEXT PRIMARY KEY, title TEXT NOT NULL, body TEXT NOT NULL, revision INTEGER NOT NULL CHECK(revision > 0));
-                CREATE TABLE entries (id TEXT PRIMARY KEY, day_date TEXT NOT NULL REFERENCES days(date) ON DELETE CASCADE, kind TEXT NOT NULL CHECK(kind IN ('task','event','note')), text TEXT NOT NULL, done INTEGER NOT NULL CHECK(done IN (0,1)), position INTEGER NOT NULL, CHECK(kind = 'task' OR done = 0));
-                CREATE INDEX entries_day_order ON entries(day_date, position);
-                PRAGMA user_version = 1;")?;
-            tx.commit()?;
-        }
-        if version < 2 {
-            let tx = conn.transaction()?;
-            tx.execute_batch("ALTER TABLE entries ADD COLUMN cancelled INTEGER NOT NULL DEFAULT 0 CHECK(cancelled IN (0,1) AND (kind = 'task' OR cancelled = 0) AND (done = 0 OR cancelled = 0)); PRAGMA user_version = 2;")?;
-            tx.commit()?;
-        }
-        if version < 3 {
-            let tx = conn.transaction()?;
-            tx.execute_batch("ALTER TABLE entries ADD COLUMN priority INTEGER NOT NULL DEFAULT 0 CHECK(priority IN (0,1)); PRAGMA user_version = 3;")?;
-            tx.commit()?;
-        }
-        if version < 4 {
-            let tx = conn.transaction()?;
-            tx.execute_batch("ALTER TABLE entries ADD COLUMN time TEXT CHECK(time IS NULL OR (kind <> 'note' AND time GLOB '[0-2][0-9]:[0-5][0-9]'));
-                ALTER TABLE entries ADD COLUMN reminder INTEGER NOT NULL DEFAULT 0 CHECK(reminder IN (0,1) AND (kind <> 'note' OR reminder = 0));
-                ALTER TABLE entries ADD COLUMN plan TEXT CHECK(plan IS NULL OR kind <> 'note');
-                PRAGMA user_version = 4;")?;
-            tx.commit()?;
-        }
-        if version < 5 {
-            let tx = conn.transaction()?;
-            tx.execute_batch("ALTER TABLE entries ADD COLUMN end_time TEXT CHECK(end_time IS NULL OR (time IS NOT NULL AND end_time GLOB '[0-2][0-9]:[0-5][0-9]' AND end_time > time));
-                PRAGMA user_version = 5;")?;
-            tx.commit()?;
-        }
-        if version < 6 {
-            let tx = conn.transaction()?;
-            tx.execute_batch("ALTER TABLE entries ADD COLUMN show_in_journal INTEGER NOT NULL DEFAULT 1 CHECK(show_in_journal IN (0,1));
-                ALTER TABLE entries ADD COLUMN calendar_uid TEXT;
-                CREATE UNIQUE INDEX entries_calendar_uid ON entries(calendar_uid) WHERE calendar_uid IS NOT NULL;
-                PRAGMA user_version = 6;")?;
-            tx.commit()?;
-        }
-        if version < 7 {
-            let tx = conn.transaction()?;
-            tx.execute_batch("CREATE TABLE series (id TEXT PRIMARY KEY, rule TEXT NOT NULL, horizon TEXT NOT NULL);
-                ALTER TABLE entries ADD COLUMN series TEXT REFERENCES series(id) ON DELETE SET NULL;
-                CREATE INDEX entries_series ON entries(series, day_date) WHERE series IS NOT NULL;
-                PRAGMA user_version = 7;")?;
-            tx.commit()?;
-        }
-        if version < 8 {
-            let tx = conn.transaction()?;
-            tx.execute_batch("CREATE TABLE reminder_log (id TEXT NOT NULL, due TEXT NOT NULL, snooze TEXT, PRIMARY KEY(id, due));
-                CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-                PRAGMA user_version = 8;")?;
-            tx.commit()?;
-        }
-        if version < 9 {
-            let tx = conn.transaction()?;
-            tx.execute_batch("ALTER TABLE entries ADD COLUMN description TEXT NOT NULL DEFAULT ''; PRAGMA user_version = 9;")?;
-            tx.commit()?;
-        }
-        if version < 10 {
-            // Appointments may end on the next day: an end of 24:00–47:59 lies that many hours after the day's start
-            // ("26:00" is 02:00 the next morning). SQLite changes a CHECK only by building the table anew, so the table is
-            // copied under its own definition with just that rule replaced – whatever columns it has by now.
-            let old: String = conn.query_row("SELECT sql FROM sqlite_master WHERE type='table' AND name='entries'", [], |r| r.get(0))?;
-            let (rule, relaxed) = ("end_time GLOB '[0-2][0-9]:[0-5][0-9]' AND end_time > time", "end_time GLOB '[0-4][0-9]:[0-5][0-9]' AND end_time > time AND end_time < '48:00'");
-            if !old.contains(rule) && !old.contains(relaxed) && !old.contains("length(end_time) BETWEEN 5 AND 7") { return Err("Unerwartetes Datenbankschema (entries)".into()); }
-            let next = old.replacen("CREATE TABLE entries", "CREATE TABLE entries_next", 1).replace(rule, relaxed);
-            let indexes: Vec<String> = conn.prepare("SELECT sql FROM sqlite_master WHERE type='index' AND tbl_name='entries' AND sql IS NOT NULL")?
-                .query_map([], |r| r.get(0))?.collect::<rusqlite::Result<_>>()?;
-            // A table that already has the rule (made new) only needs the version.
-            if old.contains(relaxed) || old.contains("length(end_time) BETWEEN 5 AND 7") { conn.execute_batch("PRAGMA user_version = 10;")?; } else {
-            conn.execute_batch("PRAGMA foreign_keys = OFF;")?;
-            let rebuilt = (|| -> Result<()> {
-                let tx = conn.transaction()?;
-                tx.execute_batch(&next)?;
-                tx.execute_batch("INSERT INTO entries_next SELECT * FROM entries; DROP TABLE entries; ALTER TABLE entries_next RENAME TO entries;")?;
-                for index in &indexes { tx.execute_batch(index)?; }
-                if tx.prepare("PRAGMA foreign_key_check")?.query([])?.next()?.is_some() { return Err("Fremdschlüssel nach dem Umbau verletzt".into()); }
-                tx.execute_batch("PRAGMA user_version = 10;")?;
-                tx.commit()?;
-                Ok(())
-            })();
-            conn.execute_batch("PRAGMA foreign_keys = ON;")?;
-            rebuilt?;
-            }
-        }
-        if version < 11 {
-            // Tags: removing one leaves its entries untagged. (A database set back to an older version keeps what it has.)
-            let tx = conn.transaction()?;
-            let tagged = tx.prepare("SELECT 1 FROM pragma_table_info('entries') WHERE name='tag'")?.exists([])?;
-            tx.execute_batch("CREATE TABLE IF NOT EXISTS tags (id TEXT PRIMARY KEY, name TEXT NOT NULL, color TEXT NOT NULL, position INTEGER NOT NULL);")?;
-            if !tagged { tx.execute_batch("ALTER TABLE entries ADD COLUMN tag TEXT REFERENCES tags(id) ON DELETE SET NULL;")?; }
-            tx.execute_batch("CREATE INDEX IF NOT EXISTS entries_tag ON entries(tag); PRAGMA user_version = 11;")?;
-            tx.commit()?;
-        }
-        // Longer appointments encode their end as hours since the start day's midnight.
-        if version < 12 {
-            let old:String=conn.query_row("SELECT sql FROM sqlite_master WHERE name='entries'",[],|r|r.get(0))?;
-            let relaxed="end_time GLOB '[0-4][0-9]:[0-5][0-9]' AND end_time > time AND end_time < '48:00'";
-            if old.contains(relaxed) {
-                let next=old.replacen("CREATE TABLE entries","CREATE TABLE entries_next",1).replacen("CREATE TABLE \"entries\"","CREATE TABLE entries_next",1).replace(relaxed,"length(end_time) BETWEEN 5 AND 7 AND end_time GLOB '[0-9]*:[0-5][0-9]' AND CAST(substr(end_time,1,instr(end_time,':')-1) AS INTEGER)<=8784 AND (CAST(substr(end_time,1,instr(end_time,':')-1) AS INTEGER)*60+CAST(substr(end_time,-2) AS INTEGER))>(CAST(substr(time,1,2) AS INTEGER)*60+CAST(substr(time,-2) AS INTEGER))");
-                let indexes:Vec<String>=conn.prepare("SELECT sql FROM sqlite_master WHERE type='index' AND tbl_name='entries' AND sql IS NOT NULL")?.query_map([],|r|r.get(0))?.collect::<rusqlite::Result<_>>()?;
-                conn.execute_batch("PRAGMA foreign_keys=OFF;")?;
-                let result=(||->Result<()> {let tx=conn.transaction()?;tx.execute_batch(&next)?;tx.execute_batch("INSERT INTO entries_next SELECT * FROM entries; DROP TABLE entries; ALTER TABLE entries_next RENAME TO entries;")?;for index in indexes{tx.execute_batch(&index)?;}tx.commit()?;Ok(())})();
-                conn.execute_batch("PRAGMA foreign_keys=ON;")?;result?;
-            }
-            conn.execute_batch("PRAGMA user_version=12;")?;
-        }
-        crate::history::install(&conn)?;
-        Ok(Self { conn })
-    }
-    /// The search over every day (see src/search.ts): entries whose text or description holds all `words` (case and
-    /// accents aside, as SQLite's LIKE does for ASCII; the app checks the rest), and day titles. Traces are left out.
-    /// `kinds` are task, event, note and `calendar` (calendar-only entries); `tags` limit to entries with one of them.
-    pub fn search(&self, words: &[String], kinds: &[String], tags: &[String], limit: usize) -> Result<Vec<SearchHit>> {
-        let limit = limit.clamp(1, 500) as i64;
-        let like = |word: &String| format!("%{}%", word.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_"));
-        let mut hits = Vec::new();
-        let want_titles = kinds.is_empty() || kinds.iter().any(|kind| kind == "title");
-        let entry_kinds: Vec<&String> = kinds.iter().filter(|kind| kind.as_str() != "title").collect();
-        if kinds.is_empty() || !entry_kinds.is_empty() {
-            let mut sql = String::from("SELECT day_date, id FROM entries WHERE plan IS NULL");
-            let mut values: Vec<String> = Vec::new();
-            for word in words { sql += " AND (text LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\')"; values.push(like(word)); values.push(like(word)); }
-            if !entry_kinds.is_empty() {
-                let mut parts = Vec::new();
-                for kind in &entry_kinds {
-                    match kind.as_str() {
-                        "calendar" => parts.push("show_in_journal = 0".to_string()),
-                        "task" | "event" | "note" => { parts.push("(kind = ? AND show_in_journal = 1)".to_string()); values.push(kind.to_string()); }
-                        _ => {}
-                    }
-                }
-                if parts.is_empty() { sql += " AND 0"; } else { sql += &format!(" AND ({})", parts.join(" OR ")); }
-            }
-            if !tags.is_empty() { sql += &format!(" AND tag IN ({})", vec!["?"; tags.len()].join(",")); values.extend(tags.iter().cloned()); }
-            sql += " ORDER BY day_date DESC, position LIMIT ?";
-            let mut stmt = self.conn.prepare(&sql)?;
-            let mut params: Vec<&dyn rusqlite::ToSql> = values.iter().map(|value| value as &dyn rusqlite::ToSql).collect();
-            params.push(&limit);
-            let found = stmt.query_map(params.as_slice(), |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?.collect::<rusqlite::Result<Vec<_>>>()?;
-            let mut days: HashMap<String, Day> = HashMap::new();
-            for (date, id) in found {
-                if !days.contains_key(&date) { days.insert(date.clone(), self.load(&date)?); }
-                if let Some(entry) = days[&date].entries.iter().find(|entry| entry.id == id) { hits.push(SearchHit { date: date.clone(), title: None, entry: Some(entry.clone()) }); }
-            }
-        }
-        if want_titles && tags.is_empty() {
-            let mut sql = String::from("SELECT date, title FROM days WHERE title <> ''");
-            let mut values: Vec<String> = Vec::new();
-            for word in words { sql += " AND title LIKE ? ESCAPE '\\'"; values.push(like(word)); }
-            sql += " ORDER BY date DESC LIMIT ?";
-            let mut stmt = self.conn.prepare(&sql)?;
-            let mut params: Vec<&dyn rusqlite::ToSql> = values.iter().map(|value| value as &dyn rusqlite::ToSql).collect();
-            params.push(&limit);
-            for row in stmt.query_map(params.as_slice(), |r| Ok(SearchHit { date: r.get(0)?, title: Some(r.get(1)?), entry: None }))? { hits.push(row?); }
-        }
-        Ok(hits)
-    }
     pub fn tags(&self) -> Result<Vec<Tag>> {
         let mut stmt = self.conn.prepare_cached("SELECT id, name, color FROM tags ORDER BY position")?;
         let tags = stmt.query_map([], |r| Ok(Tag { id: r.get(0)?, name: r.get(1)?, color: r.get(2)? }))?.collect::<rusqlite::Result<Vec<_>>>()?;
@@ -399,42 +230,6 @@ impl Store {
         for date in &touched { tx.execute("UPDATE days SET revision=revision+1 WHERE date=?1", [date])?; }
         tx.commit()?;
         Ok(touched.into_iter().collect())
-    }
-    pub fn load(&self, date: &str) -> Result<Day> {
-        validate_date(date)?;
-        let mut day = self.conn.query_row("SELECT title, body, revision FROM days WHERE date = ?1", [date], |r| Ok(Day { date: date.into(), title: r.get(0)?, body: r.get(1)?, revision: r.get(2)?, entries: vec![], touched: vec![], keep_alone: vec![] })).optional()?.unwrap_or(Day { date: date.into(), title: String::new(), body: String::new(), revision: 0, entries: vec![], touched: vec![], keep_alone: vec![] });
-        let mut stmt = self.conn.prepare_cached("SELECT e.id, e.kind, e.text, e.done, e.cancelled, e.priority, e.time, e.reminder, e.plan, e.end_time, e.show_in_journal, e.calendar_uid, e.series, s.rule, s.horizon, e.description, e.tag
-            FROM entries e LEFT JOIN series s ON s.id = e.series WHERE e.day_date = ?1 ORDER BY e.position")?;
-        let rows = stmt.query_map([date], |r| Ok((Entry { id:r.get(0)?, kind:r.get(1)?, text:r.get(2)?, done:r.get(3)?, cancelled:r.get(4)?, priority:r.get(5)?, time:r.get(6)?, end:r.get(9)?, reminder:r.get(7)?, plan:None, origin:None, show_in_journal:r.get(10)?, calendar_uid:r.get(11)?, description:r.get(15)?, tag:r.get(16)?, repeat:None }, r.get::<_, Option<String>>(8)?, (r.get(12)?, r.get(13)?, r.get(14)?))))?;
-        let mut origins = self.conn.prepare_cached("SELECT json_extract(t.value, '$.id'), e.day_date FROM entries e, json_each(e.plan, '$.targets') t WHERE json_extract(t.value, '$.date') = ?1")?;
-        let origins = origins.query_map([date], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?.collect::<rusqlite::Result<std::collections::HashMap<_, _>>>()?;
-        for row in rows {
-            let (mut entry, plan, series) = row?;
-            entry.plan = plan.map(|plan| serde_json::from_str(&plan)).transpose()?;
-            entry.repeat = repeat_of(series)?;
-            entry.origin = origins.get(&entry.id).cloned();
-            day.entries.push(entry);
-        }
-        Ok(day)
-    }
-    /// Every day from `from` to `to` (inclusive) that has a title or entries, in date order.
-    pub fn load_range(&self, from: &str, to: &str) -> Result<Vec<CalendarDay>> {
-        validate_date(from)?; validate_date(to)?;
-        if from > to || NaiveDate::parse_from_str(to, "%Y-%m-%d")?.signed_duration_since(NaiveDate::parse_from_str(from, "%Y-%m-%d")?).num_days() > 400 { return Err("Ungültiger Zeitraum".into()); }
-        let mut days: Vec<CalendarDay> = Vec::new();
-        let mut titles = self.conn.prepare_cached("SELECT date, title, (trim(title)<>'' OR trim(body)<>'' OR EXISTS(SELECT 1 FROM entries WHERE day_date=date AND show_in_journal=1)) FROM days WHERE date BETWEEN ?1 AND ?2 AND (title <> '' OR trim(body)<>'' OR EXISTS (SELECT 1 FROM entries WHERE day_date = date)) ORDER BY date")?;
-        for row in titles.query_map([from, to], |r| Ok(CalendarDay { date: r.get(0)?, title: r.get(1)?, has_journal: r.get(2)?, entries: vec![] }))? { days.push(row?); }
-        let mut stmt = self.conn.prepare_cached("SELECT e.day_date, e.id, e.kind, e.text, e.done, e.cancelled, e.priority, e.time, e.reminder, e.end_time, e.show_in_journal, e.calendar_uid, e.series, s.rule, s.horizon, e.description, e.tag
-            FROM entries e LEFT JOIN series s ON s.id = e.series WHERE e.day_date BETWEEN ?1 AND ?2 AND e.plan IS NULL ORDER BY e.day_date, e.position")?;
-        let rows = stmt.query_map([from, to], |r| Ok((r.get::<_, String>(0)?, Entry { id:r.get(1)?, kind:r.get(2)?, text:r.get(3)?, done:r.get(4)?, cancelled:r.get(5)?, priority:r.get(6)?, time:r.get(7)?, end:r.get(9)?, reminder:r.get(8)?, plan:None, origin:None, show_in_journal:r.get(10)?, calendar_uid:r.get(11)?, description:r.get(15)?, tag:r.get(16)?, repeat:None }, (r.get(12)?, r.get(13)?, r.get(14)?))))?;
-        let mut index = 0;
-        for row in rows {
-            let (date, mut entry, series) = row?;
-            entry.repeat = repeat_of(series)?;
-            while days[index].date != date { index += 1; }
-            days[index].entries.push(entry);
-        }
-        Ok(days)
     }
     pub fn save(&mut self, mut day: Day) -> Result<Day> {
         validate_date(&day.date)?;
@@ -514,9 +309,19 @@ impl Store {
         }
         day.revision += 1;
         tx.execute("INSERT INTO days(date,title,body,revision) VALUES(?1,?2,?3,?4) ON CONFLICT(date) DO UPDATE SET title=excluded.title, body=excluded.body, revision=excluded.revision", params![day.date, day.title, day.body, day.revision])?;
-        tx.execute("DELETE FROM entries WHERE day_date=?1", [&day.date])?;
+        // Remove only entries actually taken out of this day. json_each avoids SQLite's parameter limit.
+        let kept: Vec<&str> = day.entries.iter().map(|entry| entry.id.as_str()).collect();
+        tx.execute("DELETE FROM entries WHERE day_date=?1 AND id NOT IN (SELECT value FROM json_each(?2))", params![day.date, serde_json::to_string(&kept)?])?;
+        // Release only UIDs that change, before assigning any new ones. This preserves swaps within one save.
         {
-            let mut insert = tx.prepare_cached("INSERT INTO entries(id,day_date,kind,text,done,position,cancelled,priority,time,reminder,plan,end_time,show_in_journal,calendar_uid,series,description,tag) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17)")?;
+            let mut clear = tx.prepare_cached("UPDATE entries SET calendar_uid=NULL WHERE id=?1 AND calendar_uid IS NOT NULL AND calendar_uid IS NOT ?2")?;
+            for entry in &day.entries { clear.execute(params![entry.id, entry.calendar_uid])?; }
+        }
+        {
+            let mut insert = tx.prepare_cached("INSERT INTO entries(id,day_date,kind,text,done,position,cancelled,priority,time,reminder,plan,end_time,show_in_journal,calendar_uid,series,description,tag) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17)
+                ON CONFLICT(id) DO UPDATE SET kind=excluded.kind,text=excluded.text,done=excluded.done,position=excluded.position,cancelled=excluded.cancelled,priority=excluded.priority,time=excluded.time,reminder=excluded.reminder,plan=excluded.plan,end_time=excluded.end_time,show_in_journal=excluded.show_in_journal,calendar_uid=excluded.calendar_uid,series=excluded.series,description=excluded.description,tag=excluded.tag
+                WHERE (entries.kind,entries.text,entries.done,entries.position,entries.cancelled,entries.priority,entries.time,entries.reminder,entries.plan,entries.end_time,entries.show_in_journal,entries.calendar_uid,entries.series,entries.description,entries.tag)
+                  IS NOT (excluded.kind,excluded.text,excluded.done,excluded.position,excluded.cancelled,excluded.priority,excluded.time,excluded.reminder,excluded.plan,excluded.end_time,excluded.show_in_journal,excluded.calendar_uid,excluded.series,excluded.description,excluded.tag)")?;
             for (position, entry) in day.entries.iter().enumerate() {
                 let plan = entry.plan.as_ref().map(serde_json::to_string).transpose()?;
                 insert.execute(params![entry.id,day.date,entry.kind,entry.text,entry.done,position as i64,entry.cancelled,entry.priority,entry.time,entry.reminder,plan,entry.end,entry.show_in_journal,entry.calendar_uid,series[position],entry.description,entry.tag])?;

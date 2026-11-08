@@ -178,32 +178,39 @@ impl Store {
     }
     pub fn sync_apply(&mut self,expected:Value,snapshot:Value) -> Result<()> { self.sync_import(expected,snapshot,true) }
     fn sync_import(&mut self,expected:Value,snapshot:Value,commit:bool) -> Result<()> {
-        if !same_sync_value(&self.sync_snapshot()?,&expected){return Err("Lokale Daten wurden während der Synchronisierung geändert. Erneut versuchen.".into())}
-        if ![json!(11),json!(12)].contains(&snapshot["schema"]) || !snapshot["tables"].is_object(){return Err("Inkompatibler Cloud-Stand".into())}
+        // The Store stays locked for the import: this checked snapshot is also the backup.
         let backup=self.sync_snapshot()?;
+        if !same_sync_value(&backup,&expected){return Err("Lokale Daten wurden während der Synchronisierung geändert. Erneut versuchen.".into())}
+        drop(expected);
+        if ![json!(11),json!(12)].contains(&snapshot["schema"]) || !snapshot["tables"].is_object(){return Err("Inkompatibler Cloud-Stand".into())}
         let revisions:std::collections::HashMap<String,i64>={let mut s=self.conn.prepare("SELECT date,revision FROM days").map_err(|e|e.to_string())?;let rows=s.query_map([],|r|Ok((r.get(0)?,r.get(1)?))).map_err(|e|e.to_string())?;rows.collect::<std::result::Result<_,_>>().map_err(|e|e.to_string())?};
         let tx=self.conn.transaction().map_err(|e|e.to_string())?;crate::history::begin(&tx).map_err(|e|e.to_string())?;
         tx.execute_batch("PRAGMA defer_foreign_keys=ON; DELETE FROM entries; DELETE FROM days; DELETE FROM series; DELETE FROM tags;").map_err(|e|e.to_string())?;
         for (table,key) in TABLES {
             let columns:Vec<String>={let stmt=tx.prepare(&format!("SELECT * FROM {table} LIMIT 0")).map_err(|e|e.to_string())?;stmt.column_names().iter().map(|v|v.to_string()).collect()};
             let records=snapshot["tables"][*table].as_object().ok_or("Tabelle fehlt")?;
+            let sql=format!("INSERT INTO {table} ({}) VALUES ({})",columns.join(","),vec!["?";columns.len()].join(","));
+            let mut insert=tx.prepare(&sql).map_err(|e|e.to_string())?;
+            let revision=if *table=="days" {columns.iter().position(|c|c=="revision")} else {None};
             for (id,record) in records {
                 if *table=="days" {chrono::NaiveDate::parse_from_str(id,"%Y-%m-%d").map_err(|_|"Ungültiges Datum im Cloud-Stand")?;} else {uuid::Uuid::parse_str(id).map_err(|_|"Ungültige ID im Cloud-Stand")?;}
                 if record[*key].as_str()!=Some(id.as_str()) || record.as_object().map(|v|v.len())!=Some(columns.len()){return Err("Ungültiger Cloud-Datensatz".into())}
                 let mut values=Vec::new();for col in &columns {let v=record.get(col).ok_or("Spalte fehlt")?;values.push(match v {Value::Null=>rusqlite::types::Value::Null,Value::String(s)=>rusqlite::types::Value::Text(s.clone()),Value::Number(n)=>rusqlite::types::Value::Integer(n.as_i64().ok_or("Ungültige Zahl")?),_=>return Err("Ungültiger Wert".into())});}
-                if *table=="days" {if let Some(i)=columns.iter().position(|c|c=="revision"){values[i]=rusqlite::types::Value::Integer(revisions.get(id).copied().unwrap_or(0)+1);}}
-                let sql=format!("INSERT INTO {table} ({}) VALUES ({})",columns.join(","),vec!["?";columns.len()].join(","));tx.execute(&sql,rusqlite::params_from_iter(values)).map_err(|e|e.to_string())?;
+                if let Some(i)=revision {values[i]=rusqlite::types::Value::Integer(revisions.get(id).copied().unwrap_or(0)+1);}
+                insert.execute(rusqlite::params_from_iter(values)).map_err(|e|e.to_string())?;
             }
         }
         if snapshot["schema"]==json!(12) {
             let settings=snapshot["settings"].as_object().ok_or("Zusatzdaten fehlen")?;
             tx.execute("DELETE FROM settings WHERE key='period-data' OR key LIKE 'board:card:%' OR key LIKE 'board:folder:%'",[]).map_err(|e|e.to_string())?;
+            let mut insert=tx.prepare("INSERT INTO settings(key,value) VALUES(?1,?2)").map_err(|e|e.to_string())?;
             for (key,value) in settings {
                 if key!="period-data" && !key.starts_with("board:card:") && !key.starts_with("board:folder:"){return Err("Ungültige Sync-Einstellung".into())}
                 if !value.is_object(){return Err("Ungültige Zusatzdaten".into())}
-                tx.execute("INSERT INTO settings(key,value) VALUES(?1,?2)",rusqlite::params![key,value.to_string()]).map_err(|e|e.to_string())?;
+                insert.execute(rusqlite::params![key,value.to_string()]).map_err(|e|e.to_string())?;
             }
         }
+        drop(snapshot);
         tx.execute("INSERT INTO settings(key,value) VALUES('sync-local-backup',?1) ON CONFLICT(key) DO UPDATE SET value=excluded.value",[backup.to_string()]).map_err(|e|e.to_string())?;
         if tx.prepare("PRAGMA foreign_key_check").map_err(|e|e.to_string())?.exists([]).map_err(|e|e.to_string())? {return Err("Der Cloud-Stand enthält ungültige Verknüpfungen. Es wurde nichts übernommen.".into())}
         if commit {tx.commit().map_err(|e|e.to_string())} else {Ok(())}
@@ -352,6 +359,48 @@ mod tests {
         assert_eq!(db.load("2026-11-02").unwrap().entries[0].description,mail);
         assert!(db.period_data().unwrap().contains("rating"));
         drop(db);let _=std::fs::remove_file(p);
+    }
+
+    #[test] fn bulk_import_keeps_validation_backup_rollback_and_history() {
+        use rusqlite::OptionalExtension;
+        let path=std::env::temp_dir().join(format!("journal-drive-bulk-{}.sqlite",uuid::Uuid::new_v4()));
+        let mut db=Store::open(&path).unwrap();
+        for day in 1..=4 {
+            let date=format!("2026-11-{day:02}");
+            db.conn.execute("INSERT INTO days VALUES(?1,'Before','Journal body',7)",[&date]).unwrap();
+            for i in 0..80 {
+                db.conn.execute("INSERT INTO entries(id,day_date,kind,text,done,position,calendar_uid,description) VALUES(?1,?2,'event',?3,0,?4,?5,?6)",rusqlite::params![uuid::Uuid::new_v4().to_string(),date,format!("Event {i}"),i,format!("uid-{day}-{i}"),"Mail HTML 😸 ".repeat(100)]).unwrap();
+            }
+        }
+        let before=db.sync_snapshot().unwrap();let mut next=before.clone();
+        next["tables"]["days"]["2026-11-02"]["title"]=json!("After");
+        for record in next["tables"]["entries"].as_object_mut().unwrap().values_mut() {record["text"]=json!("Changed event");}
+        for i in 0..50 {next["settings"][format!("board:card:{i}")]=json!({"text":format!("Note {i}"),"dates":["2026-11-02"],"notebook":true});}
+        next["settings"]["period-data"]=json!({"days":{"2026-11-02":{"rating":9}}});
+
+        db.sync_import(before.clone(),next.clone(),false).unwrap();
+        assert_eq!(db.sync_snapshot().unwrap(),before);
+        assert_eq!(db.load("2026-11-02").unwrap().revision,7);
+        assert!(db.conn.query_row("SELECT value FROM settings WHERE key='sync-local-backup'",[],|r|r.get::<_,String>(0)).optional().unwrap().is_none());
+
+        let mut invalid=next.clone();
+        invalid["tables"]["entries"].as_object_mut().unwrap().values_mut().last().unwrap().as_object_mut().unwrap().remove("description");
+        assert!(db.sync_apply(before.clone(),invalid).is_err());
+        assert_eq!(db.sync_snapshot().unwrap(),before);
+
+        db.sync_apply(before.clone(),next.clone()).unwrap();
+        assert_eq!(db.sync_snapshot().unwrap(),next);
+        assert_eq!(db.load("2026-11-02").unwrap().revision,8);
+        let backup:String=db.conn.query_row("SELECT value FROM settings WHERE key='sync-local-backup'",[],|r|r.get(0)).unwrap();
+        assert_eq!(serde_json::from_str::<Value>(&backup).unwrap(),before);
+        assert!(db.sync_apply(before.clone(),next.clone()).is_err());
+        assert_eq!(db.sync_snapshot().unwrap(),next);
+
+        assert!(crate::history::step(&mut db,false).unwrap());
+        assert_eq!(db.sync_snapshot().unwrap(),before);
+        assert!(crate::history::step(&mut db,true).unwrap());
+        assert_eq!(db.sync_snapshot().unwrap(),next);
+        drop(db);std::fs::remove_file(path).unwrap();
     }
 }
 

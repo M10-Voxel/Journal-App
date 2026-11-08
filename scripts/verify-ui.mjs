@@ -256,8 +256,39 @@ const bootstrap = `
       }, window.__uiTest.tagSaveDelay));
     }
     if (command === 'load_day') return loadDay(payload.date);
-    if (command === 'load_range') return [...days.values()].filter(day => day.date >= payload.from && day.date <= payload.to)
-      .map(day => ({ date:day.date, title:day.title, entries:structuredClone(day.entries.filter(entry => !entry.plan).map(withRepeat)) })).filter(day => day.title || day.entries.length).sort((a, b) => a.date.localeCompare(b.date));
+    if (command === 'load_activity_minutes') {
+      (window.__uiTest.activityMinuteRequests??=[]).push(payload);
+      const result={},minutes=time=>{const [h,m]=time.split(':').map(Number);return h*60+m;};
+      for(const day of days.values())if(day.date>=payload.from&&day.date<=payload.to)for(const entry of day.entries){
+        if(entry.plan||entry.cancelled||!entry.time||!entry.end||!payload.tags.includes(entry.tag))continue;
+        const count=Math.max(0,minutes(entry.end)-minutes(entry.time));if(!count)continue;
+        const totals=result[day.date]??={};totals[entry.tag]=(totals[entry.tag]??0)+count;
+      }
+      return result;
+    }
+    if (command === 'search_entries') {
+      (window.__uiTest.searchRequests??=[]).push(payload);if(window.__uiTest.failSearch)throw new Error('Synthetic search failure');
+      const words=payload.words.map(w=>w.toLowerCase()),matches=(...texts)=>words.every(word=>texts.some(text=>text.toLowerCase().includes(word)));
+      const hits=[];const limit=Math.max(1,Math.min(500,payload.limit));
+      if(!payload.kinds.length||payload.kinds.some(k=>k!=='title')){
+        for(const day of [...days.values()].sort((a,b)=>b.date.localeCompare(a.date)))for(const entry of day.entries){
+          if(entry.plan||!matches(entry.text,entry.description??''))continue;
+          if(payload.kinds.length&&!payload.kinds.some(k=>k==='calendar'?entry.showInJournal===false:k===entry.kind&&entry.showInJournal!==false))continue;
+          if(payload.tags.length&&!payload.tags.includes(entry.tag))continue;
+          hits.push({date:day.date,entry:withRepeat(structuredClone(entry))});
+        }
+      }
+      const result=hits.slice(0,limit);
+      if((!payload.kinds.length||payload.kinds.includes('title'))&&!payload.tags.length){
+        result.push(...[...days.values()].filter(day=>day.title&&matches(day.title)).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,limit).map(day=>({date:day.date,title:day.title})));
+      }
+      return result;
+    }
+    if (command === 'load_range') {
+      (window.__uiTest.rangeRequests??=[]).push(payload);
+      return [...days.values()].filter(day => day.date >= payload.from && day.date <= payload.to)
+        .map(day => ({ date:day.date, title:day.title, entries:structuredClone(day.entries.filter(entry => !entry.plan).map(withRepeat)) })).filter(day => day.title || day.entries.length).sort((a, b) => a.date.localeCompare(b.date));
+    }
     if (command === 'snooze_reminder' || command === 'fit_popup' || command === 'reminder_action' || command === 'background_hint' || command === 'quit_app') { invoked.push([command, payload]); return null; }
     if (command === 'popup_reminders') return label !== 'reminder' ? [] : [
       { id:'10000000-0000-4000-8000-000000000001', date, kind:'task', text:'Eine Runde durch den **Park** gehen', time:'14:15', end:null, due:date + 'T14:15', late:false, snoozed:false },
@@ -3447,12 +3478,14 @@ try {
 
     console.log('Mail view and calendar zoom passed: Ctrl-wheel scales only hours; HTML styles render in a sandbox without scripts.');
   } else if (process.env.JOURNAL_UI_SCOPE === 'search') {
+    await command('Emulation.setFocusEmulationEnabled',{enabled:true});
     // The search in each design: Ctrl+F, words and filters with suggestions, a result opens where it was made.
     for (const theme of ['classic', 'journal', 'nebula']) {
-      await evaluate(`localStorage.setItem('journal.settings', JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'), theme:'${theme}', popupStyle:'a', colorTheme:'${theme === 'journal' ? 'paper' : 'original'}'}))`);
+      await evaluate(`localStorage.setItem('journal.settings', JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'), theme:'${theme}', popupStyle:'a', colorTheme:'${theme === 'journal' ? 'paper' : 'original'}'}));localStorage.setItem('journal.calendarDrawer','0');localStorage.setItem('journal.notebookDrawer','0')`);
       await command('Page.reload');
       await until("document.querySelectorAll('.entry').length>=5");
       await pause(300);
+      assert.equal(await evaluate("window.__uiTest.searchRequests?.length??0"),0,'An inactive search does not query native search.');
       await key('f', 'KeyF', 2);
       await until("document.activeElement?.classList.contains('search-input')");
       await command('Input.insertText', { text:'@Auf' });
@@ -3462,11 +3495,24 @@ try {
       await until("document.querySelector('.search-input').value.startsWith('@Aufgabe ')");
       await command('Input.insertText', { text:'Park' });
       await until("[...document.querySelectorAll('.search-result')].some(item => item.textContent.includes('Park'))");
+      assert(await evaluate("(window.__uiTest.searchRequests?.length??0)>0"),'Search uses the native projection.');
+      assert(await evaluate("(window.__uiTest.rangeRequests??[]).every(r=>r.from!==window.__uiTest.shift(-365))"),'Healthy search never loads its calendar fallback.');
+      await evaluate("(()=>{const d=window.__uiTest.day();d.entries[0].text='Park – aktualisiert';return window.__uiTest.store(d)})()");
+      await until("[...document.querySelectorAll('.search-result')].some(item=>item.textContent.includes('aktualisiert'))");
       await pause(200); await screenshot(`search-${theme}-results.png`);
       await key('Enter', 'Enter');
       await until("document.activeElement?.closest('.entry')?.textContent.includes('Park') && !document.querySelector('.search-panel')");
     }
-    console.log('Search checks passed.');
+    // Preserve the existing fallback only when native search is unavailable, and release it after closing.
+    await evaluate("window.__uiTest.failSearch=true");await key('f','KeyF',2);
+    await until("document.activeElement?.classList.contains('search-input')");
+    await evaluate("document.querySelector('.search-input').select()");await command('Input.insertText',{text:'Park'});
+    await until("[...document.querySelectorAll('.search-result')].some(item=>item.textContent.includes('Park')) && (window.__uiTest.rangeRequests??[]).some(r=>r.from===window.__uiTest.shift(-365))");
+    await key('Escape');await key('Escape');
+    const beforeFallback=await evaluate("(window.__uiTest.rangeRequests??[]).filter(r=>r.from===window.__uiTest.shift(-365)).length");
+    await evaluate("window.__uiTest.emit('journal:changed',[window.__uiTest.date])");await pause(250);
+    assert.equal(await evaluate("(window.__uiTest.rangeRequests??[]).filter(r=>r.from===window.__uiTest.shift(-365)).length"),beforeFallback,'Closing search stops the large fallback range from refreshing.');
+    assert.deepEqual(errors,[]);console.log('Search checks passed: native queries in all themes, live updates, no idle/year preload, failure fallback and cleanup.');
   } else if (process.env.JOURNAL_UI_SCOPE === 'review') {
     // Screenshots for a look: a multi-day entry in the year view, an entry edited in the hours, the folder pick.
     await evaluate("(() => { const day = window.__uiTest.day(); day.entries.push({ id:'30000000-0000-4000-8000-000000000001', kind:'event', text:'Reise', done:false, cancelled:false, priority:false, time:'09:00', end:'57:00', showInJournal:false }, { id:'30000000-0000-4000-8000-000000000002', kind:'event', text:'Besprechung', done:false, cancelled:false, priority:false, time:'10:00', end:'11:30' }); return window.__uiTest.store(day); })()");
@@ -3938,8 +3984,10 @@ try {
     assert.deepEqual(errors,[]);
     console.log('Trackpad checks passed: successive stationary-pointer gestures, all period tabs, calendar paging and no document movement.');
   } else if (process.env.JOURNAL_UI_SCOPE === 'activity-timer') {
+    await command('Emulation.setFocusEmulationEnabled',{enabled:true});
     await until("Boolean(document.querySelector('.timer-start'))");
     const reading = "document.querySelector('.period-item[data-activity-id=reading]')";
+    await until(`getComputedStyle(${reading}.querySelector('input[type=checkbox]')).opacity==='1'`);
     assert.equal(await evaluate(`getComputedStyle(${reading}.querySelector('input[type=checkbox]')).opacity`),'1');
     // The daily checklist has no reordering (the order is set in the settings) and no saved note.
     assert.equal(await evaluate("document.querySelectorAll('.period-section .activity-reorder, .period-save-status').length"),0);

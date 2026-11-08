@@ -52,10 +52,12 @@ Browser-Mocks prüfen weder echte Anbieteranmeldungen noch eine native Installat
 | Notizblock | `src/components/Notebook.tsx`, `src/notebook.ts` |
 | Mail-Erkennung | `src/mail.ts`, `src/mailMl.ts`, `src/mailContext.ts`, `src-tauri/src/mail/` |
 | Drive und Zusammenführung | `src/components/DriveSettings.tsx`, `src/sync/`, `src-tauri/src/drive.rs` |
-| Datenbank, Vault, Historie | `src-tauri/src/storage.rs`, `vault.rs`, `history.rs` |
+| Datenbank, Vault, Historie | `src-tauri/src/storage.rs` (Modelle/Schreiben), `src-tauri/src/storage/schema.rs` (Öffnen/Migrationen), `src-tauri/src/storage/read.rs` (Lesen/Aktivitätssummen), `vault.rs`, `history.rs` |
 | Darstellung | `src/settings.ts`, `src/colors.ts`, `src/i18n.ts`, Theme-CSS |
 
 Das Frontend spricht über typisierte Tauri-Aufrufe mit dem Rust-Backend. SQLite ist maßgeblich für Inhalte; `localStorage` hält ergänzende UI-/Vergleichszustände. Journal-Schema 12 und Drive-Paketformat 13 sind unterschiedliche Versionsnummern. Inhalte sind keine frei bearbeitbare Sammlung von Markdown-Dateien. Neue inhaltliche SQLite-Schreibwege müssen die [Historie](undo-redo.md) und gegebenenfalls den [Drive-Snapshot](sync-format-12.md) berücksichtigen.
+
+Aktivitätssummen werden über `load_activity_minutes` als kleine Rust/SQLite-Projektion geladen; die Wiederholungshorizonte werden vorher wie beim Kalender erweitert. `src/refreshQueue.ts` bündelt konkurrierende Aktualisierungen pro Ansicht, ohne Daten über Änderungen hinweg zwischenzuspeichern. Messgrenzen, Regressionen und weitere Ansatzpunkte stehen unter [Ressourcenverwaltung](performance.md).
 
 ## Builds, Versionen und Veröffentlichung
 

@@ -9,6 +9,7 @@ import { t } from './i18n';
 import type { Entry } from './journal';
 import { connectPatches, disconnectPatches, primaryPatches, removalIds } from './notebook';
 import type { Card, Folder, Patches } from './notebook';
+import { encodeBase64 } from './base64';
 export type { Card, Folder, Paper } from './notebook';
 
 // What the pinboard and the notebook share: the cards (one store per window, so a board and a notebook open side by side
@@ -185,8 +186,8 @@ function compress(file: File): Promise<ArrayBuffer> {
 /** Compresses an image to AVIF and stores it; the card's fields for it. */
 export async function storeImage(file: File): Promise<Pick<Card, 'title' | 'asset' | 'size'>> {
   if (file.size > 30_000_000) throw new Error(t('Bitte ein Bild unter 30 MB wählen.'));
-  const result = await compress(file); const asset = crypto.randomUUID(); let binary = ''; for (const b of new Uint8Array(result)) binary += String.fromCharCode(b);
-  await invoke('board_image_save', { id: asset, data: btoa(binary) });
+  const result = await compress(file); const asset = crypto.randomUUID();
+  await invoke('board_image_save', { id: asset, data: encodeBase64(new Uint8Array(result)) });
   return { title: file.name.replace(/\.[^.]+$/, ''), asset, size: result.byteLength };
 }
 /** The link as typed, if it is an HTTPS link. */
