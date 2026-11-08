@@ -5,8 +5,9 @@ import type { CSSProperties, ReactNode } from 'react';
 import { dateFormat, t, useLanguage } from '../i18n';
 import { formatShortDate, monthGrid, shiftDate, shiftMonth, weekDates } from '../dates';
 import { formatMonthName } from '../calendar';
-import { mailTagDefinitions } from '../mailTags';
-import { tagOf } from '../tags';
+import { ticketForEntry } from '../nebulaTickets';
+import type { TicketKind } from '../nebulaTickets';
+import type { ActivityDefinition } from '../periodData';
 import { useTags } from '../tagStore';
 import type { Entry } from '../journal';
 import type { PeriodMode } from '../periods';
@@ -56,32 +57,23 @@ function Marquee({ words }: { words: string[] }) {
 const timeOf = (now: Date) => `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
 /** What a ticket is for, which also picks its foil: delivery orange, payment green, appointments lilac, events sky. */
-type TicketKind = 'delivery' | 'payment' | 'appointment' | 'event';
 type Upcoming = { date: string; entry: Entry; tag: string; kind: TicketKind };
-/** The tickets' tags: delivery, payment and appointments (the mail tags, by their fixed ids or their names). */
-const ticketTags = Object.entries(mailTagDefinitions) as [Exclude<TicketKind, 'event'>, (typeof mailTagDefinitions)[keyof typeof mailTagDefinitions]][];
 /**
- * What comes next among the entries with a ticket tag (any kind, with or without a time) and the events (Ereignisse),
+ * Mail categories and visible events, excluding activity time and ordinary calendar-only entries,
  * from today on; open ones only, and today's timed ones only until they are over.
  */
-function useUpcoming(today: string, count: number): Upcoming[] {
+function useUpcoming(today: string, count: number, activities: readonly ActivityDefinition[]): Upcoming[] {
   const now = useNow();
   const tags = useTags();
   const { days } = useCalendarData(today, shiftDate(today, 60));
   const time = timeOf(now);
-  const ticketTag = (id: string | null | undefined): { tag: string; kind: TicketKind } | null => {
-    if (!id) return null;
-    const own = tagOf(tags, id);
-    const fixed = ticketTags.find(([, tag]) => tag.id === id || (own && [tag.de, tag.en].some(name => name.toLowerCase() === own.name.trim().toLowerCase())));
-    return fixed ? { tag: own?.name ?? fixed[1].de, kind: fixed[0] } : null;
-  };
+  const activityTags = new Set(activities.flatMap(item => item.calendarTagId ? [item.calendarTagId] : []));
   const list: Upcoming[] = [];
   for (const [date, day] of days) {
     if (date < today) continue;
     for (const entry of day.entries) {
-      const tagged = ticketTag(entry.tag);
-      const ticket = tagged ?? (entry.kind === 'event' ? { tag: tagOf(tags, entry.tag)?.name ?? t('Ereignis'), kind: 'event' as const } : null);
-      if (!ticket || entry.done || entry.cancelled) continue;
+      const ticket = ticketForEntry(entry, tags, activityTags);
+      if (!ticket) continue;
       if (date === today && entry.time && (entry.end ?? entry.time) < time) continue;
       list.push({ date, entry, ...ticket });
     }
@@ -392,7 +384,7 @@ export function NebulaDesk({ mode, date, today, modes, modeLabels, dirty, title,
   const { data: periodData } = usePeriodData();
   const rating = mode === 'day' ? periodData?.days[date]?.rating : undefined;
   // Up to six tickets in one row, as many as fit (each at least 210 px wide).
-  const upcoming = useUpcoming(today, 6);
+  const upcoming = useUpcoming(today, 6, periodData?.definitions ?? []);
   const ticketRow = useRef<HTMLDivElement>(null);
   const [ticketCount, setTicketCount] = useState(3);
   useEffect(() => {

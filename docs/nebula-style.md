@@ -20,7 +20,7 @@ Die Fensterelemente lassen sich im Zwölf-Spalten-Raster anordnen. Tagesansichte
 
 Poster und kleiner Kalender bilden die ergänzende Übersicht. Der kompakte Kalender kann zwischen Monat und dem Stundenraster eines Tages wechseln; seine Ansicht ist unabhängig vom großen Kalender. Ob das Poster mitscrollt und wie die Spalten angeordnet werden, passt sich der Fensterbreite an.
 
-Tickets zeigen bis zu drei kommende offene Einträge aus den festen Mail-Tags Lieferung/Bezahlung/Termine sowie Ereignisse. Der Ausblick umfasst 60 Tage; Klick führt zum Journaltag. Die Tage und Inhalte sind echte Daten, keine Demo-Platzhalter.
+Tickets zeigen je nach Fensterbreite bis zu sechs kommende offene Einträge aus den Mail-Kategorien Lieferung/Bezahlung/Termine sowie Ereignisse. Gewöhnliche Kalendereinträge und Aktivitätszeiten erscheinen dort nicht. Mail-Kategorien behalten ihre Tickets auch bei ausgeblendeter Journalanzeige. Der Ausblick umfasst 60 Tage; Klick führt zum Journaltag. Die Tage und Inhalte sind echte Daten, keine Demo-Platzhalter.
 
 ## Bedienung und Animationen
 

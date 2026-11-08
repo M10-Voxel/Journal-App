@@ -1549,10 +1549,10 @@ async function checkNebulaTheme() {
   const ticketEntry = (id, text, extra) => `{id:'30000000-0000-4000-8000-00000000000${id}',kind:'event',text:'${text}',done:false,cancelled:false,priority:false,time:null,reminder:false,plan:null,...${JSON.stringify(extra)}}`;
   // Tickets: entries tagged delivery, payment or appointments (the fixed mail tags) and events (Ereignisse); the foil
   // tells which. An untagged task gets none; a click opens the day.
-  await evaluate(`window.__uiTest.store({date:${JSON.stringify(tomorrow)},title:'',body:'',revision:1,entries:[${ticketEntry(1, 'Kino ohne Tag', { kind:'task', time:'18:00' })}]})`);
+  await evaluate(`window.__uiTest.store({date:${JSON.stringify(tomorrow)},title:'',body:'',revision:1,entries:[${ticketEntry(1, 'Aufgabe ohne Tag', { kind:'task', time:'18:00' })},${ticketEntry(5, 'Nur im Kalender', {showInJournal:false,time:'16:00'})},${ticketEntry(6, 'Aktivitätszeit', {showInJournal:false,time:'17:00',end:'17:30'})}]})`);
   await pause(600);
-  assert.equal(await evaluate(`document.querySelectorAll('.nebula-ticket[data-ticket-date="${tomorrow}"]').length`), 0, 'Untagged tasks get no ticket.');
-  await evaluate(`window.__uiTest.store({date:${JSON.stringify(tomorrow)},title:'',body:'',revision:2,entries:[${ticketEntry(1, 'Kino ohne Tag', { time:'18:00' })},${ticketEntry(2, 'Konzert im Park', { time:'19:30', end:'22:00', tag:'f4c8191a-2d70-4b01-9d00-000000000003' })},${ticketEntry(3, 'Paket kommt', { kind:'task', tag:'f4c8191a-2d70-4b01-9d00-000000000001' })},${ticketEntry(4, 'Miete überweisen', { kind:'task', tag:'f4c8191a-2d70-4b01-9d00-000000000002' })}]})`);
+  assert.equal(await evaluate(`document.querySelectorAll('.nebula-ticket[data-ticket-date="${tomorrow}"]').length`), 0, 'Tasks, calendar-only entries and activity time get no ticket.');
+  await evaluate(`window.__uiTest.store({date:${JSON.stringify(tomorrow)},title:'',body:'',revision:2,entries:[${ticketEntry(1, 'Kino ohne Tag', { time:'18:00',showInJournal:true })},${ticketEntry(2, 'Konzert im Park', { time:'19:30', end:'22:00', showInJournal:false,tag:'f4c8191a-2d70-4b01-9d00-000000000003' })},${ticketEntry(3, 'Paket kommt', { kind:'task', showInJournal:false,tag:'f4c8191a-2d70-4b01-9d00-000000000001' })},${ticketEntry(4, 'Miete überweisen', { kind:'task', showInJournal:false,tag:'f4c8191a-2d70-4b01-9d00-000000000002' })}]})`);
   await until(`document.querySelectorAll('.nebula-ticket[data-ticket-date="${tomorrow}"]').length>=2`);
   const ticketKinds = ['delivery', 'payment', 'event', 'appointment'];
   const shownKinds = await evaluate(`[...document.querySelectorAll('.nebula-ticket[data-ticket-date="${tomorrow}"]')].map(t => t.dataset.ticketKind)`);
@@ -2586,7 +2586,31 @@ try {
   await until("document.querySelectorAll('.entry').length === 5");
   await pause(250);
   await evaluate('document.fonts.ready.then(() => true)');
-  if (process.env.JOURNAL_UI_SCOPE === 'startup-notices') {
+  if (process.env.JOURNAL_UI_SCOPE === 'nebula-tickets') {
+    await command('Emulation.setFocusEmulationEnabled',{enabled:true});
+    await command('Emulation.setDeviceMetricsOverride',{width:1800,height:1000,deviceScaleFactor:1,mobile:false});
+    await evaluate("localStorage.setItem('journal.settings',JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'),theme:'nebula'}))");
+    await command('Page.reload');await until("Boolean(document.querySelector('.nebula-desk')) && window.__uiTest.periodData?.definitions.every(d=>d.calendarTagId)");
+    await evaluate(`(()=>{
+      const day=window.__uiTest.shift(1), activity=window.__uiTest.periodData.definitions[0].calendarTagId;
+      const item=(text,extra={})=>({id:crypto.randomUUID(),kind:'event',text,done:false,cancelled:false,priority:false,time:'15:00',end:'16:00',...extra});
+      window.__uiTest.ticketDay=day;
+      return window.__uiTest.store({date:day,title:'',body:'',revision:1,entries:[
+        item('Calendar only',{showInJournal:false}),item('Activity time',{showInJournal:false,tag:activity}),
+        item('Activity in journal',{showInJournal:true,tag:activity}),item('Task',{kind:'task'}),item('Note',{kind:'note'})
+      ]});
+    })()`);
+    await pause(200);
+    assert.equal(await evaluate("document.querySelectorAll('.nebula-ticket[data-ticket-date=\"'+window.__uiTest.ticketDay+'\"]').length"),0,'Ordinary calendar entries, activities, tasks and notes have no tickets.');
+    await evaluate(`(()=>{const day=window.__uiTest.ticketDay, current=window.__uiTest.day(day);const item=(text,extra)=>({id:crypto.randomUUID(),kind:'event',text,done:false,cancelled:false,priority:false,time:null,showInJournal:false,...extra});current.entries.push(
+      item('Event',{showInJournal:true,time:'18:00'}),item('Delivery',{tag:'f4c8191a-2d70-4b01-9d00-000000000001'}),
+      item('Payment',{tag:'f4c8191a-2d70-4b01-9d00-000000000002'}),item('Mail appointment',{tag:'f4c8191a-2d70-4b01-9d00-000000000003'})
+    );current.revision++;return window.__uiTest.store(current)})()`);
+    await until("document.querySelectorAll('.nebula-ticket[data-ticket-date=\"'+window.__uiTest.ticketDay+'\"]').length===4");
+    assert.deepEqual(await evaluate("[...document.querySelectorAll('.nebula-ticket[data-ticket-date=\"'+window.__uiTest.ticketDay+'\"]')].map(e=>e.dataset.ticketKind).sort()"),['appointment','delivery','event','payment']);
+    await screenshot('nebula-ticket-filter.png');assert.deepEqual(errors,[]);
+    console.log('Nebula ticket filter passed: only visible events and all three mail categories; no ordinary calendar entries or activity time.');
+  } else if (process.env.JOURNAL_UI_SCOPE === 'startup-notices') {
     await command('Emulation.setFocusEmulationEnabled',{enabled:true});
     for (const [theme,pixel] of [['classic',false],['classic',true],['journal',false],['journal',true],['nebula',false]]) {
       await evaluate(`sessionStorage.setItem('test.updateAvailable','1');localStorage.setItem('journal.settings',JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'),theme:${JSON.stringify(theme)},pixel:${pixel}}))`);
