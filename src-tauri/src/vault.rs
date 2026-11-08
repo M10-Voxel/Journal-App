@@ -95,9 +95,27 @@ fn initialize(source: &Path, target: &Path, mode: &str) -> Result<()> {
     result
 }
 impl Vault {
-    pub fn load_or_choose(global: PathBuf) -> Result<Self> {
+    pub fn load_or_choose(global: PathBuf) -> Result<Option<Self>> {
+        // Configuration errors are handled by the existing recovery dialog below.
+        if needs_initial_choice(&global).unwrap_or(false) {
+            loop {
+                let answer = rfd::MessageDialog::new().set_title("Willkommen bei Journal · Welcome to Journal")
+                    .set_description("Wo möchtest du deine Journal-Daten speichern? Wähle einen leeren Ordner für einen neuen Vault oder öffne einen vorhandenen.\n\nWhere would you like to store your journal? Choose an empty folder for a new vault, or open an existing one.")
+                    .set_buttons(rfd::MessageButtons::YesNoCancelCustom("Neuer Vault / New vault".into(), "Vault öffnen / Open vault".into(), "Beenden / Quit".into())).show();
+                let mode = match answer {
+                    rfd::MessageDialogResult::Custom(label) if label == "Neuer Vault / New vault" => "empty",
+                    rfd::MessageDialogResult::Custom(label) if label == "Vault öffnen / Open vault" => "open",
+                    _ => return Ok(None),
+                };
+                let Some(path) = rfd::FileDialog::new().set_title(if mode == "empty" { "Leeren Ordner auswählen / Choose an empty folder" } else { "Journal-Vault öffnen / Open journal vault" }).pick_folder() else { continue; };
+                match initialize_first_vault(&global, &path, mode) {
+                    Ok(()) => break,
+                    Err(reason) => { rfd::MessageDialog::new().set_title("Journal-Vault").set_description(reason).set_level(rfd::MessageLevel::Error).show(); }
+                }
+            }
+        }
         match Self::load(global.clone()) {
-            Ok(vault) => Ok(vault),
+            Ok(vault) => Ok(Some(vault)),
             Err(reason) => {
                 // Recovery stays explicit: never silently fall back to a different journal.
                 let answer = rfd::MessageDialog::new().set_title("Journal-Vault nicht erreichbar")
@@ -108,7 +126,7 @@ impl Vault {
                 let path = fs::canonicalize(path).map_err(error)?;
                 validate(&path)?;
                 write_json(&global.join("vault.json"), &Config { active: Some(path), pending: None })?;
-                Self::load(global)
+                Self::load(global).map(Some)
             }
         }
     }
@@ -136,6 +154,20 @@ impl Vault {
         };
         Ok(Status { path: self.path.to_string_lossy().into_owned(), legacy: self.path == self.global, preferences, error: self.error.clone() })
     }
+}
+// Existing installations, including legacy AppData journals, always retain their location.
+// Merely testing for first run neither creates a directory nor opens a SQLite file.
+fn needs_initial_choice(global: &Path) -> Result<bool> {
+    let config = read_config(global)?;
+    Ok(config.active.is_none() && config.pending.is_none() && !global.join(DB).exists()
+        && !global.join("mail.sqlite3").exists() && !global.join("board-images").exists())
+}
+fn initialize_first_vault(global: &Path, selected: &Path, mode: &str) -> Result<()> {
+    let selected = fs::canonicalize(selected).map_err(error)?;
+    if mode != "empty" && mode != "open" { return Err(error("Unbekannter Vault-Modus")); }
+    initialize(global, &selected, mode)?;
+    fs::create_dir_all(global).map_err(error)?;
+    write_json(&global.join("vault.json"), &Config { active: Some(selected), pending: None })
 }
 pub fn directory(app: &tauri::AppHandle) -> PathBuf { app.state::<Vault>().path.clone() }
 #[tauri::command]
@@ -172,6 +204,34 @@ mod tests {
     struct Temp(PathBuf);
     impl Temp { fn new() -> Self { let p = std::env::temp_dir().join(format!("journal-vault-{}", uuid::Uuid::new_v4())); fs::create_dir(&p).unwrap(); Self(p) } }
     impl Drop for Temp { fn drop(&mut self) { let _ = fs::remove_dir_all(&self.0); } }
+    #[test]
+    fn first_run_waits_for_a_choice_without_creating_appdata_databases() {
+        let root = Temp::new(); let global = root.0.join("not-created"); let selected = Temp::new();
+        assert!(needs_initial_choice(&global).unwrap());
+        assert!(!global.exists());
+        initialize_first_vault(&global, &selected.0, "empty").unwrap();
+        assert!(!global.join(DB).exists()); assert!(!global.join("mail.sqlite3").exists());
+        assert!(selected.0.join(DB).is_file());
+        assert_eq!(Vault::load(global.clone()).unwrap().path, fs::canonicalize(&selected.0).unwrap());
+        assert!(!needs_initial_choice(&global).unwrap());
+    }
+    #[test]
+    fn first_run_can_open_existing_vault_and_rejects_invalid_choices_without_saving_pointer() {
+        let global = Temp::new(); let selected = Temp::new();
+        fs::write(selected.0.join("important.txt"), "keep").unwrap();
+        assert!(initialize_first_vault(&global.0, &selected.0, "empty").is_err());
+        assert!(initialize_first_vault(&global.0, &selected.0, "open").is_err());
+        assert!(!global.0.join("vault.json").exists());
+        assert!(needs_initial_choice(&global.0).unwrap());
+        drop(crate::storage::Store::open(&selected.0.join(DB)).unwrap());
+        initialize_first_vault(&global.0, &selected.0, "open").unwrap();
+        assert_eq!(Vault::load(global.0.clone()).unwrap().path, fs::canonicalize(&selected.0).unwrap());
+        assert_eq!(fs::read_to_string(selected.0.join("important.txt")).unwrap(), "keep");
+        let legacy = Temp::new();
+        drop(crate::storage::Store::open(&legacy.0.join(DB)).unwrap());
+        assert!(!needs_initial_choice(&legacy.0).unwrap());
+        assert_eq!(Vault::load(legacy.0.clone()).unwrap().path, legacy.0);
+    }
     #[test]
     fn copies_wal_data_assets_mail_and_local_preferences_without_modifying_source() {
         let source = Temp::new(); let target = Temp::new();

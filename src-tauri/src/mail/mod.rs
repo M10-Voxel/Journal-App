@@ -286,6 +286,24 @@ pub fn mail_enabled(app: tauri::AppHandle, id: String, enabled: bool) -> Result<
     state.db.lock().map_err(err)?.execute("UPDATE accounts SET config=?2 WHERE id=?1", params![id,serde_json::to_string(&account).map_err(err)?]).map_err(err)?;
     let _ = app.emit("mail:changed", ()); Ok(())
 }
+impl MailState {
+    fn set_auto_import(&self, id: &str, enabled: bool) -> Result<()> {
+        let _guard = self.operation.try_lock().map_err(|_| "Bitte den laufenden Mailabruf abwarten")?;
+        // Update just this flag. Preserve credentials and concurrent account/polling state.
+        let changed = self.db.lock().map_err(err)?.execute(
+            "UPDATE accounts SET config=json_set(config,'$.autoImport',json(?2)) WHERE id=?1",
+            params![id, if enabled { "true" } else { "false" }],
+        ).map_err(err)?;
+        if changed == 0 { return Err("Konto nicht gefunden".into()); }
+        Ok(())
+    }
+}
+#[tauri::command]
+pub fn mail_auto_import(app: tauri::AppHandle, id: String, enabled: bool) -> Result<()> {
+    app.state::<MailState>().set_auto_import(&id, enabled)?;
+    let _ = app.emit("mail:changed", ());
+    Ok(())
+}
 #[tauri::command]
 pub fn mail_notices(state: tauri::State<'_, MailState>) -> Result<Vec<String>> {
     let db = state.db.lock().map_err(err)?;
@@ -370,6 +388,25 @@ pub fn mail_resolve(app: tauri::AppHandle, ids: Vec<String>, accepted: bool) -> 
 mod tests {
     use super::*;
     fn account() -> Account { serde_json::from_value(serde_json::json!({"id":uuid::Uuid::new_v4().to_string(),"provider":"custom","label":"Test","email":"test@example.org","protocol":"imap","host":"imap.example.org","port":993,"security":"tls","username":"","enabled":true})).unwrap() }
+    #[test]
+    fn auto_import_defaults_off_and_updates_only_the_chosen_account_without_touching_secrets() {
+        let state = MailState::open(Path::new(":memory:")).unwrap();
+        let first = account(); let second = account();
+        assert!(!first.auto_import);
+        for a in [&first, &second] {
+            state.db.lock().unwrap().execute("INSERT INTO accounts VALUES(?1,?2,?3)", params![a.id,serde_json::to_string(a).unwrap(),b"untouched-secret".to_vec()]).unwrap();
+        }
+        state.set_auto_import(&first.id, true).unwrap();
+        let accounts = state.accounts().unwrap();
+        assert!(accounts.iter().find(|a|a.id == first.id).unwrap().auto_import);
+        assert!(!accounts.iter().find(|a|a.id == second.id).unwrap().auto_import);
+        assert_eq!(sync_accounts(&state).unwrap()[&first.id]["autoImport"], true);
+        let secret: Vec<u8> = state.db.lock().unwrap().query_row("SELECT secret FROM accounts WHERE id=?1", [&first.id], |r|r.get(0)).unwrap();
+        assert_eq!(secret,b"untouched-secret");
+        state.set_auto_import(&first.id, false).unwrap();
+        assert!(!state.accounts().unwrap().iter().find(|a|a.id == first.id).unwrap().auto_import);
+        assert!(state.set_auto_import("missing",true).is_err());
+    }
     #[cfg(windows)]
     #[test] fn drive_accounts_preserve_local_secrets_and_require_new_login() {
         let path=std::env::temp_dir().join(format!("journal-mail-sync-{}.sqlite",uuid::Uuid::new_v4()));

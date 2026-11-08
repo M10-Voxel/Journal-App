@@ -13,6 +13,7 @@ export const mailApi = {
   remove: (id: string) => invoke<void>('mail_remove', { id }),
   cancel: () => invoke<void>('mail_cancel'),
   enabled: (id: string, enabled: boolean) => invoke<void>('mail_enabled', { id, enabled }),
+  autoImport: (id: string, enabled: boolean) => invoke<void>('mail_auto_import', { id, enabled }),
   notices: () => invoke<string[]>('mail_notices'),
   help: (provider: string) => invoke<void>('mail_help', { provider }),
   pending: () => invoke<MailPending[]>('mail_pending'),

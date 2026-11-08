@@ -37,7 +37,7 @@ npm.cmd run check:ui
 Remove-Item Env:JOURNAL_UI_SCOPE
 ```
 
-Für eine vollständige Browserprüfung darf `JOURNAL_UI_SCOPE` nicht gesetzt sein. Die vorhandenen Bereiche stehen in `scripts/verify-ui.mjs`; Beispiele sind `calendar-actions`, `multiday`, `journal-grid`, `nebula-sizing`, `drive`, `undo`, `vault-updates`, `popup-dismissal`, `mail-header-themes` und `activity-sizes`. Screenshots und Berichte landen unter `src-tauri/target/`.
+Für eine vollständige Browserprüfung darf `JOURNAL_UI_SCOPE` nicht gesetzt sein. Die vorhandenen Bereiche stehen in `scripts/verify-ui.mjs`; Beispiele sind `calendar-actions`, `multiday`, `journal-grid`, `nebula-sizing`, `drive`, `undo`, `vault-updates`, `startup-notices`, `mail`, `popup-dismissal`, `mail-header-themes` und `activity-sizes`. `startup-notices` prüft die einmalige Update-Suche, verspätete Antworten, Offline-Starts und Meldungen in allen Themes. `mail` prüft die manuelle Vorschlagsprüfung und den Schalter zur automatischen Übernahme. Screenshots und Berichte landen unter `src-tauri/target/`.
 
 Browser-Mocks prüfen weder echte Anbieteranmeldungen noch eine native Installation. Ein erfolgreicher Vite-Build allein belegt keinen erfolgreichen Rust-Build. Live-ML-Prüfungen benötigen zusätzlich die festgelegten Modellartefakte; siehe [Mail-Erkennung](mail-context-ml.md). Funktionsprüfungen sind keine RAM-/CPU-Messung, siehe [Ressourcenverwaltung](performance.md).
 

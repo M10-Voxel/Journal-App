@@ -5,6 +5,7 @@ import { check } from '@tauri-apps/plugin-updater';
 import type { Update } from '@tauri-apps/plugin-updater';
 import { useLanguage } from '../i18n';
 import { readVaultPreferences } from '../vaultPreferences';
+import { startupUpdate } from '../startupUpdate';
 import { Icon } from './Icon';
 
 export function UpdateSettings({ beforeChange, onBusy }: { beforeChange: () => Promise<void>; onBusy: (busy: boolean) => void }) {
@@ -13,11 +14,16 @@ export function UpdateSettings({ beforeChange, onBusy }: { beforeChange: () => P
   const [available, setAvailable] = useState<Update | null>(null), [downloaded, setDownloaded] = useState(false);
   const [progress, setProgress] = useState<{ bytes: number; total?: number } | null>(null);
   const resource = useRef<Update | null>(null);
+  const mounted = useRef(true), requested = useRef(false), finding = useRef<Promise<void> | null>(null);
   useEffect(() => {
-    void getVersion().then(setVersion).catch(() => {});
-    return () => { if (resource.current) void resource.current.close().catch(() => {}); };
+    mounted.current = true;
+    void getVersion().then(value => { if (mounted.current) setVersion(value); }).catch(() => {});
+    // Opening Updates from the startup notice immediately shows the download controls.
+    void startupUpdate().then(update => { if (update && mounted.current && !requested.current) void run(find); });
+    return () => { mounted.current = false; if (resource.current) void resource.current.close().catch(() => {}); };
   }, []);
   async function run(action: () => Promise<void>) {
+    requested.current = true;
     setBusy(true); onBusy(true); setMessage('');
     try { await action(); }
     catch (e) {
@@ -28,9 +34,17 @@ export function UpdateSettings({ beforeChange, onBusy }: { beforeChange: () => P
     } finally { setBusy(false); onBusy(false); }
   }
   async function find() {
+    if (finding.current) return finding.current;
+    const request = findAvailable();
+    finding.current = request;
+    try { await request; } finally { finding.current = null; }
+  }
+  async function findAvailable() {
     if (resource.current) await resource.current.close();
+    if (!mounted.current) return;
     resource.current = null; setAvailable(null); setDownloaded(false); setProgress(null);
     const update = await check({ timeout: 20_000 });
+    if (!mounted.current) { await update?.close(); return; }
     resource.current = update; setAvailable(update);
     if (!update) setMessage(en ? 'You are up to date.' : 'Du verwendest die aktuelle Version.');
   }
@@ -55,6 +69,7 @@ export function UpdateSettings({ beforeChange, onBusy }: { beforeChange: () => P
   return <section className="settings-section system-settings" aria-busy={busy}>
     <h3>{en ? 'App updates' : 'App-Updates'}</h3>
     <p className="settings-hint">{en ? 'Installed version' : 'Installierte Version'}: <strong data-app-version>{version || '…'}</strong></p>
+    <p className="settings-hint">{en ? 'Journal checks once on startup and notifies you when an update is available. Downloading and installing only start when you choose them.' : 'Journal sucht bei jedem Start einmal nach Updates und meldet verfügbare Versionen. Herunterladen und Installieren startest du selbst.'}</p>
     <p className="settings-hint">{en ? 'Updates are downloaded from this project’s GitHub releases and verified with a cryptographic signature before installation. Your vault and connections are preserved.' : 'Updates werden aus den GitHub-Releases dieses Projekts heruntergeladen und vor der Installation anhand einer kryptografischen Signatur geprüft. Dein Vault und deine Verbindungen bleiben erhalten.'}</p>
     <div className="system-actions"><button type="button" disabled={busy} data-update-check onClick={() => void run(find)}><Icon name="repeat" />{en ? 'Check for updates' : 'Nach Updates suchen'}</button></div>
     {available && <div className="system-confirm">

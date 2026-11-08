@@ -26,6 +26,7 @@ import { filterKey, isShown, tagOf, tagRank } from './tags';
 
 import { useMailImport } from './components/useMailImport';
 import { MailImportToast } from './components/MailImportToast';
+import { UpdateNotice } from './components/UpdateNotice';
 import { PeriodNotes } from './components/PeriodNotes';
 import { BulletinBoard, FloatingNote } from './components/BulletinBoard';
 import type { Mode } from './components/PeriodNotes';
@@ -101,6 +102,7 @@ import './popup-sheets.css';
 import './popup-chrome.css';
 import './search.css';
 import './components/mailDetails.css';
+import './components/appNotices.css';
 import { applyColors } from './colors';
 
 applyTheme(loadSettings());
@@ -797,6 +799,7 @@ function App() {
       onSnooze={reminder => { dismissReminder(reminder); journal.snoozeReminder(reminder).catch(reason => setError(t("Erinnerung: {0}", String(reason)))); }}
       onOpen={reminder => { dismissReminder(reminder); showFromCalendar(reminder.date, reminder.id); }} onDismiss={dismissReminder} />
     {help && <ShortcutHelp onClose={() => setHelp(false)} />}
+    <div className="app-notices"><UpdateNotice onOpen={() => openSettings('updates')} /><MailImportToast onReview={() => openSettings('mail')} /></div>
     {settingsOpen && <SettingsDialog key={settingsTab} bookView={bookView} onBookView={setBookView} initialTab={settingsTab} beforeSync={async () => { if (!await save()) throw new Error("Lokale Änderungen konnten nicht gespeichert werden."); await flushHistoryWindows(); }} onDriveBusy={value => { driveWorking.current = value; setDriveBusy(value); }} settings={settings} mailStatus={mailStatus} onImport={importFromCalendar} onClose={() => { if (!driveWorking.current) setSettingsOpen(false); }} onChange={next => { setSettings(next); saveSettings(next); }} />}
   </div>;
 }
@@ -806,4 +809,4 @@ const windowLabel = getCurrentWindow().label;
 if (windowLabel === 'reminder') document.documentElement.classList.add('is-popup');
 // A window of Nebula's desk pulled out of the journal draws its own frame on a transparent window.
 if (windowLabel.startsWith('panel-')) document.documentElement.classList.add('is-panel-window');
-createRoot(document.getElementById('root')!).render(<><WindowActivity /><ThemeSync /><UndoShortcuts /><ContextMenuHost />{windowLabel.startsWith('board-') ? <FloatingNote /> : windowLabel.startsWith('panel-') && detachable.includes(windowLabel.slice(6) as DetachedKind) ? <DetachedPanel kind={windowLabel.slice(6) as DetachedKind} /> : windowLabel === 'calendar' ? <CalendarWindow /> : windowLabel === 'mini' ? <MiniCalendar /> : windowLabel === 'reminder' ? <ReminderPopup /> : <App />}{!windowLabel.startsWith('board-') && !['mini', 'reminder'].includes(windowLabel) && <MailImportToast />}</>);
+createRoot(document.getElementById('root')!).render(<><WindowActivity /><ThemeSync /><UndoShortcuts /><ContextMenuHost />{windowLabel.startsWith('board-') ? <FloatingNote /> : windowLabel.startsWith('panel-') && detachable.includes(windowLabel.slice(6) as DetachedKind) ? <DetachedPanel kind={windowLabel.slice(6) as DetachedKind} /> : windowLabel === 'calendar' ? <CalendarWindow /> : windowLabel === 'mini' ? <MiniCalendar /> : windowLabel === 'reminder' ? <ReminderPopup /> : <App />}{(windowLabel === 'calendar' || windowLabel.startsWith('panel-')) && <MailImportToast />}</>);

@@ -14,6 +14,7 @@ export function useMailImport(onImport: (entries: CalendarImport[]) => Promise<v
   const [status, setStatus] = useState({ count: 0, error: '' });
   useEffect(() => {
     let disposed = false, running = false, again = false;
+    let notified = new Set<string>();
     const process = async () => {
       if (running) { again = true; return; }
       running = true;
@@ -39,14 +40,23 @@ export function useMailImport(onImport: (entries: CalendarImport[]) => Promise<v
           // Leave deferred free text queued, while attachments and existing suggestions continue to work.
           if (pending.length === 50 && processed === pending.length) again = true;
           const candidates = await mailApi.candidates() ?? [];
-          const automatic = latestMailCandidates(candidates);
+          // Read current account preferences, rather than the snapshot attached to a queued mail.
+          const accounts = await mailApi.accounts() ?? [];
+          const automatic = latestMailCandidates(candidates).filter(candidate => accounts.some(account => account.id === candidate.accountId && account.autoImport === true));
           if (automatic.length && !disposed) {
             await latest.current(automatic.map(({ date, entry }) => ({ date, entry })));
             const uids = new Set(automatic.map(item => item.entry.calendarUid));
             await mailApi.resolve(candidates.filter(item => uids.has(item.entry.calendarUid)).map(item => item.id), true);
             await emit('journal:mail-imported', automatic.map(item => ({ id:item.id, text:item.entry.text, date:item.date, time:item.entry.time, end:item.entry.end })));
           }
-          if (!disposed) setStatus({ count: latestMailCandidates(await mailApi.candidates() ?? []).length, error: deferredError });
+          if (!disposed) {
+            const remaining = latestMailCandidates(await mailApi.candidates() ?? []);
+            setStatus({ count: remaining.length, error: deferredError });
+            const fresh = remaining.filter(item => !notified.has(item.id));
+            notified = new Set(remaining.map(item => item.id));
+            // Full pending list also removes accepted/rejected suggestions from a visible notice.
+            await emit('journal:mail-suggestions', { count: remaining.length, fresh: fresh.length });
+          }
         } while (again && !disposed);
       } catch (error) { if (!disposed) setStatus(current => ({ ...current, error: String(error) })); }
       finally { running = false; }

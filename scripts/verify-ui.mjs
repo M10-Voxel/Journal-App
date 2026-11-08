@@ -44,7 +44,7 @@ const bootstrap = `
     days.set(shift(5), { date:shift(5), title:'Urlaub', body:'', revision:1, entries:[item(20, 'event', 'Flug nach Lissabon')] });
   }
   const invoked = [];
-  window.__uiTest = { date, saves: 0, invoked, shift, day: (value = date) => structuredClone(days.get(value)),
+  window.__uiTest = { date, saves: 0, invoked, shift, updateAvailable:sessionStorage.getItem('test.updateAvailable')==='1', updateCheckError:sessionStorage.getItem('test.updateCheckError')==='1', day: (value = date) => structuredClone(days.get(value)),
     // Stands in for the journal window saving a day: the stored day changes and the calendars hear about it.
     store: value => { days.set(value.date, value); return window.__TAURI_INTERNALS__.invoke('plugin:event|emit', { event:'journal:changed', payload:[value.date] }); },
     emit: (event, payload) => window.__TAURI_INTERNALS__.invoke('plugin:event|emit', { event, payload }) };
@@ -100,7 +100,18 @@ const bootstrap = `
     if (command === 'vault_choose') { invoked.push([command,payload]);return window.__uiTest.vaultChoice ?? null; }
     if (command === 'vault_save_preferences' || command === 'vault_activate') { invoked.push([command,payload]);return null; }
     if (command === 'plugin:app|version') return '0.1.0';
-    if (command === 'plugin:updater|check') { invoked.push([command,payload]);return window.__uiTest.updateAvailable ? {rid:100,currentVersion:'0.1.0',version:'0.1.1',body:'Release notes',rawJson:{}} : null; }
+    if (command === 'startup_update_check') {
+      if(label!=='main')return false;
+      if(sessionStorage.getItem('test.persistUpdateClaim')!=='1')return true;
+      const claimed=sessionStorage.getItem('test.updateClaimed')==='1';sessionStorage.setItem('test.updateClaimed','1');return !claimed;
+    }
+    if (command === 'plugin:updater|check') {
+      invoked.push([command,payload]);if(window.__uiTest.updateCheckError)throw new Error('Offline test');
+      const number=invoked.filter(([c])=>c==='plugin:updater|check').length;
+      const update=window.__uiTest.updateAvailable ? {rid:100+number,currentVersion:'0.1.0',version:'0.1.1',body:'Release notes',rawJson:{}} : null;
+      if(number===1&&sessionStorage.getItem('test.delayStartupCheck')==='1')return new Promise(resolve=>{window.__uiTest.finishStartupCheck=()=>resolve(update)});
+      return update;
+    }
     if (command === 'plugin:updater|download') { invoked.push([command,payload]);if(window.__uiTest.updateError)throw new Error(window.__uiTest.updateError);return 101; }
     if (command === 'plugin:updater|install' || command === 'plugin:resources|close') { invoked.push([command,payload]);return null; }
     if (command === 'plugin:window|get_all_windows') return [label];
@@ -175,6 +186,7 @@ const bootstrap = `
       mail.accounts = [...mail.accounts.filter(a => a.id !== account.id), account]; mailChanged(); return account;
     }
     if (command === 'mail_enabled') { mail.accounts.find(a => a.id === payload.id).enabled = payload.enabled; mailChanged(); return; }
+    if (command === 'mail_auto_import') { mail.accounts.find(a => a.id === payload.id).autoImport = payload.enabled; mailChanged(); return; }
     if (command === 'mail_cancel' || command === 'mail_help') return;
     if (command === 'mail_remove') {
       mail.accounts = mail.accounts.filter(a => a.id !== payload.id); mail.pending = mail.pending.filter(p => p.account.id !== payload.id); mail.candidates = mail.candidates.filter(p => p.accountId !== payload.id); mailChanged(); return;
@@ -411,7 +423,16 @@ async function screenshot(name) {
   const result = await command('Page.captureScreenshot', { format: 'png' });
   await writeFile(join(artifacts, name), Buffer.from(result.data, 'base64'));
 }
+async function pointAt(selector) {
+  return evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});e.scrollIntoView({block:'nearest'});const r=e.getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};})()`);
+}
+async function pointerClick(point) {
+  await command('Input.dispatchMouseEvent',{type:'mouseMoved',...point});
+  await command('Input.dispatchMouseEvent',{type:'mousePressed',...point,button:'left',buttons:1,clickCount:1});
+  await command('Input.dispatchMouseEvent',{type:'mouseReleased',...point,button:'left',buttons:0,clickCount:1});
+}
 async function checkMailSettings() {
+  await command('Emulation.setFocusEmulationEnabled',{enabled:true});
   const click = text => evaluate(`Array.from(document.querySelectorAll('.mail-settings button')).find(button => button.textContent.trim() === ${JSON.stringify(text)}).click()`);
   const fill = (label, value) => evaluate(`(() => { const input=Array.from(document.querySelectorAll('.mail-settings label')).find(label => label.textContent.startsWith(${JSON.stringify(label)})).querySelector('input'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input, ${JSON.stringify(value)}); input.dispatchEvent(new Event('input',{bubbles:true})); })()`);
   await key(',', 'Comma', 2);
@@ -446,19 +467,35 @@ async function checkMailSettings() {
   await evaluate("document.querySelector('.mail-form button[type=submit]').focus()");
   await evaluate("document.querySelector('.mail-form').requestSubmit()");
   // A subject-only neural event name now falls back to the full subject instead of crossing into another sentence.
-  await until("document.querySelectorAll('.mail-account').length === 1 && window.__uiTest.day(window.__uiTest.shift(1))?.entries.some(entry=>entry.text.includes('Lieferung') && entry.time==='10:00' && entry.end==='12:00' && entry.showInJournal===false)");
+  await until("document.querySelectorAll('.mail-account').length === 1 && document.querySelectorAll('.mail-suggestion').length===1");
+  assert.equal(await evaluate("document.querySelector('[data-mail-auto-import]').getAttribute('aria-checked')"),'false','Adding appointments defaults to off.');
+  assert(!await evaluate("window.__uiTest.day(window.__uiTest.shift(1))?.entries.some(entry=>entry.text.includes('Lieferung')) ?? false"),'Suggestions do not write calendar entries before approval.');
   await until("Boolean(document.activeElement.closest('.settings'))");
   assert.equal(await evaluate("document.querySelector('.mail-settings input[type=password]')"), null, 'Credentials leave the form after saving.');
   assert.equal(await evaluate('window.__uiTest.mail.accounts[0].password'), undefined, 'Account metadata never exposes the password.');
   assert(await evaluate('window.__uiTest.mail.analyzed.some(text=>text.includes("Lieferung UI-Test"))'), 'Free-text mail proposals use the isolated ML analysis API.');
-  await until("Boolean(document.querySelector('.mail-import-toast')) && !document.querySelector('.mail-suggestion')");
-  assert.match(await evaluate("document.querySelector('.mail-import-toast').textContent"),/Lieferung.*10:00.*12:00/s);
-  await pause(350); await screenshot('mail-auto-import.png');
-  await evaluate("document.querySelector('.mail-import-toast button').click()");
-  await until("!document.querySelector('.mail-import-toast')");
+  await until("Boolean(document.querySelector('.mail-suggestions-notice'))");
+  await key('Escape');await until("!document.querySelector('.settings')");
+  await pointerClick(await pointAt('.mail-suggestions-notice .notice-action'));
+  await until("Boolean(document.querySelector('.mail-suggestion')) && !document.querySelector('.mail-suggestions-notice')");
+  await evaluate("document.querySelector('.mail-suggestion .mail-actions button:nth-child(2)').click()");
+  await until("Boolean(document.querySelector('.mail-proposal-edit'))");
+  await screenshot('mail-review-suggestion.png');
+  await evaluate("document.querySelector('.mail-suggestion .is-primary').click()");
+  await until("Boolean(document.querySelector('.mail-import-toast')) === false && !document.querySelector('.mail-suggestion')");
+  assert(await evaluate("window.__uiTest.day(window.__uiTest.shift(1))?.entries.some(entry=>entry.text.includes('Lieferung') && entry.time==='10:00' && entry.end==='12:00' && entry.showInJournal===false)"),'A reviewed suggestion is imported only on acceptance.');
+  // Turning on the account switch enables the same pipeline for subsequent ML and ICS suggestions.
+  await evaluate("document.querySelector('[data-mail-auto-import]').click()");
+  await until("window.__uiTest.mail.accounts[0].autoImport===true");
+  await evaluate(`window.__uiTest.mail.candidates.push({id:'reject-only',accountId:window.__uiTest.mail.accounts[0].id,messageKey:'reject-only',subject:'Review',sender:'person@example.org',sentAt:Date.now()/1000,date:window.__uiTest.shift(2),evidence:'Review',entry:{id:crypto.randomUUID(),kind:'event',text:'Rejected appointment',calendarUid:'reject-only',time:'12:00'}});window.__uiTest.mail.accounts[0].autoImport=false;window.__uiTest.emit('mail:changed',null)`);
+  await until("document.querySelectorAll('.mail-suggestion').length===1");
+  await evaluate("document.querySelector('.mail-suggestion .mail-actions button:last-child').click()");
+  await until("!document.querySelector('.mail-suggestion') && !document.querySelector('.mail-suggestions-notice')");
+  assert(!await evaluate("window.__uiTest.day(window.__uiTest.shift(2))?.entries.some(e=>e.text==='Rejected appointment') ?? false"),'Rejecting a suggestion never creates a calendar entry.');
+  await evaluate("document.querySelector('[data-mail-auto-import]').click()");await until("window.__uiTest.mail.accounts[0].autoImport===true");
   await click('Bearbeiten');
   await until("Boolean(document.querySelector('.mail-form'))");
-  assert.equal(await evaluate("document.querySelectorAll('.mail-form .mail-check input').length"),1, 'Import is always automatic; only fetching remains optional.');
+  assert.equal(await evaluate("document.querySelectorAll('.mail-form .mail-check input').length"),2, 'Fetching and automatic adding are separate account preferences.');
   await evaluate("document.querySelector('.mail-form').requestSubmit()");
   await until("!document.querySelector('.mail-form')");
   await click('Pausieren'); await until('window.__uiTest.mail.accounts[0].enabled === false');
@@ -473,6 +510,8 @@ async function checkMailSettings() {
     return window.__uiTest.emit('mail:changed',null); })()`);
   await enqueueCalendar('auto-1',1);
   await until("window.__uiTest.day(window.__uiTest.shift(1))?.entries.some(entry => entry.text === 'Mail-Auto-Test') && window.__uiTest.mail.candidates.length === 0");
+  await until("document.querySelector('.mail-import-toast')?.textContent.includes('Mail-Auto-Test')");
+  await screenshot('mail-auto-import.png');
   await enqueueCalendar('auto-2',3);
   await until("window.__uiTest.day(window.__uiTest.shift(3))?.entries.some(entry => entry.text === 'Mail-Auto-Test') && window.__uiTest.mail.candidates.length === 0");
   assert.equal(await evaluate("window.__uiTest.day(window.__uiTest.shift(1))?.entries.some(entry=>entry.text==='Mail-Auto-Test') ?? false"),false, 'The update moves the existing UID without leaving a duplicate.');
@@ -2547,7 +2586,56 @@ try {
   await until("document.querySelectorAll('.entry').length === 5");
   await pause(250);
   await evaluate('document.fonts.ready.then(() => true)');
-  if (process.env.JOURNAL_UI_SCOPE === 'mail-header-themes') {
+  if (process.env.JOURNAL_UI_SCOPE === 'startup-notices') {
+    await command('Emulation.setFocusEmulationEnabled',{enabled:true});
+    for (const [theme,pixel] of [['classic',false],['classic',true],['journal',false],['journal',true],['nebula',false]]) {
+      await evaluate(`sessionStorage.setItem('test.updateAvailable','1');localStorage.setItem('journal.settings',JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'),theme:${JSON.stringify(theme)},pixel:${pixel}}))`);
+      await command('Page.reload');await until("Boolean(document.querySelector('[data-update-notice]'))");
+      assert.equal(await evaluate("window.__uiTest.invoked.filter(([c])=>c==='plugin:updater|check').length"),1,'Exactly one background check runs on startup.');
+      assert(!await evaluate("window.__uiTest.invoked.some(([c])=>c==='plugin:updater|download'||c==='plugin:updater|install')"),'Availability does not download or install anything.');
+      await evaluate("window.__uiTest.emit('journal:mail-suggestions',{count:3,fresh:3})");await until("Boolean(document.querySelector('.mail-suggestions-notice'))");
+      assert(await evaluate("(()=>{const a=document.querySelector('[data-update-notice]').getBoundingClientRect(),b=document.querySelector('.mail-suggestions-notice').getBoundingClientRect();return a.bottom<=b.top && a.left>=0 && b.bottom<=innerHeight && [...document.querySelectorAll('.app-notices button')].every(b=>b.scrollWidth<=b.clientWidth+1)})()"),'Both notices fit and do not overlap.');
+      await screenshot(`startup-notices-${theme}${pixel?'-pixel':''}.png`);
+      await pointerClick(await pointAt('[data-update-notice] > button'));
+      await until("!document.querySelector('[data-update-notice]')");
+      await evaluate("window.__uiTest.emit('journal:theme',{theme:'classic',pixel:false,popupStyle:'a'})");await pause(100);
+      assert.equal(await evaluate("window.__uiTest.invoked.filter(([c])=>c==='plugin:updater|check').length"),1,'Appearance changes never restart the background check.');
+      await pointerClick(await pointAt('.mail-suggestions-notice .notice-action'));
+      await until("Boolean(document.querySelector('.mail-settings')) && !document.querySelector('.mail-suggestions-notice')");
+      await key('Escape');await until("!document.querySelector('.settings')");
+    }
+    // The notice opens update settings, where a user can explicitly start the download.
+    await command('Page.reload');await until("Boolean(document.querySelector('[data-update-notice]'))");
+    await pointerClick(await pointAt('[data-update-notice] .notice-action'));
+    await until("Boolean(document.querySelector('[data-update-download]'))");
+    assert(!await evaluate("window.__uiTest.invoked.some(([c])=>c==='plugin:updater|download')"));
+    await pointerClick(await pointAt('[data-update-download]'));await until("Boolean(document.querySelector('[data-update-install]'))");
+    await key('Escape');await until("!document.querySelector('.settings')");
+    await evaluate("sessionStorage.setItem('test.persistUpdateClaim','1');sessionStorage.removeItem('test.updateClaimed')");
+    await command('Page.reload');await until("Boolean(document.querySelector('[data-update-notice]'))");
+    await command('Page.reload');await until("document.querySelectorAll('.entry').length===5");
+    assert.equal(await evaluate("window.__uiTest.invoked.filter(([c])=>c==='plugin:updater|check').length"),0,'A frontend reload keeps the native once-per-process check.');
+    await evaluate("sessionStorage.removeItem('test.persistUpdateClaim');sessionStorage.removeItem('test.updateClaimed')");
+    // A delayed startup reply must not replace a manually checked and downloaded update.
+    await evaluate("sessionStorage.setItem('test.delayStartupCheck','1')");
+    await command('Page.reload');await until("typeof window.__uiTest.finishStartupCheck==='function' && document.querySelectorAll('.entry').length===5");
+    await evaluate("document.querySelector('.settings-button').click()");await until("Boolean(document.querySelector('#settings-updates-tab'))");
+    await evaluate("document.querySelector('#settings-updates-tab').click()");await until("Boolean(document.querySelector('[data-update-check]'))");
+    await pointerClick(await pointAt('[data-update-check]'));await until("Boolean(document.querySelector('[data-update-download]'))");
+    await pointerClick(await pointAt('[data-update-download]'));await until("Boolean(document.querySelector('[data-update-install]'))");
+    await evaluate("window.__uiTest.finishStartupCheck()");await until("Boolean(document.querySelector('[data-update-notice]'))");
+    assert.equal(await evaluate("window.__uiTest.invoked.filter(([c])=>c==='plugin:updater|check').length"),2);
+    assert(await evaluate("Boolean(document.querySelector('[data-update-install]'))"),'A late startup response preserves the downloaded installer.');
+    await evaluate("sessionStorage.removeItem('test.delayStartupCheck')");
+    await key('Escape');await until("!document.querySelector('.settings')");
+    await evaluate("sessionStorage.removeItem('test.updateAvailable');sessionStorage.setItem('test.updateCheckError','1')");
+    await command('Page.reload');await until("document.querySelectorAll('.entry').length===5 && window.__uiTest.invoked.some(([c])=>c==='plugin:updater|check')");
+    assert(!await evaluate("Boolean(document.querySelector('[data-update-notice]'))"),'An offline startup remains silent and usable.');
+    await evaluate("sessionStorage.removeItem('test.updateCheckError');sessionStorage.setItem('test.updateAvailable','1')");
+    await command('Page.navigate',{url:`http://127.0.0.1:${server.address().port}/?window=calendar`});await until("Boolean(document.querySelector('.cal'))");
+    assert.equal(await evaluate("window.__uiTest.invoked.filter(([c])=>c==='plugin:updater|check').length"),0,'Secondary windows never check for app updates.');
+    assert.deepEqual(errors,[]);console.log('Startup notices passed: once per startup, themed notices, explicit download, offline startup and secondary-window isolation.');
+  } else if (process.env.JOURNAL_UI_SCOPE === 'mail-header-themes') {
     await command('Emulation.setFocusEmulationEnabled',{enabled:true});
     const sampleTitle='Bald ist Ihr DPD Paket da';
     const originalSubject='Ihre Sendung ist angekündigt – weitere Informationen zur Zustellung';
@@ -4039,6 +4127,7 @@ try {
     await checkCalendarStart();
   } else if (process.env.JOURNAL_UI_SCOPE === 'mail') {
     await checkMailSettings();
+    console.log('Mail review checks passed: default off, notification opens review, edit/accept/reject, account switch, automatic ML/ICS updates, and retained calendar data.');
   } else if (process.env.JOURNAL_UI_SCOPE === 'calendar') {
     await command('Emulation.setEmulatedMedia', { features:[{name:'prefers-reduced-motion',value:'reduce'}] });
     await checkCalendars();

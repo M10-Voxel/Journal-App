@@ -16,7 +16,7 @@ Die Dokumentation beschreibt den aktuellen Windows-Zweig `Windows`. Android ist 
 
 - [Google Drive](google-drive.md): Einrichtung, Verschlüsselung, Konflikte und bewusstes Ersetzen eines Datenstands.
 - [Drive-Datenformat](sync-format-12.md): Format 13, synchronisierte Inhalte und gerätelokale Daten.
-- [E-Mail-Konten](mail-accounts.md): Anbieter, Anmeldung, Abruf und automatische Kalenderübernahme.
+- [E-Mail-Konten](mail-accounts.md): Anbieter, Anmeldung, Abruf, Vorschlagsprüfung und optionale automatische Kalenderübernahme.
 - [Mailvorschau und Lieferzeiträume](mail-display-and-delivery.md): HTML-Darstellung, externe Inhalte und Werktage.
 - [Kontextbezogene Mail-Erkennung](mail-context-ml.md): lokale Modelle, Training, Prüfungen und Grenzen.
 

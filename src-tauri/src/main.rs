@@ -19,6 +19,13 @@ pub const BROWSER_ARGS: &str = "--disable-features=msWebOOUI,msPdfOOUI,msSmartSc
 /// addition in the main window's configuration).
 pub fn browser_args() -> String { std::env::var("JOURNAL_BROWSER_ARGS").map_or_else(|_| BROWSER_ARGS.to_string(), |extra| format!("{BROWSER_ARGS} {extra}")) }
 static QUITTING: AtomicBool = AtomicBool::new(false);
+static STARTUP_UPDATE_CHECKED: AtomicBool = AtomicBool::new(false);
+
+/// Keep the once-per-process check across frontend reloads (for example after a Drive sync).
+#[tauri::command]
+fn startup_update_check(window: tauri::WebviewWindow) -> bool {
+    window.label() == "main" && !STARTUP_UPDATE_CHECKED.swap(true, Ordering::Relaxed)
+}
 
 #[tauri::command]
 async fn move_calendar_entry(app: tauri::AppHandle, store: tauri::State<'_, Mutex<Store>>, id: String, from: String, to: String, time: Option<String>, end: Option<String>) -> Result<Vec<String>, String> {
@@ -250,7 +257,10 @@ fn main() {
         .manage(reminders::popup::Popup::default())
         .manage(mail::ml::MlState::default())
         .setup(|app| {
-            let vault = vault::Vault::load_or_choose(app.path().app_local_data_dir()?).map_err(std::io::Error::other)?;
+            let Some(vault) = vault::Vault::load_or_choose(app.path().app_local_data_dir()?).map_err(std::io::Error::other)? else {
+                app.handle().exit(0);
+                return Ok(());
+            };
             let dir = vault.path.clone();
             app.manage(vault);
             let store=Store::open(&dir.join("journal.sqlite3"))?;
@@ -287,6 +297,6 @@ fn main() {
             }
             if window.label() == "main" && matches!(event, tauri::WindowEvent::Destroyed) { window.app_handle().exit(0); }
         })
-        .invoke_handler(tauri::generate_handler![vault::vault_status, vault::vault_choose, vault::vault_save_preferences, vault::vault_activate, move_calendar_entry, panel_detach, history::history_step,board::board_list, board::board_patch, board::board_patch_many, board::board_image_save, board::board_image_load, board::board_link_preview, board::board_open_link, board::board_detach, board::board_remove, board::board_folders, board::board_folder_save, board::board_folder_remove,drive::drive_help, drive::drive_validate, drive::drive_restore, drive::drive_status, drive::drive_connect, drive::drive_cancel, drive::drive_disconnect, drive::drive_read, drive::drive_write, drive::drive_snapshot, drive::drive_apply,load_period_data, save_period_data, ui_language::set_ui_language, load_day, load_range, save_day, load_linked, change_linked, edit_linked, load_series, extend_series, load_tags, save_tags, search_entries, snooze_reminder, quit_app, popup_reminders, fit_popup, reminder_action, background_hint, open_window, show_day, export_calendar, import_calendar, read_calendar_file, write_calendar_file, mail::mail_drive_snapshot, mail::mail_drive_validate, mail::mail_drive_apply, mail::mail_accounts, mail::mail_save, mail::mail_cancel, mail::mail_sync, mail::mail_remove, mail::mail_pending, mail::mail_stage, mail::mail_candidates, mail::mail_resolve, mail::mail_enabled, mail::mail_notices, mail::mail_help, mail::ml::mail_ml_status, mail::ml::mail_ml_enabled, mail::ml::mail_ml_install, mail::ml::mail_ml_analyze])
+        .invoke_handler(tauri::generate_handler![startup_update_check, vault::vault_status, vault::vault_choose, vault::vault_save_preferences, vault::vault_activate, move_calendar_entry, panel_detach, history::history_step,board::board_list, board::board_patch, board::board_patch_many, board::board_image_save, board::board_image_load, board::board_link_preview, board::board_open_link, board::board_detach, board::board_remove, board::board_folders, board::board_folder_save, board::board_folder_remove,drive::drive_help, drive::drive_validate, drive::drive_restore, drive::drive_status, drive::drive_connect, drive::drive_cancel, drive::drive_disconnect, drive::drive_read, drive::drive_write, drive::drive_snapshot, drive::drive_apply,load_period_data, save_period_data, ui_language::set_ui_language, load_day, load_range, save_day, load_linked, change_linked, edit_linked, load_series, extend_series, load_tags, save_tags, search_entries, snooze_reminder, quit_app, popup_reminders, fit_popup, reminder_action, background_hint, open_window, show_day, export_calendar, import_calendar, read_calendar_file, write_calendar_file, mail::mail_drive_snapshot, mail::mail_drive_validate, mail::mail_drive_apply, mail::mail_accounts, mail::mail_save, mail::mail_cancel, mail::mail_sync, mail::mail_remove, mail::mail_pending, mail::mail_stage, mail::mail_candidates, mail::mail_resolve, mail::mail_enabled, mail::mail_auto_import, mail::mail_notices, mail::mail_help, mail::ml::mail_ml_status, mail::ml::mail_ml_enabled, mail::ml::mail_ml_install, mail::ml::mail_ml_analyze])
         .run(tauri::generate_context!()).expect("Journal konnte nicht gestartet werden");
 }

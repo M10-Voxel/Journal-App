@@ -2,6 +2,8 @@
 
 ## Speicherort wählen
 
+Beim ersten Start ohne bestehende Installation fragt Journal vor dem Anlegen der Datenbanken nach dem Speicherort: **Neuer Vault** für einen leeren Ordner oder **Vault öffnen** für vorhandene Daten. Abbrechen beendet den Start ohne neue Journal-Datenbank. In AppData bleiben nur gerätelokale Dateien wie der Verweis auf den Vault und WebView-Daten. Bereits vorhandene Journale behalten ihren Speicherort.
+
 Unter **Einstellungen → Speicherort**:
 
 | Aktion | Verhalten |
@@ -33,7 +35,9 @@ Eine Sicherung wird über **Vault öffnen** wieder ausgewählt. Die App prüft D
 
 ## Updates in der App
 
-**Einstellungen → Updates → Nach Updates suchen → Update herunterladen → Installieren und neu starten.** Die Suche erfolgt auf Knopfdruck. Vor der Installation werden ausstehende Inhalte und vaultbezogene Zustände gespeichert. Vault und Verbindungen bleiben beim Update erhalten; ein normales Versionsupdate verlangt keine erneute Einrichtung.
+Journal prüft bei jedem App-Start einmal im Hintergrund auf Updates. Ist eine neuere Version verfügbar, erscheint eine Meldung im gewählten Stil mit **Update herunterladen…**. Sie öffnet die Update-Einstellungen; Download und Installation beginnen jeweils erst auf Klick. Ohne Internet startet das Journal ohne Fehlermeldung. Es gibt keine regelmäßigen Update-Abfragen im Hintergrund und keine zusätzlichen Prüfungen durch Kalender- oder Notizfenster, erneutes Öffnen aus dem Tray oder internes Neuladen nach einer Drive-Synchronisierung.
+
+Die manuelle Suche bleibt unter **Einstellungen → Updates → Nach Updates suchen → Update herunterladen → Installieren und neu starten** verfügbar. Vor der Installation werden ausstehende Inhalte und vaultbezogene Zustände gespeichert. Vault und Verbindungen bleiben beim Update erhalten; ein normales Versionsupdate verlangt keine erneute Einrichtung.
 
 Quelle: `https://github.com/M10-Voxel/Journal-App/releases/latest/download/latest.json`. Die Release-Dateien sind öffentlich ohne GitHub-Anmeldung abrufbar. Tauri prüft die Dateisignatur und die darin authentifizierte Versionsnummer (`requireSignedVersion`). Die Windows-Installation erfolgt über NSIS im passiven Modus. Eine lose EXE kann Updates suchen/herunterladen; für das Einspielen wird ebenfalls der Installer verwendet.
 

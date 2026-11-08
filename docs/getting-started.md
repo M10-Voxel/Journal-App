@@ -4,7 +4,9 @@
 
 Die [aktuelle Windows-Version](https://github.com/M10-Voxel/Journal-App/releases/latest) enthält eine EXE zum direkten Start und einen NSIS-Installer. Der Installer bringt eine WebView2-Offlinelaufzeit mit. Für die lose EXE muss WebView2 bereits verfügbar sein. Journal verwendet für dieselbe Windows-Anmeldung denselben gewählten Speicherort, unabhängig davon, ob es direkt oder nach einer Installation gestartet wird.
 
-Updates lassen sich unter **Einstellungen → Updates** suchen, herunterladen und installieren. Die App speichert vorher ausstehende Änderungen. Ein neues Update verlangt keine neue Einrichtung des Vaults oder der Verbindungen. Details: [Vault und Updates](vault-and-updates.md).
+Beim ersten Start wählst du einen leeren Ordner für deinen Vault oder öffnest einen vorhandenen. Vor dieser Auswahl legt Journal keine Journal-Datenbank in AppData an; bestehende Installationen behalten ihren Speicherort.
+
+Journal sucht beim Start einmal nach Updates und zeigt neue Versionen als Meldung im gewählten Stil an. Unter **Einstellungen → Updates** kannst du sie herunterladen und installieren oder manuell erneut suchen. Die App speichert vorher ausstehende Änderungen. Ein neues Update verlangt keine neue Einrichtung des Vaults oder der Verbindungen. Details: [Vault und Updates](vault-and-updates.md).
 
 ## Tagesnotizen und Kalender
 
@@ -49,4 +51,4 @@ Schließen über × blendet Journal nach dem Speichern in den Infobereich aus. E
 
 Den Speicherort wählst du unter **Einstellungen → Speicherort**. Für eine Sicherung Journal vollständig beenden und den ganzen Vault-Ordner kopieren; SQLite-Dateien allein während des Betriebs zu kopieren kann bestätigte WAL-Daten auslassen.
 
-[Google Drive](google-drive.md) gleicht Geräte manuell über dasselbe Google-Konto und denselben Geräteschlüssel ab. [E-Mail-Konten](mail-accounts.md) können Termine automatisch hinzufügen. Für die normale Nutzung von Journal ist weder eine Cloud-Anmeldung noch das lokale Mailmodell erforderlich.
+[Google Drive](google-drive.md) gleicht Geräte manuell über dasselbe Google-Konto und denselben Geräteschlüssel ab. [E-Mail-Konten](mail-accounts.md) melden erkannte Terminvorschläge zur Prüfung; automatische Übernahme ist je Konto zuschaltbar und standardmäßig aus. Für die normale Nutzung von Journal ist weder eine Cloud-Anmeldung noch das lokale Mailmodell erforderlich.

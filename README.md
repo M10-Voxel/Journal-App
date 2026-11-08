@@ -7,7 +7,7 @@ Eine Windows-App für Tagesnotizen, Aufgaben und Kalender. Deine Daten werden lo
 - **[Aktuelle Version](https://github.com/M10-Voxel/Journal-App/releases/latest):** EXE zum direkten Start oder Windows-Installer.
 - **[Entwicklungsbuilds](https://github.com/M10-Voxel/Journal-App/actions/workflows/windows-build.yml):** EXE und Installer unter „Artifacts“ des jeweiligen Laufs. GitHub-Anmeldung erforderlich; 30 Tage verfügbar.
 
-Updates findest du in der App unter **Einstellungen → Updates**.
+Neue Updates werden beim Start gemeldet und lassen sich unter **Einstellungen → Updates** herunterladen.
 Pushes auf `Windows` veröffentlichen nach erfolgreichen Prüfungen automatisch ein signiertes Update.
 
 ## Funktionen
