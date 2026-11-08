@@ -8,7 +8,7 @@ Diese technische Übersicht ergänzt die [Einrichtung und Bedienung von Google D
 | --- | --- |
 | `tables.days`, `entries`, `tags`, `series` | Tagesdaten, Einträge und Kalender, Beschreibungen, Status, Tags, Planungsverknüpfungen und Wiederholungen |
 | `settings.period-data` | Aktivitäten, Checklisten, Bewertungen, erfasste Zeit sowie Tages-/Zeitraum-Notizen |
-| `settings.board:card:*`, `board:folder:*` | Pinnwand-/Notizkarten, Ordner, Inhalt, Anhänge/Verbindungen, Tagesbezug, Positionen, Größen, Farben und Linkvorschauen |
+| `settings.board:card:*`, `board:folder:*` | Pinnwand-/Notizkarten, Ordner, Inhalt, Anhänge/Verbindungen, Tagesbezug, Monats-/Jahrespinnwände mit eigenen Positionen und Größen, Farben und Linkvorschauen |
 | `images` | Referenzierte AVIF-Dateien, im Paket als Base64 |
 | `preferences` | Allgemeine Darstellungseinstellungen aus `journal.settings`, einschließlich Design, Farben, Sprache und UI-Größe |
 | `mailAccounts` | Kontometadaten und Abrufeinstellungen ohne Passwörter, Client-Secrets oder Anmeldetokens |

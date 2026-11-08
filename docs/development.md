@@ -29,7 +29,7 @@ npm.cmd run tauri dev
 
 Die EXE liegt unter `src-tauri/target/release/journal-app.exe`, der Installer unter `src-tauri/target/release/bundle/nsis/`. Ein erstmaliger Build lädt Compiler-/Paket- und Bundler-Abhängigkeiten herunter. Normale EXE-/Installer-Builds benötigen keinen privaten Update-Schlüssel.
 
-Die vollständige Browserprüfung benötigt vorher `npm.cmd run build`. Ein gezielter Bereich wird in PowerShell so geprüft:
+Die vollständige Browserprüfung benötigt vorher `npm.cmd run build`. `period-boards` prüft die Monats-/Jahrespinnwände einschließlich Gruppenübernahme und eigenständiger Positionen in sechs Theme-Varianten. Ein gezielter Bereich wird in PowerShell so geprüft:
 
 ```powershell
 $env:JOURNAL_UI_SCOPE = 'notebook'

@@ -1,5 +1,6 @@
 ﻿import { localDate, shiftDate, weekDates } from './dates.ts';
 export type PeriodMode = 'day' | 'week' | 'month' | 'quarter' | 'year';
+export const hasPinboard = (mode: PeriodMode) => mode === 'day' || mode === 'month' || mode === 'year';
 export function periodBounds(date: string, mode: PeriodMode): [string, string] {
   if (mode === 'day') return [date, date];
   if (mode === 'week') { const days = weekDates(date); return [days[0], days[6]]; }

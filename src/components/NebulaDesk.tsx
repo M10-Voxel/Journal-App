@@ -11,7 +11,7 @@ import type { ActivityDefinition } from '../periodData';
 import { useTags } from '../tagStore';
 import type { Entry } from '../journal';
 import type { PeriodMode } from '../periods';
-import { periodBounds } from '../periods';
+import { hasPinboard, periodBounds } from '../periods';
 import { plainText } from '../markdown';
 import { formatSpan } from '../planning';
 import { usePeriodData } from '../periodStore';
@@ -434,7 +434,7 @@ export function NebulaDesk({ mode, date, today, modes, modeLabels, dirty, title,
   // notebook while docked in it; the day's own windows floating over the desk.
   const [layout, changeLayout] = useNebulaLayout();
   const family: Family = mode === 'day' ? 'day' : 'period';
-  const openWindows: Record<WindowId, boolean> = { calendar: calendarOpen, notebook: notebookOpen && Boolean(notebook) };
+  const openWindows = { calendar: calendarOpen, notebook: notebookOpen && Boolean(notebook), board: hasPinboard(mode) };
   // Windows pulled out of the journal (their own windows now); the board comes back when its window closes.
   const [detached, setDetached] = useState<PanelId[]>([]);
   useEffect(() => {
@@ -451,9 +451,9 @@ export function NebulaDesk({ mode, date, today, modes, modeLabels, dirty, title,
   const notebookOpenRef = useRef(notebookOpen); notebookOpenRef.current = notebookOpen;
   const shown = visiblePanels(layout, family, openWindows).filter(id => !detached.includes(id));
   const shownRef = useRef(shown); shownRef.current = shown;
-  const floatingOwn = layout.floating.filter(id => own[family].includes(id) && !detached.includes(id));
+  const floatingOwn = layout.floating.filter(id => own[family].includes(id) && !detached.includes(id) && (id !== 'board' || openWindows.board));
   const docked = (id: WindowId) => layout.docked.includes(id);
-  const isOpen = (id: PanelId) => id === 'calendar' ? calendarOpen : id === 'notebook' ? openWindows.notebook : !detached.includes(id);
+  const isOpen = (id: PanelId) => id === 'calendar' ? calendarOpen : id === 'notebook' ? openWindows.notebook : !detached.includes(id) && (id !== 'board' || openWindows.board);
   // Focus: any window that is there to see (open, not minimized; in the grid or floating) and the overview's calendar.
   const present = (id: FocusId) => id === 'overview' || (isOpen(id) && (floatingOwn.includes(id) || (id === 'calendar' || id === 'notebook') && !docked(id)
     || shown.includes(id) && !layout.minimized.includes(id)));
@@ -530,7 +530,7 @@ export function NebulaDesk({ mode, date, today, modes, modeLabels, dirty, title,
     header.addEventListener('pointermove', move); header.addEventListener('pointerup', end); header.addEventListener('pointercancel', end);
   }
   const panelLabels: Record<PanelId, string> = { entries: t('Einträge'), data: t('Daten'), board: t('Pinnwand'), notes: t('Notiz'), activities: t('Aktivitäten'), calendar: t('Kalender'), notebook: t('Notizen') };
-  const commandOf = (id: PanelId) => id === 'entries' || id === 'notes' || id === 'activities' ? `./${id}.sh ${dayArg}` : ({ data: './data.sh', board: './board.sh', calendar: './calendar.sh', notebook: './notes.sh --tree' } as Record<string, string>)[id];
+  const commandOf = (id: PanelId) => id === 'entries' || id === 'notes' || id === 'activities' || id === 'board' ? `./${id}.sh ${dayArg}` : ({ data: './data.sh', calendar: './calendar.sh', notebook: './notes.sh --tree' } as Record<string, string>)[id];
   const panelContent: Record<PanelId, ReactNode> = { entries, data, board, notes, activities, calendar, notebook };
   const isDefault = JSON.stringify(layout) === JSON.stringify(defaultLayout());
   const [barSlots, setBarSlots] = useState<{ center: HTMLElement; end: HTMLElement } | null>(null);

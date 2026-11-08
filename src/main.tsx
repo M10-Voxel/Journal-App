@@ -30,6 +30,7 @@ import { UpdateNotice } from './components/UpdateNotice';
 import { PeriodNotes } from './components/PeriodNotes';
 import { BulletinBoard, FloatingNote } from './components/BulletinBoard';
 import type { Mode } from './components/PeriodNotes';
+import { hasPinboard } from './periods';
 import { Settings, applyTheme, loadSettings, saveSettings, swipeAvailable } from './settings';
 import { usePopupLook } from './popupLook';
 import { ThemeSync } from './components/ThemeSync';
@@ -134,6 +135,7 @@ function useStableCallback<A extends unknown[], R>(callback: (...args: A) => R):
 function App() {
   const language = useLanguage();
   const [periodMode, setPeriodMode] = useState<Mode>('day');
+  const boardPeriod = periodMode === 'month' || periodMode === 'year' ? periodMode : 'day';
   // Mail tags follow the language; they are created by the first mail import that needs them.
   useEffect(() => { void saveTags(current => ensureMailTags(current, language, false)).catch(() => {}); }, [language]);
   const [date, setDate] = useState(localDate);
@@ -267,6 +269,9 @@ function App() {
   const dateRef = useRef(date);
   dateRef.current = date;
   useEffect(() => { void emit('journal:date', date); }, [date]);
+  const boardContext = { date, period: boardPeriod };
+  const boardContextRef = useRef(boardContext); boardContextRef.current = boardContext;
+  useEffect(() => { void emit('journal:board-context', { date, period: boardPeriod }); }, [date, boardPeriod]);
   useEffect(() => {
     const stop = listen('history:restored', async () => {
       journal.invalidate();
@@ -280,7 +285,7 @@ function App() {
   }, []);
   useEffect(() => {
     const stops = [
-      listen('journal:hello', () => { void emit('journal:date', dateRef.current); }),
+      listen('journal:hello', () => { void emit('journal:date', dateRef.current); void emit('journal:board-context', boardContextRef.current); }),
       listen<{ date: string; entry: string | null }>('journal:navigate', event => showFromCalendar(event.payload.date, event.payload.entry)),
       // Reminders while this window is in front (otherwise the popup shows them, see reminders.rs), and "Erledigt" from there.
       listen<Reminder>('journal:reminder', event => {
@@ -662,7 +667,7 @@ function App() {
       </div>}</>;
   };
   const bookPage = (page: BookPage) => page.page === 'entries' ? entriesPage(page.date)
-    : page.page === 'board' ? <BulletinBoard date={page.date} />
+    : page.page === 'board' ? <BulletinBoard key={`${boardPeriod}:${page.date}`} date={page.date} period={boardPeriod} />
     : <PeriodNotes date={page.date} mode={page.page === 'data' ? 'day' : periodMode} part={page.page === 'data' ? undefined : page.page} onManage={() => openSettings('activities')} onImport={importFromCalendar} />;
   const stepLabels = {
     prev: { label: periodMode === 'day' ? t("Vorheriger Tag") : language === 'en' ? 'Previous period' : 'Vorheriger Zeitraum', tip: periodMode === 'day' ? t("Vorheriger Tag · Alt ←") : language === 'en' ? 'Previous period' : 'Vorheriger Zeitraum' },
@@ -777,7 +782,7 @@ function App() {
           onMode={setPeriodMode} onStep={stepPeriod} onToday={() => navigate(today)} stepLabels={stepLabels} disabled={driveBusy}
           datePicker={<MiniCalendarPicker date={date} open={datePickerOpen} onOpenChange={setDatePickerOpen} onPick={navigate} buttonRef={datePickerButtonRef} className="nebula-date">{pageHeading(date, periodMode)}</MiniCalendarPicker>}
           tagFilter={<TagFilter label={t("Tags im Journal")} hidden={hiddenTags} onChange={next => { setNewEntryId(null); setHiddenTags(next); }} />}
-          entries={entriesPage()} data={<PeriodNotes date={date} mode="day" onManage={() => openSettings('activities')} onImport={importFromCalendar} />} board={<BulletinBoard key={date} date={date} />}
+          entries={entriesPage()} data={<PeriodNotes date={date} mode="day" onManage={() => openSettings('activities')} onImport={importFromCalendar} />} board={<BulletinBoard key={`${boardPeriod}:${date}`} date={date} period={boardPeriod} />}
           notes={<PeriodNotes date={date} mode={periodMode} part="notes" onManage={() => openSettings('activities')} onImport={importFromCalendar} />}
           activities={<PeriodNotes date={date} mode={periodMode} part="activities" onManage={() => openSettings('activities')} onImport={importFromCalendar} />}
           calendar={calendar} calendarOpen={drawer.open} onCalendarToggle={() => toggleDrawer()} onCalendarClose={() => toggleDrawer(true)}
@@ -788,7 +793,7 @@ function App() {
           <div className="content">
             {periodMode === 'day' && entriesPage()}
             <PeriodNotes date={date} mode={periodMode} onManage={() => openSettings('activities')} onImport={importFromCalendar} />
-            {periodMode === 'day' && <BulletinBoard key={date} date={date} />}
+            {hasPinboard(periodMode) && <BulletinBoard key={`${boardPeriod}:${date}`} date={date} period={boardPeriod} />}
           </div>
         </div>}
 

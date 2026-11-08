@@ -28,7 +28,7 @@ export function Popover({ anchor, onClose, className = '', label, children, alig
       const rect = anchor.getBoundingClientRect(), margin = 8, gap = 6;
       const width = panel.offsetWidth, height = panel.offsetHeight;
       const below = rect.bottom + gap + height <= innerHeight - margin || rect.top - gap - height < margin;
-      const top = below ? Math.min(rect.bottom + gap, innerHeight - margin - height) : rect.top - gap - height;
+      const top = Math.min(below ? rect.bottom + gap : rect.top - gap - height, innerHeight - margin - height);
       const wanted = align === 'end' ? rect.right - width : rect.left;
       const left = Math.max(margin, Math.min(innerWidth - margin - width, wanted));
       setPlace(current => current && current.left === left && current.top === top && current.above === !below ? current : { left, top: Math.max(margin, top), above: !below });

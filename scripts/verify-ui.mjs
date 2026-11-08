@@ -147,7 +147,7 @@ const bootstrap = `
     }
     if (command === 'board_remove') {
       const cards=JSON.parse(sessionStorage.getItem('boardCards')||'[]'), note=cards.find(c=>c.id===payload.id), removed=new Set(payload.ids??[payload.id]);
-      for(const note of cards.filter(c=>removed.has(c.id)&&c.kind==='note'))for(const card of cards)if(card.kind!=='note'&&card.notebook&&!card.dates.length&&note.links?.includes(card.id)&&(card.links??[]).every(id=>(payload.ids??[payload.id]).includes(id)))removed.add(card.id);
+      for(const note of cards.filter(c=>removed.has(c.id)&&c.kind==='note'))for(const card of cards)if(card.kind!=='note'&&card.notebook&&!card.dates.length&&!Object.values(card.boards??{}).some(Boolean)&&note.links?.includes(card.id)&&(card.links??[]).every(id=>(payload.ids??[payload.id]).includes(id)))removed.add(card.id);
       sessionStorage.setItem('boardCards',JSON.stringify(cards.filter(c=>!removed.has(c.id)).map(c=>({...c,links:(c.links??[]).filter(id=>!removed.has(id))}))));
       return null;
     }
@@ -1413,7 +1413,7 @@ async function checkJournalTheme() {
   await until(`${kindsNow}==='notes,activities' && document.querySelector('[data-period-mode=month]').getAttribute('aria-current')==='page'`);
   await pause(400); await screenshot('journal-month.png');
   await key('PageDown', 'PageDown', 2);
-  await until(`${kindsNow}==='activities,notes'`);
+  await until(`${kindsNow}==='activities,board'`);
   await key('2', 'Digit2', 2);
   await until(`${kindsNow}==='notes,activities' && document.querySelector('[data-period-mode=week]').getAttribute('aria-current')==='page'`);
   await key('1', 'Digit1', 2);
@@ -3066,7 +3066,8 @@ try {
     await until(`window.__uiTest.day().entries.some(e=>e.id==='${entryId}' && e.tag==='${tagId}')`);
     assert.deepEqual(errors,[]);console.log('Tag editor, settings and stable identity checks passed.');
   } else if (process.env.JOURNAL_UI_SCOPE === 'board-free-drag') {
-    await evaluate("localStorage.setItem('journal.settings',JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'),theme:'nebula'}));sessionStorage.setItem('boardCards',JSON.stringify([{id:'free-card',kind:'note',title:'Free card',text:'',dates:[window.__uiTest.date],order:1,boardX:8,y:18,w:180,h:120}]));location.reload()");
+    // This scope exercises a content-sized board; fixed-height panels pan instead of growing.
+    await evaluate("localStorage.setItem('journal.nebulaLayout.v1',JSON.stringify({heights:{}}));localStorage.setItem('journal.settings',JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'),theme:'nebula'}));sessionStorage.setItem('boardCards',JSON.stringify([{id:'free-card',kind:'note',title:'Free card',text:'',dates:[window.__uiTest.date],order:1,boardX:8,y:18,w:180,h:120}]));location.reload()");
     const reset=async()=>{
       await evaluate("const cards=JSON.parse(sessionStorage.boardCards);cards[0].boardX=8;cards[0].y=18;sessionStorage.boardCards=JSON.stringify(cards);location.reload()");
       await until("Boolean(document.querySelector('.board-card'))");
@@ -3819,6 +3820,109 @@ try {
     await until("document.querySelector('.entry .entry-text').value==='Restored content'");
     assert(await evaluate("window.__sameRow===document.querySelector('.entry')"));
     console.log('Undo UI passed: local text undo, empty entry removal, redo and in-place refresh.');
+  } else if (process.env.JOURNAL_UI_SCOPE === 'period-boards') {
+    await command('Emulation.setFocusEmulationEnabled',{enabled:true});
+    await command('Emulation.setDeviceMetricsOverride',{width:1800,height:1100,deviceScaleFactor:1,mobile:false});
+    for(const [theme,pixel,popupStyle] of [['classic',false,'a'],['classic',true,'b'],['journal',false,'a'],['journal',true,'b'],['nebula',false,'a'],['nebula',false,'b']]) {
+      await evaluate(`(()=>{
+        const date=window.__uiTest.date;
+        localStorage.setItem('journal.settings',JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'),theme:${JSON.stringify(theme)},pixel:${pixel},popupStyle:${JSON.stringify(popupStyle)},language:${JSON.stringify(theme==='nebula'&&popupStyle==='b'?'en':'de')},bookPaging:'spread'}));
+        localStorage.removeItem('journal.nebulaLayout.v1');
+        const make=(id,kind,boardX,y,links,w=200)=>({id,kind,title:id,text:kind==='note'?'Shared **note**':'',dates:[date],created:date,order:1,boardX,y,w,h:kind==='note'?130:undefined,links,url:kind==='link'?'https://example.org':undefined});
+        sessionStorage.boardCards=JSON.stringify([make('period-a','note',38,44,['period-b']),make('period-b','image',320,210,['period-a','period-c'],180),make('period-c','link',510,80,['period-b']),make('period-d','note',52,430,[])]);
+        location.reload();
+      })()`);
+      await until("document.querySelectorAll('.entry').length===5");
+      if(theme==='journal') await key('PageDown','PageDown',2);
+      await until("document.querySelectorAll('.board-card').length===4");
+      const date=await evaluate('window.__uiTest.date'), month=`month:${date.slice(0,7)}`, year=`year:${date.slice(0,4)}`;
+      const openPeriodBoard=async(mode,keyValue)=>{
+        await evaluate('document.activeElement?.blur()');await key(mode==='month'?'3':'5',mode==='month'?'Digit3':'Digit5',2);
+        if(theme==='journal') {
+          await until("Boolean(document.querySelector('.book-cut-tab[data-page=board]')) && !document.querySelector('.book-page.is-notes .bulletin-board')");
+          await evaluate("document.querySelector('.book-cut-tab[data-page=board]').click()");
+          await until("Boolean(document.querySelector('.book-page.is-board:not(.is-outgoing)')) && !document.querySelector('.book-page.is-outgoing')");
+          assert(await evaluate("document.querySelector('.book-page.is-board').classList.contains('is-wide')"),'The period board gets its own wide book page.');
+        } else if(theme==='nebula') {
+          await until("Boolean(document.querySelector('[data-panel=board] .bulletin-board'))");
+          assert.equal(await evaluate("Boolean(document.querySelector('[data-panel=notes] .bulletin-board'))"),false,'The board is a separate Nebula window.');
+          assert(await evaluate("Boolean(document.querySelector('[data-panel=board] .nebula-panel-minimize'))"),'The board window has its own controls.');
+        }
+        await until(`document.querySelector('.bulletin-board')?.dataset.boardKey===${JSON.stringify(keyValue)}`);
+      };
+      const original=await evaluate("Object.fromEntries([...document.querySelectorAll('.board-card')].map(c=>[c.dataset.boardId,{x:c.offsetLeft,y:c.offsetTop,w:c.offsetWidth}]))");
+      assert.equal(await evaluate("document.querySelectorAll('.board-group-frame').length"),1,`${theme}: one rectangle per connected group`);
+      await evaluate("document.querySelector('[data-board-id=period-a] .board-assign').click()");
+      await until("Boolean(document.querySelector('.board-scope-picker'))");
+      assert.equal(await evaluate("document.querySelectorAll('.board-scope-target').length"),2);
+      assert.equal(await evaluate("Boolean(document.querySelector('.context-menu'))"),false,'The three-line action opens the assignment picker.');
+      const target=key=>`document.querySelector('[data-board-target="${key}"]')`;
+      await evaluate(`${target(month)}.click()`);
+      await until("JSON.parse(sessionStorage.boardCards).filter(c=>Object.values(c.boards??{}).some(Boolean)).length===1");
+      await evaluate("document.querySelectorAll('.board-scope-choice button')[1].click()");
+      await until(`${target(month)}.indeterminate===true`);
+      await evaluate(`${target(month)}.click()`);
+      await until(`JSON.parse(sessionStorage.boardCards).filter(c=>c.boards?.[${JSON.stringify(month)}]).length===3 && !${target(month)}.disabled`);
+      await evaluate(`${target(year)}.click()`);
+      await until(`JSON.parse(sessionStorage.boardCards).filter(c=>c.boards?.[${JSON.stringify(year)}]).length===3 && !${target(year)}.disabled`);
+      const transferred=await evaluate('JSON.parse(sessionStorage.boardCards)');
+      for(const card of transferred.filter(c=>c.id!=='period-d')) for(const key of [month,year]) assert.deepEqual([card.boards[key].boardX,card.boards[key].y,card.boards[key].w],[original[card.id].x,original[card.id].y,original[card.id].w],`${theme}: exact group arrangement copied`);
+      assert.equal(transferred.length,4,'Assignment creates references, not duplicate cards.');
+      await key('Escape');await openPeriodBoard('month',month);
+      if(theme==='nebula') {
+        await evaluate("document.querySelector('[data-panel=board] .nebula-panel-minimize').click()");
+        await until("!document.querySelector('[data-panel=board] .bulletin-board') && Boolean(document.querySelector('[data-panel=notes] .period-note'))");
+        await evaluate("document.querySelector('[data-panel=board] .nebula-panel-minimize').click()");
+        await until("document.querySelectorAll('[data-panel=board] .board-card').length===3");
+        await evaluate("document.querySelector('[data-panel=board] .nebula-panel-float').click()");
+        await until(`document.querySelector('[data-window=board] .bulletin-board')?.dataset.boardKey===${JSON.stringify(month)}`);
+        await evaluate("document.querySelector('[data-window=board] .nebula-window-grid').click()");
+        await until("Boolean(document.querySelector('[data-panel=board] .bulletin-board')) && !document.querySelector('[data-window=board]')");
+        await evaluate('document.activeElement?.blur()');await key('2','Digit2',2);
+        await until("document.querySelector('.nebula-stage')?.dataset.periodMode==='week' && !document.querySelector('[data-panel=board], [data-window=board]')");
+        await openPeriodBoard('month',month);
+      }
+      await until(`document.querySelector('.bulletin-board')?.dataset.boardKey===${JSON.stringify(month)} && document.querySelectorAll('.board-card').length===3`);
+      assert.deepEqual(await evaluate("Object.fromEntries([...document.querySelectorAll('.board-card')].map(c=>[c.dataset.boardId,{x:c.offsetLeft,y:c.offsetTop,w:c.offsetWidth}]))"),Object.fromEntries(Object.entries(original).filter(([id])=>id!=='period-d')));
+      await evaluate("document.querySelector('[data-board-id=period-a]').focus()");await key('ArrowRight');
+      await until(`JSON.parse(sessionStorage.boardCards).find(c=>c.id==='period-a').boards[${JSON.stringify(month)}].boardX===${original['period-a'].x+8}`);
+      await key('ArrowRight','ArrowRight',9);
+      await until(`JSON.parse(sessionStorage.boardCards).find(c=>c.id==='period-a').boards[${JSON.stringify(month)}].w===${original['period-a'].w+24}`);
+      assert(await evaluate(`(()=>{const c=JSON.parse(sessionStorage.boardCards).find(c=>c.id==='period-a');return c.boardX===${original['period-a'].x}&&c.boards[${JSON.stringify(year)}].boardX===${original['period-a'].x}&&c.w===${original['period-a'].w};})()`),'Month movement and resizing do not move the day or year.');
+      const groupGeometry=await evaluate("(()=>{const frame=document.querySelector('.board-group-frame'),cards=[...document.querySelectorAll('.board-card')],box=c=>({left:c.offsetLeft,top:c.offsetTop,width:c.offsetWidth,height:c.offsetHeight});return {frame:box(frame),cards:cards.map(box),fits:cards.every(c=>c.offsetLeft>=frame.offsetLeft&&c.offsetTop>=frame.offsetTop&&c.offsetLeft+c.offsetWidth<=frame.offsetLeft+frame.offsetWidth&&c.offsetTop+c.offsetHeight<=frame.offsetTop+frame.offsetHeight)};})()");
+      assert(groupGeometry.fits,`The group frame encloses all cards after resizing: ${JSON.stringify(groupGeometry)}`);
+      await evaluate("(()=>{const field=document.querySelector('[data-board-id=period-a] header input');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(field,'Shared title');field.dispatchEvent(new Event('input',{bubbles:true}));})()");
+      await until("JSON.parse(sessionStorage.boardCards).find(c=>c.id==='period-a').title==='Shared title'");
+      await screenshot(`period-board-${theme}-${pixel?'pixel':popupStyle}.png`);
+      await command('Page.reload');await until("document.querySelectorAll('.entry').length===5");await openPeriodBoard('month',month);
+      await until(`document.querySelector('.bulletin-board')?.dataset.boardKey===${JSON.stringify(month)} && document.querySelector('[data-board-id=period-a]')?.offsetLeft===${original['period-a'].x+8}`);
+      await openPeriodBoard('year',year);
+      await until(`document.querySelector('.bulletin-board')?.dataset.boardKey===${JSON.stringify(year)} && document.querySelectorAll('.board-card').length===3`);
+      assert.equal(await evaluate("document.querySelector('[data-board-id=period-a] header input').value"),'Shared title');
+      assert.equal(await evaluate("document.querySelector('[data-board-id=period-a]').offsetLeft"),original['period-a'].x);
+      await evaluate("document.querySelector('[data-board-id=period-a] .board-assign').click()");await until("Boolean(document.querySelector('.board-scope-picker'))");
+      await command('Emulation.setDeviceMetricsOverride',{width:420,height:780,deviceScaleFactor:1,mobile:false});await pause(150);
+      const pickerGeometry=await evaluate("(()=>{const p=document.querySelector('.board-scope-picker'),b=p.getBoundingClientRect();return {left:b.left,right:b.right,top:b.top,bottom:b.bottom,width:innerWidth,height:innerHeight,style:p.getAttribute('style')};})()");
+      assert(pickerGeometry.left>=0&&pickerGeometry.right<=pickerGeometry.width&&pickerGeometry.top>=0&&pickerGeometry.bottom<=pickerGeometry.height,`Assignment stays within a small window: ${JSON.stringify(pickerGeometry)}`);
+      await key('Escape');await command('Emulation.setDeviceMetricsOverride',{width:1800,height:1100,deviceScaleFactor:1,mobile:false});
+      await evaluate("document.querySelector('[data-board-id=period-a] .board-remove').click()");
+      await until("document.querySelectorAll('.board-card').length===2");
+      assert(await evaluate(`(()=>{const c=JSON.parse(sessionStorage.boardCards).find(c=>c.id==='period-a');return !c.boards[${JSON.stringify(year)}]&&!!c.boards[${JSON.stringify(month)}]&&c.dates.includes(window.__uiTest.date);})()`),'Taking down only removes this board membership.');
+      await evaluate("document.querySelector('.board-actions button').click()");await until("document.querySelectorAll('.board-card').length===3");
+      assert(await evaluate(`JSON.parse(sessionStorage.boardCards).some(c=>!c.id.startsWith('period-')&&c.dates.length===0&&!!c.boards?.[${JSON.stringify(year)}])`),'New period notes belong to this board without adding a daily pin.');
+      console.log(`Period boards passed: ${theme}, pixel=${pixel}, popup=${popupStyle}`);
+    }
+    const detachedOrigin=await evaluate('location.origin');
+    await command('Page.navigate',{url:detachedOrigin+'/?window=panel-board'});
+    await until("Boolean(document.querySelector('.nebula-detached')) && Boolean(window.__uiTest)");
+    await pause(100);
+    for(const period of ['month','year','day']) {
+      await evaluate(`window.__uiTest.emit('journal:board-context',{date:window.__uiTest.date,period:${JSON.stringify(period)}})`);
+      await until(`document.querySelector('.nebula-detached .bulletin-board')?.dataset.boardKey===( ${JSON.stringify(period)}==='day'?window.__uiTest.date:${JSON.stringify(period)}+':'+window.__uiTest.date.slice(0,${period==='month'?7:4}))`);
+    }
+    assert(await evaluate("JSON.parse(sessionStorage.boardCards).length===5"),'Undocking changes the view, not the stored cards.');
+    console.log('Detached pinboard follows the journal day/month/year context.');
+    assert.deepEqual(errors,[]);
   } else if (process.env.JOURNAL_UI_SCOPE === 'board') {
     await until("Boolean(document.querySelector('.bulletin-board'))");
     await evaluate("document.querySelector('.board-actions button').click()");
@@ -4138,12 +4242,13 @@ try {
   } else if (process.env.JOURNAL_UI_SCOPE === 'pixel') {
     await checkPixelTheme();
   } else if (process.env.JOURNAL_UI_SCOPE === 'nebula-sizing') {
-    await evaluate("localStorage.setItem('journal.settings',JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'),theme:'nebula'}));localStorage.removeItem('journal.nebulaLayout');localStorage.setItem('journal.calendarDrawer','1');localStorage.setItem('journal.notebookDrawer','1');localStorage.removeItem('journal.nebulaWindow.calendar');localStorage.removeItem('journal.nebulaWindow.notebook');");
+    await evaluate("localStorage.setItem('journal.settings',JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'),theme:'nebula'}));localStorage.removeItem('journal.nebulaLayout.v1');localStorage.setItem('journal.calendarDrawer','1');localStorage.setItem('journal.notebookDrawer','1');localStorage.removeItem('journal.nebulaWindow.calendar');localStorage.removeItem('journal.nebulaWindow.notebook');");
     await command('Emulation.setDeviceMetricsOverride',{width:1800,height:900,deviceScaleFactor:1,mobile:false});
     await command('Page.reload');
     await until("Boolean(document.querySelector('.nebula-notebook.is-open'))");await pause(500);
     assert(await evaluate("Math.abs(document.querySelector('.nebula-calendar').getBoundingClientRect().right-document.querySelector('.nebula-notebook').getBoundingClientRect().left)<1"),'Windows share a seam');
-    assert(await evaluate("Math.abs(document.querySelector('[data-panel=data]').getBoundingClientRect().height-document.querySelector('[data-panel=board]').getBoundingClientRect().height)<1"),'Default data and board heights match');
+    assert(await evaluate("Math.abs(document.querySelector('[data-panel=entries]').getBoundingClientRect().height-document.querySelector('[data-panel=data]').getBoundingClientRect().height)<1"),'Default entries and data heights match');
+    assert(await evaluate("document.querySelector('[data-panel=board]').getBoundingClientRect().height>document.querySelector('[data-panel=data]').getBoundingClientRect().height"),'The full-width board keeps its taller default height');
     await screenshot('nebula-adjacent.png');
     await evaluate("document.querySelector('.nebula-calendar-close').click();document.querySelector('.nebula-notebook .nebula-calendar-close').click()");
     const resize = async delta => { await evaluate(`(() => {const grip=document.querySelector('[data-panel=data] .nebula-panel-resize');grip.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,button:0,clientY:0}));window.dispatchEvent(new PointerEvent('pointermove',{clientY:${delta}}));window.dispatchEvent(new PointerEvent('pointerup'));})()`);await pause(150); };
@@ -4151,7 +4256,7 @@ try {
     assert.equal(await evaluate("getComputedStyle(document.querySelector('[data-panel=data] .nebula-panel-body')).overscrollBehaviorY"),'auto','A resized panel without overflow lets the desk scroll');
     await resize(-2000);
     assert.equal(await evaluate("getComputedStyle(document.querySelector('[data-panel=data] .nebula-panel-body')).overscrollBehaviorY"),'contain','Overflowing panel keeps scrolling inside');
-    assert.deepEqual(errors,[]);console.log('Nebula sizing passed: adjacent windows, equal default heights and overflow-dependent scroll containment.');
+    assert.deepEqual(errors,[]);console.log('Nebula sizing passed: adjacent windows, equal entries/data heights, taller board and overflow-dependent scroll containment.');
   } else if (process.env.JOURNAL_UI_SCOPE === 'nebula') {
     await checkNebulaTheme();
   } else if (process.env.JOURNAL_UI_SCOPE === 'popups') {

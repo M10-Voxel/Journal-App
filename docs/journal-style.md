@@ -10,7 +10,7 @@ Ohne Pixel verwendet Journal Source Serif 4 für die Schreibschrift, Fraunces f�
 
 ## Seiten und Navigation
 
-Ein Tag besitzt Einträge-, Daten- und Pinnwand-Seiten; Zeitraumübersichten haben Notizen und Aktivitäten. Nach der letzten Tagesseite folgt der nächste Tag. Der Modus **Seite für Seite** blättert ein Blatt weiter; **beide Seiten** zeigt Einträge und Daten zusammen und anschließend eine breite Pinnwand. Doppel-/Einzelseite kann gewählt werden; bei weniger als 880 Pixel verfügbarer Bühnenbreite erscheint automatisch eine Seite.
+Ein Tag besitzt Einträge-, Daten- und Pinnwand-Seiten. Monats- und Jahresübersichten besitzen Notizen, Aktivitäten und eine eigene Pinnwandseite; Woche und Quartal haben Notizen und Aktivitäten. Nach der letzten Seite folgt der nächste Tag beziehungsweise Zeitraum. Der Modus **Seite für Seite** blättert ein Blatt weiter; **beide Seiten** zeigt Einträge und Daten beziehungsweise Notizen und Aktivitäten zusammen und anschließend die breite Pinnwand, sofern die Ansicht eine besitzt. Die Pinnwand ist auch über ihr Seitenregister erreichbar. Doppel-/Einzelseite kann gewählt werden; bei weniger als 880 Pixel verfügbarer Bühnenbreite erscheint automatisch eine Seite.
 
 Die obere Leiste enthält Navigation und Fensterfunktionen. Tag, Woche, Monat, Quartal und Jahr sind Buchregister (`Strg+1–5`). Die Register für Einträge/Daten/Pinnwand behalten ihre Position. Das Leseband führt zu heute; die unteren äußeren Seitenecken sind dünne graue Winkel zum Blättern. Alternativen sind Wischen, Umschalt+Mausrad und `Strg+Bild↑`/`Strg+Bild↓`.
 

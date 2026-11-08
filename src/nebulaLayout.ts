@@ -22,7 +22,7 @@ export interface NebulaLayout {
   heights: Partial<Record<PanelId, number>>;
 }
 
-export const own: Record<Family, PanelId[]> = { day: ['entries', 'data', 'board'], period: ['notes', 'activities'] };
+export const own: Record<Family, PanelId[]> = { day: ['entries', 'data', 'board'], period: ['notes', 'activities', 'board'] };
 export const windows: readonly WindowId[] = ['calendar', 'notebook'];
 export const columns = 12, minSpan = 3;
 export const defaultLayout = (): NebulaLayout => ({ order: { day: [...own.day], period: [...own.period] }, minimized: [], spans: { entries: 7, data: 5, notes: 6, activities: 6 }, docked: [], floating: [], heights: { entries: 520, data: 520, board: 620 } });
@@ -54,8 +54,8 @@ export function normalizeLayout(raw: unknown): NebulaLayout {
 }
 
 /** The windows shown in the grid, in order: the family's own, and the calendar or notebook while docked and open. */
-export function visiblePanels(layout: NebulaLayout, family: Family, open: Record<WindowId, boolean>): PanelId[] {
-  return layout.order[family].filter(id => isOwn(id) ? !layout.floating.includes(id) : layout.docked.includes(id as WindowId) && open[id as WindowId]);
+export function visiblePanels(layout: NebulaLayout, family: Family, open: Record<WindowId, boolean> & { board?: boolean }): PanelId[] {
+  return layout.order[family].filter(id => id === 'board' && open.board === false ? false : isOwn(id) ? !layout.floating.includes(id) : layout.docked.includes(id as WindowId) && open[id as WindowId]);
 }
 
 /**

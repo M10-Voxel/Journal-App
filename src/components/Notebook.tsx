@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { t, useLanguage } from '../i18n';
 import { formatDate, formatShortDate, localDate } from '../dates';
 import { BoardImage, Lightbox, Note, connectCards, disconnectCards, hostOf, httpsLink, linkPreview, nextOrder, patchCards, removeCard, removeCards, storeImage, useCards, useFolders } from '../boardCards';
+import { BoardScopePicker } from './BoardScopePicker';
 import type { Card, Folder } from '../boardCards';
 import { attachmentsOf, canMoveFolder, flatTree, folderPath, nextFolderOrder, noteSorts, notesIn, onDayPatch, pagesOf, sortNotes, visibleTree } from '../notebook';
 import type { NoteSort } from '../notebook';
@@ -339,6 +340,7 @@ export function Notebook({ onClose, onOpenDay }: { onClose?: () => void; onOpenD
         <header className="notebook-page-head">
           <input ref={titleRef} className="notebook-title" aria-label={t('Titel')} placeholder={t('Titel')} value={page.title} onChange={e => void patch(page.id, { title: e.target.value })} />
           <div className="notebook-page-tools">
+            <BoardScopePicker cards={cards} id={page.id} date={page.created ?? page.dates[0] ?? today} />
             <FolderPick value={page.folder && known.has(page.folder) ? page.folder : null} tree={tree} onPick={folder => moveNote(page.id, folder)} />
             <button type="button" className="notebook-delete" title={t('Zettel endgültig löschen')} aria-label={t('Zettel endgültig löschen')} onClick={() => void run(() => deleteNote(page))}><Icon name="trash" /></button>
             {chosen.length > 1 && <button type="button" className="notebook-delete" disabled={busy} title={t('Alle ausgewählten Zettel löschen')} aria-label={t('Alle ausgewählten Zettel löschen')} onClick={() => void run(() => deleteNotes(chosen))}><Icon name="trash" /><span>{chosen.length}</span></button>}

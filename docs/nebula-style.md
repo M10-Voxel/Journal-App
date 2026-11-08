@@ -10,7 +10,7 @@ Space Mono wird für Schreib-/Monospace-Bereiche verwendet, Space Grotesk für U
 
 ## Desktop und Panels
 
-Die Fensterelemente lassen sich im Zwölf-Spalten-Raster anordnen. Tagesansichten besitzen `entries`, `data` und `board`, Zeitraumübersichten `notes` und `activities`. Kalender und Notizblock können frei über dem Desktop stehen oder in das Raster eingedockt werden. Die Ausgangsanordnung steht in `defaultLayout()`; bereits gespeicherte Layouts werden erhalten. **layout --reset** stellt die Ausgangsanordnung wieder her.
+Die Fensterelemente lassen sich im Zwölf-Spalten-Raster anordnen. Tagesansichten besitzen `entries`, `data` und `board`, Zeitraumübersichten `notes` und `activities`. In der Monats- und Jahresansicht kommt `board` als eigenes Pinnwandfenster hinzu, mit denselben Größen-, Minimierungs- und Fensterfunktionen wie am Tag. In Wochen- und Quartalsansichten wird es ausgeblendet. Kalender und Notizblock können frei über dem Desktop stehen oder in das Raster eingedockt werden. Die Ausgangsanordnung steht in `defaultLayout()`; bestehende Layouts behalten ihre Anordnung und ergänzen die Zeitraum-Pinnwand automatisch. **layout --reset** stellt die Ausgangsanordnung wieder her.
 
 - Kopfzeile ziehen: verschieben beziehungsweise umordnen. Ränder und Ecken verändern die Größe.
 - Fenster können minimiert, angedockt oder fokussiert werden. Eine schmale minimierte Leiste kann neben einem geöffneten Panel stehen.

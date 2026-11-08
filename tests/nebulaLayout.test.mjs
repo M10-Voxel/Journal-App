@@ -20,7 +20,7 @@ test('a stored layout is made whole: own windows always there, unknown ids and s
   assert.deepEqual(normalizeLayout(null), defaultLayout());
   const layout = normalizeLayout({ order: { day: ['board', 'calendar', 'nonsense', 'board'], period: [] }, docked: ['notebook'], minimized: ['data', 'x'], heights: { board: 300, data: 20, nonsense: 400 } });
   assert.deepEqual(layout.order.day, ['board', 'entries', 'data', 'notebook'], 'The calendar is not docked, so it leaves; the docked notebook joins.');
-  assert.deepEqual(layout.order.period, ['notes', 'activities', 'notebook']);
+  assert.deepEqual(layout.order.period, ['notes', 'activities', 'board', 'notebook']);
   assert.deepEqual(layout.minimized, ['data']);
   assert.deepEqual(layout.heights, { board: 300 }, 'Heights below the minimum are dropped.');
 });
@@ -28,11 +28,22 @@ test('a stored layout is made whole: own windows always there, unknown ids and s
 test('docking puts the calendar into both grids, at the chosen place in this one', () => {
   const layout = dockWindow(halves(), 'day', 'calendar', 1, open);
   assert.deepEqual(layout.order.day, ['entries', 'calendar', 'data', 'board']);
-  assert.deepEqual(layout.order.period, ['notes', 'activities', 'calendar']);
+  assert.deepEqual(layout.order.period, ['notes', 'activities', 'board', 'calendar']);
   assert.deepEqual(visiblePanels(layout, 'day', { calendar: false, notebook: false }), ['entries', 'data', 'board'], 'Closed, it is not shown but keeps its place.');
   const back = undockWindow(toggleMinimized(layout, 'calendar'), 'calendar');
   assert.deepEqual(back.order.day, ['entries', 'data', 'board']);
   assert.deepEqual(back.minimized, [], 'Floating again, it is not minimized.');
+});
+
+test('old period layouts gain a board panel while weeks and quarters can hide it without losing its place', () => {
+  const layout=normalizeLayout({order:{period:['activities','notes']},heights:{board:480}});
+  assert.deepEqual(layout.order.period,['activities','notes','board']);
+  assert.deepEqual(visiblePanels(layout,'period',{...open,board:true}),['activities','notes','board']);
+  assert.deepEqual(visiblePanels(layout,'period',{...open,board:false}),['activities','notes']);
+  assert.equal(layout.heights.board,480);
+  const front=movePanel(layout,'period','board',0,{...open,board:true});
+  assert.deepEqual(visiblePanels(front,'period',{...open,board:true}),['board','activities','notes']);
+  assert.deepEqual(visiblePanels(front,'period',{...open,board:false}),['activities','notes']);
 });
 
 test('moving counts the shown windows; hidden ones keep their place', () => {

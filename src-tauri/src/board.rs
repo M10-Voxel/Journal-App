@@ -70,7 +70,7 @@ fn update_cards(db:&Store,patches:&Value,remove:&[String])->Result<(Vec<Value>,V
         uuid::Uuid::parse_str(id).map_err(|_|"Ungültige Karte")?;
         if let Some(note)=cards.iter().find(|c|c["id"]==id.as_str()&&c["kind"]=="note") {
             for attachment in &cards {
-                if attachment["kind"]=="note"||attachment["notebook"]!=true||!attachment["dates"].as_array().is_some_and(|d|d.is_empty()){continue}
+                if attachment["kind"]=="note"||attachment["notebook"]!=true||!attachment["dates"].as_array().is_some_and(|d|d.is_empty())||attachment["boards"].as_object().is_some_and(|boards|boards.values().any(|board|!board.is_null())){continue}
                 let linked=note["links"].as_array().is_some_and(|links|links.contains(&attachment["id"]));
                 let private=attachment["links"].as_array().is_none_or(|links|links.iter().all(|link|link==id.as_str()||remove.iter().any(|r|link==r.as_str())));
                 if linked&&private {if let Some(id)=attachment["id"].as_str(){removed.push(id.to_string());}}
@@ -225,6 +225,45 @@ mod tests {
         assert!(state(&db).is_empty());
         crate::history::step(&mut db,false).unwrap();assert_eq!(state(&db),tied);
 
+        drop(db);std::fs::remove_file(path).unwrap();
+    }
+    #[test] fn period_groups_persist_sync_and_undo_as_one_assignment() {
+        let root=std::env::temp_dir().join(format!("journal-period-boards-{}",uuid::Uuid::new_v4()));
+        std::fs::create_dir(&root).unwrap();
+        let path=root.join("source.sqlite");let mut db=Store::open(&path).unwrap();
+        let note=uuid::Uuid::new_v4().to_string();let image=uuid::Uuid::new_v4().to_string();
+        for (id,kind,links) in [(&note,"note",vec![image.clone()]),(&image,"image",vec![note.clone()])] {
+            save_card(&db,id,&json!({"kind":kind,"title":id,"text":"Shared content","dates":["2026-11-08"],"links":links,"boardX":100,"y":80})).unwrap();
+        }
+        let before=db.sync_snapshot().unwrap();
+        update_cards(&db,&json!({
+            &note:{"boards":{"month:2026-11":{"boardX":100,"y":80,"w":280},"year:2026":{"boardX":100,"y":80,"w":280}}},
+            &image:{"boards":{"month:2026-11":{"boardX":430,"y":240},"year:2026":{"boardX":430,"y":240}}}
+        }),&[]).unwrap();
+        let assigned=db.sync_snapshot().unwrap();
+        assert!(crate::history::step(&mut db,false).unwrap());assert_eq!(db.sync_snapshot().unwrap(),before);
+        assert!(crate::history::step(&mut db,true).unwrap());assert_eq!(db.sync_snapshot().unwrap(),assigned);
+        save_card(&db,&note,&json!({"text":"Edited from another view"})).unwrap();
+        let synced=db.sync_snapshot().unwrap();drop(db);
+        let db=Store::open(&path).unwrap();assert_eq!(db.sync_snapshot().unwrap(),synced);
+        let stored=card_list(&db).unwrap().into_iter().find(|card|card["id"]==note).unwrap();
+        assert_eq!(stored["boardX"],100);assert_eq!(stored["boards"]["year:2026"]["y"],80);assert_eq!(stored["links"],json!([image]));
+        let mut remote=Store::open(&root.join("remote.sqlite")).unwrap();
+        remote.sync_apply(remote.sync_snapshot().unwrap(),synced.clone()).unwrap();
+        assert_eq!(remote.sync_snapshot().unwrap(),synced);
+        drop(remote);drop(db);std::fs::remove_dir_all(root).unwrap();
+    }
+    #[test] fn deleting_a_note_keeps_attachments_that_are_on_a_period_board() {
+        let path=std::env::temp_dir().join(format!("journal-board-period-attachment-{}.sqlite",uuid::Uuid::new_v4()));
+        let mut db=Store::open(&path).unwrap();let note=uuid::Uuid::new_v4().to_string();let image=uuid::Uuid::new_v4().to_string();
+        save_card(&db,&note,&json!({"kind":"note","text":"","dates":[],"links":[image]})).unwrap();
+        save_card(&db,&image,&json!({"kind":"image","text":"","dates":[],"notebook":true,"links":[note],"boards":{"year:2026":{"boardX":40,"y":90}}})).unwrap();
+        let (_,removed)=remove_card(&db,&note).unwrap();assert_eq!(removed,vec![note.clone()]);
+        let kept=card_list(&db).unwrap();assert_eq!(kept.len(),1);assert_eq!(kept[0]["id"],image);assert_eq!(kept[0]["links"],json!([]));
+        assert_eq!(kept[0]["boards"]["year:2026"]["y"],90);
+        assert!(crate::history::step(&mut db,false).unwrap());assert_eq!(card_list(&db).unwrap().len(),2);
+        save_card(&db,&image,&json!({"boards":{"year:2026":null}})).unwrap();
+        assert_eq!(remove_card(&db,&note).unwrap().1.len(),2);
         drop(db);std::fs::remove_file(path).unwrap();
     }
     #[test] fn cards_survive_restart_and_partial_edits_keep_their_links(){

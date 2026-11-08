@@ -1,18 +1,19 @@
 import { localDate, shiftDate } from './dates.ts';
-import { periodBounds } from './periods.ts';
+import { hasPinboard, periodBounds } from './periods.ts';
 import type { PeriodMode } from './periods.ts';
 
-// The journal style shows the app as a book. A day has three pages (entries, data, board), an overview (week to year)
-// two (note with ratings, activities). The book runs on: after the last page of a day (or period) the first page of the
+// Days, months and years have a separate board page. Weeks and quarters have only notes and activities.
+// The book runs on: after the last page of a day (or period) the first page of the
 // next one follows. A spread shows a page and the next one; turning moves by one page, so the right page goes left.
 export type DayPage = 'entries' | 'data' | 'board';
-export type PeriodPage = 'notes' | 'activities';
+export type PeriodPage = 'notes' | 'activities' | 'board';
 export type PageKind = DayPage | PeriodPage;
 export interface BookPage { date: string; page: PageKind }
 
 export const dayPages: readonly DayPage[] = ['entries', 'data', 'board'];
 export const periodPages: readonly PeriodPage[] = ['notes', 'activities'];
-export const pagesOf = (mode: PeriodMode): readonly PageKind[] => mode === 'day' ? dayPages : periodPages;
+const periodBoardPages: readonly PeriodPage[] = ['notes', 'activities', 'board'];
+export const pagesOf = (mode: PeriodMode): readonly PageKind[] => mode === 'day' ? dayPages : hasPinboard(mode) ? periodBoardPages : periodPages;
 export const firstPage = (mode: PeriodMode): PageKind => pagesOf(mode)[0];
 export const pageKey = (page: BookPage) => `${page.page}:${page.date}`;
 export const samePage = (a: BookPage, b: BookPage) => a.date === b.date && a.page === b.page;
@@ -73,7 +74,7 @@ const dayOfYear = (date: string) => {
   const [year, month, day] = date.split('-').map(Number);
   return Math.round((Date.UTC(year, month - 1, day) - Date.UTC(year, 0, 1)) / 86_400_000) + 1;
 };
-/** A page number for the foot of the page, counted from the start of the year (a day has three pages, a period two). */
+/** A page number for the foot of the page, counted from the start of the year. */
 export function pageNumber(page: BookPage, mode: PeriodMode): number {
   const pages = pagesOf(mode), index = Math.max(0, pages.indexOf(page.page));
   const month = Number(page.date.slice(5, 7));
@@ -84,24 +85,23 @@ export function pageNumber(page: BookPage, mode: PeriodMode): number {
 
 /**
  * Turning both pages at once (`spread`): a day is the spread entries | data, then the board over both pages; an
- * overview is notes | activities. One page at a time (`page`) is the paging above.
+ * overview is notes | activities, followed by its board where available. One page at a time (`page`) is the paging above.
  */
 export type BookPaging = 'page' | 'spread';
 /** The first page of the spread this page belongs to when both pages turn at once. */
 export function spreadStart(page: BookPage, mode: PeriodMode): BookPage {
   const value = normalizePage(page, mode);
-  if (mode !== 'day') return { date: value.date, page: 'notes' };
-  return value.page === 'board' ? value : { date: value.date, page: 'entries' };
+  return value.page === 'board' ? value : { date: value.date, page: firstPage(mode) };
 }
 /** The pages of that spread: two, or the board alone (two pages wide). */
 export function spreadPagesOf(page: BookPage, mode: PeriodMode): BookPage[] {
   const start = spreadStart(page, mode);
-  return mode === 'day' && start.page === 'board' ? [start] : [start, nextPage(start, mode)];
+  return start.page === 'board' ? [start] : [start, nextPage(start, mode)];
 }
 /** The next (or previous) spread when both pages turn at once. */
 export function turnSpread(page: BookPage, mode: PeriodMode, step: 1 | -1): BookPage {
   const start = spreadStart(page, mode);
-  if (mode !== 'day') return { date: shiftPeriod(start.date, mode, step), page: 'notes' };
+  if (!hasPinboard(mode)) return { date: shiftPeriod(start.date, mode, step), page: 'notes' };
   if (step > 0) return start.page === 'board' ? nextPage(start, mode) : { date: start.date, page: 'board' };
-  return start.page === 'board' ? { date: start.date, page: 'entries' } : previousPage(start, mode);
+  return start.page === 'board' ? { date: start.date, page: firstPage(mode) } : previousPage(start, mode);
 }

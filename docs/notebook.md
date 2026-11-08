@@ -14,6 +14,8 @@ Mit **Strg+Umschalt+N** öffnen und schließen. Klassisch bietet den Notizen-Tab
 
 Neue Notizen bleiben zunächst nur im Notizblock. **Auf dem Tag zeigen** legt einen Zettel auf die Pinnwand seines Erstellungsdatums. Ist der Tagesbezug aktiv, öffnen das anklickbare Datum und die Kontextmenü-Aktion den Journaltag und schließen den Notizblock. Ausschalten nimmt den Zettel von den Tagen, löscht aber nicht seinen Text.
 
+Über den Drei-Balken-Button im Notizkopf lässt sich der Zettel zusätzlich auf der Monats- oder Jahrespinnwand seines Erstellungsdatums anzeigen. Bei verknüpften Karten kann die gesamte Gruppe mit ihrer Anordnung übernommen werden. Inhalte bleiben gemeinsam; die Positionen können auf jeder Pinnwand unabhängig geändert werden.
+
 Bilder werden als AVIF angehängt; HTTPS-Links erhalten nach Möglichkeit eine Vorschau. Verbundene Zettel bilden zusätzliche Seiten. Bild↑/Bild↓ blättert; mit Strg funktioniert dies auch während des Schreibens. Verknüpfen und Lösen beschreibt die [Pinnwand](bulletin-board.md).
 
 Löschen entfernt auch ausschließlich an diesem Zettel hängende Anhänge. Geteilte oder weiterhin auf einer Pinnwand liegende Anhänge bleiben bestehen. Verbindungen, Ordneränderungen und Löschungen gehören zur lokalen [Rückgängig-Historie](undo-redo.md); Bilddateien bleiben für Wiederherstellung verfügbar.

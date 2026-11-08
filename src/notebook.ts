@@ -5,11 +5,14 @@
 
 export type Paper = 'yellow' | 'blue' | 'green' | 'pink';
 export type CardKind = 'note' | 'image' | 'link';
+export type BoardPlacement = { boardX?: number; x?: number; y?: number; z?: number; w?: number; h?: number };
 export type Card = {
   id: string; kind: CardKind; title: string; text: string; dates: string[]; order: number; url?: string; image?: string; pixel?: boolean; asset?: string; size?: number;
   x?: number; y?: number; z?: number; paper?: Paper;
   /** Absolute board coordinate; older cards keep their relative x until first moved. */
   boardX?: number;
+  /** Extra period boards, with a separate layout per board. Null means taken down. */
+  boards?: Record<string, BoardPlacement | null>;
   /** Chosen size: width of every card, height of a note (images keep their proportions, links their content). */
   w?: number; h?: number;
   /** The folder of a note (notebook), none for notes outside every folder. */
@@ -139,7 +142,7 @@ export function removalPatches(cards: Card[], id: string): Patches {
 export function removalIds(cards: Card[], id: string, removing = new Set([id])): Set<string> {
   const removed = new Set([id]), note = cards.find(card => card.id === id);
   if (note?.kind === 'note') for (const card of cards) {
-    if (card.kind !== 'note' && card.notebook && !card.dates.length && linksOf(note).includes(card.id) && linksOf(card).every(other => removing.has(other))) removed.add(card.id);
+    if (card.kind !== 'note' && card.notebook && !card.dates.length && !Object.values(card.boards ?? {}).some(Boolean) && linksOf(note).includes(card.id) && linksOf(card).every(other => removing.has(other))) removed.add(card.id);
   }
   return removed;
 }

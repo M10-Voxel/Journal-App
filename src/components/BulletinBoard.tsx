@@ -4,13 +4,16 @@ import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { Icon } from './Icon';
 import { Popover } from './Popover';
-import { contextMenu, openMenuAt } from './ContextMenu';
+import { BoardScopePicker } from './BoardScopePicker';
+import { contextMenu } from './ContextMenu';
 import type { MenuEntry, MenuItem, MenuSpec } from './ContextMenu';
 import { useLanguage } from '../i18n';
 import { BoardImage, Lightbox, Note, connectCards, disconnectCards, togglePrimaryNote, hostOf, httpsLink, linkPreview, nextOrder, source, storeImage, useCards, useFolders, usePixelTheme, waitForCard } from '../boardCards';
 import type { Card, Paper } from '../boardCards';
 import { folderPath, threadKind, threads } from '../notebook';
 import { resizeBoardView } from '../boardViewport';
+import { boardKey, cardGroups, cardWidth, groupFrames, isOnBoard, layoutBoard, pinToBoard, scopedBoardPatch } from '../boardPlacement';
+import type { BoardPeriod, BoardBox } from '../boardPlacement';
 import './bulletinBoard.css';
 
 // The board under the checklist: notes (small paper slips with Markdown), images (compressed to AVIF, as polaroids)
@@ -21,10 +24,10 @@ import './bulletinBoard.css';
 // the note, two notes pages of each other in the notebook). Threads hang from pin to pin and follow the cards.
 const papers: Paper[] = ['yellow', 'blue', 'green', 'pink'];
 const defaultWidth = (kind: Card['kind']) => kind === 'note' ? 232 : kind === 'image' ? 236 : 260;
-const widthOf = (card: Card) => card.w ?? defaultWidth(card.kind);
+const widthOf = cardWidth;
 const sizes = { minWidth: 160, maxWidth: 640, minHeight: 120, maxHeight: 900 };
 /** A slight tilt of its own per card, like pinned paper. */
-const tiltOf = (id: string) => ((parseInt(id.replace(/-/g, '').slice(0, 6), 16) % 7) - 3) * .6;
+const tiltOf = (id: string) => (((parseInt(id.replace(/-/g, '').slice(0, 6), 16) || 0) % 7) - 3) * .6;
 type Point = { x: number; y: number };
 /** A thread hangs a little between its pins (the pixel look draws it in steps on a 4 px grid). */
 function threadPath(a: Point, b: Point, pixel: boolean, taut = false) {
@@ -40,8 +43,10 @@ function threadPath(a: Point, b: Point, pixel: boolean, taut = false) {
   return path;
 }
 
-export function BulletinBoard({ date }: { date: string }) {
-  const { cards, patch, error } = useCards(); const en = useLanguage() === 'en'; const tr = (de: string, enText: string) => en ? enText : de;
+export function BulletinBoard({ date, period = 'day' }: { date: string; period?: BoardPeriod }) {
+  const { cards, patch: savePatch, error } = useCards(); const en = useLanguage() === 'en'; const tr = (de: string, enText: string) => en ? enText : de;
+  const key = boardKey(date, period);
+  const patch = (id: string, changes: Partial<Card>) => savePatch(id, scopedBoardPatch(cards.find(card => card.id === id), key, changes));
   const pixelTheme = usePixelTheme();
   const { folders } = useFolders();
   const [busy, setBusy] = useState(false), [message, setMessage] = useState(''), [picker, setPicker] = useState(false), [link, setLink] = useState<string | null>(null), [query, setQuery] = useState('');
@@ -100,15 +105,14 @@ export function BulletinBoard({ date }: { date: string }) {
     element.addEventListener('pointermove', move); element.addEventListener('pointerup', end); element.addEventListener('pointercancel', end); element.addEventListener('lostpointercapture', end);
   }
   const upload = useRef<HTMLInputElement>(null), boardRef = useRef<HTMLDivElement>(null);
-  const visible = cards.filter(c => c.dates?.includes(date)).sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
+  const layout = layoutBoard(cards, key, width);
+  const visible = layout.map(item => item.card);
   const topZ = Math.max(0, ...visible.map(c => c.z ?? 0));
   // Cards pinned before positions existed (or new ones) are laid out in a loose grid.
   const columns = Math.max(1, Math.floor((width + 24) / 264));
-  const placed = visible.map((card, index) => {
-    const free = Math.max(0, width - widthOf(card) - 16);
-    const auto = { x: columns > 1 ? (index % columns) / (columns - 1) : 0, y: 18 + Math.floor(index / columns) * 250 };
-    const x = dragging?.id === card.id ? dragging.x : card.boardX ?? Math.round(8 + (card.x ?? auto.x) * free);
-    const y = dragging?.id === card.id ? dragging.y : card.y ?? auto.y;
+  const placed = layout.map(({ card, x: savedX, y: savedY }) => {
+    const x = dragging?.id === card.id ? dragging.x : savedX;
+    const y = dragging?.id === card.id ? dragging.y : savedY;
     return { card, x, y, z: dragging?.id === card.id ? topZ + 1 : card.z ?? 0 };
   });
   const boardHeight = Math.max(380, ...placed.map(p => p.y + (heights[p.card.id] ?? 220) + 36));
@@ -157,7 +161,7 @@ export function BulletinBoard({ date }: { date: string }) {
   }
   async function add(kind: Card['kind'], extra: Partial<Card> = {}) {
     const id = crypto.randomUUID();
-    await patch(id, { kind, title: kind === 'note' ? tr('Neue Notiz', 'New note') : '', text: '', dates: [date], created: date, order: nextOrder(cards), z: topZ + 1, paper: papers[visible.length % papers.length], ...freeSpot(kind), ...extra });
+    await patch(id, { kind, title: kind === 'note' ? tr('Neue Notiz', 'New note') : '', text: '', dates: period === 'day' ? [date] : [], created: date, order: nextOrder(cards), z: topZ + 1, paper: papers[visible.length % papers.length], ...freeSpot(kind), ...extra });
     return id;
   }
   async function addLink() {
@@ -333,7 +337,7 @@ export function BulletinBoard({ date }: { date: string }) {
     setPicking({ from: card.id, index: 0 });
     setMessage(tr('Faden: Karte mit den Pfeiltasten wählen, Enter verbindet, Esc bricht ab.', 'Thread: pick a card with the arrow keys, Enter ties, Esc cancels.'));
   };
-  const takeDown = (card: Card) => { const dates = card.dates.filter(d => d !== date); void run(() => patch(card.id, { dates, ...card.onDay && !dates.length ? { onDay: false } : {} })); };
+  const takeDown = (card: Card) => { const changes = pinToBoard(cards, [card.id], key, false)[card.id]; if (changes) void run(() => patch(card.id, changes)); };
   const paperNames: [Paper, string][] = [['yellow', tr('Gelb', 'Yellow')], ['blue', tr('Blau', 'Blue')], ['green', tr('Grün', 'Green')], ['pink', tr('Rosa', 'Pink')]];
   function cardMenu(card: Card, x: number): MenuSpec {
     const tied = (card.links ?? []).map(id => cards.find(other => other.id === id)).filter((other): other is Card => !!other);
@@ -384,9 +388,18 @@ export function BulletinBoard({ date }: { date: string }) {
     ] };
   };
 
-  return <section className={`bulletin-board${pixelTheme ? ' is-pixel' : ''}`} aria-label={tr('Pinnwand', 'Pinboard')} onKeyDown={e => { if (!(e.ctrlKey && e.shiftKey && e.code === 'KeyN')) e.stopPropagation(); }}>
+  const boardTitle = period === 'month' ? tr('Monatspinnwand', 'Monthly pinboard') : period === 'year' ? tr('Jahrespinnwand', 'Yearly pinboard') : tr('Pinnwand', 'Pinboard');
+  const positions = Object.fromEntries(placed.map(({ card, x, y, z }) => [card.id, { boardX: x, y, z, w: widthOf(card), h: sizing?.id === card.id ? sizing.h : card.h }]));
+  const boxes: Record<string, BoardBox> = Object.fromEntries(placed.map(({ card, x, y }) => {
+    const w = sizing?.id === card.id ? sizing.w : widthOf(card), h = sizing?.id === card.id ? sizing.h ?? heights[card.id] ?? 220 : heights[card.id] ?? 220;
+    const angle = nebula || card.kind === 'note' ? 0 : tiltOf(card.id) * Math.PI / 180;
+    const rotatedW = Math.abs(w * Math.cos(angle)) + Math.abs(h * Math.sin(angle)), rotatedH = Math.abs(h * Math.cos(angle)) + Math.abs(w * Math.sin(angle));
+    return [card.id, { left: x + (w - rotatedW) / 2, top: y + (h - rotatedH) / 2, width: rotatedW, height: rotatedH }];
+  }));
+  const groups = groupFrames(cardGroups(cards), boxes);
+  return <section className={`bulletin-board${pixelTheme ? ' is-pixel' : ''}`} data-board-key={key} aria-label={boardTitle} onKeyDown={e => { if (!(e.ctrlKey && e.shiftKey && e.code === 'KeyN')) e.stopPropagation(); }}>
     <div className="board-head">
-      <div><h3>{tr('Pinnwand', 'Pinboard')}</h3><p className="page-hint">{tr('Zettel, Bilder und Links – frei anpinnen und verschieben.', 'Notes, images and links – pin and move them freely.')}</p></div>
+      <div><h3>{boardTitle}</h3><p className="page-hint">{tr('Zettel, Bilder und Links – frei anpinnen und verschieben.', 'Notes, images and links – pin and move them freely.')}</p></div>
       <div className="board-actions" role="toolbar" aria-label={tr('Hinzufügen', 'Add')}>
         <button type="button" disabled={busy} onClick={() => void run(() => add('note'))} title={tr('Neuer Zettel', 'New note')}><Icon name="pencil" /><span>{tr('Zettel', 'Note')}</span></button>
         <button type="button" disabled={busy} onClick={() => upload.current?.click()} title={tr('Bild hochladen (wird als AVIF komprimiert)', 'Upload image (compressed to AVIF)')}><Icon name="layout" /><span>{tr('Bild', 'Image')}</span></button>
@@ -399,10 +412,10 @@ export function BulletinBoard({ date }: { date: string }) {
     }} />
     {link !== null && <form className="board-link-form" onSubmit={e => { e.preventDefault(); void run(addLink); }}><Icon name="jump" /><input autoFocus type="url" required placeholder="https://…" aria-label="URL" value={link} onChange={e => setLink(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') setLink(null); }} /><button disabled={busy}>{tr('Anpinnen', 'Pin')}</button><button type="button" onClick={() => setLink(null)}>{tr('Abbrechen', 'Cancel')}</button></form>}
     {picker && <div className="board-library"><input autoFocus aria-label={tr('Notizen suchen', 'Search notes')} placeholder={tr('Zettel suchen …', 'Search notes …')} value={query} onChange={e => setQuery(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') setPicker(false); }} />
-      {cards.filter(c => c.kind === 'note' && !c.dates.includes(date) && (c.title + ' ' + c.text).toLowerCase().includes(query.toLowerCase())).map(c => {
+      {cards.filter(c => c.kind === 'note' && !isOnBoard(c, key) && (c.title + ' ' + c.text).toLowerCase().includes(query.toLowerCase())).map(c => {
         // Notes of the notebook carry their folder's path.
         const path = folderPath(folders, c.folder);
-        return <button type="button" key={c.id} className={`paper-${c.paper ?? 'yellow'}`} onClick={() => { void run(() => patch(c.id, { dates: [...c.dates, date], z: topZ + 1, ...freeSpot('note') })); setPicker(false); }}>
+        return <button type="button" key={c.id} className={`paper-${c.paper ?? 'yellow'}`} onClick={() => { void run(() => patch(c.id, { ...pinToBoard(cards, [c.id], key, true)[c.id], z: topZ + 1, ...freeSpot('note') })); setPicker(false); }}>
           <strong>{c.title || tr('Ohne Titel', 'Untitled')}</strong>{path.length > 0 && <span className="board-library-path"><Icon name="layout" />{path.join(' / ')}</span>}<small>{c.text.slice(0, 80)}</small></button>;
       })}
       <p className="page-hint">{tr('Zettel von anderen Tagen und abgenommene Zettel. Derselbe Zettel – Änderungen erscheinen überall.', 'Notes from other days and taken-down notes. The same note – edits show everywhere.')}</p></div>}
@@ -411,6 +424,7 @@ export function BulletinBoard({ date }: { date: string }) {
       style={{ height: Math.max(viewportHeight, Math.ceil(pan.y + boardHeight * scale)), '--board-scale': scale, '--board-pan-x': `${pan.x}px`, '--board-pan-y': `${pan.y}px` } as CSSProperties}>
     <div ref={boardRef} className={`board-world${linking ? ' is-linking' : ''}`} style={{ height: boardHeight, width, transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})` }}>
       {!visible.length && <p className="board-empty">{tr('Noch leer.', 'Still empty.')}<span className="page-hint"> {tr('Pinne einen Zettel, ein Bild oder einen Link an.', 'Pin a note, an image or a link.')}</span></p>}
+      {groups.map(group => <div key={group.ids.slice().sort().join(':')} className="board-group-frame" data-board-group={group.ids.join(',')} aria-hidden="true" style={{ left: group.left, top: group.top, width: group.width, height: group.height }} />)}
       {placed.map(({ card, x, y, z }) => <article key={card.id} data-board-id={card.id} tabIndex={0}
         className={`board-card is-${card.kind}${card.kind === 'note' ? ` paper-${card.paper ?? 'yellow'}` : ''}${dragging?.id === card.id ? ' is-moving' : ''}${sizing?.id === card.id ? ' is-sizing' : ''}${card.h ? ' has-height' : ''}${target === card.id ? ' is-link-target' : ''}${linking?.from === card.id || picking?.from === card.id ? ' is-link-source' : ''}${card.kind === 'note' && card.primary ? ' is-primary' : ''}`}
         style={{ left: x, top: y, zIndex: 1 + z, width: sizing?.id === card.id ? sizing.w : widthOf(card), height: card.kind === 'note' ? (sizing?.id === card.id ? sizing.h : card.h || undefined) : undefined, '--tilt': `${tiltOf(card.id)}deg` } as CSSProperties}
@@ -440,9 +454,8 @@ export function BulletinBoard({ date }: { date: string }) {
               title={card.primary ? tr('Hauptnotiz (erste Seite im Notizblock) · aufheben', 'Main note (first page in the notebook) · undo') : tr('Als Hauptnotiz markieren: erste Seite im Notizblock', 'Mark as main note: first page in the notebook')}
               aria-label={tr('Hauptnotiz', 'Main note')} onClick={() => void run(() => togglePrimaryNote(card.id))}><Icon name="priority" /></button>}
             {card.kind === 'note' && <button type="button" className="board-detach" title={tr('Als schwebende Notiz öffnen', 'Open floating note')} aria-label={tr('Als schwebende Notiz öffnen', 'Open floating note')} onClick={() => void run(() => invoke('board_detach', { id: card.id }))}><Icon name="pin" /></button>}
-            {/* The card's menu, the same as on a right click. */}
-            <button type="button" className="board-extra" title={tr('Mehr · Rechtsklick', 'More · right click')} aria-label={tr('Mehr', 'More')} aria-haspopup="menu" onClick={e => openMenuAt(e.currentTarget, cardMenu(card, x), e.detail === 0)}><Icon name="details" /></button>
-            <button type="button" className="board-remove" title={tr('Abnehmen (Zettel bleiben unter „Vorhandene“)', 'Take down (notes stay under “Existing”)')} aria-label={tr('Abnehmen', 'Take down')} onClick={() => { const dates = card.dates.filter(d => d !== date); void run(() => patch(card.id, { dates, ...card.onDay && !dates.length ? { onDay: false } : {} })); }}><Icon name="trash" /></button>
+            <BoardScopePicker cards={cards} id={card.id} date={date} source={key} positions={positions} />
+            <button type="button" className="board-remove" title={tr('Von dieser Pinnwand abnehmen', 'Take down from this pinboard')} aria-label={tr('Abnehmen', 'Take down')} onClick={() => takeDown(card)}><Icon name="trash" /></button>
           </div>
         </header>
         {card.kind === 'note' && card.primary && <span className="board-primary-mark" aria-label={tr('Hauptnotiz', 'Main note')}>{tr('Hauptnotiz', 'Main note')}</span>}
