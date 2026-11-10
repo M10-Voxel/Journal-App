@@ -142,8 +142,13 @@ const bootstrap = `
       sessionStorage.setItem('boardCards',JSON.stringify(cards.map(c=>c.folder===payload.id?{...c,folder:parent}:c)));return null;
     }
     if (command === 'board_patch_many') {
+      const apply=()=>{
       const cards=JSON.parse(sessionStorage.getItem('boardCards')||'[]');
-      sessionStorage.setItem('boardCards',JSON.stringify(cards.map(c=>({...c,...payload.patches[c.id]}))));return null;
+      const merged=new Map(cards.map(c=>[c.id,c]));
+      for(const [id,patch] of Object.entries(payload.patches))merged.set(id,{...merged.get(id),...patch,id});
+      sessionStorage.setItem('boardCards',JSON.stringify([...merged.values()]));return null;
+      };
+      return window.__uiTest.boardDelayMs?new Promise(resolve=>setTimeout(()=>resolve(apply()),window.__uiTest.boardDelayMs)):apply();
     }
     if (command === 'board_remove') {
       const cards=JSON.parse(sessionStorage.getItem('boardCards')||'[]'), note=cards.find(c=>c.id===payload.id), removed=new Set(payload.ids??[payload.id]);
@@ -2872,13 +2877,23 @@ try {
     await evaluate(`(() => {
       const card=(id,title,extra={})=>({id,kind:'note',title,text:'Notiz mit **Markdown**',dates:[],order:1,created:window.__uiTest.date,notebook:true,...extra});
       sessionStorage.setItem('boardFolders',JSON.stringify([{id:'work',name:'Arbeit',parent:null,order:1},{id:'home',name:'Privat',parent:null,order:2}]));
-      sessionStorage.setItem('boardCards',JSON.stringify([card('work-note','Projektplan',{folder:'work',links:['page','image']}),card('home-note','Urlaubsplan',{folder:'home'}),card('page','Zweite Seite',{folder:'work',links:['work-note']}),card('image','Bild',{kind:'image',notebook:true,links:['work-note'],image:'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="green"/></svg>'})]));
+      sessionStorage.setItem('boardCards',JSON.stringify([card('work-note','Projektplan',{folder:'work',links:['image']}),card('home-note','Urlaubsplan',{folder:'home'}),card('page','Zweite Seite',{folder:'work',links:[]}),card('image','Bild',{kind:'image',notebook:true,links:['work-note'],image:'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="green"/></svg>'})]));
       localStorage.setItem('journal.notebookCollapsed','invalid JSON');
       localStorage.setItem('journal.notebookNote','work-note');localStorage.setItem('journal.notebookDrawer','1');
     })()`);
     await command('Page.reload');
     await until("document.querySelector('.notebook-title')?.value==='Projektplan'");
     assert.equal(await evaluate("document.querySelectorAll('.notebook-attachment').length"),1);
+    await evaluate("(() => {const cards=JSON.parse(sessionStorage.boardCards),root=cards.find(c=>c.id==='work-note'),child=cards.find(c=>c.id==='page');root.links.push(child.id);root.pageLinks=[child.id];child.links=[root.id];sessionStorage.boardCards=JSON.stringify(cards);window.__uiTest.emit('board:reset',null);})()");
+    await until("document.querySelectorAll('.notebook-note').length===2&&!document.querySelector('.notebook-note[data-note-id=page]')");
+    await evaluate("window.dispatchEvent(new CustomEvent('journal:open-note',{detail:'page'}))");
+    await until("document.querySelector('.notebook-page')?.dataset.pageId==='page'");
+    assert(await evaluate("Boolean(document.querySelector('.notebook-note[data-note-id=work-note].is-current'))"),'Directly opening a subpage selects its main note while displaying the requested page.');
+    assert(await evaluate("Boolean(document.querySelector('.notebook-subpage[data-subpage-id=page].is-current'))"),'The directed child is shown under its parent, not as another standalone note.');
+    await evaluate("document.getAnimations().filter(a=>a.effect?.target?.closest?.('.notebook')&&Number.isFinite(a.effect.getTiming().iterations)).forEach(a=>a.finish())");
+    await screenshot('notebook-directed-pages.png');
+    await evaluate("(() => {const cards=JSON.parse(sessionStorage.boardCards);cards.find(c=>c.id==='work-note').links=['image'];cards.find(c=>c.id==='work-note').pageLinks=[];cards.find(c=>c.id==='page').links=[];sessionStorage.boardCards=JSON.stringify(cards);window.__uiTest.emit('board:reset',null);window.dispatchEvent(new CustomEvent('journal:open-note',{detail:'work-note'}));})()");
+    await until("document.querySelectorAll('.notebook-note').length===3&&document.querySelector('.notebook-title')?.value==='Projektplan'");
     await evaluate("window.__notebookBeforeMove=sessionStorage.boardCards;document.querySelectorAll('.notebook-note')[0].click()");
     await evaluate("document.querySelectorAll('.notebook-note')[1].dispatchEvent(new MouseEvent('click',{bubbles:true,ctrlKey:true}))");
     await until("document.querySelectorAll('.notebook-note.is-chosen').length===2");
@@ -2925,6 +2940,7 @@ try {
     await until("!document.querySelector('.notebook-title')");
     await fill('Zettel suchen','');
     await until("document.querySelector('.notebook-title')?.value==='Urlaubsplan'");
+    await evaluate("(() => {const cards=JSON.parse(sessionStorage.boardCards);cards.find(c=>c.id==='work-note').links=['image','page'];cards.find(c=>c.id==='work-note').pageLinks=['page'];cards.find(c=>c.id==='page').links=['work-note'];sessionStorage.boardCards=JSON.stringify(cards);window.__uiTest.emit('board:reset',null);})()");
     await evaluate("document.querySelector('[data-folder=work] .notebook-folder-name').click()");
     await until("Boolean(document.querySelector('[data-note-id=work-note]'))");
     await evaluate("document.querySelector('[data-note-id=work-note]').click()");
@@ -3909,11 +3925,12 @@ try {
       await key('Escape');await command('Emulation.setDeviceMetricsOverride',{width:1800,height:1100,deviceScaleFactor:1,mobile:false});
       await evaluate("document.querySelector('[data-board-id=period-a] .board-remove').click()");
       await until("document.querySelectorAll('.board-card').length===2");
-      assert(await evaluate(`(()=>{const c=JSON.parse(sessionStorage.boardCards).find(c=>c.id==='period-a');return !c.boards[${JSON.stringify(year)}]&&!!c.boards[${JSON.stringify(month)}]&&c.dates.includes(window.__uiTest.date);})()`),'Taking down only removes this board membership.');
+      assert(await evaluate("!JSON.parse(sessionStorage.boardCards).some(c=>c.id==='period-a')"),'Deleting a period card also removes its notebook record and other placements.');
       await evaluate("document.querySelector('.board-actions button').click()");await until("document.querySelectorAll('.board-card').length===3");
       assert(await evaluate(`JSON.parse(sessionStorage.boardCards).some(c=>!c.id.startsWith('period-')&&c.dates.length===0&&!!c.boards?.[${JSON.stringify(year)}])`),'New period notes belong to this board without adding a daily pin.');
       console.log(`Period boards passed: ${theme}, pixel=${pixel}, popup=${popupStyle}`);
     }
+    const detachedCardsBefore=await evaluate('sessionStorage.boardCards');
     const detachedOrigin=await evaluate('location.origin');
     await command('Page.navigate',{url:detachedOrigin+'/?window=panel-board'});
     await until("Boolean(document.querySelector('.nebula-detached')) && Boolean(window.__uiTest)");
@@ -3922,7 +3939,7 @@ try {
       await evaluate(`window.__uiTest.emit('journal:board-context',{date:window.__uiTest.date,period:${JSON.stringify(period)}})`);
       await until(`document.querySelector('.nebula-detached .bulletin-board')?.dataset.boardKey===( ${JSON.stringify(period)}==='day'?window.__uiTest.date:${JSON.stringify(period)}+':'+window.__uiTest.date.slice(0,${period==='month'?7:4}))`);
     }
-    assert(await evaluate("JSON.parse(sessionStorage.boardCards).length===5"),'Undocking changes the view, not the stored cards.');
+    assert.equal(await evaluate('sessionStorage.boardCards'),detachedCardsBefore,'Undocking changes the view, not the stored cards.');
     console.log('Detached pinboard follows the journal day/month/year context.');
     assert.deepEqual(errors,[]);
   } else if (process.env.JOURNAL_UI_SCOPE === 'board') {
@@ -4020,6 +4037,15 @@ try {
     await until("Boolean(document.querySelector('.board-thread.is-drawing'))");
     await key('Enter');
     await until("JSON.parse(sessionStorage.boardCards).filter(c=>c.links?.length).length===2");
+    // A third, unrelated card must fade the thread too; all card surfaces, not just their pins, mask it.
+    assert(await evaluate("(() => { const svg=document.querySelector('.board-threads'), cards=[...document.querySelectorAll('.board-card')]; return cards.length===3 && cards.every(card=>{const mask=svg.querySelector('[data-thread-card=\"'+card.dataset.boardId+'\"]'); return mask && Math.abs(Number(mask.getAttribute('width'))-card.offsetWidth)<2 && Math.abs(Number(mask.getAttribute('height'))-card.offsetHeight)<2;}) && [...svg.querySelectorAll('.board-thread')].every(path=>path.getAttribute('mask')?.startsWith('url(#board-threads-')); })()"), 'Threads fade over the complete surface of every card, including unrelated cards.');
+    await screenshot('board-thread-card-masking.png');
+    await evaluate("document.querySelector('.board-note .cm-content').focus()");
+    const blankBoardPoint = await evaluate("(() => { const v=document.querySelector('.board-viewport'),r=v.getBoundingClientRect(); for(let y=Math.max(0,r.top)+15;y<Math.min(innerHeight,r.bottom)-10;y+=25)for(let x=Math.max(0,r.left)+15;x<Math.min(innerWidth,r.right)-10;x+=25){const el=document.elementFromPoint(x,y);if(el?.closest('.board-viewport')===v&&!el.closest('.board-card,.board-thread-hit'))return {x,y};}throw Error('No free board area'); })()");
+    await command('Input.dispatchMouseEvent',{type:'mouseMoved',...blankBoardPoint});
+    await command('Input.dispatchMouseEvent',{type:'mousePressed',...blankBoardPoint,button:'left',buttons:1,clickCount:1});
+    await command('Input.dispatchMouseEvent',{type:'mouseReleased',...blankBoardPoint,button:'left',buttons:0,clickCount:1});
+    await until("!document.activeElement.closest('.board-card')");
     await evaluate("document.querySelector('.board-thread-hit').focus()");await key('Enter');
     await until("Boolean(document.querySelector('.board-thread-cut'))");
     await evaluate("document.querySelector('.board-thread-cut').click()");
@@ -4049,13 +4075,19 @@ try {
     await until("document.querySelectorAll('.board-card').length===3");
     assert(await evaluate("document.querySelector('.board-note').textContent.includes('Markdown note')"));
     const noteId=await evaluate("JSON.parse(sessionStorage.boardCards).find(c=>c.kind==='note').id");
+    await evaluate(`window.__deletedNoteFixture=JSON.parse(sessionStorage.boardCards).find(c=>c.id===${JSON.stringify(noteId)})`);
     await evaluate(`document.querySelector('[data-board-id="${noteId}"] header button:last-child').click()`);
     await until("document.querySelectorAll('.board-card').length===2");
+    assert(await evaluate(`!JSON.parse(sessionStorage.boardCards).some(c=>c.id===${JSON.stringify(noteId)})`),'Deleting a pinboard card deletes its notebook data too.');
+    // Seed a separate notebook-only source to exercise the Existing picker after permanent deletion.
+    await evaluate("sessionStorage.boardCards=JSON.stringify([...JSON.parse(sessionStorage.boardCards),{...window.__deletedNoteFixture,dates:[],notebook:true}]);window.__uiTest.emit('board:reset',null)");
     await evaluate("document.querySelectorAll('.board-actions button')[3].click()");
     await evaluate("document.querySelector('.board-library .board-library-pick').click()");
     await until("document.querySelectorAll('.board-card').length===3");
-    await evaluate(`document.querySelector('[data-board-id="${noteId}"] .board-detach').click()`);
-    await command('Page.navigate',{url:`http://127.0.0.1:${server.address().port}/?window=board-${noteId}`});
+    const repinnedId = await evaluate(`JSON.parse(sessionStorage.boardCards).find(c=>c.copyOf===${JSON.stringify(noteId)}).id`);
+    assert.notEqual(repinnedId,noteId,'Clicking an existing note creates a new independent card.');
+    await evaluate(`document.querySelector('[data-board-id="${repinnedId}"] .board-detach').click()`);
+    await command('Page.navigate',{url:`http://127.0.0.1:${server.address().port}/?window=board-${repinnedId}`});
     await until("Boolean(document.querySelector('.floating-note .cm-content'))");
     await evaluate("document.querySelector('.floating-note .cm-content').focus()");
     await command('Input.insertText',{text:'Floating update '});
@@ -4063,6 +4095,97 @@ try {
     await evaluate("document.querySelector('.floating-note button[aria-pressed]').click()");
     await until("document.querySelector('.floating-note button[aria-pressed=false]')!==null");
     await screenshot('board-floating.png');
+    // Existing -> group copy keeps exact positions and sizes, and creates the group atomically.
+    await evaluate("sessionStorage.setItem('boardCards',JSON.stringify([{id:'11000000-0000-4000-8000-000000000001',kind:'note',title:'Source A',text:'A',dates:['2020-01-01'],order:0,boardX:40,y:60,w:300,h:240,links:['11000000-0000-4000-8000-000000000002']},{id:'11000000-0000-4000-8000-000000000002',kind:'note',title:'Source B',text:'B',dates:['2020-01-01'],order:1,boardX:390,y:190,w:200,h:310,links:['11000000-0000-4000-8000-000000000001']}]))");
+    await command('Page.navigate',{url:`http://127.0.0.1:${server.address().port}/`});
+    await until("Boolean(document.querySelector('.board-actions'))");
+    await evaluate("document.querySelectorAll('.board-actions button')[3].click()");
+    await until("Boolean(document.querySelector('.board-library-copy'))");
+    assert.equal(await evaluate("document.querySelector('.board-library-copy').querySelectorAll('button').length"),1,'Only the larger group action sits beside the note.');
+    await evaluate("document.querySelector('.board-library-copy button').click()");
+    await until("document.querySelectorAll('.board-card').length===2");
+    assert.deepEqual(await evaluate("JSON.parse(sessionStorage.boardCards).filter(c=>c.dates.includes(window.__uiTest.date)).sort((a,b)=>a.order-b.order).map(c=>[c.boardX,c.y,c.w,c.h,c.links.length])"),[[40,60,300,240,1],[390,190,200,310,1]]);
+    assert.equal(await evaluate("document.querySelectorAll('.board-thread-direction').length"),1,'Note-to-note threads have a direction arrow.');
+    assert.equal(await evaluate("document.querySelectorAll('.board-primary').length"),0,'The main-note button has been replaced by thread directions.');
+    await evaluate("document.querySelector('.board-thread-hit').focus()");await key('Enter','Enter');
+    await until("Boolean(document.querySelector('.board-thread-reverse'))");
+    const beforeReverse=await evaluate("document.querySelector('.board-thread-menu p').textContent");
+    await evaluate("document.querySelector('.board-thread-reverse').click()");
+    await until(`document.querySelector('.board-thread-menu p').textContent!==${JSON.stringify(beforeReverse)}`);
+    await evaluate("document.querySelector('.board-thread-reverse').click()");
+    await until(`document.querySelector('.board-thread-menu p').textContent===${JSON.stringify(beforeReverse)}`);
+    await key('Escape','Escape');
+    await evaluate("document.querySelector('.board-group-name').focus()");
+    await command('Input.insertText',{text:'Testprojekt'}); await key('Enter','Enter');
+    await until("JSON.parse(sessionStorage.boardCards).filter(c=>c.groupName==='Testprojekt').length===2");
+    await command('Page.reload');
+    await until("document.querySelector('.board-group-name')?.value==='Testprojekt'");
+    // Drag an actual frame edge; the interior remains available for panning and card editing.
+    await evaluate("document.querySelector('.board-group-frame').scrollIntoView({block:'nearest'})");
+    const groupDrag = await evaluate("(() => {const frame=document.querySelector('.board-group-frame'),r=frame.getBoundingClientRect(); return {x:r.left+1,y:Math.max(r.top+30,110)};})()");
+    await command('Input.dispatchMouseEvent',{type:'mouseMoved',...groupDrag});
+    await command('Input.dispatchMouseEvent',{type:'mousePressed',...groupDrag,button:'left',buttons:1,clickCount:1});
+    await command('Input.dispatchMouseEvent',{type:'mouseMoved',x:groupDrag.x+32,y:groupDrag.y+20,button:'left',buttons:1});
+    await command('Input.dispatchMouseEvent',{type:'mouseReleased',x:groupDrag.x+32,y:groupDrag.y+20,button:'left',buttons:0,clickCount:1});
+    await until("JSON.parse(sessionStorage.boardCards).filter(c=>c.copyOf).every(c=>c.boardX===(c.title==='Source A'?72:422)&&c.y===(c.title==='Source A'?80:210))");
+    await evaluate("document.querySelector('.board-group-frame').focus()");
+    await key('ArrowDown','ArrowDown');
+    await until("JSON.parse(sessionStorage.boardCards).filter(c=>c.copyOf).every(c=>c.y===(c.title==='Source A'?88:218))");
+    await key('ArrowUp','ArrowUp');
+    await until("JSON.parse(sessionStorage.boardCards).filter(c=>c.copyOf).every(c=>c.y===(c.title==='Source A'?80:210))");
+    await screenshot('board-group-tools.png');
+    await until("Boolean(document.querySelector('.board-group-frame .board-copy-sync[aria-checked=false]'))");
+    await until("!document.querySelector('.board-status')");
+    await evaluate("window.__uiTest.boardDelayMs=200;window.__syncView={world:document.querySelector('.board-world'),card:document.querySelector('.board-card'),top:document.querySelector('.board-viewport').getBoundingClientRect().top,transform:document.querySelector('.board-world').style.transform};true");
+    await evaluate("document.querySelector('.board-group-frame .board-copy-sync').click()");
+    await until("Boolean(document.querySelector('.board-copy-sync:disabled'))");
+    assert(await evaluate("!document.querySelector('.board-status')&&window.__syncView.world===document.querySelector('.board-world')&&window.__syncView.card===document.querySelector('.board-card')&&Math.abs(window.__syncView.top-document.querySelector('.board-viewport').getBoundingClientRect().top)<1&&window.__syncView.transform===document.querySelector('.board-world').style.transform"),'Sync does not insert a status row, move the board or recreate its cards while saving.');
+    await until("JSON.parse(sessionStorage.boardCards).filter(c=>c.copySync).length===2");
+    await until("!document.querySelector('.board-copy-sync:disabled')");
+    assert.deepEqual(await evaluate("JSON.parse(sessionStorage.boardCards).filter(c=>c.copyOf).sort((a,b)=>a.order-b.order).map(c=>[c.boardX,c.y])"),[[72,80],[422,210]],'Enabling preserves the copied group position.');
+    await evaluate("(() => {const copy=JSON.parse(sessionStorage.boardCards).find(c=>c.copyOf==='11000000-0000-4000-8000-000000000002');document.querySelector('[data-board-id=\"'+copy.id+'\"]').focus({preventScroll:true});})()");
+    await key('ArrowRight','ArrowRight');
+    await until("JSON.parse(sessionStorage.boardCards).find(c=>c.id==='11000000-0000-4000-8000-000000000002').boardX===398");
+    await evaluate("document.querySelector('.board-group-frame').focus({preventScroll:true})");
+    await key('ArrowRight','ArrowRight');
+    await until("JSON.parse(sessionStorage.boardCards).filter(c=>c.copyOf).sort((a,b)=>a.order-b.order).every((c,i)=>c.boardX===(i===0?80:438))");
+    assert.deepEqual(await evaluate("JSON.parse(sessionStorage.boardCards).filter(c=>!c.copyOf).map(c=>c.boardX)"),[40,398],'Moving the whole synchronized group leaves the original group in place.');
+    await evaluate("(() => { const input=document.querySelector('.board-card header input'); input.focus(); input.select(); })()");
+    await command('Input.insertText',{text:'Shared copy title'});
+    await until("JSON.parse(sessionStorage.boardCards).filter(c=>c.title==='Shared copy title').length===2");
+    await evaluate("window.__syncView.top=document.querySelector('.board-viewport').getBoundingClientRect().top;window.__syncView.transform=document.querySelector('.board-world').style.transform;true");
+    await evaluate("document.querySelector('.board-group-frame .board-copy-sync').click()");
+    await until("!JSON.parse(sessionStorage.boardCards).some(c=>c.copySync)");
+    await until("!document.querySelector('.board-copy-sync:disabled')");
+    assert(await evaluate("window.__syncView.world===document.querySelector('.board-world')&&Math.abs(window.__syncView.top-document.querySelector('.board-viewport').getBoundingClientRect().top)<1&&window.__syncView.transform===document.querySelector('.board-world').style.transform"),'Turning sync off also preserves the board viewport.');
+    await evaluate("window.__uiTest.boardDelayMs=0");
+    await evaluate("(() => { const input=document.querySelector('.board-card header input'); input.focus(); input.select(); })()");
+    await command('Input.insertText',{text:'Independent copy title'});
+    await until("JSON.parse(sessionStorage.boardCards).filter(c=>c.title==='Independent copy title').length===1");
+    await command('Page.reload');
+    await until("Boolean(document.querySelector('.board-group-frame .board-copy-sync[aria-checked=false]'))");
+    await evaluate("document.querySelectorAll('.board-actions button')[3].click()");
+    await until("Boolean(document.querySelector('.board-library-copy'))");
+    await evaluate("document.querySelector('.board-library-pick').click()");
+    await until("Boolean(document.querySelector('.board-card > .board-copy-sync[aria-checked=false]'))");
+    await evaluate("document.querySelector('.board-card > .board-copy-sync').click()");
+    await until("Boolean(document.querySelector('.board-card > .board-copy-sync[aria-checked=true]'))");
+    const syncedCard = await evaluate("(() => { const card=document.querySelector('.board-card > .board-copy-sync').closest('.board-card');card.focus();return JSON.parse(sessionStorage.boardCards).find(c=>c.id===card.dataset.boardId); })()");
+    await key('ArrowRight','ArrowRight');
+    await until(`(() => { const c=JSON.parse(sessionStorage.boardCards),source=c.find(c=>c.id===${JSON.stringify(syncedCard.copyOf)}),copy=c.find(c=>c.id===${JSON.stringify(syncedCard.id)});return copy.boardX===${syncedCard.boardX + 8}&&source.boardX!==copy.boardX; })()`);
+    await evaluate("document.activeElement.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',altKey:true,shiftKey:true,bubbles:true,cancelable:true}))");
+    await until(`(() => { const c=JSON.parse(sessionStorage.boardCards),source=c.find(c=>c.id===${JSON.stringify(syncedCard.copyOf)}),copy=c.find(c=>c.id===${JSON.stringify(syncedCard.id)});return source.w===${syncedCard.w + 24}&&copy.w===source.w; })()`);
+    // The mock window can be idle, pausing entrance animations. Finish those for a useful visual snapshot.
+    await evaluate("document.getAnimations().filter(a=>a.effect?.target?.matches?.('.board-card')).forEach(a=>a.finish())");
+    await screenshot('board-copy-sync.png');
+    await evaluate("document.documentElement.setAttribute('data-pixel','')");
+    await pause(150); await screenshot('board-copy-sync-pixel.png');
+    await evaluate("(() => {const f=document.querySelector('.board-group-frame'),r=f.getBoundingClientRect();f.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:r.left+2,clientY:r.top+2}));})()");
+    await until("Boolean(document.querySelector('.ctx-item[data-item=delete]'))");
+    await key('Escape','Escape');
+    await evaluate("document.querySelector('.board-group-remove').click()");
+    await until("document.querySelectorAll('.board-card').length===1&&!document.querySelector('.board-group-frame')");
+    assert.equal(await evaluate("JSON.parse(sessionStorage.boardCards).length"),3,'Deleting a group removes its cards while preserving independent originals and copies.');
     assert.deepEqual(errors,[]);
     console.log('Board checks passed: markdown, AVIF encoding and decoding, link preview, pixel rendering, detach request and reload persistence.');
   } else if (process.env.JOURNAL_UI_SCOPE === 'trackpad') {
@@ -4323,8 +4446,14 @@ try {
       // The entry's icon (Alt I): searched in German, taken with Enter, shown in the tag's colour at the entry's lower right.
       await key('i', 'KeyI', 1);
       await until("document.querySelectorAll('.icon-picker .icon-option').length > 50 && document.activeElement === document.querySelector('.icon-picker input')");
+      await evaluate("document.querySelector('.icon-picker-browse [data-browse=all]').click()");
+      await until("document.querySelectorAll('.icon-picker .icon-option').length > 1500");
+      await evaluate("document.querySelector('.icon-picker input').focus()");
+      const iconPickerTop = await evaluate("document.querySelector('.icon-picker').getBoundingClientRect().top");
       await command('Input.insertText', { text:'arzt' });
       await until("document.querySelector('.icon-picker .icon-option[aria-selected=true]')?.dataset.icon === 'stethoscope'");
+      await pause(100);
+      assert(Math.abs(await evaluate("document.querySelector('.icon-picker').getBoundingClientRect().top") - iconPickerTop) < 2, `Searching keeps the icon picker in place (${theme} ${style}).`);
       await pause(250); await screenshot(`popups-${theme}-${style}-icons.png`);
       assert(await evaluate("(() => { const r=document.querySelector('.icon-picker').getBoundingClientRect(); return r.top>=0 && r.left>=0 && r.bottom<=innerHeight && r.right<=innerWidth; })()"), `The icon picker is on screen (${theme} ${style}).`);
       if (theme === 'classic' && style === 'b') {
@@ -4345,6 +4474,8 @@ try {
       await evaluate("document.querySelector('.reminder-choice [data-reminder-unit=day]').click()");
       await until("document.querySelector('.cal-composer-reminder').getAttribute('aria-label').includes('Tage vorher') && document.querySelector('.reminder-choice-own').classList.contains('is-current')");
       await evaluate("document.querySelector('.reminder-choice-number input').focus()");
+      // Let the reopened popover settle before typing (a focus hand-back of the previous one may still be due).
+      await pause(200); await evaluate("document.querySelector('.reminder-choice-number input').focus()");
       await key('ArrowDown', 'ArrowDown');
       await pause(250); await screenshot(`popups-${theme}-${style}-reminder.png`);
       assert(await evaluate("(() => { const r=document.querySelector('.reminder-choice').getBoundingClientRect(); return r.top>=0 && r.left>=0 && r.bottom<=innerHeight && r.right<=innerWidth; })()"), `The reminder choice is on screen (${theme} ${style}).`);
@@ -4745,7 +4876,14 @@ try {
   await screenshot('clock.png');
   await evaluate("document.querySelector('.planner-time-toggle').click()");
   await until("Boolean(document.querySelector('.planner-grid')) && document.activeElement.getAttribute('aria-selected') === 'true'");
+  // The bell opens when the reminder comes, inside the entry's planner: the planner stays open around it.
   await evaluate("document.querySelector('.planner-reminder').click()");
+  await until("Boolean(document.querySelector('.reminder-choice [data-reminder-choice=\"10\"]')) && Boolean(document.querySelector('.entry-dock-shell.is-open .planner'))");
+  assert.deepEqual(await evaluate("[...document.querySelectorAll('.reminder-choice [data-reminder-choice]')].map(b => b.dataset.reminderChoice)"), ['off', '0', '10', '60', '1440', 'own'], 'Presets: at the time, 10 minutes, an hour, a day.');
+  await pause(200);
+  assert(await evaluate("Boolean(document.querySelector('.entry-dock-shell.is-open .planner')) && Boolean(document.querySelector('.reminder-choice'))"), 'Choosing the reminder keeps the planner open.');
+  await evaluate("document.querySelector('.reminder-choice [data-reminder-choice=\"10\"]').click()");
+  await until("!document.querySelector('.reminder-choice') && Boolean(document.querySelector('.entry-dock-shell.is-open .planner'))");
   await until("document.querySelector('.planner-reminder').getAttribute('aria-pressed') === 'true' && document.querySelector('.planner-confirm').getAttribute('aria-label').endsWith('15:30 Uhr')");
   assert.equal(await evaluate("document.querySelector('.planner-confirm').textContent"), await shortDate(inTwoDays));
   assert(await evaluate("(() => { const planner=document.querySelector('.planner'); return Array.from(document.querySelectorAll('.planner-foot > *')).every(item => item.offsetParent === planner && item.offsetLeft + item.offsetWidth <= planner.clientWidth - 10 && item.offsetWidth >= 28); })()"), 'Calendar controls must fit inside the panel.');
@@ -4777,6 +4915,9 @@ try {
   await key('ArrowRight'); await key('ArrowRight');
   await setTime('15:30');
   await evaluate("document.querySelector('.planner-reminder').click()");
+  await until("Boolean(document.querySelector('.reminder-choice [data-reminder-choice=\"0\"]'))");
+  await evaluate("document.querySelector('.reminder-choice [data-reminder-choice=\"0\"]').click()");
+  await until("!document.querySelector('.reminder-choice') && document.querySelector('.planner-reminder').getAttribute('aria-pressed') === 'true'");
   await evaluate("document.querySelector('.planner-confirm').click()");
   await until(`${row(firstTask)}.dataset.trace === 'date' && !document.querySelector('.entry-dock-shell.is-open')`);
   assert.equal(await symbolIcon(firstTask), 'scheduled', 'A task planned for a date shows <.');

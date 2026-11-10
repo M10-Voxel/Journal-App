@@ -70,6 +70,15 @@
 .notebook-note-meta .icon { width: 10px; height: 10px; }
 .notebook-note:hover { background: var(--hover); }
 .notebook-note.is-current { background: var(--selected); }
+.notebook-note-group { display: flex; flex-direction: column; min-width: 0; }
+.notebook-subpage { display: flex; align-items: center; gap: 5px; min-height: 26px; margin: 1px 0 1px 12px; padding: 3px 7px; border: 0; border-left: 1px solid var(--edge); border-radius: 3px; background: transparent; color: var(--muted); font: 11.5px var(--sans); text-align: left; cursor: pointer; }
+.notebook-subpage .icon { flex: none; width: 10px; height: 10px; }
+.notebook-subpage small { flex: none; font: 10px var(--mono); opacity: .6; }
+.notebook-subpage span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.notebook-subpage:hover { background: var(--hover); }
+.notebook-subpage.is-current { color: var(--text); background: var(--selected); border-left-color: var(--accent); }
+:root[data-theme='nebula'] .notebook-subpage { font-family: var(--mono); border-radius: 0; }
+:root[data-pixel] .notebook-subpage { font-size: 15px; border-radius: 0; }
 .notebook-empty { margin: 6px 6px; color: var(--muted); font: 12px var(--sans); }
 
 /* The page: title, the switch, the text (as long as it is), the attachments, and the pager when there are pages. */

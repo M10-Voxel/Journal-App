@@ -4,11 +4,13 @@
 .board-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; }
 .board-head h3 { margin: 0; color: var(--strong); font: 600 15px var(--sans); }
 .board-head p { margin: 3px 0 0; color: var(--muted); font: 12px var(--sans); }
-.board-actions { display: flex; gap: 4px; padding: 3px; border-radius: 999px; background: var(--surface); box-shadow: 0 0 0 1px var(--edge); }
-.board-actions button { display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 11px 0 9px; border: 0; border-radius: 999px; background: transparent; color: var(--muted); font: 500 12px var(--sans); cursor: pointer; transition: background-color var(--fast) ease, color var(--fast) ease, transform 200ms var(--spring); }
-.board-actions button .icon { width: 13px; height: 13px; color: var(--accent); }
-.board-actions button:hover:not(:disabled), .board-actions button[aria-expanded='true'] { background: var(--hover); color: var(--text); }
-.board-actions button:active:not(:disabled) { transform: scale(.94); }
+/* The add buttons: one slim strip of segments, the way the theme draws its toolbars (themes below). Creating ones
+   (note, image, link) are marked is-create; "existing" is neutral. */
+.board-actions { display: flex; align-items: center; gap: 2px; padding: 2px; border-radius: 8px; background: var(--border); box-shadow: inset 0 0 0 1px var(--edge); }
+.board-actions button { display: flex; align-items: center; gap: 5px; height: 24px; padding: 0 9px 0 7px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font: 500 12px var(--sans); white-space: nowrap; cursor: pointer; transition: background-color var(--fast) ease, color var(--fast) ease, transform 200ms var(--spring); }
+.board-actions button .icon { width: 12px; height: 12px; color: var(--accent); }
+.board-actions button:is(:hover, :focus-visible):not(:disabled), .board-actions button[aria-expanded='true'] { background: var(--surface); color: var(--strong); box-shadow: 0 0 0 1px var(--edge), 0 1px 3px #0000003d; outline: 0; }
+.board-actions button:active:not(:disabled) { transform: scale(.95); }
 .board-actions button:disabled { opacity: .4; cursor: default; }
 .board-status { margin: 0 0 10px; color: var(--accent); font: 12px var(--sans); }
 
@@ -25,13 +27,14 @@
 .board-library > input { width: 100%; box-sizing: border-box; margin-bottom: 8px; }
 .board-library > :is(button, .board-library-row) { display: flex; flex-direction: column; gap: 2px; width: 100%; margin-bottom: 5px; padding: 7px 10px; border: 0; border-radius: 4px; background: var(--paper); color: var(--paper-ink); text-align: left; font: 12px var(--sans); cursor: pointer; box-shadow: 0 1px 2px #0006; }
 .board-library > button:hover, .board-library-pick:hover { filter: brightness(1.08); }
-/* A note of the library: the note itself (shows it here) and, beside it, buttons for independent copies. */
+/* A click copies the note; its group has a larger action alongside it. */
 .board-library > .board-library-row { flex-direction: row; align-items: stretch; gap: 0; padding: 0; overflow: hidden; }
 .board-library-pick { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; padding: 7px 10px; border: 0; background: transparent; color: inherit; text-align: left; font: 12px var(--sans); cursor: pointer; }
 .board-library-copy { flex: none; display: flex; flex-direction: column; justify-content: center; gap: 3px; padding: 4px 6px; border-left: 1px solid color-mix(in srgb, var(--paper-ink, #000) 14%, transparent); }
-.board-library-copy button { display: flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border: 0; border-radius: 999px; background: color-mix(in srgb, var(--paper-ink, #000) 11%, transparent); color: inherit; font: 11px var(--sans); white-space: nowrap; cursor: pointer; }
+.board-library-copy button { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 34px; height: 100%; padding: 0 12px; border: 0; border-radius: 6px; background: color-mix(in srgb, var(--paper-ink, #000) 11%, transparent); color: inherit; font: 12px var(--sans); white-space: nowrap; cursor: pointer; }
 .board-library-copy button:hover { background: color-mix(in srgb, var(--paper-ink, #000) 22%, transparent); }
 .board-library-copy .icon { width: 11px; height: 11px; }
+:root[data-theme='nebula'] .board-library-copy button { border-radius: 0; font-family: var(--mono); }
 .board-library small { opacity: .7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .board-library p { margin: 4px 2px 0; color: var(--muted); font: 11px var(--sans); }
 
@@ -62,23 +65,64 @@
 .paper-green { --paper: #b7d6a4; --paper-ink: #17281a; --pin: #c46ac6; }
 .paper-pink { --paper: #e5b3c2; --paper-ink: #321620; --pin: #4f8fd9; }
 
-.board-card header { display: flex; align-items: center; gap: 2px; margin: -4px -4px 6px; }
-.board-card header input { flex: 1; min-width: 0; height: 24px; padding: 0 4px; border: 0; border-radius: 3px; background: transparent; color: inherit; font: 600 13px var(--sans); outline: 0; cursor: text; }
+.board-card header { position: relative; display: flex; align-items: center; margin: -4px -4px 6px; }
+.board-card header input { flex: 1; min-width: 0; height: 24px; padding: 0 4px; border: 0; border-radius: 3px; background: transparent; color: inherit; font: 600 13px var(--sans); text-overflow: ellipsis; outline: 0; cursor: text; }
 .board-card header input::placeholder { color: color-mix(in srgb, currentColor 45%, transparent); }
 .board-card header input:focus { background: color-mix(in srgb, var(--paper-ink) 8%, transparent); }
-/* A note's tag: its dot beside the tools (always there when set, else with the tools). */
-.board-tag { display: grid; place-items: center; flex: none; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 4px; background: transparent; cursor: pointer; opacity: 0; transition: opacity var(--fast) ease; }
-.board-card:is(:hover, :focus-within) .board-tag, .board-tag.is-set, .board-tag[aria-expanded='true'] { opacity: 1; }
-.board-tag:hover { background: color-mix(in srgb, var(--paper-ink) 12%, transparent); }
-.board-tag .tag-dot.is-empty { box-shadow: inset 0 0 0 1.2px color-mix(in srgb, var(--paper-ink) 45%, transparent); }
-.board-tools { display: flex; gap: 1px; opacity: 0; transition: opacity var(--fast) ease; }
-.board-card:is(:hover, :focus-within) .board-tools { opacity: 1; }
-.board-tools button { display: grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: color-mix(in srgb, currentColor 65%, transparent); cursor: pointer; }
-.board-tools button:hover { background: color-mix(in srgb, var(--paper-ink) 12%, transparent); color: inherit; }
+/* The tools (tag, paper, float, pinboards, delete) lie over the title's end while the card is pointed at or focused,
+   on the paper's own colour, so the title keeps its full width at rest. While the title is typed in they step aside. */
+.board-tools { position: absolute; top: 50%; right: 0; display: flex; align-items: center; gap: 0; padding: 1px 1px 1px 16px; transform: translateY(-50%);
+  background: linear-gradient(90deg, transparent, var(--paper) 14px); opacity: 0; pointer-events: none; transition: opacity var(--fast) ease; }
+.board-card:is(:hover, :focus-within) .board-tools, .board-tools:has([aria-expanded='true']) { opacity: 1; pointer-events: auto; }
+.board-card header:has(> input:focus) .board-tools:not(:has([aria-expanded='true'])) { opacity: 0; pointer-events: none; }
+.board-tools button { display: grid; place-items: center; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: color-mix(in srgb, currentColor 62%, transparent); cursor: pointer; }
+.board-tools button:is(:hover, :focus-visible) { background: color-mix(in srgb, var(--paper-ink) 12%, transparent); color: inherit; outline: 0; }
 .board-tools button[aria-pressed='true'] { background: color-mix(in srgb, var(--paper-ink) 18%, transparent); color: inherit; }
 .board-tools .icon { width: 12px; height: 12px; }
-.board-tools:has(.board-assign[aria-expanded='true']) { opacity: 1; }
-.board-group-frame { position: absolute; box-sizing: border-box; z-index: 0; border: 1px solid color-mix(in srgb, var(--accent) 38%, var(--edge)); border-radius: 10px; background: color-mix(in srgb, var(--accent) 3%, transparent); pointer-events: none; }
+.board-tag .tag-dot { width: 8px; height: 8px; }
+.board-tag .tag-dot.is-empty { box-shadow: inset 0 0 0 1.2px color-mix(in srgb, var(--paper-ink) 45%, transparent); }
+/* A group: a thin frame around its cards, held at its edges. Its name sits in the top line like a legend (the line
+   breaks for it), its actions at the top right; both quiet until the frame is pointed at or focused. --board-ground
+   is the board's own colour, so name and actions cut the line cleanly (set per theme). */
+.bulletin-board { --board-ground: var(--cork); }
+.board-group-frame { --frame: color-mix(in srgb, var(--accent) 38%, var(--edge)); position: absolute; box-sizing: border-box; z-index: 0; border: 1px solid var(--frame); border-radius: 10px; background: color-mix(in srgb, var(--accent) 3%, transparent); pointer-events: none; transition: border-color var(--fast) ease; }
+.board-group-frame:is(:hover, :focus-within) { --frame: color-mix(in srgb, var(--accent) 62%, var(--edge)); }
+.board-group-frame:is(:focus-visible, .is-moving) { outline: 1px solid var(--accent); outline-offset: 2px; }
+.board-group-edge { position: absolute; pointer-events: auto; cursor: grab; touch-action: none; }
+.board-group-frame.is-moving .board-group-edge { cursor: grabbing; }
+.board-group-edge:is(.is-top, .is-bottom) { left: 0; right: 0; height: 8px; }
+.board-group-edge.is-top { top: -4px; } .board-group-edge.is-bottom { bottom: -4px; }
+.board-group-edge:is(.is-left, .is-right) { top: 0; bottom: 0; width: 8px; }
+.board-group-edge.is-left { left: -4px; } .board-group-edge.is-right { right: -4px; }
+.board-group-name { position: absolute; top: -9px; left: 12px; field-sizing: content; min-width: 4ch; max-width: calc(100% - 96px); box-sizing: border-box; height: 18px; padding: 0 5px; border: 0; border-radius: 3px; outline: none;
+  background: var(--board-ground); color: var(--muted); font: 500 11px var(--sans); text-overflow: ellipsis; pointer-events: auto; cursor: text; }
+.board-group-name::placeholder { color: transparent; transition: color var(--fast) ease; }
+.board-group-frame:is(:hover, :focus-within) .board-group-name::placeholder { color: var(--placeholder); }
+.board-group-name:placeholder-shown:not(:focus) { width: 14ch; background: transparent; }
+.board-group-frame:is(:hover, :focus-within) .board-group-name:placeholder-shown { background: var(--board-ground); }
+.board-group-name:focus { color: var(--strong); box-shadow: inset 0 -1px 0 var(--accent); }
+.board-group-actions { display: flex; align-items: center; gap: 2px; position: absolute; top: -10px; right: 12px; padding: 0 3px; border-radius: 4px; background: var(--board-ground); pointer-events: auto; opacity: .55; transition: opacity var(--fast) ease; }
+.board-group-frame:is(:hover, :focus-within) .board-group-actions, .board-group-actions:has(.is-on) { opacity: 1; }
+.board-group-remove { display: grid; place-items: center; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--muted); cursor: pointer; }
+.board-group-remove .icon { width: 12px; height: 12px; }
+.board-group-remove:is(:hover, :focus-visible) { color: var(--error); background: color-mix(in srgb, var(--error) 14%, transparent); outline: 0; }
+/* Sync with the original: a small switch. On a card it hangs at the paper's upper right edge like a tab (its word
+   shows while the card is pointed at); at a group it is only the symbol and the switch. */
+.board-copy-sync { display: inline-flex; align-items: center; gap: 4px; height: 18px; padding: 0 5px; border: 0; border-radius: 9px; background: var(--surface); box-shadow: 0 0 0 1px var(--edge); color: var(--muted); font: 500 10px var(--sans); cursor: pointer; pointer-events: auto; white-space: nowrap; transition: color var(--fast) ease, box-shadow var(--fast) ease; }
+.board-copy-sync > .icon { width: 10px; height: 10px; }
+.board-copy-sync > i { width: 16px; height: 9px; border-radius: 5px; background: var(--inset); box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 60%, transparent); transition: background-color var(--fast) ease; }
+.board-copy-sync > i::after { content: ''; display: block; width: 5px; height: 5px; margin: 2px; background: currentColor; border-radius: 50%; transition: transform 180ms var(--spring); }
+.board-copy-sync:is(:hover, :focus-visible) { color: var(--text); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 55%, var(--edge)); outline: 0; }
+.board-copy-sync.is-on { color: var(--accent); }
+.board-copy-sync.is-on > i { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+.board-copy-sync.is-on > i::after { transform: translateX(7px); }
+.board-group-actions .board-copy-sync { padding: 0 3px; background: transparent; box-shadow: none; }
+.board-group-actions .board-copy-sync > span { display: none; }
+.board-card > .board-copy-sync { position: absolute; top: -9px; right: 8px; z-index: 4; opacity: .8; }
+.board-card > .board-copy-sync > span { display: none; }
+.board-card:is(:hover, :focus-within) > .board-copy-sync > span { display: inline; }
+.board-card:is(:hover, :focus-within) > .board-copy-sync, .board-card > .board-copy-sync.is-on { opacity: 1; }
+:root[data-theme='nebula'] .board-copy-sync { font-family: var(--mono); }
 .board-scope-picker { width: 292px; max-width: calc(100vw - 24px); box-sizing: border-box; }
 .board-scope-choice { display: flex; gap: 3px; margin-bottom: 10px; padding: 3px; border-radius: 7px; background: var(--inset); }
 .board-scope-choice button { display: flex; align-items: center; justify-content: center; gap: 6px; flex: 1; min-width: 0; padding: 7px 5px; border: 0; border-radius: 5px; background: transparent; color: var(--muted); font: 12px var(--sans); cursor: pointer; }
@@ -283,6 +327,12 @@
 .board-thread { --thread-w: 1.5px; fill: none; stroke: var(--thread, var(--accent)); stroke-width: var(--thread-w); stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 2px 1.5px #0007); transition: stroke-width var(--fast) ease; }
 .board-thread.is-drawing { stroke-dasharray: 5 4; opacity: .9; }
 .board-thread-knot { fill: var(--thread, var(--accent)); }
+.board-thread-direction { fill: none; stroke: var(--thread, var(--accent)); stroke-width: 2px; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+.board-thread-reverse { display: flex; align-items: center; gap: 7px; width: 100%; min-height: 30px; margin-bottom: 4px; padding: 0 10px; border: 0; border-radius: 5px; background: var(--hover); color: var(--text); font: 12px var(--sans); cursor: pointer; }
+.board-thread-reverse .icon { width: 13px; height: 13px; }
+:root[data-theme='nebula'] .board-thread-reverse { border-radius: 0; font-family: var(--mono); }
+:root[data-pixel] .board-thread-reverse { border-radius: 0; }
+:root[data-pixel] .board-thread-direction { stroke-linecap: square; stroke-linejoin: miter; shape-rendering: crispEdges; }
 .board-thread-hit { fill: none; stroke: transparent; stroke-width: 12px; pointer-events: stroke; cursor: pointer; outline: none; }
 .board-surface.is-linking .board-thread-hit { pointer-events: none; }
 .board-thread-group:is(:hover, .is-open, :focus-within) .board-thread { stroke-width: calc(var(--thread-w) + 1px); }
@@ -319,18 +369,6 @@
 .nebula-panel-body.has-height .bulletin-board { height: 100%; display: flex; flex-direction: column; min-height: 0; margin-block: 0; padding-bottom: 0; }
 .nebula-panel-body.has-height .board-viewport { flex: 1; height: auto; min-height: 80px; }
 
-/* Notes tied together: the main note (the notebook's first page) carries a small tag at its top edge; its switch in the
-   card's tools stays lit. Images and links may be tied among themselves (a bundle). */
-.board-card.is-primary { outline: 2px solid var(--accent); outline-offset: 2px; }
-.board-primary-mark { position: absolute; top: -9px; left: 12px; z-index: 2; padding: 1px 7px; border-radius: 999px; background: var(--accent); color: var(--accent-text, #fff); font: 700 9.5px/16px var(--sans); letter-spacing: .05em; text-transform: uppercase; pointer-events: none; }
-.board-tools .board-primary[aria-pressed='true'] { color: var(--accent); }
-.board-thread-primary { display: flex; align-items: center; gap: 7px; width: 100%; height: 30px; margin-bottom: 4px; padding: 0 10px; border: 0; border-radius: 6px; background: transparent; color: var(--text); font: 500 12.5px var(--sans); text-align: left; cursor: pointer; }
-.board-thread-primary:hover, .board-thread-primary[aria-pressed='true'] { background: var(--hover); color: var(--strong); }
-.board-thread-primary[aria-pressed='true'] .icon { color: var(--accent); }
-.board-thread-primary .icon { flex: none; width: 13px; height: 13px; }
-:root[data-pixel] :is(.board-primary-mark, .board-thread-primary) { border-radius: 0; }
-:root[data-theme='nebula'] .board-card.is-primary { outline-color: var(--nb-violet, #7b2cbf); }
-:root[data-theme='nebula'] .board-primary-mark { border-radius: 0; background: var(--nb-violet, #7b2cbf); color: #fff; font-family: var(--mono); }
 /* The board in a Nebula window fills it: with a set height (from the first pull at the lower edge) exactly, else when
    its row stretches the window taller (never below the board's own height). The window's content wrapper passes the
    height on (without it, a set height left the board at its smallest). */
@@ -340,3 +378,65 @@
 .nebula-panel.is-board > .nebula-panel-body > .nebula-panel-content > .bulletin-board { flex: 1 0 auto; display: flex; flex-direction: column; min-height: 0; }
 .nebula-panel.is-board > .nebula-panel-body.has-height > .nebula-panel-content > .bulletin-board { flex: 1 1 0; height: auto; }
 .nebula-panel.is-board > .nebula-panel-body:not(.has-height) .board-viewport { flex: 1 0 auto; }
+
+/* ── Board controls per theme: the add strip, group frames and their names, the sync switch ───────────────────────
+   Normal keeps the segmented strip and rounded frame above. */
+
+/* Journal: ink on the page. The add buttons are written words between thin rules, underlined in ink when pointed at;
+   a group is pencilled round with a dashed line and named in handwriting; sync is a small paper label. */
+:root[data-theme='journal'] .bulletin-board { --board-ground: var(--book-paper); }
+:root[data-theme='journal'] .board-actions { gap: 0; padding: 0; border-radius: 0; background: transparent; box-shadow: none; }
+:root[data-theme='journal'] .board-actions button { position: relative; height: 26px; padding: 0 9px; border-radius: 3px; color: var(--muted); font: italic 13.5px var(--write); }
+:root[data-theme='journal'] .board-actions button + button::before { content: ''; position: absolute; left: -.5px; top: 7px; bottom: 7px; width: 1px; background: var(--divider); }
+:root[data-theme='journal'] .board-actions button .icon { color: color-mix(in srgb, var(--accent) 80%, var(--text)); }
+:root[data-theme='journal'] .board-actions button:is(:hover, :focus-visible):not(:disabled), :root[data-theme='journal'] .board-actions button[aria-expanded='true'] { background: transparent; box-shadow: none; color: var(--strong);
+  text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--accent) 70%, transparent); text-decoration-thickness: 1.5px; text-underline-offset: 4px; }
+:root[data-theme='journal'] .board-actions button:active:not(:disabled) { transform: translateY(1px); }
+:root[data-theme='journal'] :is(.board-link-form, .board-library) { border-radius: 3px; background: var(--book-paper); box-shadow: var(--soft-shadow); }
+:root[data-theme='journal'] :is(.board-link-form input, .board-library > input) { border-radius: 0; background: transparent; box-shadow: inset 0 -1px 0 var(--divider); font: 14px var(--write); }
+:root[data-theme='journal'] :is(.board-link-form input, .board-library > input):focus { box-shadow: inset 0 -1.5px 0 var(--accent); }
+:root[data-theme='journal'] .board-link-form button { border-radius: 3px; font: italic 13px var(--write); }
+:root[data-theme='journal'] .board-group-frame { --frame: color-mix(in srgb, var(--text) 28%, transparent); border-style: dashed; border-radius: 4px; background: transparent; }
+:root[data-theme='journal'] .board-group-frame:is(:hover, :focus-within) { --frame: color-mix(in srgb, var(--text) 50%, transparent); }
+:root[data-theme='journal'] .board-group-name { top: -11px; height: 21px; color: var(--text); font: italic 14px var(--write); }
+:root[data-theme='journal'] .board-group-name:focus { box-shadow: inset 0 -1.5px 0 var(--accent); }
+:root[data-theme='journal'] :is(.board-group-actions, .board-group-remove) { border-radius: 2px; }
+:root[data-theme='journal'] .board-copy-sync { height: 17px; border-radius: 2px; background: var(--book-paper); box-shadow: 0 0 0 1px var(--divider), 0 1px 2px var(--ink-shadow); font: italic 11.5px var(--write); }
+:root[data-theme='journal'] .board-copy-sync > i { border-radius: 2px; }
+:root[data-theme='journal'] .board-copy-sync > i::after { border-radius: 1px; }
+:root[data-theme='journal'] .board-group-actions .board-copy-sync { background: transparent; box-shadow: none; }
+/* The card's strip of tape sits at its upper right: the label hangs at the left instead. */
+:root[data-theme='journal'] .board-card > .board-copy-sync { right: auto; left: 8px; transform: rotate(-2deg); }
+
+/* Nebula: terminal parts. Square, mono, a dashed violet frame named in small capitals on the board's black; the
+   sync switch a little box that turns violet. In the Holo-Papier look the foils say what a button does: green for
+   creating, lilac for neutral ones (existing notes, sync on), orange for deleting. */
+:root[data-theme='nebula'] .bulletin-board { --board-ground: #08080a; }
+:root[data-theme='nebula'] .board-group-frame { --frame: color-mix(in srgb, var(--nb-violet-light) 42%, transparent); border-style: dashed; background: transparent; }
+:root[data-theme='nebula'] .board-group-frame:is(:hover, :focus-within) { --frame: var(--nb-violet-light); }
+:root[data-theme='nebula'] .board-group-name { color: var(--nb-violet-light); font: 700 10px/18px var(--mono); letter-spacing: .12em; text-transform: uppercase; }
+:root[data-theme='nebula'] .board-group-name:focus { color: #fff; box-shadow: inset 0 -1px 0 var(--nb-violet-light); }
+:root[data-theme='nebula'] :is(.board-group-name, .board-group-actions, .board-group-remove, .board-copy-sync, .board-copy-sync > i, .board-copy-sync > i::after) { border-radius: 0; }
+:root[data-theme='nebula'] .board-copy-sync { background: #050505; box-shadow: 0 0 0 1px var(--edge); color: #b8b8b8; text-transform: lowercase; }
+:root[data-theme='nebula'] .board-copy-sync:is(:hover, :focus-visible) { box-shadow: 0 0 0 1px var(--nb-violet-light); color: #fff; }
+:root[data-theme='nebula'] .board-copy-sync.is-on { background: var(--nb-violet); box-shadow: 0 0 0 1px #000, 2px 2px 0 var(--nb-offset); color: #fff; }
+:root[data-theme='nebula'] .board-copy-sync.is-on > i { background: #0004; }
+:root[data-theme='nebula'] .board-group-actions .board-copy-sync:not(.is-on) { background: transparent; box-shadow: none; }
+:root[data-theme='nebula'][data-popups='b'] .board-actions button.is-create:is(:hover, :focus-visible):not(:disabled) { border-color: #111; background: var(--holo-positive); color: #111; }
+:root[data-theme='nebula'][data-popups='b'] .board-actions button:not(.is-create):is(:hover, :focus-visible, [aria-expanded='true']):not(:disabled),
+:root[data-theme='nebula'][data-popups='b'] .board-actions button.is-create[aria-expanded='true'] { border-color: #111; background: var(--holo); color: #111; }
+:root[data-theme='nebula'][data-popups='b'] .board-actions button:is(:hover, :focus-visible, [aria-expanded='true']):not(:disabled) .icon { color: #111; }
+:root[data-theme='nebula'][data-popups='b'] .board-copy-sync.is-on { background: var(--holo); box-shadow: 0 0 0 1px #111, 2px 2px 0 var(--nb-offset); color: #111; }
+:root[data-theme='nebula'][data-popups='b'] .board-group-remove:is(:hover, :focus-visible) { background: var(--holo-danger); color: #111; }
+
+/* Pixel: hard edges and offset shadows, the pixel face a size up so it stays legible. */
+:root[data-pixel] :is(.board-group-name, .board-group-actions, .board-group-remove, .board-copy-sync, .board-copy-sync > i, .board-copy-sync > i::after) { border-radius: 0; }
+:root[data-pixel] .board-group-frame { border-style: dashed; }
+:root[data-pixel] .board-group-name { top: -11px; height: 20px; font-size: 15px; }
+:root[data-pixel] .board-copy-sync { height: 18px; box-shadow: 0 0 0 2px var(--edge), 2px 2px 0 #0008; font-size: 13px; }
+:root[data-pixel] .board-copy-sync > i { box-shadow: inset 0 0 0 2px color-mix(in srgb, currentColor 60%, transparent); }
+:root[data-pixel] .board-copy-sync > i::after { margin: 2px; transition: none; }
+:root[data-pixel] .board-group-actions .board-copy-sync { box-shadow: none; }
+:root[data-pixel] .board-actions button { font-size: 15px; }
+:root[data-pixel] .board-tools button { border-radius: 0; }
+@media (prefers-reduced-motion: reduce) { .board-copy-sync > i::after, .board-tools, .board-group-actions { transition: none; } }

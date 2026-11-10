@@ -83,7 +83,7 @@ fn update_cards(db:&Store,patches:&Value,remove:&[String])->Result<(Vec<Value>,V
         if removed.contains(&id){changed.remove(&id);continue}
         if let Some(links)=card["links"].as_array() {
             let kept:Vec<Value>=links.iter().filter(|link|!removed.iter().any(|id|**link==id.as_str())).cloned().collect();
-            if kept.len()!=links.len(){card["links"]=json!(kept);changed.insert(id.clone(),write_card(db,&id,&card)?);}
+            if kept.len()!=links.len(){card["links"]=json!(kept);if let Some(directions)=card["pageLinks"].as_array(){card["pageLinks"]=json!(directions.iter().filter(|link|!removed.iter().any(|id|**link==id.as_str())).cloned().collect::<Vec<_>>());}changed.insert(id.clone(),write_card(db,&id,&card)?);}
         }
     }
     for id in &removed {db.conn.execute("DELETE FROM settings WHERE key=?1",[format!("board:card:{id}")]).map_err(|e|e.to_string())?;}
@@ -205,7 +205,7 @@ mod tests {
         for (id,kind) in [(&note,"note"),(&page,"note"),(&image,"image"),(&shared,"link")] {
             save_card(&db,id,&json!({"kind":kind,"title":id,"text":"","dates":[],"notebook":true,"links":[]})).unwrap();
         }
-        let patches=json!({&note:{"links":[page,image,shared]},&page:{"links":[note,shared]},&image:{"links":[note]},&shared:{"links":[note,page]}});
+        let patches=json!({&note:{"links":[page,image,shared]},&page:{"links":[note,shared],"pageLinks":[note]},&image:{"links":[note]},&shared:{"links":[note,page]}});
         update_cards(&db,&patches,&[]).unwrap();
         let tied=state(&db);
         crate::history::step(&mut db,false).unwrap();
@@ -218,6 +218,7 @@ mod tests {
         assert!(removed.contains(&note)&&removed.contains(&image)&&removed.len()==2);
         let kept=state(&db);assert_eq!(kept.len(),2);
         assert!(kept.iter().all(|c|!c["links"].as_array().unwrap().contains(&json!(note))));
+        assert_eq!(kept.iter().find(|c|c["id"]==page).unwrap()["pageLinks"],json!([]));
         crate::history::step(&mut db,false).unwrap();assert_eq!(state(&db),tied);
         crate::history::step(&mut db,true).unwrap();assert_eq!(state(&db),kept);
         crate::history::step(&mut db,false).unwrap();

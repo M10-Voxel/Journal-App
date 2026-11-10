@@ -8,7 +8,7 @@ export const maxReminderBefore = 30 * 24 * 60;
 export type ReminderSetting = { reminder: boolean; before: number };
 type Unit = 'min' | 'hour' | 'day';
 const unitMinutes: Record<Unit, number> = { min: 1, hour: 60, day: 1440 };
-const presets = [0, 5, 60] as const;
+const presets = [0, 10, 60, 1440] as const;
 
 /** "zur Uhrzeit", "5 Min. vorher", "1 Std. vorher", "2 Tage vorher". */
 export function reminderLeadLabel(before: number | undefined): string {
@@ -21,7 +21,7 @@ export function reminderLeadLabel(before: number | undefined): string {
 const unitOf = (minutes: number): Unit => minutes && minutes % 1440 === 0 ? 'day' : minutes && minutes % 60 === 0 ? 'hour' : 'min';
 
 /**
- * When a reminder comes: off, at the time, 5 minutes or an hour ahead, or a time of one's own (a number with arrows and
+ * When a reminder comes: off, at the time, 10 minutes, an hour or a day ahead, or a time of one's own (a number with arrows and
  * minutes, hours or days). Presets take effect and close; the own time changes as it is typed, Enter closes.
  */
 export function ReminderChoice({ anchor, value, timed, onChange, onClose }: {
@@ -35,8 +35,9 @@ export function ReminderChoice({ anchor, value, timed, onChange, onClose }: {
   const choices: { key: string; label: string; set: ReminderSetting }[] = [
     { key: 'off', label: t('Keine Erinnerung'), set: { reminder: false, before: value.before } },
     { key: '0', label: timed ? t('Zur Uhrzeit') : t('Um 9:00 (ohne Uhrzeit)'), set: { reminder: true, before: 0 } },
-    { key: '5', label: t('5 Min. vorher'), set: { reminder: true, before: 5 } },
+    { key: '10', label: t('10 Min. vorher'), set: { reminder: true, before: 10 } },
     { key: '60', label: t('1 Std. vorher'), set: { reminder: true, before: 60 } },
+    { key: '1440', label: t('1 Tag vorher'), set: { reminder: true, before: 1440 } },
   ];
   const current = !value.reminder ? 'off' : own ? 'own' : String(value.before);
   const ownMinutes = (count: number, of: Unit) => Math.max(1, Math.min(maxReminderBefore, Math.round(count) * unitMinutes[of]));

@@ -3,6 +3,7 @@
 // Suggestions complete the filter being typed, like the repeat field does (see repeatText.ts).
 import type { Tag } from './tags.ts';
 import type { Card } from './notebook.ts';
+import { noteOwners, notesIn } from './notebook.ts';
 import { plainText } from './markdown.ts';
 
 export type SearchType = 'task' | 'event' | 'note' | 'calendar' | 'title' | 'board' | 'board-note' | 'board-image' | 'board-link' | 'notebook';
@@ -108,16 +109,25 @@ export function cardBoard(card: Card): { date: string; period?: 'month' | 'year'
  * or in the notebook. An image or link taken down from every board only still exists as the attachment of a note it is
  * tied to (it opens there); without one it is not offered.
  */
+const notebookVisibility = new WeakMap<readonly Card[],Set<string>>();
+function notebookVisible(card:Card,cards:readonly Card[]):boolean{
+  if(card.notebook||cardBoard(card))return true;
+  if(!card.links?.length)return false;
+  let visible=notebookVisibility.get(cards);
+  if(!visible){const all=[...cards],roots=new Set(notesIn(all,[],'all').map(card=>card.id));visible=new Set([...noteOwners(all)].filter(([,root])=>roots.has(root)).map(([id])=>id));notebookVisibility.set(cards,visible);}
+  return visible.has(card.id);
+}
 export function cardItem(card: Card, cards: readonly Card[], untitled: string): SearchItem | null {
   const board = cardBoard(card);
   const base = { key: `card:${card.id}`, title: card.title || untitled, snippet: `${plainText(card.text ?? '')} ${card.url ?? ''}`.trim(), tag: card.tag ?? null };
   if (card.kind === 'note') {
+    if(!notebookVisible(card,cards))return null;
     const notebook = !board || Boolean(card.notebook);
     return { ...base, type: notebook ? 'notebook' : 'board-note', date: board?.date ?? null, target: { kind: 'card', id: card.id, date: board?.date ?? null, notebook, period: board?.period } };
   }
   const type = card.kind === 'image' ? 'board-image' : 'board-link';
   if (board) return { ...base, type, date: board.date, target: { kind: 'card', id: card.id, date: board.date, notebook: false, period: board.period } };
-  const note = cards.find(other => other.kind === 'note' && (card.links ?? []).includes(other.id));
+  const note = cards.find(other => other.kind === 'note' && (card.links ?? []).includes(other.id)&&notebookVisible(other,cards));
   return note ? { ...base, type, date: cardBoard(note)?.date ?? null, target: { kind: 'card', id: note.id, date: null, notebook: true } } : null;
 }
 

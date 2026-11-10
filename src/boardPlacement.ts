@@ -1,4 +1,5 @@
 import type { BoardPlacement, Card, Patches } from './notebook';
+import { pageDirections } from './notebook.ts';
 
 export type BoardPeriod = 'day' | 'month' | 'year';
 export const boardKey = (date: string, period: BoardPeriod = 'day') => period === 'day' ? date : `${period}:${date.slice(0, period === 'month' ? 7 : 4)}`;
@@ -7,6 +8,36 @@ const layoutKeys = ['boardX', 'x', 'y', 'z', 'w', 'h'] as const;
 export const cardWidth = (card: Card) => card.w ?? (card.kind === 'note' ? 232 : card.kind === 'image' ? 236 : 260);
 export const isOnBoard = (card: Card, key: string) => periodBoard(key) ? !!card.boards?.[key] : card.dates.includes(key);
 export const cardOnBoard = (card: Card, key: string): Card => periodBoard(key) ? { ...card, ...card.boards?.[key] } : card;
+
+/**
+ * The notes "Existing" offers for a board, each only once:
+ * - A note and its copies (copyOf, followed to the first original still there) are one entry; cards already on this
+ *   board are not offered (another copy of the same note can still be pinned here).
+ * - Old copies without a recorded origin count as the same note when title and text match.
+ * - Copies taken off every board and never in the notebook are not offered (the notebook hides them as well).
+ * The entry shown is the original when it can be offered, else the most recently ordered copy.
+ */
+export function libraryNotes(cards: Card[], key: string, query = ''): Card[] {
+  const byId = new Map(cards.map(card => [card.id, card]));
+  const rootOf = (card: Card) => {
+    let root = card;
+    for (const seen = new Set<string>(); root.copyOf && byId.has(root.copyOf) && !seen.has(root.id);) { seen.add(root.id); root = byId.get(root.copyOf)!; }
+    return root.id;
+  };
+  const active = (card: Card) => !!card.notebook || card.dates.length > 0 || Object.values(card.boards ?? {}).some(Boolean);
+  const notes = cards.filter(card => card.kind === 'note');
+  const family = (card: Card) => card.copyOf || notes.some(other => other.copyOf === card.id) ? `copy:${rootOf(card)}` : `same:${card.title.trim()}\u0000${card.text.trim()}`;
+  const words = query.trim().toLowerCase();
+  const chosen = new Map<string, Card>();
+  for (const card of notes) {
+    const name = family(card);
+    if (isOnBoard(card, key) || !active(card) || !`${card.title} ${card.text}`.toLowerCase().includes(words)) continue;
+    const kept = chosen.get(name);
+    const original = (other: Card) => !other.copyOf || !byId.has(other.copyOf);
+    if (!kept || (original(card) && !original(kept)) || (original(card) === original(kept) && (card.order ?? 0) > (kept.order ?? 0))) chosen.set(name, card);
+  }
+  return [...chosen.values()];
+}
 
 /** Period layout edits stay on this board; title, text and threads still belong to the same card. */
 export function scopedBoardPatch(card: Card | undefined, key: string, changes: Partial<Card>): Partial<Card> {
@@ -46,12 +77,23 @@ export function cardGroups(cards: Card[]): string[][] {
  * them). Returns the copies in the order of `ids` with the id each one was made from, or none if nothing can be copied.
  */
 export const copyableCard = (card: Card) => card.kind !== 'image';
-export function copyCards(cards: Card[], ids: readonly string[], newId: () => string): { from: string; card: Pick<Card, 'id' | 'kind' | 'title' | 'text' | 'url' | 'paper' | 'w' | 'h' | 'pixel' | 'size' | 'tag' | 'links'> }[] {
+/** The first selected card identifies the source board; use its scoped layout, resolving legacy positions once. */
+export function copyLayout(cards: Card[], ids: readonly string[], width: number): Record<string, BoardPlacement> {
+  const first = cards.find(card => card.id === ids[0]);
+  const source = first?.dates[0] ?? Object.keys(first?.boards ?? {}).find(key => first?.boards?.[key]);
+  const wanted = new Set(ids);
+  const sourceCards = cards.filter(card => !source || isOnBoard(card, source) || wanted.has(card.id));
+  const resolved = layoutBoard(sourceCards.map(card => ({ ...(source ? cardOnBoard(card, source) : card), dates: ['copy-source'] })), 'copy-source', width);
+  return Object.fromEntries(resolved.filter(({ card }) => wanted.has(card.id)).map(({ card, x, y, z }) => [card.id, { boardX: x, y, z, w: cardWidth(card), h: card.h }]));
+}
+export function copyCards(cards: Card[], ids: readonly string[], newId: () => string): { from: string; card: Pick<Card, 'id' | 'kind' | 'title' | 'text' | 'url' | 'paper' | 'w' | 'h' | 'pixel' | 'size' | 'tag' | 'links' | 'groupName' | 'pageLinks'> }[] {
   const chosen = ids.map(id => cards.find(card => card.id === id)).filter((card): card is Card => !!card && copyableCard(card));
   const made = new Map(chosen.map(card => [card.id, newId()]));
+  const directions=pageDirections(cards);
   return chosen.map(card => ({ from: card.id, card: {
-    id: made.get(card.id)!, kind: card.kind, title: card.title, text: card.text, url: card.url, paper: card.paper, w: card.w, h: card.h, pixel: card.pixel, size: card.size, tag: card.tag,
+    id: made.get(card.id)!, kind: card.kind, title: card.title, text: card.text, url: card.url, paper: card.paper, w: card.w, h: card.h, pixel: card.pixel, size: card.size, tag: card.tag, groupName: card.groupName,
     links: (card.links ?? []).filter(other => made.has(other)).map(other => made.get(other)!),
+    pageLinks: directions.filter(([from,to])=>from===card.id&&made.has(to)).map(([,to])=>made.get(to)!),
   } }));
 }
 

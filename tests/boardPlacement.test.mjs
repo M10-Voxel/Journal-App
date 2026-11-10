@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { boardKey, cardGroups, cardOnBoard, groupFrames, isOnBoard, layoutBoard, pinToBoard, scopedBoardPatch } from '../src/boardPlacement.ts';
+import { boardKey, cardGroups, cardOnBoard, groupFrames, isOnBoard, layoutBoard, libraryNotes, pinToBoard, scopedBoardPatch } from '../src/boardPlacement.ts';
 import { removalIds } from '../src/notebook.ts';
 
 const card = (id, extra = {}) => ({ id, kind: 'note', title: id, text: '**Shared content**', order: 1, dates: ['2026-11-08'], ...extra });
@@ -89,14 +89,43 @@ test('period-pinned notebook attachments are kept when their former note is dele
 test('copies of notes: new ids, the threads between them kept, images left out', async () => {
   const { copyCards } = await import('../src/boardPlacement.ts');
   const card = (id, kind, extra = {}) => ({ id, kind, title:id.toUpperCase(), text:`text ${id}`, dates:[], order:0, ...extra });
-  const cards = [card('a','note',{ links:['b','img','c'], paper:'blue', w:300 }), card('b','note',{ links:['a'] }), card('img','image',{ links:['a'], asset:'x' }), card('c','link',{ url:'https://example.org', links:['a'] }), card('z','note')];
+  const cards = [card('a','note',{ links:['b','img','c'], paper:'blue', w:300, groupName:'Project' }), card('b','note',{ links:['a'] }), card('img','image',{ links:['a'], asset:'x' }), card('c','link',{ url:'https://example.org', links:['a'] }), card('z','note')];
   let n = 0;
   const copies = copyCards(cards, ['a','b','img','c'], () => `new-${++n}`);
   assert.deepEqual(copies.map(copy => [copy.from, copy.card.id, copy.card.kind]), [['a','new-1','note'],['b','new-2','note'],['c','new-3','link']]);
   assert.deepEqual(copies.map(copy => copy.card.links), [['new-2','new-3'],['new-1'],['new-1']]);
   assert.equal(copies[0].card.paper, 'blue'); assert.equal(copies[0].card.w, 300); assert.equal(copies[0].card.title, 'A'); assert.equal(copies[2].card.url, 'https://example.org');
   assert.equal('asset' in copies[0].card, false);
+  assert.equal(copies[0].card.groupName, 'Project');
   // One note alone: no thread to a card that is not copied.
   assert.deepEqual(copyCards(cards, ['a'], () => 'only').map(copy => copy.card.links), [[]]);
   assert.deepEqual(copyCards(cards, ['img', 'missing'], () => 'nope'), []);
+});
+
+test('copy layout preserves group positions and sizes from daily and period boards', async () => {
+  const { copyLayout } = await import('../src/boardPlacement.ts');
+  const cards = [card('a', { boardX: -40, y: 90, w: 310, h: 270 }), card('b', { boardX: 340, y: 210, w: 180, h: 410 })];
+  assert.deepEqual(copyLayout(cards, ['a', 'b'], 500), { a: { boardX: -40, y: 90, z: 0, w: 310, h: 270 }, b: { boardX: 340, y: 210, z: 0, w: 180, h: 410 } });
+  const period = cards.map((c, i) => ({ ...c, dates: [], boards: { 'year:2026': { boardX: 120 + i * 400, y: 80 + i * 70, w: 360, h: 320 } } }));
+  assert.deepEqual(Object.values(copyLayout(period, ['a', 'b'], 400)).map(p => [p.boardX, p.y, p.w, p.h]), [[120, 80, 360, 320], [520, 150, 360, 320]]);
+});
+
+test('"Existing" offers every note once: copies, legacy duplicates and stale copies collapse', () => {
+  const cards = [
+    card('orig', { title: 'Plan', text: 'A', dates: ['2026-11-01'] }),
+    card('copy1', { title: 'Plan', text: 'A', copyOf: 'orig', dates: ['2026-11-02'], order: 5 }),
+    card('copy2', { title: 'Plan', text: 'A', copyOf: 'copy1', dates: ['2026-11-03'] }),
+    card('old1', { title: 'Liste', text: 'B', dates: ['2026-11-04'] }),
+    card('old2', { title: 'Liste', text: 'B', dates: ['2026-11-05'] }),
+    card('stale', { title: 'Weg', text: 'C', dates: [] }),
+    card('book', { title: 'Heft', text: 'D', dates: [], notebook: true }),
+    { id: 'img', kind: 'image', title: 'Bild', text: '', dates: ['2026-11-01'] },
+  ];
+  assert.deepEqual(libraryNotes(cards, '2026-11-09').map(c => c.id).sort(), ['book', 'old1', 'orig']);
+  // A copy already on this board is not offered; its note still is, once.
+  assert.deepEqual(libraryNotes(cards, '2026-11-03').map(c => c.id).sort(), ['book', 'old1', 'orig']);
+  assert.deepEqual(libraryNotes(cards, '2026-11-01').map(c => c.id).sort(), ['book', 'copy1', 'old1']);
+  // The original gone: the latest copy stands for it.
+  assert.deepEqual(libraryNotes(cards.filter(c => c.id !== 'orig'), '2026-11-09').map(c => c.id).filter(id => id.startsWith('copy')), ['copy1']);
+  assert.deepEqual(libraryNotes(cards, '2026-11-09', 'heft').map(c => c.id), ['book']);
 });

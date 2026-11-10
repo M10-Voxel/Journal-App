@@ -2,6 +2,8 @@
 
 ## Icons
 
+Neben der Suche schaltet ein kleiner Umschalter **Häufig | Alle Icons** zwischen den häufigen Icons und der vollständigen alphabetischen Auswahl. Während einer Suche ist keiner der beiden gewählt, denn die Suche durchsucht immer alle Icons. „Kein Icon“ zeigt ein durchgestrichenes Kreissymbol. Der Umschalter folgt dem Design: Normal als Segment, im Journal als unterstrichene Handschrift, in Nebula als Terminal-Knöpfe (im Holo-Papier-Look mit lila Foil), in Pixel eckig. Die Bibliothek enthält bislang keine Kategorien. Die Suche durchsucht weiterhin alle Icons. Die Auswahlfläche bleibt beim Filtern gleich hoch, damit das Popup nicht an eine andere Bildschirmposition springt; die Pfeiltasten scrollen ausschließlich die Icon-Liste.
+
 Ein Kalendereintrag kann wie eine Notion-Seite ein Icon tragen: im Kalender-Popup über den Smiley-Knopf oder **Alt+I**. Die Auswahl zeigt zuerst häufige Icons; die Suche findet alle rund 2.000 Icons über ihren englischen Namen oder deutsche Stichwörter (z. B. „Arzt“, „Geburtstag“, „Sport“). Pfeile bewegen die Auswahl, Enter übernimmt, „Kein Icon“ entfernt es.
 
 Das Icon steht unten rechts am Eintrag in der Farbe seines Tags (ohne Tag in der Akzentfarbe). Ist der Eintrag zu klein für seinen Text – kurzer Zeitblock, schmale Spalte oder Monatszelle –, steht das Icon statt des Texts; Titel und Bedienhilfen nennen den Eintrag weiterhin. Die Beschreibung im Detail-Popup nennt Icon und Erinnerung.
@@ -12,7 +14,7 @@ Quelle: [Lucide](https://lucide.dev) (ISC-Lizenz), geladen als eigener Chunk ers
 
 ## Erinnerungs-Vorlauf
 
-Die Glocke im Kalender-Popup und im Planer öffnet die Auswahl: keine Erinnerung, zur Uhrzeit (ohne Uhrzeit um 9:00), 5 Min. vorher, 1 Std. vorher oder eine eigene Zeit – Zahl mit Pfeilen bzw. ↑/↓ und Einheit Min./Std./Tage (höchstens 30 Tage). Im Planer schaltet **E** die Erinnerung weiterhin nur an und aus. Der Eintrag im Journal zeigt den Vorlauf neben der Glocke.
+Die Glocke im Kalender-Popup und im Planer öffnet die Auswahl: keine Erinnerung, zur Uhrzeit (ohne Uhrzeit um 9:00), 10 Min., 1 Std. oder 1 Tag vorher oder eine eigene Zeit – Zahl mit Pfeilen bzw. ↑/↓ und Einheit Min./Std./Tage (höchstens 30 Tage). Im Planer schaltet **E** die Erinnerung weiterhin nur an und aus. Das Popup öffnet sich auch aus dem Planer eines Eintrags in der Tagesansicht, ohne dass der Planer schließt. Es folgt dem Design: im Journal in Handschrift mit unterstrichener Einheit, in Nebula als Terminal-Zeilen mit eckigen Einheiten-Knöpfen (im Holo-Papier-Look mit lila Foil für gezeigte und gewählte Optionen), in Pixel eckig. Der Eintrag im Journal zeigt den Vorlauf neben der Glocke.
 
 Die Fälligkeit rechnet `Store::due_reminders` aus Uhrzeit minus Vorlauf (Spalte `entries.reminder_before`, Minuten); dafür werden auch Einträge der kommenden Tage geprüft. Geplante und wiederholte Kopien übernehmen den Vorlauf. iCal exportiert `X-JOURNAL-REMINDER-BEFORE`; beim Import gilt sonst der `TRIGGER` des ersten `VALARM`.
 

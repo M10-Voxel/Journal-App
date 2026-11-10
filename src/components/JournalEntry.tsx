@@ -306,10 +306,12 @@ export const JournalEntry = memo(function JournalEntry({ layout, entry, day, tag
     // Focus leaving to nowhere right after a click inside this row (e.g. a re-rendered calendar day) is not "clicking outside".
     onBlur={event => {
       if (restorePriorityFocus.current || event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+      // A popover opened from the row (the planner's reminder choice) lives in the body, but still belongs to it.
+      if ((event.relatedTarget as Element | null)?.closest?.('.popover')) return;
       if (!event.relatedTarget && performance.now() - lastPointerDown.current < 600) return;
       onOpenChange(entry.id, false);
     }}
-    onFocusCapture={event => { if (asTextField(event.target)) onOpenChange(entry.id, false); }}
+    onFocusCapture={event => { if (asTextField(event.target) && !(event.target as Element).closest('.popover')) onOpenChange(entry.id, false); }}
     onKeyDown={event => {
       if (onShortcut(event)) { event.preventDefault(); event.stopPropagation(); return; }
       if (event.altKey && !event.ctrlKey && !event.metaKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {

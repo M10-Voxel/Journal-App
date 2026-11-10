@@ -40,12 +40,13 @@ test('cards: found where they hang (day, month or year board, notebook); taken-d
   const note = card('n', 'note', { dates:['2026-11-05'] });
   const cards = [
     note,
-    card('loose', 'note'),
+    card('loose', 'note', {notebook:true}),
     card('monthly', 'note', { boards:{ 'month:2026-10':{ x:1 }, 'year:2025':{ x:1 }, 'month:2026-09':null } }),
     card('yearly', 'image', { boards:{ 'year:2026':{ x:1 } } }),
     card('gone', 'image', { boards:{ 'month:2026-10':null } }),
     card('orphan', 'link', { url:'https://example.org' }),
     card('attached', 'link', { links:['n'] }),
+    card('deleted-pin','note'),
   ];
   const found = Object.fromEntries(cards.map(c => [c.id, cardItem(c, cards, 'Ohne Titel')]));
   assert.deepEqual(cardBoard(cards[2]), { date:'2026-10-01', period:'month' });
@@ -57,5 +58,6 @@ test('cards: found where they hang (day, month or year board, notebook); taken-d
   assert.deepEqual(found.yearly.target, { kind:'card', id:'yearly', date:'2026-01-01', notebook:false, period:'year' });
   assert.equal(found.gone, null);
   assert.equal(found.orphan, null);
+  assert.equal(found['deleted-pin'],null,'Old unpinned board-only notes are not offered as notebook results.');
   assert.deepEqual(found.attached.target, { kind:'card', id:'n', date:null, notebook:true });
 });

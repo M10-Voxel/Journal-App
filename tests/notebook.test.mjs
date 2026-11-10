@@ -1,12 +1,23 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { primaryPatches, attachmentsOf, canMoveFolder, connectPatches, disconnectPatches, flatTree, folderPath, folderWithin, nextFolderOrder, notesIn, onDayPatch, pagesOf, removalIds, removalPatches, threadKind, threads, visibleTree } from '../src/notebook.ts';
+import { pageDirections, reversePagePatches, attachmentsOf, canMoveFolder, connectPatches, disconnectPatches, flatTree, folderPath, folderWithin, nextFolderOrder, noteOwners, notesIn, onDayPatch, pagesOf, removalIds, removalPatches, threadKind, threads, visibleTree } from '../src/notebook.ts';
 
 const folder = (id, name, parent = null, order = 1) => ({ id, name, parent, order });
-const card = (id, kind, extra = {}) => ({ id, kind, title: id, text: '', dates: [], order: 1, ...extra });
+const card = (id, kind, extra = {}) => ({ id, kind, title: id, text: '', dates: [], notebook:kind==='note', order: 1, ...extra });
 const apply = (cards, patches) => cards.map(value => patches[value.id] ? { ...value, ...patches[value.id] } : value);
 
 const folders = [folder('top', 'Projekte'), folder('garden', 'Garten', 'top', 2), folder('beds', 'Beete', 'garden'), folder('shop', 'Einkauf', 'top', 1), folder('home', 'Zuhause', null, 2)];
+
+test('main notes own their subpages in the list, folder counts and child-text search', () => {
+  const notes = [card('main','note',{primary:true,folder:'garden',links:['sub']}),card('sub','note',{folder:'beds',text:'Unique child content',links:['last']}),card('last','note',{links:['sub']}),card('alone','note')];
+  assert.equal(noteOwners(notes).get('last'),'main');
+  assert.deepEqual(notesIn(notes,folders,'all').map(c=>c.id).sort(),['alone','main']);
+  assert.deepEqual(notesIn(notes,folders,'beds'),[]);
+  assert.deepEqual(notesIn(notes,folders,'garden').map(c=>c.id),['main']);
+  assert.deepEqual(notesIn(notes,folders,'all','Unique').map(c=>c.id),['main']);
+  assert.deepEqual(pagesOf(notes,notes[0]).map(c=>c.id),['main','sub','last']);
+  assert.equal(notesIn(notes.map(c=>({...c,primary:false})),folders,'all').length,2,'Connected notes also form one notebook without a main-note flag.');
+});
 
 test('a folder knows its path, what lies inside it, and where it may move', () => {
   assert.deepEqual(folderPath(folders, 'beds'), ['Projekte', 'Garten', 'Beete']);
@@ -62,7 +73,7 @@ test('threads tie both cards: an image or link to a note is an attachment, two n
   assert.deepEqual(connectPatches(cards, 'img', 'n1'), {});
   assert.deepEqual(attachmentsOf(cards, cards[0]).map(c => c.id), ['img', 'url']);
   assert.deepEqual(pagesOf(cards, cards[0]).map(c => c.id), ['n1', 'n2']);
-  assert.deepEqual(pagesOf(cards, cards[1]).map(c => c.id), ['n2', 'n1']);
+  assert.deepEqual(pagesOf(cards, cards[1]).map(c => c.id), ['n1', 'n2']);
   assert.deepEqual(threads(cards), [['img', 'n1'], ['n1', 'url'], ['n1', 'n2']]);
   // Untying cuts both sides, from either end.
   cards = apply(cards, disconnectPatches(cards, 'img', 'n1'));
@@ -119,13 +130,26 @@ test('images and links tied to each other hang on a note as a bundle; the main n
   const get = id => cards.find(c => c.id === id);
   assert.deepEqual(attachmentsOf(cards, get('n1')).map(c => c.id), ['c', 'b', 'a'], 'One thread brings the whole bundle.');
   assert.deepEqual(attachmentsOf(cards, get('n2')).map(c => c.id), [], 'Through another note nothing is attached.');
-  assert.deepEqual(pagesOf(cards, get('n3')).map(c => c.id), ['n3', 'n2', 'n1'], 'Notes tied in a chain are all pages.');
-  cards = apply(cards, primaryPatches(cards, 'n2'));
-  assert.deepEqual(pagesOf(cards, get('n3')).map(c => c.id), ['n2', 'n3', 'n1'], 'The main note comes first.');
-  cards = apply(cards, primaryPatches(cards, 'n1'));
-  assert.equal(get('n2').primary, false, 'Only one main note in a group.');
-  assert.equal(pagesOf(cards, get('n2'))[0].id, 'n1');
-  cards = apply(cards, primaryPatches(cards, 'n1'));
-  assert.equal(get('n1').primary, false, 'Again: no main note.');
-  assert.deepEqual(primaryPatches(cards, 'a'), {}, 'Only notes can be main notes.');
+  assert.deepEqual(pagesOf(cards, get('n3')).map(c => c.id), ['n1', 'n2', 'n3']);
+  cards = apply(cards, reversePagePatches(cards,'n1','n2'));
+  assert.deepEqual(pagesOf(cards,get('n3')).map(c=>c.id),['n2','n1','n3']);
+  cards = apply(cards, reversePagePatches(cards,'n2','n3'));
+  assert.deepEqual(pagesOf(cards,get('n1')).map(c=>c.id),['n3','n2','n1']);
+  assert.deepEqual(reversePagePatches(cards,'a','b'),{},'Attachments have no direction.');
+});
+
+test('old unpinned board-only copies are hidden without deleting data; real notebook notes remain',()=>{
+ const cards=[card('live','note',{notebook:false,order:1,boards:{'month:2026-11':{}},links:['child']}),card('child','note',{notebook:false,order:2,links:['live']}),card('old','note',{notebook:false}),card('written','note')];
+ assert.deepEqual(notesIn(cards,[],'all').map(c=>c.id).sort(),['live','written']);
+ assert.equal(cards.length,4);
+ assert.equal(pageDirections(cards).length,1);
+});
+test('directed branches and cycles never duplicate notebook pages; copied directions ignore attachments',()=>{
+ let notes=[card('a','note'),card('b','note'),card('c','note'),card('img','image')];
+ for(const [a,b]of [['a','b'],['b','c'],['c','a'],['img','a']])notes=apply(notes,connectPatches(notes,a,b));
+ assert.equal(pageDirections(notes).length,3);
+ assert.equal(new Set(pagesOf(notes,notes[0]).map(c=>c.id)).size,3);
+ assert.equal(notesIn(notes,[],'all').length,1);
+ notes=apply(notes,disconnectPatches(notes,'a','b'));
+ assert(!notes.find(c=>c.id==='a').pageLinks.includes('b'));
 });

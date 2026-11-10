@@ -7,9 +7,10 @@ import { EntryText } from './components/EntryText';
 import { Icon } from './components/Icon';
 import { t } from './i18n';
 import type { Entry } from './journal';
-import { connectPatches, disconnectPatches, primaryPatches, removalIds } from './notebook';
+import { connectPatches, disconnectPatches, removalIds } from './notebook';
 import type { Card, Folder, Patches } from './notebook';
 import { encodeBase64 } from './base64';
+import { syncPatches } from './boardSync';
 export type { Card, Folder, Paper } from './notebook';
 
 // What the pinboard and the notebook share: the cards (one store per window, so a board and a notebook open side by side
@@ -58,6 +59,8 @@ const cardsNow = () => cardStore.value, foldersNow = () => folderStore.value;
 
 /** Changes a card (or makes it): at once here, saved in order per card. */
 export function patchCard(id: string, changes: Partial<Card>) {
+  const shared = syncPatches(cardStore.value, { [id]: changes });
+  if (Object.keys(shared).length > 1) return patchCards(shared);
   // A new card remembers when it was made; a change of title or text when it was last edited (notebook sorting).
   const now = Date.now(), isNew = !cardStore.value.some(c => c.id === id);
   if (isNew && changes.createdAt == null) changes = { ...changes, createdAt: now, updatedAt: now };
@@ -67,17 +70,18 @@ export function patchCard(id: string, changes: Partial<Card>) {
   void pending.catch(e => fail(cardStore, e)); return pending;
 }
 export function patchCards(patches: Patches) {
+  patches = syncPatches(cardStore.value, patches);
   const ids = Object.keys(patches);
   if (!ids.length) return Promise.resolve();
-  set(cardStore, old => old.map(card => patches[card.id] ? { ...card, ...patches[card.id] } : card));
+  const known = new Set(cardStore.value.map(card => card.id)), now = Date.now();
+  patches = Object.fromEntries(Object.entries(patches).map(([id, patch]) => [id, !known.has(id) ? { createdAt: now, updatedAt: now, ...patch } : 'title' in patch || 'text' in patch ? { ...patch, updatedAt: now } : patch]));
+  set(cardStore, old => [...old.map(card => patches[card.id] ? { ...card, ...patches[card.id] } : card), ...ids.filter(id => !known.has(id)).map(id => ({ ...patches[id], id } as Card))]);
   const pending = enqueue([...ids, 'folders'], () => invoke('board_patch_many', { patches, source }));
   void pending.catch(e => fail(cardStore, e)); return pending;
 }
 /** Ties two cards with a thread (both sides). Returns false when they cannot be tied (or already are). */
 export function connectCards(a: string, b: string) { const patches = connectPatches(cardStore.value, a, b); if (!Object.keys(patches).length) return null; return patchCards(patches); }
 export function disconnectCards(a: string, b: string) { return patchCards(disconnectPatches(cardStore.value, a, b)); }
-/** Makes a note the main note (first page) of the notes tied to it, or takes that back. */
-export function togglePrimaryNote(id: string) { return patchCards(primaryPatches(cardStore.value, id)); }
 /** Removes a card for good; no thread keeps pointing at it. */
 export const removeCard = (id: string) => removeCards([id]);
 export async function removeCards(ids: string[]) {
@@ -85,7 +89,7 @@ export async function removeCards(ids: string[]) {
   const id = ids[0], selected = new Set(ids);
   const removed = new Set(ids.flatMap(id => [...removalIds(cardStore.value, id, selected)]));
   const affected = cardStore.value.filter(card => removed.has(card.id) || card.links?.some(other => removed.has(other))).map(card => card.id);
-  set(cardStore, old => old.filter(card => !removed.has(card.id)).map(card => card.links ? { ...card, links: card.links.filter(other => !removed.has(other)) } : card));
+  set(cardStore, old => old.filter(card => !removed.has(card.id)).map(card => card.links ? { ...card, links: card.links.filter(other => !removed.has(other)), ...(card.pageLinks?{pageLinks:card.pageLinks.filter(other=>!removed.has(other))}:{}) } : card));
   const pending = enqueue([...affected, id, 'folders'], () => invoke('board_remove', { id, ids, source }));
   void pending.catch(e => fail(cardStore, e)); return pending;
 }

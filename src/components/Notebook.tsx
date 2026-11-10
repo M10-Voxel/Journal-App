@@ -8,7 +8,7 @@ import { formatDate, formatShortDate, localDate } from '../dates';
 import { BoardImage, Lightbox, Note, connectCards, disconnectCards, hostOf, httpsLink, linkPreview, nextOrder, patchCards, removeCard, removeCards, storeImage, useCards, useFolders } from '../boardCards';
 import { BoardScopePicker } from './BoardScopePicker';
 import type { Card, Folder } from '../boardCards';
-import { attachmentsOf, canMoveFolder, flatTree, folderPath, nextFolderOrder, noteSorts, notesIn, onDayPatch, pagesOf, sortNotes, visibleTree } from '../notebook';
+import { attachmentsOf, canMoveFolder, flatTree, folderPath, nextFolderOrder, notebookGroups, noteSorts, notesIn, onDayPatch, sortNotes, visibleTree } from '../notebook';
 import type { NoteSort } from '../notebook';
 import { Icon } from './Icon';
 import { Popover } from './Popover';
@@ -64,18 +64,26 @@ export function Notebook({ onClose, onOpenDay }: { onClose?: () => void; onOpenD
   // Notes whose tag is hidden in the journal's tag filter stay out of the list, like on the board.
   const [hiddenTags] = useHiddenTags('journal');
   const notes = sortNotes(notesIn(cards, folders, shownChoice, query), sort).filter(note => !note.tag || isShown(hiddenTags, note.tag));
-  const current = notes.find(card => card.id === selected) ?? notes[0] ?? null;
+  const books=notebookGroups(cards),bookPages=new Map(books.map(group=>[group[0].id,group]));
+  const owners = new Map(books.flatMap(group=>group.map(card=>[card.id,group[0].id] as const)));
+  const current = notes.find(card => card.id === (owners.get(selected ?? '') ?? selected)) ?? notes[0] ?? null;
   const currentId = current?.id ?? null;
-  const pages = current ? pagesOf(cards, current) : [];
+  const pages = current ? bookPages.get(current.id)??[current] : [];
   const index = Math.min(pageIndex, Math.max(0, pages.length - 1));
   const page = pages[index] ?? null;
   const attachments = page ? attachmentsOf(cards, page) : [];
   const tree = flatTree(folders);
   const visibleRows = visibleTree(folders, collapsed);
-  const counts = (id: string) => cards.filter(card => card.kind === 'note' && card.folder === id).length;
+  const listed = new Set(notesIn(cards,folders,'all').map(card=>card.id));
+  const counts = (id: string) => cards.filter(card => listed.has(card.id) && card.folder === id).length;
 
   useEffect(() => { if (focusTitle.current && page) { focusTitle.current = false; titleRef.current?.focus(); titleRef.current?.select(); } }, [page?.id]);
-  useEffect(() => { setPageIndex(0); }, [current?.id]);
+  useEffect(() => {
+    const requested = pages.findIndex(page => page.id === selected);
+    const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    const matched = words.length ? pages.findIndex(page => words.every(word => `${page.title} ${page.text}`.toLowerCase().includes(word))) : -1;
+    setPageIndex(requested > 0 ? requested : Math.max(0, matched));
+  }, [current?.id, selected, query]);
   useEffect(() => { setLink(null); setMessage(''); }, [page?.id]);
 
   async function run(action: () => Promise<unknown>) { setBusy(true); setMessage(''); try { await action(); } catch (e) { setMessage(String(e)); } finally { setBusy(false); } }
@@ -271,7 +279,7 @@ export function Notebook({ onClose, onOpenDay }: { onClose?: () => void; onOpenD
   return <section className="notebook" aria-label={t('Notizen')} onKeyDown={onKey}>
     <header className="notebook-head">
       <h2><Icon name="note" />{t('Notizen')}</h2>
-      <span className="notebook-head-count">{t('{0} Zettel', cards.filter(card => card.kind === 'note').length)}</span>
+      <span className="notebook-head-count">{t('{0} Zettel', listed.size)}</span>
       <span className="notebook-head-space" />
       <button type="button" className="notebook-new" disabled={busy} onClick={() => newNote()} title={t('Neuer Zettel im gewählten Ordner')}><Icon name="pencil" /><span>{t('Neuer Zettel')}</span></button>
       {onClose && <button type="button" className="notebook-close" aria-label={t('Notizen schließen')} title={t('Notizen schließen · Strg ⇧ N')} onClick={onClose}><Icon name="done" /></button>}
@@ -284,10 +292,10 @@ export function Notebook({ onClose, onOpenDay }: { onClose?: () => void; onOpenD
           <div className="notebook-tree-head"><span>{t('Ordner')}</span><button type="button" className="notebook-add-folder" disabled={busy} title={t('Neuer Ordner')} aria-label={t("Neuer Ordner")} onClick={() => newFolder(null)}><b aria-hidden="true">+</b></button></div>
           <ul role="tree" aria-label={t('Ordner')}>
             <li role="treeitem" aria-selected={shownChoice === 'all'} className={`notebook-folder is-all${shownChoice === 'all' ? ' is-current' : ''}`} data-folder="all" onContextMenu={specialMenu('all')}>
-              <button type="button" className="notebook-folder-name" onClick={() => setChoice('all')}><span className="notebook-branch" aria-hidden="true">.</span><Icon name="journal" /><span>{t('Alle Zettel')}</span><small>{cards.filter(card => card.kind === 'note').length}</small></button>
+              <button type="button" className="notebook-folder-name" onClick={() => setChoice('all')}><span className="notebook-branch" aria-hidden="true">.</span><Icon name="journal" /><span>{t('Alle Zettel')}</span><small>{listed.size}</small></button>
             </li>
             <li role="treeitem" aria-selected={shownChoice === 'none'} className={`notebook-folder is-none${shownChoice === 'none' ? ' is-current' : ''}${dropOn === 'none' ? ' is-drop' : ''}`} data-folder="none" {...dropHandlers(null)} onContextMenu={specialMenu('none')}>
-              <button type="button" className="notebook-folder-name" onClick={() => setChoice('none')}><span className="notebook-branch" aria-hidden="true">{tree.length ? '├── ' : '└── '}</span><Icon name="note" /><span>{t('Ohne Ordner')}</span><small>{cards.filter(card => card.kind === 'note' && (!card.folder || !known.has(card.folder))).length}</small></button>
+              <button type="button" className="notebook-folder-name" onClick={() => setChoice('none')}><span className="notebook-branch" aria-hidden="true">{tree.length ? '├── ' : '└── '}</span><Icon name="note" /><span>{t('Ohne Ordner')}</span><small>{cards.filter(card => listed.has(card.id) && (!card.folder || !known.has(card.folder))).length}</small></button>
             </li>
             {visibleRows.map(({ folder, depth, last, lines }) => {
               const hasChildren = folders.some(f => f.parent === folder.id), open = !collapsed.has(folder.id);
@@ -328,14 +336,14 @@ export function Notebook({ onClose, onOpenDay }: { onClose?: () => void; onOpenD
           </div>
           {notes.map(note => {
             const path = shownChoice === 'all' || query ? folderPath(folders, note.folder).join(' / ') : '';
-            return <button type="button" role="listitem" key={note.id} data-note-id={note.id} className={`notebook-note paper-${note.paper ?? 'yellow'}${note.id === current?.id ? ' is-current' : ''}${chosen.includes(note.id) ? ' is-chosen' : ''}`}
+            return <div className="notebook-note-group" key={note.id}><button type="button" role="listitem" data-note-id={note.id} className={`notebook-note paper-${note.paper ?? 'yellow'}${note.id === current?.id ? ' is-current' : ''}${chosen.includes(note.id) ? ' is-chosen' : ''}`}
               aria-current={note.id === current?.id || undefined} aria-pressed={chosen.length ? chosen.includes(note.id) : undefined} draggable
               onDragStart={e => { e.dataTransfer.setData(noteType, chosen.includes(note.id) && chosen.length > 1 ? chosen.join(',') : note.id); e.dataTransfer.effectAllowed = 'move'; }}
               onPointerEnter={() => { hoverNote.current = note.id; }} onPointerLeave={() => { hoverNote.current = null; }} onClick={e => clickNote(e, note.id)} onContextMenu={noteMenu(note)}>
               <strong>{noteTitle(note)}</strong>
               <small>{note.text.replace(/[#*_`>|[\]-]+/g, ' ').trim().slice(0, 70) || t('leer')}</small>
               <span className="notebook-note-meta">{tagOf(tags, note.tag) && <span title={tagOf(tags, note.tag)!.name} style={{ '--tag': tagOf(tags, note.tag)!.color } as CSSProperties}><i className="tag-dot" />{tagOf(tags, note.tag)!.name}</span>}{path && <span>{path}</span>}{(note.links ?? []).length > 0 && <span title={t('Verbunden')}><Icon name="jump" />{(note.links ?? []).length}</span>}{note.dates.length > 0 && <span title={t('Auf dem Tag')}><Icon name="calendar" /></span>}</span>
-            </button>;
+            </button>{(bookPages.get(note.id)??[note]).slice(1).map((child,at)=><button type="button" key={child.id} className={`notebook-subpage${page?.id===child.id?' is-current':''}`} data-subpage-id={child.id} onClick={()=>select(child.id)} onContextMenu={noteMenu(child)}><Icon name="right"/><small>{at+2}</small><span>{noteTitle(child)}</span></button>)}</div>;
           })}
           {!notes.length && <p className="notebook-empty">{query ? t('Kein Zettel passt.') : t('Hier liegt noch kein Zettel.')}</p>}
         </div>

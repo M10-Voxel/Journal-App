@@ -19,7 +19,14 @@ export type Card = {
   folder?: string | null;
   /** The cards tied to this one by a thread (symmetric: the other card names this one too). */
   links?: string[];
-  /** The main note of the notes tied together: the notebook shows it as their first page. */
+  /** Directed note-to-note edges. Attachment links stay undirected; missing legacy directions are inferred. */
+  pageLinks?: string[];
+  /** Independent copy's source. Opt-in sync includes content and geometry; board membership stays local. */
+  copyOf?: string;
+  copySync?: boolean;
+  /** Optional label of the connected group; saved on its members so splits and copies keep a useful label. */
+  groupName?: string;
+  /** Legacy main-note hint, used only to infer directions for old undirected connections. */
   primary?: boolean;
   /** The tag's ID of a note (see tags.ts); the search finds notes by it. */
   tag?: string | null;
@@ -123,6 +130,10 @@ export function connectPatches(cards: Card[], a: string, b: string): Patches {
   const patches: Patches = {};
   if (!linksOf(first).includes(b)) patches[a] = { links: [...linksOf(first), b] };
   if (!linksOf(second).includes(a)) patches[b] = { links: [...linksOf(second), a] };
+  if (first.kind === 'note' && second.kind === 'note' && Object.keys(patches).length) {
+    patches[a] = { ...patches[a], pageLinks: [...(first.pageLinks ?? []).filter(id => id !== b), b] };
+    patches[b] = { ...patches[b], pageLinks: (second.pageLinks ?? []).filter(id => id !== a) };
+  }
   return patches;
 }
 /** The changes cutting the thread between `a` and `b` (both sides). */
@@ -130,14 +141,14 @@ export function disconnectPatches(cards: Card[], a: string, b: string): Patches 
   const patches: Patches = {};
   for (const [self, other] of [[a, b], [b, a]]) {
     const card = cards.find(value => value.id === self);
-    if (card && linksOf(card).includes(other)) patches[self] = { links: linksOf(card).filter(id => id !== other) };
+    if (card && linksOf(card).includes(other)) patches[self] = { links: linksOf(card).filter(id => id !== other), ...(card.pageLinks?.includes(other) ? { pageLinks: card.pageLinks.filter(id => id !== other) } : {}) };
   }
   return patches;
 }
 /** The changes leaving no thread to a card that is removed for good. */
 export function removalPatches(cards: Card[], id: string): Patches {
   const patches: Patches = {};
-  for (const card of cards) if (card.id !== id && linksOf(card).includes(id)) patches[card.id] = { links: linksOf(card).filter(other => other !== id) };
+  for (const card of cards) if (card.id !== id && linksOf(card).includes(id)) patches[card.id] = { links: linksOf(card).filter(other => other !== id), ...(card.pageLinks?.includes(id) ? { pageLinks: card.pageLinks.filter(other => other !== id) } : {}) };
   return patches;
 }
 /** Private notebook attachments disappear with their note; shared and day-board cards remain. */
@@ -174,23 +185,73 @@ function reach(cards: Card[], start: Card, through: (card: Card) => boolean): Ca
 /** A note's attachments: the images and links tied to it, and every image and link tied to those (a bundle comes whole). */
 export function attachmentsOf(cards: Card[], note: Card): Card[] { return reach(cards, note, card => card.kind !== 'note'); }
 /** The notes tied together with this one, directly or through other notes (this one first). */
-function noteGroup(cards: Card[], note: Card): Card[] { return [note, ...reach(cards, note, card => card.kind === 'note')]; }
-/**
- * A note's pages: every note tied to it, directly or through other notes. The main note of them comes first, else this
- * note. One page without threads (it scrolls, nothing to turn).
- */
-export function pagesOf(cards: Card[], note: Card): Card[] {
-  const group = noteGroup(cards, note), main = group.find(card => card.primary);
-  return main ? [main, ...group.filter(card => card !== main)] : group;
+function noteGroups(cards: Card[]): Card[][] {
+  const notes = cards.filter(card => card.kind === 'note'), byId = new Map(notes.map(card => [card.id, card]));
+  const edges = new Map(notes.map(card => [card.id, new Set<string>()]));
+  for (const card of notes) for (const id of card.links ?? []) if (byId.has(id)) { edges.get(card.id)!.add(id); edges.get(id)!.add(card.id); }
+  const seen = new Set<string>(), groups: Card[][] = [];
+  for (const note of notes) if (!seen.has(note.id)) {
+    const group = [note]; seen.add(note.id);
+    for (let i = 0; i < group.length; i++) for (const id of edges.get(group[i].id)!) if (!seen.has(id)) { seen.add(id); group.push(byId.get(id)!); }
+    groups.push(group);
+  }
+  return groups;
 }
-/** The changes making `id` the main note of its notes (and no other one there); again on the main note: none is main. */
-export function primaryPatches(cards: Card[], id: string): Patches {
-  const note = cards.find(card => card.id === id);
-  if (note?.kind !== 'note') return {};
-  const patches: Patches = {};
-  for (const other of noteGroup(cards, note)) if (other !== note && other.primary) patches[other.id] = { primary: false };
-  patches[id] = { primary: !note.primary };
-  return patches;
+function noteGroup(cards: Card[], note: Card): Card[] { return noteGroups(cards).find(group => group.some(card => card.id === note.id)) ?? [note]; }
+/** Directions are explicit for new edges. Legacy edges follow the former main note, then stable creation order. */
+export function pageDirections(cards: Card[]): [string, string][] {
+  const byId = new Map(cards.map(card => [card.id, card]));
+  const depth=new Map<string,number>(),pairs=threads(cards);
+  const neighbors=new Map(cards.filter(c=>c.kind==='note').map(c=>[c.id,[] as string[]]));
+  for(const [a,b]of pairs)if(neighbors.has(a)&&neighbors.has(b)){neighbors.get(a)!.push(b);neighbors.get(b)!.push(a);}
+  for(const group of noteGroups(cards)){
+    const root=[...group].sort((a,b)=>Number(!!b.primary)-Number(!!a.primary)||byOrder(a,b))[0],queue=[root.id];depth.set(root.id,0);
+    for(let i=0;i<queue.length;i++)for(const id of neighbors.get(queue[i])??[])if(!depth.has(id)){depth.set(id,depth.get(queue[i])!+1);queue.push(id);}
+  }
+  return pairs.flatMap(([a,b]) => {
+    const first=byId.get(a)!,second=byId.get(b)!;
+    if(first.kind!=='note'||second.kind!=='note')return [];
+    if(first.pageLinks?.includes(b)&&!second.pageLinks?.includes(a))return [[a,b] as [string,string]];
+    if(second.pageLinks?.includes(a)&&!first.pageLinks?.includes(b))return [[b,a] as [string,string]];
+    const order=(depth.get(a)??0)-(depth.get(b)??0)||byOrder(first,second);
+    return [order<=0?[a,b] as [string,string]:[b,a] as [string,string]];
+  });
+}
+export function reversePagePatches(cards: Card[], a: string, b: string): Patches {
+  const edge=pageDirections(cards).find(([from,to])=>from===a&&to===b||from===b&&to===a);
+  if(!edge)return {};
+  const [from,to]=edge,first=cards.find(card=>card.id===from)!,second=cards.find(card=>card.id===to)!;
+  return {[from]:{pageLinks:(first.pageLinks??[]).filter(id=>id!==to)},[to]:{pageLinks:[...(second.pageLinks??[]).filter(id=>id!==from),from]}};
+}
+function orderedNotes(group:Card[],directions:[string,string][]):Card[]{
+  const byId=new Map(group.map(card=>[card.id,card])),out=new Map(group.map(card=>[card.id,[] as string[]])),incoming=new Map(group.map(card=>[card.id,0]));
+  for(const [from,to]of directions)if(byId.has(from)&&byId.has(to)){out.get(from)!.push(to);incoming.set(to,incoming.get(to)!+1);}
+  const remaining=new Set(byId.keys()),result:Card[]=[];
+  while(remaining.size){
+    const available=[...remaining].filter(id=>incoming.get(id)===0);
+    const next=(available.length?available:[...remaining]).map(id=>byId.get(id)!).sort(byOrder)[0];
+    result.push(next);remaining.delete(next.id);for(const id of out.get(next.id)!)incoming.set(id,incoming.get(id)!-1);
+  }
+  return result;
+}
+/** Every connected notebook group appears once, owned by its first note in directed order. */
+export function noteOwners(cards: Card[]): Map<string, string> {
+  const owners = new Map<string, string>();
+  const directions=pageDirections(cards);
+  for (const group of noteGroups(cards)) {
+    const main = orderedNotes(group,directions)[0];
+    for (const card of group) owners.set(card.id, main.id);
+  }
+  return owners;
+}
+/** The complete notebook, in directed order and without duplicates (also for legacy edges and cycles). */
+export function pagesOf(cards: Card[], note: Card): Card[] {
+  return orderedNotes(noteGroup(cards,note),pageDirections(cards));
+}
+/** Resolve all books once for the sidebar instead of traversing every thread again for every row. */
+export function notebookGroups(cards:Card[]):Card[][]{
+  const directions=pageDirections(cards);
+  return noteGroups(cards).map(group=>orderedNotes(group,directions));
 }
 
 /** Notes in a folder choice: all, those outside every folder (folders that are gone count as none), or one folder with its subfolders. */
@@ -198,9 +259,12 @@ export function primaryPatches(cards: Card[], id: string): Patches {
 export function notesIn(cards: Card[], folders: Folder[], choice: 'all' | 'none' | string, query = ''): Card[] {
   const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const known = new Set(folders.map(folder => folder.id));
-  return cards.filter(card => card.kind === 'note')
+  const owners = noteOwners(cards);
+  const activeOwners=new Set(cards.filter(card=>card.kind==='note'&&(card.notebook||card.dates.length||Object.values(card.boards??{}).some(Boolean))).map(card=>owners.get(card.id)));
+  const matched = words.length ? new Set(cards.filter(card => card.kind === 'note' && words.every(word => `${card.title} ${card.text}`.toLowerCase().includes(word))).map(card => owners.get(card.id))) : null;
+  return cards.filter(card => card.kind === 'note' && owners.get(card.id) === card.id && activeOwners.has(card.id))
     .filter(card => words.length ? true : choice === 'all' || (choice === 'none' ? !card.folder || !known.has(card.folder) : card.folder === choice))
-    .filter(card => words.every(word => `${card.title} ${card.text}`.toLowerCase().includes(word)))
+    .filter(card => !matched || matched.has(card.id))
     .sort((a, b) => (b.order ?? 0) - (a.order ?? 0) || a.id.localeCompare(b.id));
 }
 export type NoteSort = 'title' | 'created' | 'updated';

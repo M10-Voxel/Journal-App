@@ -342,9 +342,11 @@
 /* Tickets carry their tag. */
 
 /* ── The pinboard: a grid on black, square cards without tilt, pins as violet squares ─────────────────────────── */
-:root[data-theme='nebula'] .board-actions { gap: 0; padding: 0; background: transparent; box-shadow: none; }
-:root[data-theme='nebula'] .board-actions button { height: 28px; margin-left: -1px; border: 1px solid var(--edge); color: var(--text); font: 11px var(--mono); text-transform: lowercase; }
-:root[data-theme='nebula'] .board-actions button:hover:not(:disabled), :root[data-theme='nebula'] .board-actions button[aria-expanded='true'] { border-color: var(--accent); background: var(--event-background); color: var(--strong); }
+:root[data-theme='nebula'] .board-actions { gap: 0; padding: 0; border-radius: 0; background: transparent; box-shadow: none; }
+:root[data-theme='nebula'] .board-actions button { position: relative; height: 26px; margin-left: -1px; padding: 0 10px 0 8px; border: 1px solid var(--edge); border-radius: 0; color: var(--text); font: 11px var(--mono); text-transform: lowercase; }
+:root[data-theme='nebula'] .board-actions button .icon { color: var(--nb-violet-light); }
+:root[data-theme='nebula'] .board-actions button:is(:hover, :focus-visible):not(:disabled), :root[data-theme='nebula'] .board-actions button[aria-expanded='true'] { z-index: 1; border-color: var(--accent); background: var(--event-background); box-shadow: none; color: var(--strong); }
+:root[data-theme='nebula'] .board-actions button:active:not(:disabled) { transform: translate(1px, 1px); }
 :root[data-theme='nebula'] .board-head p { font: 11px var(--mono); }
 :root[data-theme='nebula'] :is(.board-link-form, .board-library) { box-shadow: 0 0 0 1px var(--nb-line), 3px 3px 0 var(--nb-offset); }
 :root[data-theme='nebula'] :is(.board-link-form input, .board-library > input) { font: 12px var(--mono); }

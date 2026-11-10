@@ -32,23 +32,32 @@
 .cal-composer-icon:not(.has-icon) .entry-icon { opacity: .75; }
 
 /* ── The icon picker ───────────────────────────────────────────────────────────────────────────────────────────── */
-.icon-picker { width: 316px; }
+.icon-picker { width: 300px; }
 .icon-picker-body { color: var(--tag, var(--accent)); }
+/* Search and the two tabs (common / all) share one row; the grid keeps its height so the popup never jumps. */
+.icon-picker-top { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.icon-picker-top > .icon-picker-search { flex: 1; min-width: 0; margin: 0; }
 .icon-picker-search { color: var(--muted); }
-.icon-picker-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; max-height: 236px; overflow: auto; padding: 2px; scrollbar-width: thin; }
+.icon-picker-grid { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); align-content: start; gap: 1px; height: 214px; overflow: hidden auto; padding: 2px; scrollbar-width: thin; }
+.icon-picker-browse { flex: none; display: flex; gap: 1px; padding: 2px; border-radius: 6px; background: var(--inset); box-shadow: inset 0 0 0 1px var(--edge); }
+.icon-picker-browse button { height: 22px; padding: 0 7px; border: 0; border-radius: 4px; background: transparent; color: var(--muted); font: 11.5px var(--sans); white-space: nowrap; cursor: pointer; }
+.icon-picker-browse button:is(:hover, :focus-visible) { color: var(--text); outline: 0; }
+.icon-picker-browse button:focus-visible { box-shadow: inset 0 0 0 1px var(--accent); }
+.icon-picker-browse button[aria-pressed='true'] { background: var(--selected); color: var(--strong); }
 .icon-option { display: grid; place-items: center; aspect-ratio: 1; padding: 0; border: 0; border-radius: 6px; background: transparent; color: inherit; cursor: pointer;
   transition: background-color var(--fast) ease, transform 160ms var(--spring); }
 .icon-option .entry-icon { width: 18px; height: 18px; }
-.icon-option.is-none { color: var(--muted); }
+.icon-option.is-none { color: var(--placeholder); }
+.icon-option.is-none .entry-icon { width: 15px; height: 15px; }
 .icon-option.is-none .icon { width: 12px; height: 12px; }
 .icon-option[aria-selected='true'] { background: var(--hover); transform: scale(1.08); }
 .icon-option.is-current { box-shadow: inset 0 0 0 1.5px color-mix(in srgb, currentColor 70%, transparent); }
 .icon-picker-empty { grid-column: 1 / -1; margin: 10px 6px; color: var(--placeholder); font: 12px var(--sans); }
 
 /* ── When a reminder comes ────────────────────────────────────────────────────────────────────────────────────── */
-.reminder-choice { width: 252px; }
+.reminder-choice { width: 268px; }
 .reminder-choice-list { display: flex; flex-direction: column; gap: 1px; }
-.reminder-choice-option { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 28px; padding: 0 8px; border: 0; border-radius: 6px; background: transparent; color: var(--text); font: 12px var(--sans); text-align: left; cursor: pointer; }
+.reminder-choice-option { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 27px; padding: 0 8px; border: 0; border-radius: 6px; background: transparent; color: var(--text); font: 12px var(--sans); text-align: left; cursor: pointer; }
 .reminder-choice-option > .icon { flex: none; width: 12px; height: 12px; color: var(--muted); }
 .reminder-choice-option > span { flex: 1; }
 .reminder-choice-option:is(:hover, :focus-visible) { background: var(--hover); color: var(--strong); outline: 0; }
@@ -56,7 +65,7 @@
 .reminder-choice-option[aria-checked='true'] > .icon:first-child { color: var(--accent); }
 .reminder-choice-check { flex: none; width: 12px; height: 12px; color: var(--accent); }
 .reminder-choice-own { margin-top: 3px; padding-top: 4px; border-top: 1px solid var(--divider); }
-.reminder-choice-amount { display: flex; align-items: center; gap: 6px; padding: 5px 8px 4px 28px; color: var(--muted); font: 11.5px var(--sans); }
+.reminder-choice-amount { display: flex; align-items: center; gap: 5px; padding: 5px 6px 4px 28px; color: var(--muted); font: 11.5px var(--sans); }
 .reminder-choice-own:not(.is-current) .reminder-choice-amount { opacity: .6; }
 .reminder-choice-number { display: flex; align-items: stretch; height: 26px; border-radius: 6px; background: var(--inset); box-shadow: inset 0 0 0 1px var(--edge); }
 .reminder-choice-number:focus-within { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 60%, transparent); }
@@ -72,7 +81,7 @@
 .reminder-choice-units button[aria-checked='true'] { background: var(--selected); color: var(--strong); }
 
 /* ── Normal design, second popup look: rounder ───────────────────────────────────────────────────────────────── */
-:root[data-theme='classic'][data-popups='b'] :is(.icon-option, .reminder-choice-option) { border-radius: 999px; }
+:root[data-theme='classic'][data-popups='b'] :is(.icon-option, .reminder-choice-option, .icon-picker-browse, .icon-picker-browse button) { border-radius: 999px; }
 :root[data-theme='classic'][data-popups='b'] :is(.reminder-choice-number, .reminder-choice-units) { border-radius: 999px; }
 :root[data-theme='classic'][data-popups='b'] .reminder-choice-units button { border-radius: 999px; }
 
@@ -85,6 +94,9 @@
 :root[data-theme='journal'] .icon-option[aria-selected='true'] { background: var(--paper-shade); transform: none; }
 :root[data-theme='journal'] .icon-option.is-current { box-shadow: inset 0 -2px 0 currentColor; }
 :root[data-theme='journal'] .reminder-choice-option { font-family: var(--sans); }
+:root[data-theme='journal'] .icon-picker-browse { padding: 0; border-radius: 0; background: transparent; box-shadow: none; }
+:root[data-theme='journal'] .icon-picker-browse button { height: 24px; padding: 0 6px; border-radius: 0; font: italic 13px var(--write); }
+:root[data-theme='journal'] .icon-picker-browse button[aria-pressed='true'] { background: transparent; color: var(--strong); box-shadow: inset 0 -1.5px 0 var(--accent); }
 
 /* ── Nebula: a terminal. Thin bright lines that glow, no rounding, mono type. ───────────────────────────────── */
 :root[data-theme='nebula'] .entry-icon { stroke-width: 1.6; }
@@ -92,6 +104,13 @@
 :root[data-theme='nebula'] :is(.icon-option, .reminder-choice-option, .reminder-choice-number, .reminder-choice-units, .reminder-choice-units button) { border-radius: 0; }
 :root[data-theme='nebula'] :is(.reminder-choice-option, .reminder-choice-amount, .reminder-choice-units button, .icon-picker-empty) { font-family: var(--mono); }
 :root[data-theme='nebula'] .icon-option[aria-selected='true'] { transform: none; background: color-mix(in srgb, var(--tag, var(--accent)) 16%, transparent); box-shadow: inset 0 0 0 1px currentColor; }
+:root[data-theme='nebula'] :is(.icon-picker-browse, .icon-picker-browse button) { border-radius: 0; }
+:root[data-theme='nebula'] .icon-picker-browse { padding: 0; gap: 0; background: transparent; }
+:root[data-theme='nebula'] .icon-picker-browse button { height: 26px; font: 11px var(--mono); text-transform: lowercase; }
+:root[data-theme='nebula'] .icon-picker-browse button[aria-pressed='true'] { background: var(--nb-violet); color: #fff; }
+:root[data-theme='nebula'][data-popups='b'] .icon-picker-browse { box-shadow: inset 0 0 0 1px #111; }
+:root[data-theme='nebula'][data-popups='b'] .icon-picker-browse button { color: #111; }
+:root[data-theme='nebula'][data-popups='b'] .icon-picker-browse button[aria-pressed='true'] { background: var(--holo); color: #111; box-shadow: inset 0 0 0 1px #111; }
 :root[data-theme='nebula'] .reminder-choice-option[aria-checked='true']::before { content: '>'; margin-right: -4px; color: var(--accent); font: 12px var(--mono); }
 :root[data-theme='nebula'][data-popups='b'] :is(.reminder-choice-number, .reminder-choice-units) { background: #ececec; box-shadow: inset 0 0 0 1px #111; }
 :root[data-theme='nebula'][data-popups='b'] :is(.reminder-choice-number input, .reminder-choice-units button[aria-checked='true']) { color: #111; }
@@ -99,8 +118,39 @@
 /* ── Pixel: square steps, no smoothing, the lines a little stronger so they keep their shape small. ─────────── */
 :root[data-pixel] .entry-icon { stroke-width: 2.4; stroke-linecap: square; stroke-linejoin: miter; shape-rendering: crispEdges; }
 :root[data-pixel] .cal-item-icon { filter: none; }
-:root[data-pixel] :is(.icon-option, .reminder-choice-option, .reminder-choice-number, .reminder-choice-units, .reminder-choice-units button) { border-radius: 0; }
+:root[data-pixel] :is(.icon-picker-browse, .icon-picker-browse button, .icon-option, .reminder-choice-option, .reminder-choice-number, .reminder-choice-units, .reminder-choice-units button) { border-radius: 0; }
 :root[data-pixel] .icon-option[aria-selected='true'] { transform: none; box-shadow: inset 0 0 0 2px currentColor; }
-:root[data-pixel] :is(.reminder-choice-option, .reminder-choice-amount, .reminder-choice-units button) { font-size: 15px; }
+:root[data-pixel] :is(.reminder-choice-option, .reminder-choice-amount, .reminder-choice-units button, .icon-picker-browse button) { font-size: 15px; }
 :root[data-pixel] .reminder-choice-number input { font-size: 15px; }
 @media (prefers-reduced-motion: reduce) { .icon-option { transition: none; } .icon-option[aria-selected='true'] { transform: none; } }
+
+/* ── The reminder choice per design (ReminderChoice.tsx) ─────────────────────────────────────────────────────────
+   Journal: the presets written in the book's hand, the chosen unit underlined in ink. Nebula: terminal rows with a
+   prompt for the chosen one, the units as square keys (violet when chosen); in the Holo-Papier look a pointed or
+   chosen row gets the lilac foil (all neutral choices). Pixel: square keys a size up. */
+.reminder-choice-suffix { flex: none; white-space: nowrap; }
+:root[data-theme='journal'] .reminder-choice-option { font: italic 13.5px var(--write); }
+:root[data-theme='journal'] .reminder-choice-option[aria-checked='true'] { font-weight: 600; }
+:root[data-theme='journal'] .reminder-choice-option:is(:hover, :focus-visible) { background: var(--paper-shade); }
+:root[data-theme='journal'] .reminder-choice-units { gap: 0; padding: 0; }
+:root[data-theme='journal'] .reminder-choice-units button { font: italic 12.5px var(--write); }
+:root[data-theme='journal'] .reminder-choice-units button[aria-checked='true'] { background: transparent; box-shadow: inset 0 -1.5px 0 var(--accent); }
+:root[data-theme='journal'] .reminder-choice-amount { font: italic 12.5px var(--write); }
+:root[data-theme='nebula'] .reminder-choice-option { font-size: 11.5px; text-transform: lowercase; }
+:root[data-theme='nebula'] .reminder-choice-option:is(:hover, :focus-visible) { background: var(--event-background); box-shadow: inset 2px 0 0 var(--nb-violet-light); }
+:root[data-theme='nebula'] .reminder-choice-units { gap: 0; padding: 0; background: transparent; box-shadow: none; }
+:root[data-theme='nebula'] .reminder-choice-units button { height: 26px; margin-left: -1px; padding: 0 6px; box-shadow: inset 0 0 0 1px var(--edge); text-transform: lowercase; }
+:root[data-theme='nebula'] .reminder-choice-units button[aria-checked='true'] { position: relative; background: var(--nb-violet); color: #fff; box-shadow: inset 0 0 0 1px var(--nb-violet-light); }
+:root[data-theme='nebula'] .reminder-choice-number { height: 26px; }
+:root[data-theme='nebula'][data-popups='b'] .reminder-choice-option { color: #111; }
+:root[data-theme='nebula'][data-popups='b'] .reminder-choice-option > .icon { color: #333; }
+:root[data-theme='nebula'][data-popups='b'] .reminder-choice-option:is(:hover, :focus-visible) { background: var(--holo); color: #111; box-shadow: inset 0 0 0 1px #111; }
+:root[data-theme='nebula'][data-popups='b'] .reminder-choice-option[aria-checked='true']::before { color: #111; }
+:root[data-theme='nebula'][data-popups='b'] :is(.reminder-choice-check, .reminder-choice-option[aria-checked='true'] > .icon:first-child) { color: #111; }
+:root[data-theme='nebula'][data-popups='b'] .reminder-choice-amount { color: #333; }
+:root[data-theme='nebula'][data-popups='b'] .reminder-choice-units { background: transparent; box-shadow: none; }
+:root[data-theme='nebula'][data-popups='b'] .reminder-choice-units button { color: #111; box-shadow: inset 0 0 0 1px #111; }
+:root[data-theme='nebula'][data-popups='b'] .reminder-choice-units button[aria-checked='true'] { background: var(--holo); color: #111; box-shadow: inset 0 0 0 1px #111; }
+:root[data-theme='nebula'][data-popups='b'] .reminder-choice-steps button { color: #333; }
+:root[data-theme='nebula'][data-popups='b'] .reminder-choice-own { border-top-color: #111; }
+:root[data-pixel] .reminder-choice-units button[aria-checked='true'] { box-shadow: inset 0 0 0 2px currentColor; }
