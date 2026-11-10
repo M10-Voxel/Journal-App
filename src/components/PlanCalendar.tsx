@@ -11,6 +11,7 @@ import type { RepeatRule } from '../repeat';
 import { ClockDial } from './ClockDial';
 import { RepeatPanel } from './RepeatPanel';
 import { Icon } from './Icon';
+import { ReminderChoice, reminderLeadLabel } from './ReminderChoice';
 
 const weekdayInitials = () => getLanguage() === 'en' ? ['M','T','W','T','F','S','S'] : ['M','D','M','D','F','S','S'];
 
@@ -34,6 +35,9 @@ export function PlanCalendar({ day, initial, initialView = 'date', onPreview, on
   const [month, setMonth] = useState(initial.date.slice(0, 7));
   const [time, setTime] = useState(initial.time || (initialView === 'time' ? nextFullHour() : ''));
   const [reminder, setReminder] = useState(initial.reminder);
+  const [reminderBefore, setReminderBefore] = useState(initial.reminderBefore ?? 0);
+  const [choosingReminder, setChoosingReminder] = useState(false);
+  const reminderButton = useRef<HTMLButtonElement>(null);
   const [rule, setRule] = useState<RepeatRule | null>(initial.repeat ?? (initialView === 'repeat' ? defaultRule(initial.date) : null));
   const look = usePopupLook();
   const [view, setView] = useState<'date' | 'time' | 'repeat'>(initialView === 'time' || initialView === 'repeat' ? initialView : 'date');
@@ -122,7 +126,7 @@ export function PlanCalendar({ day, initial, initialView = 'date', onPreview, on
     setEndCursor(date);
     setMonth(date.slice(0, 7));
   }
-  const confirm = () => { if (!multi || picked.length) onConfirm(multi ? picked : [selected], { time: time || null, reminder }, multi ? initial.repeat ?? null : rule); };
+  const confirm = () => { if (!multi || picked.length) onConfirm(multi ? picked : [selected], { time: time || null, reminder, reminderBefore }, multi ? initial.repeat ?? null : rule); };
   /** Left click: starts a range, closes it, or moves one of its ends (adjustRange). */
   function setPoint(date: string) {
     const next = adjustRange(range, pending, date);
@@ -205,7 +209,7 @@ export function PlanCalendar({ day, initial, initialView = 'date', onPreview, on
         aria-label={`${formatDate(date)}${date === day ? t(", aktueller Tag") : ''}${repeating.has(date) ? t(", Wiederholung") : ''}`}
         onPointerEnter={() => { if (multi) setHovered(date); }}
         onClick={() => { if (pickEnd) { chooseEnd(date); return; } select(date); if (multi) setPoint(date); }}
-        onDoubleClick={() => { if (!multi && !pickEnd) onConfirm([date], { time: time || null, reminder }, ruleFor(date)); }}
+        onDoubleClick={() => { if (!multi && !pickEnd) onConfirm([date], { time: time || null, reminder, reminderBefore }, ruleFor(date)); }}
         onContextMenu={event => { if (!multi) return; event.preventDefault(); select(date); flip(date); }}>
         <span>{Number(date.slice(8))}</span>
       </button>)}
@@ -219,6 +223,8 @@ export function PlanCalendar({ day, initial, initialView = 'date', onPreview, on
         setRule(next);
       }} />}
     </div>
+    {choosingReminder && <ReminderChoice anchor={reminderButton.current} value={{ reminder, before: reminderBefore }} timed={Boolean(time)}
+      onChange={next => { setReminder(next.reminder); setReminderBefore(next.before); }} onClose={byKey => { setChoosingReminder(false); if (byKey) reminderButton.current?.focus({ preventScroll: true }); }} />}
     <div className="planner-foot">
       <div className={`planner-time${time ? ' is-set' : ''}${view === 'time' ? ' is-active' : ''}`}>
         <button type="button" className="planner-time-toggle" aria-pressed={view === 'time'} aria-label={view === 'time' ? t("Zurück zum Kalender") : time ? t("Uhrzeit {0} ändern", time) : t("Uhrzeit wählen (optional)")} data-tip={view === 'time' ? t("Kalender · U") : t("Uhrzeit · U")} onClick={toggleClock}>
@@ -226,7 +232,9 @@ export function PlanCalendar({ day, initial, initialView = 'date', onPreview, on
         </button>
         {time && <button type="button" className="planner-clear" aria-label={t("Uhrzeit entfernen")} data-tip={t("Entfernen · Entf")} onClick={clearTime}><Icon name="done" /></button>}
       </div>
-      <button type="button" className="planner-reminder" aria-pressed={reminder} aria-label={t("Erinnern")} data-tip={`${reminder ? t("Erinnerung an") : t("Erinnern")} ${time ? t("um {0}", time) : t("um 9:00")} · E`} onClick={() => setReminder(value => !value)}>
+      {/* E switches the reminder on or off; a click chooses when it comes (at the time, ahead, or a time of one's own). */}
+      <button ref={reminderButton} type="button" className="planner-reminder" aria-pressed={reminder} aria-haspopup="dialog" aria-expanded={choosingReminder}
+        aria-label={reminder ? t('Erinnerung: {0}', reminderLeadLabel(reminderBefore)) : t("Erinnern")} data-tip={`${reminder ? `${t("Erinnerung")} ${reminderLeadLabel(reminderBefore)}` : t("Erinnern")} ${time ? t("um {0}", time) : t("um 9:00")} · E`} onClick={() => setChoosingReminder(value => !value)}>
         <Icon name="bell" key={String(reminder)} />
       </button>
       <button type="button" className={`planner-confirm${moved ? ' is-move' : ''}`} disabled={(multi && !picked.length) || pickEnd}

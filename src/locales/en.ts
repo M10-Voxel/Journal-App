@@ -103,6 +103,8 @@ const english: Record<string, string> = {
   "Aktivitäten": "Activities",
   "Tagesbewertung & Checkliste": "Daily rating & checklist",
   "Buchansicht": "Book view",
+  "Reihenfolge der Kategorien zurücksetzen": "Reset the order of the categories",
+  "In einem schmalen Fenster zeigt das Buch immer eine Seite.": "In a narrow window the book always shows one page.",
   "Doppelseite": "Spread",
   "Einzelseite": "Single page",
   "Kalender zuklappen · Strg K": "Fold the calendar away · Ctrl K",

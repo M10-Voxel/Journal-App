@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties, DragEvent, KeyboardEvent } from 'react';
+import { isShown, tagOf } from '../tags';
+import { useHiddenTags, useTags } from '../tagStore';
 import { invoke } from '@tauri-apps/api/core';
 import { t, useLanguage } from '../i18n';
 import { formatDate, formatShortDate, localDate } from '../dates';
@@ -33,6 +35,7 @@ export function Notebook({ onClose, onOpenDay }: { onClose?: () => void; onOpenD
   useLanguage();
   const { cards, patch, error } = useCards();
   const { folders, save, remove, error: folderError } = useFolders();
+  const tags = useTags();
   const [choice, setChoiceState] = useState<Choice>(() => read(choiceKey) ?? 'all');
   const [selected, setSelectedState] = useState<string | null>(() => read(noteKey));
   const [pageIndex, setPageIndex] = useState(0);
@@ -58,7 +61,9 @@ export function Notebook({ onClose, onOpenDay }: { onClose?: () => void; onOpenD
     window.addEventListener('journal:open-note', open);
     return () => window.removeEventListener('journal:open-note', open);
   }, []);
-  const notes = sortNotes(notesIn(cards, folders, shownChoice, query), sort);
+  // Notes whose tag is hidden in the journal's tag filter stay out of the list, like on the board.
+  const [hiddenTags] = useHiddenTags('journal');
+  const notes = sortNotes(notesIn(cards, folders, shownChoice, query), sort).filter(note => !note.tag || isShown(hiddenTags, note.tag));
   const current = notes.find(card => card.id === selected) ?? notes[0] ?? null;
   const currentId = current?.id ?? null;
   const pages = current ? pagesOf(cards, current) : [];
@@ -329,7 +334,7 @@ export function Notebook({ onClose, onOpenDay }: { onClose?: () => void; onOpenD
               onPointerEnter={() => { hoverNote.current = note.id; }} onPointerLeave={() => { hoverNote.current = null; }} onClick={e => clickNote(e, note.id)} onContextMenu={noteMenu(note)}>
               <strong>{noteTitle(note)}</strong>
               <small>{note.text.replace(/[#*_`>|[\]-]+/g, ' ').trim().slice(0, 70) || t('leer')}</small>
-              <span className="notebook-note-meta">{path && <span>{path}</span>}{(note.links ?? []).length > 0 && <span title={t('Verbunden')}><Icon name="jump" />{(note.links ?? []).length}</span>}{note.dates.length > 0 && <span title={t('Auf dem Tag')}><Icon name="calendar" /></span>}</span>
+              <span className="notebook-note-meta">{tagOf(tags, note.tag) && <span title={tagOf(tags, note.tag)!.name} style={{ '--tag': tagOf(tags, note.tag)!.color } as CSSProperties}><i className="tag-dot" />{tagOf(tags, note.tag)!.name}</span>}{path && <span>{path}</span>}{(note.links ?? []).length > 0 && <span title={t('Verbunden')}><Icon name="jump" />{(note.links ?? []).length}</span>}{note.dates.length > 0 && <span title={t('Auf dem Tag')}><Icon name="calendar" /></span>}</span>
             </button>;
           })}
           {!notes.length && <p className="notebook-empty">{query ? t('Kein Zettel passt.') : t('Hier liegt noch kein Zettel.')}</p>}

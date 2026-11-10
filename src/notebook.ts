@@ -21,6 +21,8 @@ export type Card = {
   links?: string[];
   /** The main note of the notes tied together: the notebook shows it as their first page. */
   primary?: boolean;
+  /** The tag's ID of a note (see tags.ts); the search finds notes by it. */
+  tag?: string | null;
   /** The day the card was made. */
   created?: string;
   /** Made in the notebook (not on a day's board). */

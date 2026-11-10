@@ -40,6 +40,21 @@ export function cardGroups(cards: Card[]): string[][] {
   return groups;
 }
 
+/**
+ * Independent copies of the cards `ids` (and the threads between them): new ids, the same title, text, paper and size.
+ * Notes and links are copied; an image keeps its file under its own card, so images are left out (and the threads to
+ * them). Returns the copies in the order of `ids` with the id each one was made from, or none if nothing can be copied.
+ */
+export const copyableCard = (card: Card) => card.kind !== 'image';
+export function copyCards(cards: Card[], ids: readonly string[], newId: () => string): { from: string; card: Pick<Card, 'id' | 'kind' | 'title' | 'text' | 'url' | 'paper' | 'w' | 'h' | 'pixel' | 'size' | 'tag' | 'links'> }[] {
+  const chosen = ids.map(id => cards.find(card => card.id === id)).filter((card): card is Card => !!card && copyableCard(card));
+  const made = new Map(chosen.map(card => [card.id, newId()]));
+  return chosen.map(card => ({ from: card.id, card: {
+    id: made.get(card.id)!, kind: card.kind, title: card.title, text: card.text, url: card.url, paper: card.paper, w: card.w, h: card.h, pixel: card.pixel, size: card.size, tag: card.tag,
+    links: (card.links ?? []).filter(other => made.has(other)).map(other => made.get(other)!),
+  } }));
+}
+
 /** Add references, not copies. Explicit group transfers also align any members already on the destination. */
 export function pinToBoard(cards: Card[], ids: readonly string[], key: string, show: boolean, positions: Record<string, BoardPlacement> = {}, replacePositions = false): Patches {
   const wanted = new Set(ids), patches: Patches = {};

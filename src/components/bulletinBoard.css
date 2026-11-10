@@ -20,9 +20,18 @@
 .board-link-form button { height: 30px; padding: 0 12px; border: 0; border-radius: 6px; background: var(--hover); color: var(--text); font: 500 12px var(--sans); cursor: pointer; }
 .board-link-form button:first-of-type { background: var(--accent); color: var(--on-accent); }
 .board-library { max-height: 300px; overflow: auto; }
+.board-hidden-hint { display: flex; align-items: center; gap: 6px; margin: -4px 0 8px; color: var(--placeholder); font: 11px var(--sans); }
+:root[data-pixel] .board-hidden-hint { font-size: 14px; }
 .board-library > input { width: 100%; box-sizing: border-box; margin-bottom: 8px; }
-.board-library > button { display: flex; flex-direction: column; gap: 2px; width: 100%; margin-bottom: 5px; padding: 7px 10px; border: 0; border-radius: 4px; background: var(--paper); color: var(--paper-ink); text-align: left; font: 12px var(--sans); cursor: pointer; box-shadow: 0 1px 2px #0006; }
-.board-library > button:hover { filter: brightness(1.08); }
+.board-library > :is(button, .board-library-row) { display: flex; flex-direction: column; gap: 2px; width: 100%; margin-bottom: 5px; padding: 7px 10px; border: 0; border-radius: 4px; background: var(--paper); color: var(--paper-ink); text-align: left; font: 12px var(--sans); cursor: pointer; box-shadow: 0 1px 2px #0006; }
+.board-library > button:hover, .board-library-pick:hover { filter: brightness(1.08); }
+/* A note of the library: the note itself (shows it here) and, beside it, buttons for independent copies. */
+.board-library > .board-library-row { flex-direction: row; align-items: stretch; gap: 0; padding: 0; overflow: hidden; }
+.board-library-pick { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; padding: 7px 10px; border: 0; background: transparent; color: inherit; text-align: left; font: 12px var(--sans); cursor: pointer; }
+.board-library-copy { flex: none; display: flex; flex-direction: column; justify-content: center; gap: 3px; padding: 4px 6px; border-left: 1px solid color-mix(in srgb, var(--paper-ink, #000) 14%, transparent); }
+.board-library-copy button { display: flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border: 0; border-radius: 999px; background: color-mix(in srgb, var(--paper-ink, #000) 11%, transparent); color: inherit; font: 11px var(--sans); white-space: nowrap; cursor: pointer; }
+.board-library-copy button:hover { background: color-mix(in srgb, var(--paper-ink, #000) 22%, transparent); }
+.board-library-copy .icon { width: 11px; height: 11px; }
 .board-library small { opacity: .7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .board-library p { margin: 4px 2px 0; color: var(--muted); font: 11px var(--sans); }
 
@@ -57,6 +66,11 @@
 .board-card header input { flex: 1; min-width: 0; height: 24px; padding: 0 4px; border: 0; border-radius: 3px; background: transparent; color: inherit; font: 600 13px var(--sans); outline: 0; cursor: text; }
 .board-card header input::placeholder { color: color-mix(in srgb, currentColor 45%, transparent); }
 .board-card header input:focus { background: color-mix(in srgb, var(--paper-ink) 8%, transparent); }
+/* A note's tag: its dot beside the tools (always there when set, else with the tools). */
+.board-tag { display: grid; place-items: center; flex: none; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 4px; background: transparent; cursor: pointer; opacity: 0; transition: opacity var(--fast) ease; }
+.board-card:is(:hover, :focus-within) .board-tag, .board-tag.is-set, .board-tag[aria-expanded='true'] { opacity: 1; }
+.board-tag:hover { background: color-mix(in srgb, var(--paper-ink) 12%, transparent); }
+.board-tag .tag-dot.is-empty { box-shadow: inset 0 0 0 1.2px color-mix(in srgb, var(--paper-ink) 45%, transparent); }
 .board-tools { display: flex; gap: 1px; opacity: 0; transition: opacity var(--fast) ease; }
 .board-card:is(:hover, :focus-within) .board-tools { opacity: 1; }
 .board-tools button { display: grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: color-mix(in srgb, currentColor 65%, transparent); cursor: pointer; }
@@ -141,7 +155,7 @@
 :root[data-pixel] .board-card.is-moving { transform: translate(-2px, -2px); box-shadow: 8px 8px 0 #000a; }
 :root[data-pixel] .board-card:focus-visible { box-shadow: 0 0 0 2px var(--accent), 4px 4px 0 #000a; }
 :root[data-pixel] .board-pin { width: 12px; height: 12px; margin-left: -6px; top: -6px; border-radius: 0; background: linear-gradient(#fff8, #fff8) 2px 2px / 4px 4px no-repeat, var(--pin, #d9534f); box-shadow: 2px 2px 0 #0009; }
-:root[data-pixel] :is(.board-actions, .board-actions button, .board-link-form, .board-library, .board-library > button, .board-tools button, .board-lightbox figure, .board-lightbox figcaption button, .board-image) { border-radius: 0; }
+:root[data-pixel] :is(.board-actions, .board-actions button, .board-link-form, .board-library, .board-library > button, .board-library-row, .board-library-copy button, .board-tools button, .board-lightbox figure, .board-lightbox figcaption button, .board-image) { border-radius: 0; }
 :root[data-pixel] :is(.board-link-form, .board-library) { outline: 1px solid var(--edge); outline-offset: 1px; box-shadow: 3px 3px 0 var(--border), 5px 5px 0 #0008; }
 :root[data-pixel] .board-actions { box-shadow: 0 0 0 1px var(--edge), 3px 3px 0 #0008; }
 :root[data-pixel] .board-paper i { border-radius: 0; }
@@ -173,7 +187,13 @@
 .cm-line.md-h1 { font-size: 1.45em; line-height: 1.35; padding-top: 4px !important; }
 .cm-line.md-h2 { font-size: 1.22em; line-height: 1.4; }
 .cm-line.md-h3 { font-size: 1.06em; text-transform: none; opacity: .9; }
-.cm-line.md-li { padding-left: calc(var(--indent, 0) * 18px + 2px) !important; }
+/* Indent levels (two spaces or a tab each). Rendered, a line's white space is its indent, and the lines a list item
+   wraps into line up with its text (a hanging indent as wide as its bullet or checkbox). At the cursor (`is-source`)
+   the white space and marker show as typed, after the same indent. */
+.cm-line:is(.md-li, .md-indent) { padding-left: calc(var(--indent, 0) * 18px + 2px) !important; }
+.cm-line.md-ul:not(.is-source) { padding-left: calc(var(--indent, 0) * 18px + 20px) !important; text-indent: -18px; }
+.cm-line.md-task:not(.is-source) { padding-left: calc(var(--indent, 0) * 18px + 23px) !important; text-indent: -21px; }
+.cm-line :is(.md-bullet, .md-checkbox) { text-indent: 0; }
 .md-bullet { display: inline-block; width: 18px; vertical-align: middle; }
 .md-bullet::before { content: ''; display: block; width: 5px; height: 5px; margin: 0 auto 2px 4px; border-radius: 50%; background: currentColor; opacity: .75; }
 .md-ol-mark { font-variant-numeric: tabular-nums; opacity: .7; }

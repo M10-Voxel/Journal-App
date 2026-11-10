@@ -99,7 +99,7 @@ fn reopening_existing_schema_only_adds_indexes_and_keeps_all_content_and_history
     db.conn.execute_batch("DROP INDEX entries_activity_time").unwrap();
     let before=db.sync_snapshot().unwrap();let undo:i64=db.conn.query_row("SELECT COUNT(*) FROM undo_rows",[],|r|r.get(0)).unwrap();drop(db);
     let mut db=Store::open(&path).unwrap();assert_eq!(db.sync_snapshot().unwrap(),before);
-    assert_eq!(db.conn.pragma_query_value(None,"user_version",|r|r.get::<_,i64>(0)).unwrap(),12);
+    assert_eq!(db.conn.pragma_query_value(None,"user_version",|r|r.get::<_,i64>(0)).unwrap(),13);
     assert_eq!(db.conn.query_row("SELECT COUNT(*) FROM undo_rows",[],|r|r.get::<_,i64>(0)).unwrap(),undo);
     assert!(crate::history::step(&mut db,false).unwrap());assert_eq!(db.period_data().unwrap(),"{}");
     assert!(crate::history::step(&mut db,true).unwrap());assert!(db.period_data().unwrap().contains("Existing note"));

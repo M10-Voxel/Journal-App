@@ -42,7 +42,13 @@ export function Popover({ anchor, onClose, className = '', label, children, alig
   }, [anchor, align]);
   useLayoutEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
-    if (focus) ref.current?.querySelector<HTMLElement>('[data-autofocus], input, button:not(:disabled)')?.focus({ preventScroll: true });
+    // The marked element, else a text field (so typing, digits and arrows work at once), else the first button that is
+    // not the head's close button (which comes first in the panel).
+    if (focus) {
+      const panel = ref.current;
+      (panel?.querySelector<HTMLElement>('[data-autofocus]') ?? panel?.querySelector<HTMLElement>('input:not(:disabled):not([type=checkbox]):not([type=radio]), textarea:not(:disabled)')
+        ?? panel?.querySelector<HTMLElement>('button:not(:disabled):not(.chrome-close)'))?.focus({ preventScroll: true });
+    }
     return () => {
       if (ref.current?.contains(document.activeElement) || document.activeElement === document.body) previous?.focus({ preventScroll: true });
     };

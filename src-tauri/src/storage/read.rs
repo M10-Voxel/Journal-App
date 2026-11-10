@@ -2,11 +2,11 @@
 use super::*;
 
 const ORIGINS_SQL: &str = "SELECT json_extract(t.value, '$.id'), e.day_date FROM entries e, json_each(e.plan, '$.targets') t WHERE json_extract(t.value, '$.date') = ?1";
-const ENTRY_COLUMNS: &str = "e.id,e.kind,e.text,e.done,e.cancelled,e.priority,e.time,e.reminder,e.plan,e.end_time,e.show_in_journal,e.calendar_uid,e.series,s.rule,s.horizon,e.description,e.tag";
+const ENTRY_COLUMNS: &str = "e.id,e.kind,e.text,e.done,e.cancelled,e.priority,e.time,e.reminder,e.plan,e.end_time,e.show_in_journal,e.calendar_uid,e.series,s.rule,s.horizon,e.description,e.tag,e.reminder_before,e.icon";
 type EntryRow = (Entry, Option<String>, (Option<String>, Option<String>, Option<String>));
 
 fn entry_row(r: &rusqlite::Row<'_>, at: usize) -> rusqlite::Result<EntryRow> {
-    Ok((Entry { id:r.get(at)?,kind:r.get(at+1)?,text:r.get(at+2)?,done:r.get(at+3)?,cancelled:r.get(at+4)?,priority:r.get(at+5)?,time:r.get(at+6)?,reminder:r.get(at+7)?,end:r.get(at+9)?,show_in_journal:r.get(at+10)?,calendar_uid:r.get(at+11)?,description:r.get(at+15)?,tag:r.get(at+16)?,plan:None,origin:None,repeat:None },r.get(at+8)?,(r.get(at+12)?,r.get(at+13)?,r.get(at+14)?)))
+    Ok((Entry { id:r.get(at)?,kind:r.get(at+1)?,text:r.get(at+2)?,done:r.get(at+3)?,cancelled:r.get(at+4)?,priority:r.get(at+5)?,time:r.get(at+6)?,reminder:r.get(at+7)?,end:r.get(at+9)?,show_in_journal:r.get(at+10)?,calendar_uid:r.get(at+11)?,description:r.get(at+15)?,tag:r.get(at+16)?,reminder_before:r.get(at+17)?,icon:r.get(at+18)?,plan:None,origin:None,repeat:None },r.get(at+8)?,(r.get(at+12)?,r.get(at+13)?,r.get(at+14)?)))
 }
 fn finish_entry((mut entry, plan, series): EntryRow) -> Result<Entry> {
     entry.plan=plan.map(|value|serde_json::from_str(&value)).transpose()?;

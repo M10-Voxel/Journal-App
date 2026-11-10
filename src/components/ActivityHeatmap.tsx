@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { CSSProperties, KeyboardEvent } from 'react';
 import type { ActivityDefinition, PeriodData } from '../periodData';
-import { activityLevel, activityPalette } from '../activityColors';
+import { activityLevel, activityPalette, activityRange } from '../activityColors';
 import { getLanguage } from '../i18n';
 import { shiftDate, weekDates } from '../dates';
 import { periodDates } from '../periods';
@@ -13,10 +13,10 @@ export function ActivityHeatmap({ activity, dates, data, calendar }: { activity:
   const first = dates[0], last = dates[dates.length - 1];
   const padded = periodDates(weekDates(first)[0], weekDates(last)[6]);
   const columns = padded.length / 7;
-  const palette = activityPalette(activity.color);
+  const palette = activityPalette(activity.color), range = activityRange(activity);
   const detail = (date: string) => {
     const record = data.days[date]?.items[activity.id];
-    const active = activityLevel(record, activity.trackTime) > 0;
+    const active = activityLevel(record, activity.trackTime, range) > 0;
     const label = new Intl.DateTimeFormat(en ? 'en-GB' : 'de-DE', { weekday:'short', day:'numeric', month:'short', year:'numeric' }).format(new Date(`${date}T12:00:00`));
     return `${label} · ${active ? activity.trackTime && record?.minutes != null ? `${record.minutes} min` : en ? 'Done' : 'Erledigt' : en ? 'No activity' : 'Keine Aktivität'}${record?.text ? ` · ${record.text}` : ''}`;
   };
@@ -35,7 +35,7 @@ export function ActivityHeatmap({ activity, dates, data, calendar }: { activity:
       {!calendar && Array.from({length:columns}, (_, column) => { const start = padded[column*7], end = padded[column*7+6]; const marker = dates.find(date => date >= start && date <= end && (date === first || date.endsWith('-01'))); return marker ? <span key={`month-${column}`} className="heatmap-month" style={{gridColumn:column+2, gridRow:1}}>{new Intl.DateTimeFormat(en ? 'en-GB' : 'de-DE', {month:'short'}).format(new Date(`${marker}T12:00:00`))}</span> : null; })}
       {padded.map((date, index) => {
         const inRange = date >= first && date <= last;
-        const level = inRange ? activityLevel(data.days[date]?.items[activity.id], activity.trackTime) : 0;
+        const level = inRange ? activityLevel(data.days[date]?.items[activity.id], activity.trackTime, range) : 0;
         const shade = level ? palette[level-1] : undefined;
         const lightness = shade ? .299 * parseInt(shade.slice(1,3),16) + .587 * parseInt(shade.slice(3,5),16) + .114 * parseInt(shade.slice(5,7),16) : 0;
         const style = { gridColumn:calendar ? index%7+1 : Math.floor(index/7)+2, gridRow:calendar ? Math.floor(index/7)+2 : index%7+2, backgroundColor:level ? palette[level-1] : undefined };
@@ -43,6 +43,6 @@ export function ActivityHeatmap({ activity, dates, data, calendar }: { activity:
       })}
     </div></div>
     <p className="heatmap-detail" aria-live="polite">{selected && selected >= first && selected <= last ? detail(selected) : <span className="page-hint">{en ? 'Select a day for details' : 'Tag für Details auswählen'}</span>}</p>
-    {activity.trackTime ? <ActivityPalette color={activity.color} trackTime /> : <p className="heatmap-binary-legend"><i style={{backgroundColor:palette[0]}} />{en ? 'Done' : 'Erledigt'}</p>}
+    {activity.trackTime ? <ActivityPalette color={activity.color} trackTime range={range} /> : <p className="heatmap-binary-legend"><i style={{backgroundColor:palette[0]}} />{en ? 'Done' : 'Erledigt'}</p>}
   </div>;
 }

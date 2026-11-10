@@ -187,7 +187,7 @@ export function EntryActionDock({ layout, swipeActions, removeChoice, onClose, e
   }, [planning]);
 
   if (planning) return <div ref={dockRef} className={`entry-dock-shell${isOpen ? ' is-open' : ''}`} inert={!isOpen} aria-hidden={!isOpen}>
-    <PlanCalendar day={day} initialView={plannerView} initial={{ date: day, time: entry.time ?? null, reminder: entry.reminder ?? false, repeat: entry.repeat?.rule ?? null }} onPreview={onPlanDatePreview}
+    <PlanCalendar day={day} initialView={plannerView} initial={{ date: day, time: entry.time ?? null, reminder: entry.reminder ?? false, reminderBefore: entry.reminderBefore ?? 0, repeat: entry.repeat?.rule ?? null }} onPreview={onPlanDatePreview}
       onCancel={() => onPlanningChange(false)} onConfirm={(dates: string[], schedule: Schedule, repeat: RepeatRule | null) => onPlan(repeatChange(entry, day, dates, { ...schedule, end: keepDuration(entry, schedule.time) }, repeat, localDate()))} />
   </div>;
 

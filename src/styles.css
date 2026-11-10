@@ -154,6 +154,11 @@ h2 { margin: 0; font-size: 12px; font-weight: 600; }
 .empty > span { font-size: 11px; }
 .entry { position: relative; min-height: 36px; }
 .entry-main { position: relative; display: flex; align-items: flex-start; gap: 10px; min-height: 36px; }
+/* An entry's description, faint under its text and in line with it (symbol width + gap). Two lines at most. */
+.entry-description { margin: -6px 0 6px 40px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; color: var(--placeholder); font: 12px/1.45 var(--sans); white-space: pre-line; overflow-wrap: anywhere; user-select: text; }
+.entry[data-status='done'] .entry-description, .entry[data-status='cancelled'] .entry-description { opacity: .7; }
+:root[data-theme='journal'] .entry-description { font-family: var(--write); font-size: 13px; font-style: italic; }
+:root[data-pixel] .entry-description { font-size: 15px; line-height: 1.2; }
 .entry-group-start { margin-top: 20px; }
 .entry-new { animation: entry-in 300ms var(--spring); }
 .entry-actions { position: relative; flex: none; margin-top: 3px; }
@@ -261,6 +266,8 @@ h2 { margin: 0; font-size: 12px; font-weight: 600; }
 .entry-when { color: var(--accent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 25.098%, transparent); border-radius: 999px; animation: chip-in 360ms var(--spring) backwards; }
 .entry-when:hover { background: var(--surface); }
 .entry-when .icon, .entry-trace-target .icon { width: 12px; height: 12px; }
+/* A reminder ahead of the time says how far ("1 Std. vorher"), small after the bell. */
+.entry-when-lead { margin-left: -2px; font-size: 10.5px; opacity: .8; }
 .entry[data-trace] .entry-edit { color: var(--placeholder); }
 .entry[data-trace] .entry-text { cursor: default; }
 .entry-trace-target { color: var(--muted); box-shadow: inset 0 0 0 1px var(--hover); border-radius: 999px; animation: chip-in 360ms var(--spring) backwards; }
@@ -787,3 +794,6 @@ html.is-popup, html.is-popup body, html.is-popup #root { background: transparent
 
 /* Keep static backgrounds while idle instead of continuously repainting GPU layers. */
 :root[data-window-idle] *, :root[data-window-idle] *::before, :root[data-window-idle] *::after { animation-play-state: paused !important; }
+/* Cards that arrive while the window is not in front (reminders come in a popup that never takes the focus, mail and
+   update notes in a window behind others) still play: their entrance starts invisible and would stay there. */
+:root[data-window-idle] :is(.reminder, .reminder *, .mail-import-toast, .mail-import-toast *, .app-notices, .app-notices *) { animation-play-state: running !important; }

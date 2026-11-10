@@ -2,6 +2,9 @@ import { calendarDaysWithSpans } from '../calendarSpans';
 import type { SpanEntry } from '../calendarSpans';
 import { decodeMailContent } from '../mailContent';
 import { MailContent } from './MailContent';
+import { MarkdownField } from './MarkdownField';
+import { EntryIcon } from './EntryIcon';
+import { reminderLeadLabel } from './ReminderChoice';
 import { copyCalendarEntry } from '../calendarClipboard';
 import { journal } from '../journal';
 import { linkedScopes } from '../planning';
@@ -175,12 +178,14 @@ export function CalendarItem({ entry, date, variant = 'line', short = false, sty
     <div className="cal-details-meta">
       <span className="cal-details-date"><Icon name="calendar" />{formatShortDate(date)}</span>
       {entry.time && <span className="cal-details-time"><Icon name="clock" />{formatSpan(entry.time,entry.end)}</span>}
+      {entry.reminder && <span className="cal-details-reminder"><Icon name="bell" />{reminderLeadLabel(entry.reminderBefore)}</span>}
+      {entry.icon && <span className="cal-details-icon"><EntryIcon name={entry.icon} />{entry.icon}</span>}
       {tag && <span className="cal-details-tag"><span className="tag-dot" />{tag.name}</span>}
     </div>
   </div> : null;
   const spanning=Boolean(entry.end && Number(entry.end.split(':')[0])>=24);
   const state = entry.done ? ' is-done' : entry.cancelled ? ' is-cancelled' : '';
-  return <button type="button" className={`cal-item is-${entry.kind} is-${variant}${short ? ' is-short' : ''}${spanning ? ' is-multiday' : ''}${state}${entry.priority ? ' is-priority' : ''}${tag ? ' has-tag' : ''}${editingId === entry.id ? ' is-editing' : ''}${chosen ? ' is-selected' : ''}${night ? ` is-night-${night}` : ''}`}
+  return <button type="button" className={`cal-item is-${entry.kind} is-${variant}${short ? ' is-short' : ''}${spanning ? ' is-multiday' : ''}${state}${entry.priority ? ' is-priority' : ''}${tag ? ' has-tag' : ''}${entry.icon ? ' has-icon' : ''}${editingId === entry.id ? ' is-editing' : ''}${chosen ? ' is-selected' : ''}${night ? ` is-night-${night}` : ''}`}
     ref={noteRef} style={tag ? { ...style, '--tag': tag.color } as CSSProperties : style} data-tag={tag?.name}
     data-calendar-entry={entry.id} data-calendar-time={night === 'rest' ? '00:00' : entry.time ?? undefined}
     data-calendar-end={night === 'start' ? '24:00' : night === 'rest' && entry.end ? timeOfMinutes(minutesOf(entry.end) - 1440) : entry.end ?? undefined}
@@ -191,13 +196,15 @@ export function CalendarItem({ entry, date, variant = 'line', short = false, sty
     onPointerDown={beginMove} onClick={event => { event.stopPropagation(); if(suppressDragClick.current){suppressDragClick.current=false;return;} setDetails(value=>!value); }} onDoubleClick={event => event.stopPropagation()}>
     <Icon name={entrySymbol(entry)} />
     <span className="cal-item-text">{plainText(entry.text) || t("ohne Text")}</span>
+    {/* Its icon in the tag's colour at the lower right; where the entry is too small for its text, the icon stands for it. */}
+    {entry.icon && <EntryIcon name={entry.icon} className="cal-item-icon" />}
     {entry.time && <time className="cal-item-time" aria-hidden="true"><span>{formatSpan(entry.time, entry.end)}</span></time>}
     {options && <Popover anchor={noteRef.current} label={t("L?schen")} onClose={()=>setOptions(null)}><ScopeChoice action="remove" options={options} onCancel={()=>setOptions(null)} onChoose={option=>{setOptions(null);void remove?.(entry,date,option.others).catch(reason=>setError(String(reason)));}} /></Popover>}
     {error && <Popover anchor={noteRef.current} label={t("Fehler")} onClose={()=>setError('')}><p role="alert">{error}</p></Popover>}
     {details && <Popover anchor={noteRef.current} className={`cal-details${mail ? ' has-mail' : ''}`} label={t("Beschreibung")} onClose={() => setDetails(false)}>
       {/* Clicks in here stay here: the entry around it would otherwise open the journal. */}
       <div className="cal-details-body" onClick={event => event.stopPropagation()} onDoubleClick={event => event.stopPropagation()} onContextMenu={event => event.stopPropagation()} style={tag ? { '--tag': tag.color } as CSSProperties : undefined}>
-        {mail ? <MailContent mail={mail} heading={overview} entryTitle={detailTitle}/> : <>{overview}<p className="cal-details-text">{entry.description}</p></>}
+        {mail ? <MailContent mail={mail} heading={overview} entryTitle={detailTitle}/> : <>{overview}{entry.description && <MarkdownField className="cal-details-text" label={t("Beschreibung")} value={entry.description} />}</>}
         <div className="tag-picker-foot cal-details-actions"><button type="button" onClick={() => copyCalendarEntry(entry)}><Icon name="copy" />{t("Kopieren")}<kbd>{t("Strg")} C</kbd></button><button type="button" onClick={() => {setDetails(false);if(noteRef.current)edit?.(entry,date,noteRef.current);}}><Icon name="pencil" />{t("Bearbeiten")}</button><span className="cal-details-escape"><kbd>Esc</kbd></span><button type="button" onClick={() => { setDetails(false); open(date, entry.id); }}><Icon name="journal" />{t("Im Journal zeigen")}</button></div>
       </div>
     </Popover>}

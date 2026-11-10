@@ -4,6 +4,9 @@ import type { CSSProperties, KeyboardEvent } from 'react';
 import { Entry, EntryKind, journal } from '../journal';
 import type { LinkedAction } from '../journal';
 import { EntryText } from './EntryText';
+import { decodeMailContent } from '../mailContent';
+import { plainText } from '../markdown';
+import { reminderLeadLabel } from './ReminderChoice';
 import { EntryActionDock, EntryPreview, PlanUpdate, TaskStatus } from './EntryActionDock';
 import type { ActionLayout } from './EntryActionDock';
 import type { PlannerView } from './PlanCalendar';
@@ -293,6 +296,7 @@ export const JournalEntry = memo(function JournalEntry({ layout, entry, day, tag
   const dragClass = dragState === 'source' ? ' entry-dragging' : dragState ? ` ${dragState}` : '';
   // A tag's entries share a thin line in its colour at their left; a new group (within a kind) keeps a little distance.
   const tagClass = `${tag ? ` has-tag${tagFirst ? ' tag-first' : ''}${tagLast ? ' tag-last' : ''}` : ''}${tagFirst && !isGroupStart ? ' entry-tag-start' : ''}`;
+  const description = entry.description && !decodeMailContent(entry.description) ? plainText(entry.description).split('\n').filter(line => line.trim()).join('\n') : '';
   return <div ref={rootRef} className={`entry${isNew ? ' entry-new' : ''}${isGroupStart ? ' entry-group-start' : ''}${tagClass}${isOpen ? ' entry-open' : ''}${leaving ? ' entry-leaving' : ''}${dragClass}`} data-entry-id={entry.id}
     style={tag ? { '--tag': tag.color } as CSSProperties : undefined} data-group={filterKey(entry.tag)} data-tag={tag?.name} data-entry-kind={entry.kind} data-status={status} data-priority={entry.priority ? 'high' : undefined} data-preview={preview ?? undefined} data-trace={trace ? trace.via : undefined} data-swipe={layout === 'swipe' && swipe.phase !== 'idle' ? swipe.phase : undefined}
     // Swiping the entry keeps the gesture from turning the day; Shift + wheel always turns the day.
@@ -358,16 +362,19 @@ export const JournalEntry = memo(function JournalEntry({ layout, entry, day, tag
         </button>
       </div>
       <EntryText entry={entry} label={entry.priority ? t("{0} mit hoher Priorität", label) : label} strike={strike} focusEntryId={focusEntryId} onChange={text => onChange(entry.id, { text })} />
-      {tag && tagFirst && <button ref={tagRef} type="button" className="entry-tag" aria-label={t("Tag {0} ändern", tag.name)} data-tip={t("Tag · Alt G")} aria-haspopup="dialog" aria-expanded={tagging}
-        onClick={() => chooseTag()}><span className="tag-dot" />{tag.name}</button>}
       {!trace && (entry.time || entry.reminder || rule) && <button type="button" className="entry-when" title={rule ? describe(rule) : undefined}
-        aria-label={t("Termin{0}{1}{2} ändern", entry.time ? ` ${formatSpan(entry.time, entry.end)}` : '', entry.reminder ? t(", mit Erinnerung") : '', rule ? `, ${describe(rule)}` : '')} onClick={() => openPlanner()}>
-        {entry.time && <span>{formatSpan(entry.time, entry.end)}</span>}{entry.reminder && <Icon name="bell" />}{rule && <Icon name="repeat" className="entry-repeat" />}
+        aria-label={t("Termin{0}{1}{2} ändern", entry.time ? ` ${formatSpan(entry.time, entry.end)}` : '', entry.reminder ? t(", Erinnerung {0}", reminderLeadLabel(entry.reminderBefore)) : '', rule ? `, ${describe(rule)}` : '')} onClick={() => openPlanner()}>
+        {entry.time && <span>{formatSpan(entry.time, entry.end)}</span>}{entry.reminder && <Icon name="bell" />}{entry.reminder && (entry.reminderBefore ?? 0) > 0 && <span className="entry-when-lead">{reminderLeadLabel(entry.reminderBefore)}</span>}{rule && <Icon name="repeat" className="entry-repeat" />}
       </button>}
       {trace && <button type="button" className="entry-trace-target" aria-label={t("Zum {0} springen{1}", formatShortDate(trace.targets[0].date), trace.repeat?.rule ? `, ${describe(trace.repeat.rule)}` : '')} title={trace.repeat?.rule ? describe(trace.repeat.rule) : undefined} onClick={() => onNavigate(trace.targets[0].date)}>
         <span>{trace.targets.length > 1 ? t("{0} Tage", trace.targets.length) : formatShortDate(trace.targets[0].date)}</span>{trace.time && <span className="entry-trace-time">{formatSpan(trace.time, trace.end)}</span>}{trace.reminder && <Icon name="bell" />}{trace.repeat?.rule && <Icon name="repeat" className="entry-repeat" />}
       </button>}
+      {/* The tag is always the last thing in the row, after the time or the date. */}
+      {tag && tagFirst && <button ref={tagRef} type="button" className="entry-tag" aria-label={t("Tag {0} ändern", tag.name)} data-tip={t("Tag · Alt G")} aria-haspopup="dialog" aria-expanded={tagging}
+        onClick={() => chooseTag()}><span className="tag-dot" />{tag.name}</button>}
     </div>
+    {/* The calendar description, faintly under the text (its first lines, without Markdown marks; imported mails have their own view). */}
+    {description && <p className="entry-description" title={description}>{description}</p>}
     {scopeAsk && !fromSatellite && scopeChoice()}
     {tagging && <TagPicker anchor={tagRef.current ?? triggerRef.current} value={tag?.id ?? null} onPick={pickTag}
       onClose={() => { setTagging(false); const selection = restoreSelection.current; if (selection) { restoreSelection.current = null; const text = rootRef.current?.querySelector<TextField>('.entry-text'); text?.focus({ preventScroll: true }); text?.setSelectionRange(selection.start, selection.end, selection.direction); } }} />}

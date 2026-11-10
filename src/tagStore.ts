@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useSyncExternalStore } from 'react';
 import { setTagOrder } from './tags';
 import type { Tag } from './tags';
 
@@ -74,20 +74,27 @@ function readHidden(scope: TagScope): Set<string> {
     return new Set(Array.isArray(list) ? list.filter((item): item is string => typeof item === 'string') : []);
   } catch { return new Set(); }
 }
+// One choice per scope for the whole window: every view using it (the journal's entries, its board and notebook) follows
+// a change at once; other windows hear of it through the storage event.
+const hiddenNow: Partial<Record<TagScope, ReadonlySet<string>>> = {};
+const hiddenListeners = new Set<() => void>();
+const hiddenOf = (scope: TagScope) => hiddenNow[scope] ??= readHidden(scope);
+if (typeof window !== 'undefined') window.addEventListener('storage', event => {
+  if (event.key !== hiddenKey && event.key !== null) return;
+  for (const scope of Object.keys(hiddenNow) as TagScope[]) hiddenNow[scope] = readHidden(scope);
+  for (const listener of [...hiddenListeners]) listener();
+});
+const subscribeHidden = (listener: () => void) => { hiddenListeners.add(listener); return () => { hiddenListeners.delete(listener); }; };
+export function setHiddenTags(scope: TagScope, next: ReadonlySet<string>) {
+  hiddenNow[scope] = new Set(next);
+  try {
+    const stored = JSON.parse(localStorage.getItem(hiddenKey) ?? '{}') as Record<string, unknown>;
+    localStorage.setItem(hiddenKey, JSON.stringify({ ...stored, [scope]: [...next] }));
+  } catch { /* storage unavailable: keep it for this session */ }
+  for (const listener of [...hiddenListeners]) listener();
+}
 export function useHiddenTags(scope: TagScope): [ReadonlySet<string>, (next: ReadonlySet<string>) => void] {
-  const [hidden, setHidden] = useState(() => readHidden(scope));
-  // The calendar in its own window and in the sidebar share the choice.
-  useEffect(() => {
-    const reload = (event: StorageEvent) => { if (event.key === hiddenKey || event.key === null) setHidden(readHidden(scope)); };
-    window.addEventListener('storage', reload);
-    return () => window.removeEventListener('storage', reload);
-  }, [scope]);
-  const change = useCallback((next: ReadonlySet<string>) => {
-    setHidden(new Set(next));
-    try {
-      const stored = JSON.parse(localStorage.getItem(hiddenKey) ?? '{}') as Record<string, unknown>;
-      localStorage.setItem(hiddenKey, JSON.stringify({ ...stored, [scope]: [...next] }));
-    } catch { /* storage unavailable: keep it for this session */ }
-  }, [scope]);
+  const hidden = useSyncExternalStore(subscribeHidden, () => hiddenOf(scope), () => hiddenOf(scope));
+  const change = useCallback((next: ReadonlySet<string>) => setHiddenTags(scope, next), [scope]);
   return [hidden, change];
 }

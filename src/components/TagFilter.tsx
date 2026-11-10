@@ -5,7 +5,7 @@ import { untagged } from '../tags';
 import { manageTags, useTags } from '../tagStore';
 import { Icon } from './Icon';
 import { Popover } from './Popover';
-import { groupTags, orderedTags, tagKindLabel } from '../tagKinds';
+import { groupTags, orderedTags, tagKindLabel, useTagKindOrder } from '../tagKinds';
 import { useActivityTagIds } from '../tagGroups';
 
 /**
@@ -16,6 +16,7 @@ import { useActivityTagIds } from '../tagGroups';
 export function TagFilter({ hidden, onChange, label }: { hidden: ReadonlySet<string>; onChange: (next: ReadonlySet<string>) => void; label: string }) {
   useLanguage();
   const activityIds = useActivityTagIds();
+  useTagKindOrder();
   const tags = orderedTags(useTags(), activityIds);
   const groups = groupTags(tags, activityIds);
   const [open, setOpen] = useState(false);

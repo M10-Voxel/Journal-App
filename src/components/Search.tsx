@@ -3,7 +3,7 @@ import { Fragment, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, KeyboardEvent, ReactNode } from 'react';
 import { localDate, shiftDate, formatShortDate } from '../dates';
 import { plainText } from '../markdown';
-import { acceptSuggestion, excerpt, highlights, parseQuery, runSearch, searchSuggestions, typeFilters } from '../search';
+import { acceptSuggestion, cardItem, excerpt, highlights, parseQuery, runSearch, searchSuggestions, typeFilters } from '../search';
 import type { SearchItem, SearchResult, SearchType } from '../search';
 import { tagOf } from '../tags';
 import { useTags } from '../tagStore';
@@ -16,7 +16,7 @@ import { useEffect } from 'react';
 import type { Entry } from '../journal';
 import type { ParsedQuery } from '../search';
 import { Icon } from './Icon';
-import { kindOfTag, tagKindLabel, tagKinds } from '../tagKinds';
+import { kindOfTag, kindOrder, tagKindLabel, useTagKindOrder } from '../tagKinds';
 import { useActivityTagIds } from '../tagGroups';
 import type { IconName } from './Icon';
 
@@ -87,12 +87,7 @@ function useSearchItems(parsed: ParsedQuery, active: boolean): { items: SearchIt
       if (day.title.trim()) items.push(titleItem(day.date, day.title));
       for (const entry of day.entries) items.push(entryItem(day.date, entry));
     }
-    for (const card of cards) {
-      const notebook = card.kind === 'note' && (!card.dates?.length || Boolean((card as { notebook?: boolean }).notebook));
-      const type: SearchType = card.kind === 'note' ? notebook ? 'notebook' : 'board-note' : card.kind === 'image' ? 'board-image' : 'board-link';
-      const date = card.dates?.[0] ?? (card as { created?: string }).created ?? null;
-      items.push({ key: `card:${card.id}`, type, title: card.title || t('Ohne Titel'), snippet: `${plainText(card.text ?? '')} ${card.url ?? ''}`.trim(), date, tag: null, target: { kind: 'card', id: card.id, date: card.dates?.[0] ?? null, notebook } });
-    }
+    for (const card of cards) { const item = cardItem(card, cards, t('Ohne Titel')); if (item) items.push(item); }
     return items;
   }, [days, cards, stored, active, hasTerms]);
   return { items, pending: active && hasTerms && !onlyCards && (completed !== key || (fallback && !ready)) };
@@ -121,9 +116,10 @@ export function SearchBox({ variant, onOpen, autoFocus = false, onClose }: { var
   const { items, pending } = useSearchItems(parsed, focused);
   // Tags are offered by kind like everywhere else: your own, the checklist's, the mail import's (each kind set apart).
   const activityIds = useActivityTagIds();
+  useTagKindOrder();
   const kindOf = (id?: string) => id ? kindOfTag(id, activityIds) : null;
   const suggestions = searchSuggestions(parsed, tags, english, 12)
-    .map((suggestion, order) => ({ suggestion, order })).sort((a, b) => (a.suggestion.id ? tagKinds.indexOf(kindOf(a.suggestion.id)!) : 0) - (b.suggestion.id ? tagKinds.indexOf(kindOf(b.suggestion.id)!) : 0) || a.order - b.order)
+    .map((suggestion, order) => ({ suggestion, order })).sort((a, b) => (a.suggestion.id ? kindOrder().indexOf(kindOf(a.suggestion.id)!) : 0) - (b.suggestion.id ? kindOrder().indexOf(kindOf(b.suggestion.id)!) : 0) || a.order - b.order)
     .map(({ suggestion }) => suggestion.id ? { ...suggestion, description: tagKindLabel(kindOf(suggestion.id)!) } : suggestion);
   const results = runSearch(items, parsed);
   const words = parsed.words;

@@ -6,7 +6,7 @@ import type { Tag } from '../tags';
 import { createTag, manageTags, useTags } from '../tagStore';
 import { Icon } from './Icon';
 import { Popover } from './Popover';
-import { kindOfTag, orderedTags, tagKindLabel } from '../tagKinds';
+import { kindOfTag, orderedTags, tagKindLabel, useTagKindOrder } from '../tagKinds';
 import { useActivityTagIds } from '../tagGroups';
 
 type Option = { kind: 'none' } | { kind: 'tag'; tag: Tag } | { kind: 'create'; name: string };
@@ -21,6 +21,7 @@ export function TagPicker({ anchor, value, onPick, onClose }: {
   useLanguage();
   // Own tags first, then the checklist's, then the mail import's, each kind set apart.
   const activityIds = useActivityTagIds();
+  useTagKindOrder();
   const tags = orderedTags(useTags(), activityIds);
   const [query, setQuery] = useState('');
   const [error, setError] = useState('');

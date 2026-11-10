@@ -4,8 +4,8 @@ import { cleanRule, continued, occurrences, sameRule, seriesHorizon, withStart }
 import type { RepeatRule } from './repeat.ts';
 
 /** `end` (optional) closes a time span that starts at `time`. */
-export interface Schedule { time: string | null; end?: string | null; reminder: boolean }
-type PlanChange = Partial<Pick<Entry, 'time' | 'end' | 'reminder' | 'plan' | 'repeat'>>;
+export interface Schedule { time: string | null; end?: string | null; reminder: boolean; /** Minutes ahead (see Entry.reminderBefore). */ reminderBefore?: number }
+type PlanChange = Partial<Pick<Entry, 'time' | 'end' | 'reminder' | 'reminderBefore' | 'plan' | 'repeat'>>;
 
 export const canPlan = (entry: Entry) => entry.kind !== 'note' && !entry.plan;
 /** Notes have no time, reminder, planning or repetition, so only an entry without them can become one. */
@@ -19,9 +19,11 @@ export const canBeNote = (entry: Entry) => !entry.time && !entry.end && !entry.r
 export function planChange(day: string, dates: readonly string[], schedule: Schedule, via: PlanVia = dates.length > 1 ? 'days' : 'date', newId: () => string = () => crypto.randomUUID()): PlanChange {
   const targets = [...new Set(dates)].filter(date => date !== day).sort();
   const end = schedule.time ? schedule.end ?? null : null;
-  if (targets.length === 0) return { time: schedule.time, end, reminder: schedule.reminder };
+  // The lead time stays with the entry: its planned copies take it from there.
+  const lead = schedule.reminderBefore === undefined ? {} : { reminderBefore: schedule.reminderBefore };
+  if (targets.length === 0) return { time: schedule.time, end, reminder: schedule.reminder, ...lead };
   const plan: Plan = { via: targets.length > 1 ? 'days' : via === 'days' ? 'date' : via, targets: targets.map(date => ({ date, id: newId() })), time: schedule.time, end, reminder: schedule.reminder };
-  return { plan };
+  return { plan, ...lead };
 }
 /**
  * Planning with the repetition the planner shows (`rule`, null for none). Unchanged, it is plain planning: an occurrence

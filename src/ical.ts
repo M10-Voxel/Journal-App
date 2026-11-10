@@ -5,6 +5,18 @@ import ICAL from 'ical.js';
 import type { CalendarDay, CalendarImport } from './journal';
 import { localDate, shiftDate } from './dates.ts';
 
+
+/** The minutes a reminder comes ahead: the journal's own property, else the first alarm's trigger before the start. */
+function reminderLead(source: ICAL.Component): number {
+  const own = Number(source.getFirstPropertyValue('x-journal-reminder-before'));
+  if (Number.isFinite(own) && own > 0) return Math.min(43200, Math.round(own));
+  const trigger = source.getFirstSubcomponent('valarm')?.getFirstPropertyValue('trigger') as { toSeconds?: () => number } | null | undefined;
+  const seconds = typeof trigger?.toSeconds === 'function' ? trigger.toSeconds() : 0;
+  return seconds < 0 ? Math.min(43200, Math.round(-seconds / 60)) : 0;
+}
+/** A Lucide name as stored (see entryIcons.ts); anything else is dropped. */
+const iconName = (value: unknown) => typeof value === 'string' && /^[a-z0-9-]{1,64}$/.test(value) ? value : null;
+
 export interface CalendarPreview { entries: CalendarImport[]; notices: string[] }
 const pad = (n: number) => String(n).padStart(2, '0');
 const clock = (date: Date) => `${pad(date.getHours())}:${pad(date.getMinutes())}`;
@@ -47,6 +59,8 @@ export function exportCalendar(days: readonly CalendarDay[], now = new Date()): 
     component.updatePropertyWithValue('x-journal-done', entry.done ? 'TRUE' : 'FALSE');
     component.updatePropertyWithValue('x-journal-cancelled', entry.cancelled ? 'TRUE' : 'FALSE');
     component.updatePropertyWithValue('x-journal-reminder', entry.reminder ? 'TRUE' : 'FALSE');
+    if (entry.reminderBefore) component.updatePropertyWithValue('x-journal-reminder-before', String(entry.reminderBefore));
+    if (entry.icon) component.updatePropertyWithValue('x-journal-icon', entry.icon);
     if (entry.priority) component.updatePropertyWithValue('priority', 1);
     if (entry.cancelled) component.updatePropertyWithValue('status', 'CANCELLED');
     if (entry.time) {
@@ -166,6 +180,8 @@ export function importCalendar(content: string, year = new Date().getFullYear())
           priority: Number(source.getFirstPropertyValue('priority') || 0) > 0 && Number(source.getFirstPropertyValue('priority')) <= 4,
           time, end: finish && time && Number(finish.split(':')[0])*60+Number(finish.split(':')[1])>Number(time.split(':')[0])*60+Number(time.split(':')[1]) ? finish : null,
           reminder: source.getFirstPropertyValue('x-journal-reminder') === 'TRUE' || source.getAllSubcomponents('valarm').length > 0,
+          ...reminderLead(source) ? { reminderBefore: reminderLead(source) } : {},
+          ...iconName(source.getFirstPropertyValue('x-journal-icon')) ? { icon: iconName(source.getFirstPropertyValue('x-journal-icon')) } : {},
           showInJournal: source.getFirstPropertyValue('x-journal-show-in-journal') !== 'FALSE', plan: null,
           ...repeatRule && !source.hasProperty('recurrence-id') ? {repeat:{series:seriesId,rule:repeatRule,horizon:shiftDate(until,-1)}} : {},
         } });

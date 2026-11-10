@@ -85,3 +85,18 @@ test('period-pinned notebook attachments are kept when their former note is dele
   assert.deepEqual([...removalIds([note, attachment], 'a')], ['a']);
   assert.deepEqual([...removalIds([note, { ...attachment, boards: { 'month:2026-11': null } }], 'a')], ['a', 'b']);
 });
+
+test('copies of notes: new ids, the threads between them kept, images left out', async () => {
+  const { copyCards } = await import('../src/boardPlacement.ts');
+  const card = (id, kind, extra = {}) => ({ id, kind, title:id.toUpperCase(), text:`text ${id}`, dates:[], order:0, ...extra });
+  const cards = [card('a','note',{ links:['b','img','c'], paper:'blue', w:300 }), card('b','note',{ links:['a'] }), card('img','image',{ links:['a'], asset:'x' }), card('c','link',{ url:'https://example.org', links:['a'] }), card('z','note')];
+  let n = 0;
+  const copies = copyCards(cards, ['a','b','img','c'], () => `new-${++n}`);
+  assert.deepEqual(copies.map(copy => [copy.from, copy.card.id, copy.card.kind]), [['a','new-1','note'],['b','new-2','note'],['c','new-3','link']]);
+  assert.deepEqual(copies.map(copy => copy.card.links), [['new-2','new-3'],['new-1'],['new-1']]);
+  assert.equal(copies[0].card.paper, 'blue'); assert.equal(copies[0].card.w, 300); assert.equal(copies[0].card.title, 'A'); assert.equal(copies[2].card.url, 'https://example.org');
+  assert.equal('asset' in copies[0].card, false);
+  // One note alone: no thread to a card that is not copied.
+  assert.deepEqual(copyCards(cards, ['a'], () => 'only').map(copy => copy.card.links), [[]]);
+  assert.deepEqual(copyCards(cards, ['img', 'missing'], () => 'nope'), []);
+});

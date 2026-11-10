@@ -26,8 +26,12 @@ export interface Entry {
   time?: string | null;
   /** Optional end `HH:MM` on the same day, after `time` (entries marked as a range in the calendar). */
   end?: string | null;
-  /** The user wants to be reminded. Stored only; notifications are not implemented yet. */
+  /** The user wants to be reminded (see reminders.rs). */
   reminder?: boolean;
+  /** Minutes before the entry's time (or 9:00 without one) the reminder comes; 0 or missing: at the time. */
+  reminderBefore?: number;
+  /** A Lucide icon's name (see entryIcons.ts), drawn in the tag's colour in the calendar. */
+  icon?: string | null;
   /** Hidden entries remain stored and visible in the calendar. Defaults to true. */
   showInJournal?: boolean;
   /** Stable iCalendar identity for repeat imports. */
@@ -140,7 +144,7 @@ export const journal = {
 export interface LinkedEntry { id: string; date: string; kind: EntryKind; done: boolean; cancelled: boolean; trace: boolean; series?: string | null }
 export interface LinkedEdit {
   kind: EntryKind; text: string; description: string; tag: string | null; priority: boolean; reminder: boolean; showInJournal: boolean;
-  times?: { time: string | null; end: string | null };
+  times?: { time: string | null; end: string | null }; reminderBefore?: number; icon?: string | null;
 }
 export type LinkedAction = 'remove' | 'done' | 'cancelled' | 'open';
 

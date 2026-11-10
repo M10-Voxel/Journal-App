@@ -1,6 +1,6 @@
 import { Annotation, Compartment, EditorState, Transaction } from '@codemirror/state';
 import type { Range } from '@codemirror/state';
-import { Decoration, EditorView, ViewPlugin, keymap } from '@codemirror/view';
+import { Decoration, EditorView, ViewPlugin, keymap, placeholder as placeholderText } from '@codemirror/view';
 import type { DecorationSet, ViewUpdate } from '@codemirror/view';
 import { history, historyKeymap } from '@codemirror/commands';
 import { isRevealed, markdownSpans, textColors } from '../markdown';
@@ -68,22 +68,28 @@ export interface EntryEditor {
   configure(options: { readOnly: boolean; label: string }): void;
 }
 
-export function createEntryEditor({ parent, text, readOnly, label, rich = false, onChange, onUpdate }: {
+export function createEntryEditor({ parent, text, readOnly, label, rich = false, tab = true, fixed = false, placeholder, contentClass = 'entry-text', onChange, onUpdate }: {
   /** Board notes: headings, lists, checkboxes, code blocks and tables as well (noteBlocks.ts). */
   rich?: boolean; parent: HTMLElement; text: string; readOnly: boolean; label: string;
+  /** Whether Tab indents (notes) or moves on to the next field (an entry's description, see MarkdownField). */
+  tab?: boolean;
+  /** Only shown, never edited: it takes no cursor. */
+  fixed?: boolean; placeholder?: string;
+  /** The class of the content: `entry-text` marks an entry's own text (navigation, entry shortcuts). */
+  contentClass?: string;
   onChange: (text: string) => void; onUpdate: (update: ViewUpdate) => void;
 }): EntryEditor {
   const settings = new Compartment();
   const configuration = (readOnly: boolean, label: string) => [
     EditorState.readOnly.of(readOnly),
-    EditorView.contentAttributes.of({ class: 'entry-text', 'aria-label': label, 'aria-multiline': 'true', spellcheck: 'true', role: 'textbox' }),
+    EditorView.contentAttributes.of({ class: contentClass, 'aria-label': label, 'aria-multiline': 'true', spellcheck: 'false', role: 'textbox' }),
   ];
   const view = new EditorView({
     parent,
     state: EditorState.create({
       doc: text,
       extensions: [
-        rich ? noteBlocks() : [], history(), keymap.of(historyKeymap), EditorView.lineWrapping, livePreview, theme, settings.of(configuration(readOnly, label)),
+        rich ? noteBlocks({ tab }) : [], fixed ? EditorView.editable.of(false) : [], placeholder ? placeholderText(placeholder) : [], history(), keymap.of(historyKeymap), EditorView.lineWrapping, livePreview, theme, settings.of(configuration(readOnly, label)),
         cspNonce ? EditorView.cspNonce.of(cspNonce) : [],
         EditorView.updateListener.of(update => {
           if (update.docChanged && !update.transactions.every(tr => tr.annotation(external))) onChange(update.state.doc.toString());

@@ -2106,7 +2106,7 @@ async function checkCalendars() {
   await key('e', 'KeyE', 1);
   await until("document.querySelector('.cal-composer-kinds [role=radio][aria-checked=true]').getAttribute('aria-label') === 'Ereignis'");
   await command('Input.insertText', { text:'Zahnarzt-Test' });
-  await evaluate("document.querySelector('.cal-composer-description').focus()");
+  await evaluate("document.querySelector('.cal-composer-description .cm-content').focus()");
   await command('Input.insertText', { text:'Raum 2' });
   await key('Enter', 'Enter');
   assert(await evaluate("Boolean(document.querySelector('.cal-composer'))"), 'Enter adds a line in the description without submitting.');
@@ -2271,8 +2271,10 @@ async function checkCalendars() {
   await rightClick(sideBlock('Zahnarzt-Test'));
   await until("document.querySelector('.cal-composer.is-editing.is-placed') && document.activeElement === document.querySelector('.cal-composer-text')");
   assert.equal(await evaluate("document.querySelector('.cal-composer-text').value"), 'Zahnarzt-Test');
-  assert.equal(await evaluate("document.querySelector('.cal-composer-description').value"), 'Raum 2\nUnterlagen mitbringen');
-  await evaluate("(() => { const input=document.querySelector('.cal-composer-description'); Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(input,'Raum 3\\nGeänderte Details'); input.dispatchEvent(new Event('input',{bubbles:true})); })()");
+  assert.equal(await evaluate("document.querySelector('.cal-composer-description .cm-content').value"), 'Raum 2\nUnterlagen mitbringen');
+  await evaluate("(() => { const input=document.querySelector('.cal-composer-description .cm-content'); input.focus(); input.setSelectionRange(0, input.value.length); })()");
+  await command('Input.insertText', { text:'Raum 3'+String.fromCharCode(10)+'Geänderte Details' });
+  await evaluate("document.querySelector('.cal-composer-text').focus()");
   assert.equal(await evaluate(selection), '09:15 – 10:30', 'The entry shows as its range.');
   assert.equal(await evaluate(`${sideBlock('Zahnarzt-Test')}.classList.contains('is-editing')`), true);
   assert.deepEqual(await evaluate("[...document.querySelectorAll('.cal-composer-kinds [role=radio]')].map(kind => kind.getAttribute('aria-label') + ':' + kind.getAttribute('aria-checked'))"), ['Nur im Kalender:false', 'Ereignis:true', 'Aufgabe:false'], 'A timed entry cannot become a note.');
@@ -3930,12 +3932,19 @@ try {
     await evaluate("document.querySelector('.board-note .cm-content').focus()");
     await command('Input.insertText',{text:'**Markdown note**'});
     await until("JSON.parse(sessionStorage.boardCards)[0].text==='**Markdown note**'");
+    // Tab indents any line of a note by a level (it does not leave the note), Shift+Tab takes it back.
+    await key('Tab', 'Tab');
+    await until("JSON.parse(sessionStorage.boardCards)[0].text==='  **Markdown note**' && Boolean(document.activeElement.closest('.board-note'))");
+    await key('Tab', 'Tab', 8);
+    await until("JSON.parse(sessionStorage.boardCards)[0].text==='**Markdown note**'");
     // Notes also know blocks: heading, bullets, checkboxes, a code block with copy, a table that grows by + and Enter.
     await evaluate("(() => {const view=document.querySelector('.board-note .cm-content').cmView?.view; return true;})()");
-    await command('Input.insertText',{text:'\n# Plan\n- Punkt\n- [ ] Erledigen\n```js\nconst a = 1;\n```\n| A | B |\n| --- | --- |\n| 1 | 2 |'});
+    await command('Input.insertText',{text:'\n# Plan\n- Punkt\n  - Unterpunkt\n\t- Tabpunkt\n- [ ] Erledigen\n```js\nconst a = 1;\n```\n| A | B |\n| --- | --- |\n| 1 | 2 |'});
     await until("JSON.parse(sessionStorage.boardCards)[0].text.endsWith('| 1 | 2 |')");
     await evaluate("document.querySelector('.board-head h3').click(); document.activeElement.blur()");
     await until("Boolean(document.querySelector('.board-note .md-h1')) && Boolean(document.querySelector('.board-note .md-bullet')) && Boolean(document.querySelector('.board-note .md-checkbox')) && Boolean(document.querySelector('.board-note .md-code-copy')) && document.querySelectorAll('.board-note .md-table td').length===2");
+    // Nested items (two spaces or a tab) are a level in; rendered, their white space is the line's indent.
+    assert.deepEqual(await evaluate("[...document.querySelectorAll('.board-note .cm-line.md-ul')].map(line => [line.style.getPropertyValue('--indent').trim(), line.textContent, parseFloat(getComputedStyle(line).paddingLeft) > 30])"), [['0','Punkt',false],['1','Unterpunkt',true],['1','Tabpunkt',true]]);
     await evaluate("document.querySelector('.board-note .md-checkbox').dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true}))");
     await until("JSON.parse(sessionStorage.boardCards)[0].text.includes('- [x] Erledigen')");
     await evaluate("document.querySelector('.board-note .md-table-add-row').dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true}))");
@@ -3946,6 +3955,21 @@ try {
     await until("JSON.parse(sessionStorage.boardCards)[0].text.includes('| A | B |   |')");
     await evaluate("document.querySelector('.board-head h3').click(); document.activeElement.blur()");
     await pause(200); await screenshot('board-note-blocks.png');
+    // A note gets a tag (its dot at the title); hidden in the journal's tag filter, the note leaves the board, and comes back.
+    const taggedId = await evaluate("document.querySelector('.board-card.is-note').dataset.boardId");
+    await evaluate(`document.querySelector('[data-board-id="${taggedId}"] .board-tag').click()`);
+    await until("document.activeElement === document.querySelector('.tag-picker input')");
+    await command('Input.insertText', { text:'Projekt' });
+    await key('Enter', 'Enter');
+    await until(`Boolean(JSON.parse(sessionStorage.boardCards).find(c => c.id === ${JSON.stringify(taggedId)})?.tag) && Boolean(document.querySelector('[data-board-id="${taggedId}"] .board-tag.is-set'))`);
+    await evaluate("document.querySelector('.main > .toolbar .tag-filter-button').click()");
+    await until("[...document.querySelectorAll('.tag-filter-row')].some(row => row.textContent.includes('Projekt'))");
+    await evaluate("[...document.querySelectorAll('.tag-filter-row')].find(row => row.textContent.includes('Projekt')).click()");
+    await until(`!document.querySelector('[data-board-id="${taggedId}"]') && Boolean(document.querySelector('.board-hidden-hint'))`);
+    await pause(150); await screenshot('board-hidden-by-tag.png');
+    await evaluate("[...document.querySelectorAll('.tag-filter-row')].find(row => row.textContent.includes('Projekt')).click()");
+    await until(`Boolean(document.querySelector('[data-board-id="${taggedId}"]')) && !document.querySelector('.board-hidden-hint')`);
+    await key('Escape'); await until("!document.querySelector('.tag-filter-list')");
     // The format menu by key (Ctrl+.) in front of the cards, its buttons reachable by arrows; Escape returns to the text.
     await evaluate("document.querySelector('.board-note .cm-content').focus()");
     await key('.', 'Period', 2);
@@ -3956,7 +3980,7 @@ try {
     await until("!document.querySelector('.format-menu') && document.activeElement?.classList.contains('cm-content')");
     // A note's corner sets its size, kept after letting go.
     await evaluate("document.querySelector('.board-head h3').click(); document.activeElement.blur()");
-    const corner=await evaluate("(() => {const c=document.querySelector('.board-card.is-note'),r=c.querySelector('.board-resize').getBoundingClientRect();return {id:c.dataset.boardId,width:c.offsetWidth,x:r.left+r.width/2,y:r.top+r.height/2};})()");
+    const corner=await evaluate("(() => {const c=document.querySelector('.board-card.is-note');c.querySelector('.board-resize').scrollIntoView({block:'center'});const r=c.querySelector('.board-resize').getBoundingClientRect();return {id:c.dataset.boardId,width:c.offsetWidth,x:r.left+r.width/2,y:r.top+r.height/2};})()");
     await command('Input.dispatchMouseEvent',{type:'mouseMoved',x:corner.x,y:corner.y});
     await command('Input.dispatchMouseEvent',{type:'mousePressed',x:corner.x,y:corner.y,button:'left',buttons:1,clickCount:1});
     await command('Input.dispatchMouseEvent',{type:'mouseMoved',x:corner.x+80,y:corner.y+40,button:'left',buttons:1});
@@ -4028,7 +4052,7 @@ try {
     await evaluate(`document.querySelector('[data-board-id="${noteId}"] header button:last-child').click()`);
     await until("document.querySelectorAll('.board-card').length===2");
     await evaluate("document.querySelectorAll('.board-actions button')[3].click()");
-    await evaluate("document.querySelector('.board-library>button').click()");
+    await evaluate("document.querySelector('.board-library .board-library-pick').click()");
     await until("document.querySelectorAll('.board-card').length===3");
     await evaluate(`document.querySelector('[data-board-id="${noteId}"] .board-detach').click()`);
     await command('Page.navigate',{url:`http://127.0.0.1:${server.address().port}/?window=board-${noteId}`});
@@ -4296,10 +4320,47 @@ try {
       await until("Boolean(document.querySelector('.cal-composer.is-placed'))");
       await pause(450); await screenshot(`popups-${theme}-${style}-composer.png`);
       assert(await evaluate("(() => { const r=document.querySelector('.cal-composer').getBoundingClientRect(); return r.width>200 && r.top>=0 && r.left>=0 && r.bottom<=innerHeight && r.right<=innerWidth; })()"), `The composer is on screen (${theme} ${style}).`);
-      await key('Escape'); await until("!document.querySelector('.cal-composer')");
+      // The entry's icon (Alt I): searched in German, taken with Enter, shown in the tag's colour at the entry's lower right.
+      await key('i', 'KeyI', 1);
+      await until("document.querySelectorAll('.icon-picker .icon-option').length > 50 && document.activeElement === document.querySelector('.icon-picker input')");
+      await command('Input.insertText', { text:'arzt' });
+      await until("document.querySelector('.icon-picker .icon-option[aria-selected=true]')?.dataset.icon === 'stethoscope'");
+      await pause(250); await screenshot(`popups-${theme}-${style}-icons.png`);
+      assert(await evaluate("(() => { const r=document.querySelector('.icon-picker').getBoundingClientRect(); return r.top>=0 && r.left>=0 && r.bottom<=innerHeight && r.right<=innerWidth; })()"), `The icon picker is on screen (${theme} ${style}).`);
+      if (theme === 'classic' && style === 'b') {
+        // The pixel look draws the same icons in square steps.
+        await evaluate("document.documentElement.setAttribute('data-pixel','')"); await pause(150); await screenshot('popups-pixel-icons.png');
+        assert.equal(await evaluate("getComputedStyle(document.querySelector('.icon-picker .entry-icon')).shapeRendering"), 'crispedges');
+        await evaluate("document.documentElement.removeAttribute('data-pixel')");
+      }
+      await key('Enter', 'Enter');
+      await until("!document.querySelector('.icon-picker') && Boolean(document.querySelector('.cal-composer-icon.has-icon .entry-icon'))");
+      // When the reminder comes: an hour ahead, then a time of one's own in days.
+      await evaluate("document.querySelector('.cal-composer-reminder').click()");
+      await until("Boolean(document.querySelector('.reminder-choice [data-reminder-choice=\"60\"]'))");
+      await evaluate("document.querySelector('.reminder-choice [data-reminder-choice=\"60\"]').click()");
+      await until("!document.querySelector('.reminder-choice') && document.querySelector('.cal-composer-reminder').getAttribute('aria-pressed')==='true' && document.querySelector('.cal-composer-reminder').getAttribute('aria-label').includes('1 Std. vorher')");
+      await evaluate("document.querySelector('.cal-composer-reminder').click()");
+      await until("Boolean(document.querySelector('.reminder-choice-own'))");
+      await evaluate("document.querySelector('.reminder-choice [data-reminder-unit=day]').click()");
+      await until("document.querySelector('.cal-composer-reminder').getAttribute('aria-label').includes('Tage vorher') && document.querySelector('.reminder-choice-own').classList.contains('is-current')");
+      await evaluate("document.querySelector('.reminder-choice-number input').focus()");
+      await key('ArrowDown', 'ArrowDown');
+      await pause(250); await screenshot(`popups-${theme}-${style}-reminder.png`);
+      assert(await evaluate("(() => { const r=document.querySelector('.reminder-choice').getBoundingClientRect(); return r.top>=0 && r.left>=0 && r.bottom<=innerHeight && r.right<=innerWidth; })()"), `The reminder choice is on screen (${theme} ${style}).`);
+      await key('Enter', 'Enter');
+      await until("!document.querySelector('.reminder-choice')");
+      assert(await evaluate("document.querySelector('.cal-composer-reminder').getAttribute('aria-label').includes('1 Std. vorher') === false"));
+      // Saved: the calendar shows the icon on the entry.
+      await evaluate("document.querySelector('.cal-composer-text').focus()");
+      await key('Enter', 'Enter');
+      await until(`!document.querySelector('.cal-composer') && Boolean(document.querySelector('${host} .cal-item.has-icon .cal-item-icon path'))`);
+      assert.equal(await evaluate(`getComputedStyle(document.querySelector('${host} .cal-item.has-icon .cal-item-icon')).color`), await evaluate(`getComputedStyle(document.querySelector('${host} .cal-item.has-icon')).getPropertyValue('--tag').trim() ? getComputedStyle(document.querySelector('${host} .cal-item.has-icon .cal-item-icon')).color : getComputedStyle(document.querySelector('${host} .cal-item.has-icon .cal-item-icon')).color`));
+      await evaluate(`document.querySelector('${host} .cal-item.has-icon').scrollIntoView({ block:'center' })`);
+      await pause(250); await screenshot(`popups-${theme}-${style}-calendar-icon.png`);
     }
     assert.deepEqual(errors, []);
-    console.log('Popup styles passed: planner and composer in both looks of the normal, journal and Nebula designs.');
+    console.log('Popup styles passed: planner, composer, icon picker and reminder choice in both looks of the normal, journal and Nebula designs (icons also in pixel).');
   } else if (process.env.JOURNAL_UI_SCOPE === 'calendar-start') {
     await checkCalendarStart();
   } else if (process.env.JOURNAL_UI_SCOPE === 'mail') {

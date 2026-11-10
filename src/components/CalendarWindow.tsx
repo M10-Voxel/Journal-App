@@ -181,7 +181,9 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
   const removeChosen = async () => {
     const chosen = [...calendarSelection().values()];
     clearCalendarSelection();
-    if (onRemove) await Promise.all(chosen.map(item => onRemove(item.date, item.entry.id, []))).catch(reason => setNotice(String(reason)));
+    // One after the other: every removal loads and saves its day, and a day saved by a parallel removal has a new revision
+    // ("Dieser Tag wurde inzwischen geändert").
+    if (onRemove) try { for (const item of chosen) await onRemove(item.date, item.entry.id, []); } catch (reason) { setNotice(String(reason)); }
   };
   const beginMulti=(event:ReactPointerEvent<HTMLDivElement>)=>{
    if(!onCreate || event.button!==2 || (event.target as Element).closest('.cal-item,input,button:not(.cal-year-day):not(.cal-month-number)'))return;

@@ -1,6 +1,6 @@
 # Drive-Datenformat: aktuell Format 13
 
-Diese technische Übersicht ergänzt die [Einrichtung und Bedienung von Google Drive](google-drive.md). Die Zahl im Dateinamen ist historisch; das aktuelle Cloud-Paket verwendet **Format 13**. Das Journal-SQLite-Schema steht unabhängig davon bei Version 12.
+Diese technische Übersicht ergänzt die [Einrichtung und Bedienung von Google Drive](google-drive.md). Die Zahl im Dateinamen ist historisch; das aktuelle Cloud-Paket verwendet **Format 13**. Das Journal-SQLite-Schema steht unabhängig davon bei Version 13 (Version 13 ergänzte an `entries` die Spalten `reminder_before` und `icon`). Ein Cloud-Stand eines älteren App-Stands ohne diese Spalten wird angenommen; seine Einträge erhalten den Standard (kein Vorlauf, kein Icon). Ältere App-Stände können neuere Pakete dagegen nicht einlesen – beide Geräte sollten aktualisiert sein.
 
 ## Enthaltene Daten
 

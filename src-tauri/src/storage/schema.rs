@@ -8,7 +8,7 @@ impl Store {
         // WAL needs fewer syncs per save than the rollback journal and keeps reads independent of writes.
         conn.pragma_update_and_check(None, "journal_mode", "WAL", |r| r.get::<_, String>(0))?;
         let version: i64 = conn.pragma_query_value(None, "user_version", |r| r.get(0))?;
-        if version > 12 { return Err("Die Datenbank wurde mit einer neueren Version erstellt".into()); }
+        if version > 13 { return Err("Die Datenbank wurde mit einer neueren Version erstellt".into()); }
         if version == 0 {
             let tx = conn.transaction()?;
             tx.execute_batch("CREATE TABLE days (date TEXT PRIMARY KEY, title TEXT NOT NULL, body TEXT NOT NULL, revision INTEGER NOT NULL CHECK(revision > 0));
@@ -117,6 +117,15 @@ impl Store {
                 conn.execute_batch("PRAGMA foreign_keys=ON;")?;result?;
             }
             conn.execute_batch("PRAGMA user_version=12;")?;
+        }
+        // A reminder may come before its entry (minutes ahead), and an entry may carry an icon (see `valid_icon`).
+        if version < 13 {
+            let tx = conn.transaction()?;
+            let has = |column: &str| -> rusqlite::Result<bool> { tx.prepare("SELECT 1 FROM pragma_table_info('entries') WHERE name=?1")?.exists([column]) };
+            if !has("reminder_before")? { tx.execute_batch("ALTER TABLE entries ADD COLUMN reminder_before INTEGER NOT NULL DEFAULT 0 CHECK(reminder_before BETWEEN 0 AND 43200);")?; }
+            if !has("icon")? { tx.execute_batch("ALTER TABLE entries ADD COLUMN icon TEXT CHECK(icon IS NULL OR length(icon) BETWEEN 1 AND 64);")?; }
+            tx.execute_batch("PRAGMA user_version = 13;")?;
+            tx.commit()?;
         }
         // Additive index only: schema version, persisted rows and older app compatibility stay unchanged.
         conn.execute_batch("CREATE INDEX IF NOT EXISTS entries_activity_time ON entries(tag,day_date,time,end_time) WHERE plan IS NULL AND time IS NOT NULL AND end_time IS NOT NULL AND cancelled=0;")?;

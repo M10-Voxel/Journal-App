@@ -1,4 +1,7 @@
-export interface ActivityDefinition { id: string; name: string; color: string; trackTime: boolean; textField: boolean; active: boolean; calendarTagId?: string }
+import { activityRange } from './activityColors.ts';
+export interface ActivityDefinition { id: string; name: string; color: string; trackTime: boolean; textField: boolean; active: boolean; calendarTagId?: string;
+  /** The minutes the graph's seven shades run over (default 0 and 180, see activityColors.ts). */
+  minMinutes?: number; maxMinutes?: number }
 export interface ActivityRecord { done: boolean; minutes?: number; text?: string }
 export interface PeriodDay { rating?: number; items: Record<string, ActivityRecord> }
 /** `calendarTime`: the days' minutes hold only typed time; the timer's time lives in the calendar (see activityCalendar.ts). */
@@ -8,8 +11,13 @@ export function moveActivity(definitions: ActivityDefinition[], id: string, targ
   if (from < 0 || to < 0) return definitions;
   const next = [...definitions]; const [item] = next.splice(from, 1); next.splice(to, 0, item); return next;
 }
+/** The shades' minutes only when they are a valid range (activityRange); otherwise the default applies. */
+const rangeFields = (item: Partial<ActivityDefinition>): Pick<ActivityDefinition, 'minMinutes' | 'maxMinutes'> => {
+  const { min, max } = activityRange(item);
+  return item.minMinutes === undefined && item.maxMinutes === undefined ? {} : { minMinutes: min, maxMinutes: max };
+};
 export function normalizePeriodData(raw: Partial<PeriodData>): PeriodData {
-  return { definitions: (raw.definitions ?? []).map(item => ({ ...item, color: /^#[\da-f]{6}$/i.test(item.color ?? '') ? item.color : '#569eff', trackTime: item.trackTime !== false, textField: item.textField !== false, active: item.active !== false })), days: raw.days ?? {}, notes: raw.notes ?? {}, ...(raw.calendarTime ? { calendarTime: true } : {}) };
+  return { definitions: (raw.definitions ?? []).map(item => ({ ...item, color: /^#[\da-f]{6}$/i.test(item.color ?? '') ? item.color : '#569eff', trackTime: item.trackTime !== false, textField: item.textField !== false, active: item.active !== false, ...rangeFields(item) })), days: raw.days ?? {}, notes: raw.notes ?? {}, ...(raw.calendarTime ? { calendarTime: true } : {}) };
 }
 /** Minutes recorded before checkbox support was fixed also belong in the totals. */
 export function activitySummary(dates: string[], days: Record<string, PeriodDay>, id: string) {

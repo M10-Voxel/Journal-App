@@ -31,6 +31,7 @@
     "@tauri-apps/plugin-updater": "^2.14.1",
     "chrono-node": "^2.10.3",
     "ical.js": "^2.2.1",
+    "lucide": "^1.71.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

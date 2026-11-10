@@ -64,3 +64,23 @@ test('tag kinds: own first, then the checklist, then the mail import; moving sta
   assert.deepEqual(moveWithinKind(list, 'o2', -1, activities).map(tag => tag.id), ['o2', 'o1', 'a1', mail.id]);
   assert.deepEqual(moveWithinKind(list, 'a1', -1, activities).map(tag => tag.id), ['o1', 'o2', 'a1', mail.id], 'A tag never leaves its kind.');
 });
+
+test('the order of the tag kinds is the user\'s: whole, once each, default first', async () => {
+  const { normalizeKindOrder, groupTags, moveKind, kindOrder, resetKindOrder, orderedTags } = await import('../src/tagKinds.ts');
+  assert.deepEqual(normalizeKindOrder(null), ['own', 'activity', 'mail']);
+  assert.deepEqual(normalizeKindOrder(['mail', 'own']), ['mail', 'own', 'activity']);
+  assert.deepEqual(normalizeKindOrder(['mail', 'mail', 'bogus', 'activity']), ['mail', 'activity', 'own']);
+  const tags = [{ id:'o', name:'Own', color:'#111111' }, { id:'a', name:'Act', color:'#222222' }, { id:'m', name:'Mail', color:'#333333' }];
+  const activity = new Set(['a']);
+  assert.deepEqual(orderedTags(tags, new Set(['a'])).map(tag => tag.id).filter(id => id !== 'm'), ['o', 'a']);
+  const mailId = Object.values((await import('../src/mailTags.ts')).mailTagDefinitions)[0].id;
+  const all = [...tags.slice(0, 2), { id: mailId, name:'Mail', color:'#333333' }];
+  assert.deepEqual(groupTags(all, activity).map(group => group.kind), ['own', 'activity', 'mail']);
+  assert.equal(moveKind('mail', -1), true);
+  assert.deepEqual(kindOrder(), ['own', 'mail', 'activity']);
+  assert.deepEqual(groupTags(all, activity).map(group => group.kind), ['own', 'mail', 'activity']);
+  assert.equal(moveKind('own', -1), false);
+  assert.equal(moveKind('activity', 1), false);
+  resetKindOrder();
+  assert.deepEqual(kindOrder(), ['own', 'activity', 'mail']);
+});

@@ -6,7 +6,7 @@ import type { Tag } from '../tags';
 import { saveTags, useTags } from '../tagStore';
 import { ColorButton } from './ColorPicker';
 import { Icon } from './Icon';
-import { groupTags, moveWithinKind, orderedTags, tagKindLabel } from '../tagKinds';
+import { groupTags, moveKind, moveWithinKind, orderedTags, resetKindOrder, tagKindLabel, tagKinds, useTagKindOrder } from '../tagKinds';
 import { useActivityTagIds } from '../tagGroups';
 
 /** A name edited in place: saved on Enter or when leaving the field, Escape takes the change back. */
@@ -37,6 +37,7 @@ export function TagSettings() {
   latest.current = { colors };
   const listRef = useRef<HTMLDivElement>(null);
   const activityIds = useActivityTagIds();
+  const kindOrder = useTagKindOrder();
   const shown = orderedTags(tags, activityIds).map(tag => colors[tag.id] ? { ...tag, color: colors[tag.id] } : tag);
   const groups = groupTags(shown, activityIds);
   async function store(edit: (current: Tag[]) => Tag[]): Promise<boolean> {
@@ -89,7 +90,12 @@ export function TagSettings() {
     <p className="settings-hint">{t('Tags wie Arbeit, Privat oder Uni gruppieren Einträge im Journal und färben sie im Kalender. Zuweisen mit ')}<kbd>Alt</kbd> <kbd>G</kbd>{t(' am Eintrag oder im Kalender-Popup; ein- und ausblenden über das Tag-Symbol in der Leiste.')}</p>
     <div ref={listRef} className="tag-list" role="list" aria-labelledby="settings-tags-title">
       {groups.map(group => <div key={group.kind} className={`tag-group is-${group.kind}`} role="group" aria-label={tagKindLabel(group.kind)}>
-      <h4 className="tag-group-label">{tagKindLabel(group.kind)}</h4>
+      <h4 className="tag-group-label">{tagKindLabel(group.kind)}
+        {/* The kinds sit in this order in every list; the numbers 1–9 follow it. */}
+        <span className="tag-group-move">
+          <button type="button" className="cal-icon-button" aria-label={t('{0} nach oben', tagKindLabel(group.kind))} data-tip={t('Nach oben')} disabled={kindOrder.indexOf(group.kind) === 0} onClick={() => moveKind(group.kind, -1)}><Icon name="up" /></button>
+          <button type="button" className="cal-icon-button" aria-label={t('{0} nach unten', tagKindLabel(group.kind))} data-tip={t('Nach unten')} disabled={kindOrder.indexOf(group.kind) === kindOrder.length - 1} onClick={() => moveKind(group.kind, 1)}><Icon name="down" /></button>
+        </span></h4>
       {group.tags.map((tag, place) => { const index = shown.indexOf(tag); return <div key={tag.id} className="tag-row" role="listitem" style={{ '--tag': tag.color } as CSSProperties} data-tag-row={tag.name} data-tag-id={tag.id}>
         <ColorButton value={tag.color} label={tag.name} swatches={tagSwatches} onChange={value => recolor(tag.id, value)} />
         <NameField tag={tag} onRename={value => store(current => current.map(other => other.id === tag.id ? { ...other, name: value } : other))} />
@@ -103,6 +109,7 @@ export function TagSettings() {
       </div>; })}
       </div>)}
       {!tags.length && <p className="tag-empty">{t('Noch keine Tags.')}</p>}
+      {kindOrder.some((kind, index) => kind !== tagKinds[index]) && <button type="button" className="tag-kind-reset" onClick={resetKindOrder}>{t('Reihenfolge der Kategorien zurücksetzen')}</button>}
     </div>
     <form className="tag-row is-new" style={{ '--tag': newColor } as CSSProperties} onSubmit={event => { event.preventDefault(); void add(); }}>
       <ColorButton value={newColor} label={t('Neuer Tag')} swatches={tagSwatches} onChange={setColor} />

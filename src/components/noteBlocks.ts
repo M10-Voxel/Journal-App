@@ -10,12 +10,16 @@ import { t } from '../i18n';
 // ``` code blocks with a copy button, and | tables |. Like the inline formatting, it is a live preview: markers show
 // where the cursor is, rendered everywhere else. A table off the cursor is drawn as a real table – a click into a cell
 // edits it there, + at its right and bottom edge (on hover) adds a column or a row; Enter at a row's end adds a row,
-// Tab moves between cells. Lists go on with Enter (an empty item ends them), Tab / Shift+Tab indent.
+// Tab moves between cells. Lists go on with Enter (an empty item ends them). Tab / Shift+Tab indent any line (or all
+// selected ones) by a level: two spaces, a tab counts as one. Indented lines keep their level when they wrap.
 
 const heading = /^(#{1,3}) /;
 const task = /^(\s*)([-*+]) \[( |x|X)\] /;
 const bullet = /^(\s*)([-*+]) /;
 const ordered = /^(\s*)(\d+)([.)]) /;
+const indented = /^([ 	]+)\S/;
+/** The level of leading white space: two spaces or one tab each. */
+export const indentLevel = (space: string) => Math.floor([...space].reduce((columns, char) => columns + (char === '	' ? 2 : 1), 0) / 2);
 const fence = /^\s*```(\S*)\s*$/;
 const tableRow = /^\s*\|.*\|\s*$/;
 const tableRule = /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/;
@@ -126,7 +130,7 @@ class Checkbox extends WidgetType {
   toDOM(view: EditorView) {
     const box = document.createElement('span'); box.className = `md-checkbox${this.checked ? ' is-checked' : ''}`;
     box.setAttribute('role', 'checkbox'); box.setAttribute('aria-checked', String(this.checked));
-    box.addEventListener('mousedown', event => { event.preventDefault(); event.stopPropagation(); view.dispatch({ changes: { from: this.at, to: this.at + 1, insert: this.checked ? ' ' : 'x' }, userEvent: 'input.toggle' }); });
+    box.addEventListener('mousedown', event => { event.preventDefault(); event.stopPropagation(); if (view.state.readOnly) return; view.dispatch({ changes: { from: this.at, to: this.at + 1, insert: this.checked ? ' ' : 'x' }, userEvent: 'input.toggle' }); });
     return box;
   }
   ignoreEvent() { return true; }
@@ -167,17 +171,27 @@ function decorate(state: EditorState): DecorationSet {
       ranges.push((touches(state, line.from, end) ? Decoration.mark({ class: 'md-mark' }) : Decoration.replace({})).range(line.from, end));
     } else if ((match = task.exec(text))) {
       const checked = match[3] !== ' ', start = line.from + match[1].length, end = line.from + match[0].length;
-      ranges.push(Decoration.line({ class: `md-li md-task${checked ? ' is-done' : ''}`, attributes: { style: `--indent: ${Math.floor(match[1].length / 2)}` } }).range(line.from));
-      if (!touches(state, start, end - 1)) ranges.push(Decoration.replace({ widget: new Checkbox(checked, start + 3) }).range(start, end));
+      const editing = touches(state, line.from, end - 1);
+      ranges.push(Decoration.line({ class: `md-li md-task${checked ? ' is-done' : ''}${editing ? ' is-source' : ''}`, attributes: { style: `--indent: ${indentLevel(match[1])}` } }).range(line.from));
+      // Rendered, the white space is the line's indent (so wrapped lines line up); at the cursor it shows as typed.
+      if (!editing) ranges.push(Decoration.replace({ widget: new Checkbox(checked, start + 3) }).range(line.from, end));
       else ranges.push(Decoration.mark({ class: 'md-mark' }).range(start, end));
     } else if ((match = bullet.exec(text))) {
       const start = line.from + match[1].length, end = line.from + match[0].length;
-      ranges.push(Decoration.line({ class: 'md-li', attributes: { style: `--indent: ${Math.floor(match[1].length / 2)}` } }).range(line.from));
-      if (!touches(state, start, end - 1)) ranges.push(Decoration.replace({ widget: new Bullet() }).range(start, end));
+      const editing = touches(state, line.from, end - 1);
+      ranges.push(Decoration.line({ class: `md-li md-ul${editing ? ' is-source' : ''}`, attributes: { style: `--indent: ${indentLevel(match[1])}` } }).range(line.from));
+      if (!editing) ranges.push(Decoration.replace({ widget: new Bullet() }).range(line.from, end));
       else ranges.push(Decoration.mark({ class: 'md-mark' }).range(start, end));
     } else if ((match = ordered.exec(text))) {
-      ranges.push(Decoration.line({ class: 'md-li md-ol', attributes: { style: `--indent: ${Math.floor(match[1].length / 2)}` } }).range(line.from));
-      ranges.push(Decoration.mark({ class: 'md-ol-mark' }).range(line.from + match[1].length, line.from + match[0].length - 1));
+      const start = line.from + match[1].length, editing = touches(state, line.from, start);
+      ranges.push(Decoration.line({ class: `md-li md-ol${editing ? ' is-source' : ''}`, attributes: { style: `--indent: ${indentLevel(match[1])}` } }).range(line.from));
+      if (!editing && start > line.from) ranges.push(Decoration.replace({}).range(line.from, start));
+      ranges.push(Decoration.mark({ class: 'md-ol-mark' }).range(start, line.from + match[0].length - 1));
+    } else if ((match = indented.exec(text))) {
+      // An indented paragraph: its level as the line's indent.
+      const start = line.from + match[1].length, editing = touches(state, line.from, start);
+      ranges.push(Decoration.line({ class: `md-indent${editing ? ' is-source' : ''}`, attributes: { style: `--indent: ${indentLevel(match[1])}` } }).range(line.from));
+      if (!editing) ranges.push(Decoration.replace({}).range(line.from, start));
     }
   }
   return Decoration.set(ranges, true);
@@ -265,7 +279,14 @@ function enter(view: EditorView): boolean {
   if (table && head === line.to) { tableEdit(view, table.block.from, 'add-row', 0, line.number + 1); return true; }
   if (findBlocks(state).some(block => block.kind === 'code' && head > block.from && head <= block.to)) return false;
   const match = task.exec(line.text) ?? bullet.exec(line.text) ?? ordered.exec(line.text);
-  if (!match) return false;
+  if (!match) {
+    // An indented paragraph goes on at its level.
+    const lead = indented.exec(line.text)?.[1];
+    if (!lead || head < line.from + lead.length) return false;
+    view.dispatch({ changes: { from: head, insert: `
+${lead}` }, selection: { anchor: head + 1 + lead.length }, scrollIntoView: true, userEvent: 'input' });
+    return true;
+  }
   // An empty item ends the list.
   if (line.text.trim() === match[0].trim()) { view.dispatch({ changes: { from: line.from, to: line.to, insert: '' } }); return true; }
   const marker = task.test(line.text) ? `${match[1]}${match[2]} [ ] ` : ordered.test(line.text) ? `${match[1]}${Number(match[2]) + 1}${match[3]} ` : `${match[1]}${match[2]} `;
@@ -273,7 +294,7 @@ function enter(view: EditorView): boolean {
   return true;
 }
 function tab(view: EditorView, back: boolean): boolean {
-  const state = view.state, head = state.selection.main.head, line = state.doc.lineAt(head);
+  const state = view.state, head = state.selection.main.head;
   const table = tableAt(state);
   if (table) {
     // To the next (or previous) cell, across rows; past the last a new row.
@@ -291,14 +312,21 @@ function tab(view: EditorView, back: boolean): boolean {
     view.dispatch({ selection: { anchor: start, head: start + text.trim().length } });
     return true;
   }
-  if (!(task.test(line.text) || bullet.test(line.text) || ordered.test(line.text))) return false;
-  if (back) { const spaces = /^ {1,2}/.exec(line.text)?.[0].length ?? 0; if (spaces) view.dispatch({ changes: { from: line.from, to: line.from + spaces } }); }
-  else view.dispatch({ changes: { from: line.from, insert: '  ' } });
+  // Every line of the selection moves a level in or out. Shift+Tab on a line that is not indented leaves the note.
+  const { from, to } = state.selection.main, first = state.doc.lineAt(from), last = state.doc.lineAt(to), changes = [];
+  for (let number = first.number; number <= last.number; number++) {
+    const current = state.doc.line(number);
+    if (back) { const lead = /^(	| {1,2})/.exec(current.text)?.[0].length ?? 0; if (lead) changes.push({ from: current.from, to: current.from + lead }); }
+    else if (current.text.trim() || first.number === last.number) changes.push({ from: current.from, insert: '  ' });
+  }
+  if (!changes.length) return !back;
+  view.dispatch({ changes, userEvent: back ? 'delete.dedent' : 'input.indent' });
   return true;
 }
 
-export const noteBlocks = (): Extension => [
+/** `tab: false` leaves Tab to the form around the editor (an entry's description): it moves on to the next field. */
+export const noteBlocks = ({ tab: indents = true }: { tab?: boolean } = {}): Extension => [
   blockField,
   EditorView.focusChangeEffect.of((_, focusing) => focusEffect.of(focusing)),
-  keymap.of([{ key: 'Enter', run: enter }, { key: 'Tab', run: view => tab(view, false), shift: view => tab(view, true) }]),
+  keymap.of([{ key: 'Enter', run: enter }, ...indents ? [{ key: 'Tab', run: (view: EditorView) => tab(view, false), shift: (view: EditorView) => tab(view, true) }] : []]),
 ];

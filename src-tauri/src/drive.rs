@@ -157,6 +157,8 @@ pub async fn drive_write(app:tauri::AppHandle,vault:String,id:Option<String>,eta
 }
 
 const TABLES: &[(&str,&str)] = &[("tags","id"),("series","id"),("days","date"),("entries","id")];
+/// Entry columns newer than the snapshot format, with the value an older snapshot's entries get.
+fn later_column(col: &str) -> Option<Value> { match col { "reminder_before" => Some(json!(0)), "icon" => Some(Value::Null), _ => None } }
 impl Store {
     pub fn sync_snapshot(&self) -> Result<Value> {
         let mut tables=serde_json::Map::new();
@@ -194,8 +196,12 @@ impl Store {
             let revision=if *table=="days" {columns.iter().position(|c|c=="revision")} else {None};
             for (id,record) in records {
                 if *table=="days" {chrono::NaiveDate::parse_from_str(id,"%Y-%m-%d").map_err(|_|"Ungültiges Datum im Cloud-Stand")?;} else {uuid::Uuid::parse_str(id).map_err(|_|"Ungültige ID im Cloud-Stand")?;}
-                if record[*key].as_str()!=Some(id.as_str()) || record.as_object().map(|v|v.len())!=Some(columns.len()){return Err("Ungültiger Cloud-Datensatz".into())}
-                let mut values=Vec::new();for col in &columns {let v=record.get(col).ok_or("Spalte fehlt")?;values.push(match v {Value::Null=>rusqlite::types::Value::Null,Value::String(s)=>rusqlite::types::Value::Text(s.clone()),Value::Number(n)=>rusqlite::types::Value::Integer(n.as_i64().ok_or("Ungültige Zahl")?),_=>return Err("Ungültiger Wert".into())});}
+                // Columns added after schema 12 (reminder lead time, icon) may be missing in a snapshot of an older version: they get their default.
+                let later=|col:&str|*table=="entries" && later_column(col).is_some();
+                let present=columns.iter().filter(|col|record.get(col.as_str()).is_some()).count();
+                if record[*key].as_str()!=Some(id.as_str()) || record.as_object().map(|v|v.len())!=Some(present) || columns.iter().any(|col|record.get(col.as_str()).is_none() && !later(col)){return Err("Ungültiger Cloud-Datensatz".into())}
+                let fallback=|col:&str|if *table=="entries" {later_column(col)} else {None};
+                let mut values=Vec::new();for col in &columns {let missing=record.get(col).is_none();let default=if missing {fallback(col).ok_or("Spalte fehlt")?} else {Value::Null};let v=if missing {&default} else {record.get(col).ok_or("Spalte fehlt")?};values.push(match v {Value::Null=>rusqlite::types::Value::Null,Value::String(s)=>rusqlite::types::Value::Text(s.clone()),Value::Number(n)=>rusqlite::types::Value::Integer(n.as_i64().ok_or("Ungültige Zahl")?),_=>return Err("Ungültiger Wert".into())});}
                 if let Some(i)=revision {values[i]=rusqlite::types::Value::Integer(revisions.get(id).copied().unwrap_or(0)+1);}
                 insert.execute(rusqlite::params_from_iter(values)).map_err(|e|e.to_string())?;
             }
@@ -357,6 +363,15 @@ mod tests {
         db.sync_apply(before.clone(),next.clone()).unwrap();assert_eq!(db.load("2026-11-02").unwrap().revision,8);
         assert_eq!(db.sync_snapshot().unwrap(),next);assert!(db.sync_apply(before,next.clone()).is_err());assert_eq!(db.sync_snapshot().unwrap(),next);
         assert_eq!(db.load("2026-11-02").unwrap().entries[0].description,mail);
+        // A snapshot of an older version has no lead time or icon on its entries: they get their defaults.
+        let mut older=db.sync_snapshot().unwrap();let current=older.clone();
+        for record in older["tables"]["entries"].as_object_mut().unwrap().values_mut(){let record=record.as_object_mut().unwrap();record.remove("reminder_before");record.remove("icon");}
+        db.sync_apply(current,older).unwrap();
+        let entry=&db.load("2026-11-02").unwrap().entries[0];assert_eq!((entry.reminder_before,entry.icon.clone()),(0,None));
+        // Other columns may not be missing.
+        let mut broken=db.sync_snapshot().unwrap();let now=broken.clone();
+        broken["tables"]["entries"].as_object_mut().unwrap().values_mut().next().unwrap().as_object_mut().unwrap().remove("text");
+        assert!(db.sync_apply(now,broken).is_err());
         assert!(db.period_data().unwrap().contains("rating"));
         drop(db);let _=std::fs::remove_file(p);
     }

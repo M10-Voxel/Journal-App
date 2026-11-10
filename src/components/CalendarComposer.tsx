@@ -1,5 +1,6 @@
 import { decodeMailContent } from '../mailContent';
 import { MailContent } from './MailContent';
+import { MarkdownField } from './MarkdownField';
 import { useDismissLayer } from './useDismissLayer';
 import { shiftDate } from '../dates';
 import { copyCalendarEntry } from '../calendarClipboard';
@@ -20,6 +21,8 @@ import type { ScopeOption } from '../planning';
 import { ScopeChoice } from './ScopeChoice';
 import { Icon, priorityIcon } from './Icon';
 import { TagPicker } from './TagPicker';
+import { EntryIcon, IconPicker } from './EntryIcon';
+import { ReminderChoice, reminderLeadLabel } from './ReminderChoice';
 import { contrastRatio } from '../colors';
 import { DateField, TimeField } from './FieldPickers';
 import { PopupHead, PopupKeys } from './PopupChrome';
@@ -30,9 +33,9 @@ import { useTags } from '../tagStore';
 /** A range marked in the time grid, in minutes of its day. */
 export interface Draft { date: string; start: number; end: number }
 /** What the composer creates: an event or a task (a time block) over the marked range. */
-export interface NewEntry { kind: EntryKind; text: string; description: string; tag: string | null; time: string | null; end: string | null; priority: boolean; reminder: boolean; showInJournal: boolean; repeat?: Repeat }
+export interface NewEntry { kind: EntryKind; text: string; description: string; tag: string | null; time: string | null; end: string | null; priority: boolean; reminder: boolean; reminderBefore?: number; icon?: string | null; showInJournal: boolean; repeat?: Repeat }
 /** What editing an entry in the calendar changes. */
-export type EntryEdit = Partial<Pick<Entry, 'kind' | 'text' | 'description' | 'tag' | 'priority' | 'reminder' | 'time' | 'end' | 'done' | 'cancelled' | 'showInJournal' | 'repeat'>>;
+export type EntryEdit = Partial<Pick<Entry, 'kind' | 'text' | 'description' | 'tag' | 'priority' | 'reminder' | 'reminderBefore' | 'icon' | 'time' | 'end' | 'done' | 'cancelled' | 'showInJournal' | 'repeat'>>;
 
 const widths = { create: 400, edit: 436 };
 type ComposerKind = EntryKind | 'calendar';
@@ -74,6 +77,11 @@ export function CalendarComposer({ date, draft, entry, span, onSpanChange, tag: 
   const [tagging, setTagging] = useState(false);
   const tagButton = useRef<HTMLButtonElement>(null);
   const [reminder, setReminder] = useState(entry?.reminder ?? false);
+  const [reminderBefore, setReminderBefore] = useState(entry?.reminderBefore ?? 0);
+  const [icon, setIcon] = useState<string | null>(entry?.icon ?? null);
+  const [choosingIcon, setChoosingIcon] = useState(false);
+  const [choosingReminder, setChoosingReminder] = useState(false);
+  const iconButton = useRef<HTMLButtonElement>(null), reminderButton = useRef<HTMLButtonElement>(null);
   const [showInJournal, setShowInJournal] = useState(entry ? entry.showInJournal !== false : false);
   const selectedKind: ComposerKind = showInJournal ? kind : 'calendar';
   const [busy, setBusy] = useState(false);
@@ -171,13 +179,13 @@ export function CalendarComposer({ date, draft, entry, span, onSpanChange, tag: 
       if (longSpan && (longEnd <= minutesOf(longStartTime) || longEnd - minutesOf(longStartTime) > 366 * 1440)) { setError(t('Bitte den Zeitraum prüfen.')); setBusy(false); return; }
       if (!entry) {
         const times = longSpan ? { time: longStartTime, end: timeOfMinutes(longEnd) } : { time: draft ? timeOfMinutes(draft.start) : null, end: draft ? timeOfMinutes(draft.end) : null };
-        const made = { kind: kind === 'note' ? 'event' as const : kind, text: text.trim(), description: description.trim(), tag: tagId, ...times, priority, reminder, showInJournal };
+        const made = { kind: kind === 'note' ? 'event' as const : kind, text: text.trim(), description: description.trim(), tag: tagId, ...times, priority, reminder, reminderBefore: reminder ? reminderBefore : 0, icon, showInJournal };
         await onCreate?.({ ...made, repeat: repeatOf({ id: '', done: false, cancelled: false, plan: null, ...made }) });
       } else {
         // An entry without an end keeps having none, unless its length changed.
         const times = longSpan ? {time:longStartTime,end:timeOfMinutes((Date.parse(longEndDate)-Date.parse(date))/86400000*1440+minutesOf(longEndTime))} : draft ? { time: timeOfMinutes(draft.start), end: entry.end || length !== slotMinutes ? timeOfMinutes(draft.end) : null } : {};
         const repeat = repeatOf(entry);
-        const change: EntryEdit = { kind, text: text.trim(), description: description.trim(), tag: tagId, priority, showInJournal, reminder: kind === 'note' ? false : reminder, ...times, ...kind === 'task' ? {} : { done: false, cancelled: false }, ...repeat ? { repeat } : {} };
+        const change: EntryEdit = { kind, text: text.trim(), description: description.trim(), tag: tagId, priority, showInJournal, reminder: kind === 'note' ? false : reminder, reminderBefore: kind !== 'note' && reminder ? reminderBefore : 0, icon, ...times, ...kind === 'task' ? {} : { done: false, cancelled: false }, ...repeat ? { repeat } : {} };
         // A changed rule makes a new series anyway; otherwise the group decides whether there is anything to ask.
         const options = repeat ? [] : editScopes(await journal.linked(entry.id).catch(() => []), entry.id, date);
         if (options.length > 1) { setApplying({ change, options }); setBusy(false); return; }
@@ -204,17 +212,19 @@ export function CalendarComposer({ date, draft, entry, span, onSpanChange, tag: 
   }
   function onKeyDown(event: KeyboardEvent) {
     if(entry && event.ctrlKey && event.key.toLowerCase()==='c' && !window.getSelection()?.toString() && (!(event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) || event.target.selectionStart===event.target.selectionEnd)) {
-      event.preventDefault();copyCalendarEntry({...entry,text,description,priority,tag:tagId,reminder,showInJournal,kind,repeat:rule ? {...entry.repeat!,rule} : null});return;
+      event.preventDefault();copyCalendarEntry({...entry,text,description,priority,tag:tagId,reminder,reminderBefore,icon,showInJournal,kind,repeat:rule ? {...entry.repeat!,rule} : null});return;
     }
     const key = event.key;
     if (removing || applying) return;
     if (key === 'Escape' && repeatView) { setRepeatView(repeatView === 'end' ? 'rule' : null); if (repeatView === 'rule') inputRef.current?.focus(); }
     else if (key === 'Escape') onCancel(true);
     else if (event.altKey && !event.ctrlKey && event.code === 'KeyW' && kind !== 'note') toggleRepeat();
-    else if (key === 'Enter' && !event.altKey && (!(event.target instanceof HTMLTextAreaElement) || event.ctrlKey || event.metaKey)) void submit();
+    // Enter in the description is a new line there; Ctrl+Enter saves from anywhere.
+    else if (key === 'Enter' && !event.altKey && (!(event.target as Element).closest?.('.cal-composer-description') || event.ctrlKey || event.metaKey)) void submit();
     else if (event.altKey && !event.ctrlKey && event.code in kindKeys) chooseKind(kindKeys[event.code]);
     else if (event.altKey && !event.ctrlKey && event.code === 'KeyP') setPriority(value => !value);
     else if (event.altKey && !event.ctrlKey && event.code === 'KeyG') setTagging(true);
+    else if (event.altKey && !event.ctrlKey && event.code === 'KeyI') setChoosingIcon(true);
     else if (event.altKey && !event.ctrlKey && key === 'Delete' && editing) void remove();
     else if ((key === 'ArrowUp' || key === 'ArrowDown') && draft && event.target === inputRef.current && !event.altKey && !event.ctrlKey) {
       const step = key === 'ArrowUp' ? -snapMinutes : snapMinutes;
@@ -251,12 +261,12 @@ export function CalendarComposer({ date, draft, entry, span, onSpanChange, tag: 
       <input ref={inputRef} className={`cal-composer-text${shaking ? ' is-shaking' : ''}`} onAnimationEnd={() => setShaking(false)} value={text} placeholder={selectedKind === 'calendar' ? t("Neuer Kalendereintrag …") : kind === 'event' ? t("Neues Ereignis …") : kind === 'task' ? t("Neue Aufgabe …") : t("Notiz …")} aria-label={t("Text")} disabled={busy}
         onChange={event => setText(event.target.value)} />
     </div>
-    {entry && <button type="button" className="cal-composer-copy" onClick={() => copyCalendarEntry({...entry,text,description,priority,tag:tagId,reminder,showInJournal,kind,repeat:rule ? {...entry.repeat!,rule} : null})}><Icon name="copy" />{t("Kopieren")}<kbd>{t("Strg")} C</kbd></button>}
+    {entry && <button type="button" className="cal-composer-copy" onClick={() => copyCalendarEntry({...entry,text,description,priority,tag:tagId,reminder,reminderBefore,icon,showInJournal,kind,repeat:rule ? {...entry.repeat!,rule} : null})}><Icon name="copy" />{t("Kopieren")}<kbd>{t("Strg")} C</kbd></button>}
     {longSpan && <div className="cal-multi-form" role="group" aria-label={t('Zeitraum')}>
       <div className="cal-multi-row"><span className="cal-multi-label">{t('Beginn')}</span>{onSpanChange ? <DateField className="cal-multi-input is-start" label={t('Beginn')} value={date} onChange={start => { const end=longEndDate < start ? start : longEndDate; setLongEndDate(end); onSpanChange({start,end}); }} /> : <span className="cal-composer-day">{formatShortDate(date)}</span>}<TimeField className="cal-multi-input" label={t('Beginn')} value={longStartTime} onChange={setLongStartTime} /></div>
       <div className="cal-multi-row"><span className="cal-multi-label">{t('Ende')}</span><DateField className="cal-multi-input is-end" label={t('Ende')} min={date} value={longEndDate} onChange={end => { setLongEndDate(end); onSpanChange?.({start:date,end}); }} /><TimeField className="cal-multi-input" label={t('Ende')} value={longEndTime} onChange={setLongEndTime} /></div>
     </div>}
-    {decodeMailContent(description) ? <MailContent mail={decodeMailContent(description)!}/> : <textarea className="cal-composer-description" aria-label={t("Beschreibung")} placeholder={t("Beschreibung hinzufügen …")} value={description} onChange={event => setDescription(event.target.value)} disabled={busy} rows={2} maxLength={100000} />}
+    {decodeMailContent(description) ? <MailContent mail={decodeMailContent(description)!}/> : <MarkdownField className="cal-composer-description" label={t("Beschreibung")} placeholder={t("Beschreibung hinzufügen …")} value={description} onChange={setDescription} disabled={busy} />}
     <div className="cal-composer-foot">
       <div className={`cal-composer-when${draft ? '' : ' is-untimed'}`}>
         <span className="cal-composer-day">{formatShortDate(date)}</span>
@@ -265,10 +275,15 @@ export function CalendarComposer({ date, draft, entry, span, onSpanChange, tag: 
       </div>
       <button ref={tagButton} type="button" className={`cal-satellite cal-composer-tag${tag ? ' has-tag' : ''}`} style={satellite(tag ? { '--tag': tag.color } as CSSProperties : undefined)} aria-pressed={Boolean(tag)} aria-haspopup="dialog" aria-expanded={tagging}
         aria-label={tag ? t("Tag: {0}", tag.name) : t("Tag zuweisen")} data-tip={tag ? t("{0} · Alt G", tag.name) : t("Tag · Alt G")} onClick={() => setTagging(value => !value)}>{tag ? <span className="tag-dot" /> : <Icon name="tag" />}</button>
+      {/* The entry's icon (Alt I), in the tag's colour; the calendar shows it at the entry's lower right. */}
+      <button ref={iconButton} type="button" className={`cal-satellite cal-composer-icon${icon ? ' has-icon' : ''}`} style={satellite(tag ? { '--tag': tag.color } as CSSProperties : undefined)} aria-pressed={Boolean(icon)}
+        aria-haspopup="dialog" aria-expanded={choosingIcon} aria-label={icon ? t('Icon: {0}', icon) : t('Icon wählen')} data-tip={icon ? t('{0} · Alt I', icon) : t('Icon · Alt I')} onClick={() => setChoosingIcon(value => !value)}>
+        {icon ? <EntryIcon name={icon} /> : <EntryIcon name="face-slightly-smiling-plus" />}</button>
       <button type="button" className="cal-satellite cal-composer-priority" style={satellite()} aria-pressed={priority} aria-label={t("Hohe Priorität")} data-tip={t("Priorität · Alt P")} onClick={() => setPriority(value => !value)}><Icon name={priorityIcon(kind)} /></button>
       {kind !== 'note' && <button type="button" className="cal-satellite cal-composer-repeat" style={satellite()} aria-pressed={Boolean(rule)} aria-expanded={repeatView !== null}
         aria-label={shownRule ? t("Wiederholen: {0}", describe(shownRule)) : t("Wiederholen")} data-tip={shownRule ? `${describe(shownRule)} · Alt W` : t("Wiederholen · Alt W")} onClick={toggleRepeat}><Icon name="repeat" /></button>}
-      {kind !== 'note' && <button type="button" className="cal-satellite cal-composer-reminder" style={satellite()} aria-pressed={reminder} aria-label={t("Erinnern")} data-tip={t("Erinnern zur Uhrzeit")} onClick={() => setReminder(value => !value)}><Icon name="bell" /></button>}
+      {kind !== 'note' && <button ref={reminderButton} type="button" className="cal-satellite cal-composer-reminder" style={satellite()} aria-pressed={reminder} aria-haspopup="dialog" aria-expanded={choosingReminder}
+        aria-label={reminder ? t('Erinnerung: {0}', reminderLeadLabel(reminderBefore)) : t("Erinnern")} data-tip={reminder ? t('Erinnerung {0}', reminderLeadLabel(reminderBefore)) : t("Erinnern")} onClick={() => setChoosingReminder(value => !value)}><Icon name="bell" /></button>}
       {editing && <button type="button" className="cal-satellite cal-composer-remove" style={satellite()} aria-label={t("{0} löschen", label)} data-tip={t("Löschen · Alt Entf")} disabled={busy} onClick={() => void remove()}><Icon name="trash" /></button>}
       <button type="button" className="cal-satellite cal-composer-create" style={satellite()} aria-label={editing ? t("Speichern") : t("{0} anlegen", label)} data-tip={editing ? t("Speichern · Enter") : t("Anlegen · Enter")} disabled={busy} onClick={() => void submit()}><Icon name="check" /></button>
     </div>
@@ -295,6 +310,9 @@ export function CalendarComposer({ date, draft, entry, span, onSpanChange, tag: 
             onPick={until => { setRule({ ...shownRule, end: { until: until < shownRule.start ? shownRule.start : until } }); setRepeatView('rule'); }} />
         </div>}
     </div>}
+    {choosingIcon && <IconPicker anchor={iconButton.current} value={icon} color={tag?.color} onPick={setIcon} onClose={byKey => { setChoosingIcon(false); if (byKey) requestAnimationFrame(() => inputRef.current?.focus({ preventScroll: true })); }} />}
+    {choosingReminder && <ReminderChoice anchor={reminderButton.current} value={{ reminder, before: reminderBefore }} timed={Boolean(draft || entry?.time)}
+      onChange={next => { setReminder(next.reminder); setReminderBefore(next.before); }} onClose={byKey => { setChoosingReminder(false); if (byKey) requestAnimationFrame(() => inputRef.current?.focus({ preventScroll: true })); }} />}
     {tagging && <TagPicker anchor={tagButton.current} value={tagId} onPick={setTagId} onClose={byKey => { setTagging(false); if (byKey) requestAnimationFrame(() => inputRef.current?.focus({ preventScroll: true })); }} />}
     {applying && <ScopeChoice className="in-composer" action="edit" options={applying.options} onCancel={() => { setApplying(null); inputRef.current?.focus(); }}
       onChoose={option => { const { change } = applying; setApplying(null); setBusy(true); void onSave?.(change, option).catch(reason => { setError(String(reason)); setBusy(false); }); }} />}

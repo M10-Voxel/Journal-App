@@ -96,3 +96,15 @@ test('calendar names and colors supply reusable tag metadata',()=>{
  const content=wrap(event('named','DTSTART;VALUE=DATE:20261103','SUMMARY:Meeting')).replace('VERSION:2.0','VERSION:2.0\r\nX-WR-CALNAME:Uni\r\nX-APPLE-CALENDAR-COLOR:#1A2B3CFF');
  const parsed=importCalendar(content);assert.equal(parsed.entries[0].tag.name,'Uni');assert.equal(parsed.entries[0].tag.color,'#1A2B3C');
 });
+
+test('reminder lead time and icon round trip; a foreign alarm sets the lead time', () => {
+  const original = entry({ reminder:true, reminderBefore:90, icon:'graduation-cap', time:'10:00' });
+  const ics = exportCalendar([{ date:'2026-11-05', title:'', entries:[original] }]);
+  assert(ics.includes('X-JOURNAL-REMINDER-BEFORE:90') && ics.includes('X-JOURNAL-ICON:graduation-cap'));
+  const [{ entry: back }] = importCalendar(ics, 2026).entries;
+  assert.equal(back.reminderBefore, 90); assert.equal(back.icon, 'graduation-cap');
+  const foreign = wrap(event('alarm@example.org', 'SUMMARY:Arzt', 'DTSTART:20261105T090000', 'DTEND:20261105T093000',
+    'BEGIN:VALARM', 'ACTION:DISPLAY', 'TRIGGER:-PT15M', 'DESCRIPTION:Arzt', 'END:VALARM', 'X-JOURNAL-ICON:Not Valid'));
+  const [{ entry: alarm }] = importCalendar(foreign, 2026).entries;
+  assert.equal(alarm.reminder, true); assert.equal(alarm.reminderBefore, 15); assert.equal('icon' in alarm, false);
+});

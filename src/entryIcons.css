@@ -1,0 +1,106 @@
+/* Entry icons (entryIcons.ts, EntryIcon.tsx) and the reminder's lead time (ReminderChoice.tsx), in every design:
+   the icon is a flat line drawing in the tag's colour; each theme changes only its line and the pickers' surfaces. */
+
+.entry-icon { flex: none; display: block; width: 16px; height: 16px; overflow: visible; }
+.entry-icon.is-loading { display: inline-block; }
+
+/* ── In the calendar ───────────────────────────────────────────────────────────────────────────────────────────
+   At the entry's lower right in the tag's colour (without a tag in the accent). Where the entry is too small for its
+   text – a short time block, a narrow column or chip – the icon takes the text's place. */
+.cal-item.has-icon { container: cal-item / inline-size; }
+.cal-item-icon { width: 13px; height: 13px; margin-left: auto; color: var(--tag, var(--accent)); }
+.cal-item.is-event .cal-item-icon { color: var(--tag, var(--event-text)); }
+.cal-item.is-block .cal-item-icon { position: absolute; right: 5px; bottom: 4px; width: 15px; height: 15px; }
+.cal-item.is-block.has-icon .cal-item-text { padding-bottom: 2px; }
+.cal-item.has-icon .cal-item-time { right: 22px; }
+.cal-item:is(.is-done, .is-cancelled) .cal-item-icon { color: var(--disabled); opacity: .8; }
+/* Too small: the icon stands for the text (still named in the item's title and label). */
+.cal-item.is-block.is-short.has-icon .cal-item-text { display: none; }
+.cal-item.is-block.is-short .cal-item-icon { position: static; width: 12px; height: 12px; margin: 0; }
+@container cal-item (max-width: 58px) {
+  .cal-item.has-icon .cal-item-text, .cal-item.has-icon > .icon { display: none; }
+  .cal-item-icon { position: static !important; margin: auto; }
+}
+/* The details popover names it beside date, time and reminder. */
+:is(.cal-details-reminder, .cal-details-icon) { display: inline-flex; align-items: center; gap: 4px; }
+.cal-details-reminder .icon { width: 11px; height: 11px; }
+.cal-details-icon .entry-icon { width: 13px; height: 13px; color: var(--tag, var(--accent)); }
+
+/* ── The composer's icon button ─────────────────────────────────────────────────────────────────────────────── */
+.cal-composer-icon .entry-icon { width: 15px; height: 15px; }
+.cal-composer-icon.has-icon { color: var(--tag, var(--accent)); }
+.cal-composer-icon:not(.has-icon) .entry-icon { opacity: .75; }
+
+/* ── The icon picker ───────────────────────────────────────────────────────────────────────────────────────────── */
+.icon-picker { width: 316px; }
+.icon-picker-body { color: var(--tag, var(--accent)); }
+.icon-picker-search { color: var(--muted); }
+.icon-picker-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; max-height: 236px; overflow: auto; padding: 2px; scrollbar-width: thin; }
+.icon-option { display: grid; place-items: center; aspect-ratio: 1; padding: 0; border: 0; border-radius: 6px; background: transparent; color: inherit; cursor: pointer;
+  transition: background-color var(--fast) ease, transform 160ms var(--spring); }
+.icon-option .entry-icon { width: 18px; height: 18px; }
+.icon-option.is-none { color: var(--muted); }
+.icon-option.is-none .icon { width: 12px; height: 12px; }
+.icon-option[aria-selected='true'] { background: var(--hover); transform: scale(1.08); }
+.icon-option.is-current { box-shadow: inset 0 0 0 1.5px color-mix(in srgb, currentColor 70%, transparent); }
+.icon-picker-empty { grid-column: 1 / -1; margin: 10px 6px; color: var(--placeholder); font: 12px var(--sans); }
+
+/* ── When a reminder comes ────────────────────────────────────────────────────────────────────────────────────── */
+.reminder-choice { width: 252px; }
+.reminder-choice-list { display: flex; flex-direction: column; gap: 1px; }
+.reminder-choice-option { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 28px; padding: 0 8px; border: 0; border-radius: 6px; background: transparent; color: var(--text); font: 12px var(--sans); text-align: left; cursor: pointer; }
+.reminder-choice-option > .icon { flex: none; width: 12px; height: 12px; color: var(--muted); }
+.reminder-choice-option > span { flex: 1; }
+.reminder-choice-option:is(:hover, :focus-visible) { background: var(--hover); color: var(--strong); outline: 0; }
+.reminder-choice-option[aria-checked='true'] { color: var(--strong); font-weight: 500; }
+.reminder-choice-option[aria-checked='true'] > .icon:first-child { color: var(--accent); }
+.reminder-choice-check { flex: none; width: 12px; height: 12px; color: var(--accent); }
+.reminder-choice-own { margin-top: 3px; padding-top: 4px; border-top: 1px solid var(--divider); }
+.reminder-choice-amount { display: flex; align-items: center; gap: 6px; padding: 5px 8px 4px 28px; color: var(--muted); font: 11.5px var(--sans); }
+.reminder-choice-own:not(.is-current) .reminder-choice-amount { opacity: .6; }
+.reminder-choice-number { display: flex; align-items: stretch; height: 26px; border-radius: 6px; background: var(--inset); box-shadow: inset 0 0 0 1px var(--edge); }
+.reminder-choice-number:focus-within { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 60%, transparent); }
+.reminder-choice-number input { width: 38px; padding: 0 2px 0 7px; border: 0; outline: 0; background: transparent; color: var(--strong); font: 12px var(--mono); text-align: right; -moz-appearance: textfield; appearance: textfield; }
+.reminder-choice-number input::-webkit-inner-spin-button, .reminder-choice-number input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.reminder-choice-steps { display: flex; flex-direction: column; }
+.reminder-choice-steps button { display: grid; place-items: center; flex: 1; width: 16px; padding: 0; border: 0; background: transparent; color: var(--muted); cursor: pointer; }
+.reminder-choice-steps button:hover { color: var(--strong); background: var(--hover); }
+.reminder-choice-steps .icon { width: 9px; height: 9px; }
+.reminder-choice-units { display: flex; gap: 1px; padding: 2px; border-radius: 6px; background: var(--inset); box-shadow: inset 0 0 0 1px var(--edge); }
+.reminder-choice-units button { height: 22px; padding: 0 6px; border: 0; border-radius: 4px; background: transparent; color: var(--muted); font: 11px var(--sans); cursor: pointer; }
+.reminder-choice-units button:hover { color: var(--text); background: var(--hover); }
+.reminder-choice-units button[aria-checked='true'] { background: var(--selected); color: var(--strong); }
+
+/* ── Normal design, second popup look: rounder ───────────────────────────────────────────────────────────────── */
+:root[data-theme='classic'][data-popups='b'] :is(.icon-option, .reminder-choice-option) { border-radius: 999px; }
+:root[data-theme='classic'][data-popups='b'] :is(.reminder-choice-number, .reminder-choice-units) { border-radius: 999px; }
+:root[data-theme='classic'][data-popups='b'] .reminder-choice-units button { border-radius: 999px; }
+
+/* ── Journal: ink on paper. Thinner lines, square corners, the pickers like index cards. ──────────────────────── */
+:root[data-theme='journal'] .entry-icon { stroke-width: 1.7; }
+:root[data-theme='journal'] .cal-item-icon { color: color-mix(in srgb, var(--tag, var(--accent)) 85%, var(--text)); }
+:root[data-theme='journal'] :is(.icon-option, .reminder-choice-option, .reminder-choice-units button) { border-radius: 3px; }
+:root[data-theme='journal'] :is(.reminder-choice-number, .reminder-choice-units) { border-radius: 3px; background: transparent; box-shadow: inset 0 -1px 0 var(--divider); }
+:root[data-theme='journal'] .reminder-choice-number input { font-family: var(--write); font-size: 13px; }
+:root[data-theme='journal'] .icon-option[aria-selected='true'] { background: var(--paper-shade); transform: none; }
+:root[data-theme='journal'] .icon-option.is-current { box-shadow: inset 0 -2px 0 currentColor; }
+:root[data-theme='journal'] .reminder-choice-option { font-family: var(--sans); }
+
+/* ── Nebula: a terminal. Thin bright lines that glow, no rounding, mono type. ───────────────────────────────── */
+:root[data-theme='nebula'] .entry-icon { stroke-width: 1.6; }
+:root[data-theme='nebula'] .cal-item-icon { filter: drop-shadow(0 0 3px color-mix(in srgb, var(--tag, var(--accent)) 55%, transparent)); }
+:root[data-theme='nebula'] :is(.icon-option, .reminder-choice-option, .reminder-choice-number, .reminder-choice-units, .reminder-choice-units button) { border-radius: 0; }
+:root[data-theme='nebula'] :is(.reminder-choice-option, .reminder-choice-amount, .reminder-choice-units button, .icon-picker-empty) { font-family: var(--mono); }
+:root[data-theme='nebula'] .icon-option[aria-selected='true'] { transform: none; background: color-mix(in srgb, var(--tag, var(--accent)) 16%, transparent); box-shadow: inset 0 0 0 1px currentColor; }
+:root[data-theme='nebula'] .reminder-choice-option[aria-checked='true']::before { content: '>'; margin-right: -4px; color: var(--accent); font: 12px var(--mono); }
+:root[data-theme='nebula'][data-popups='b'] :is(.reminder-choice-number, .reminder-choice-units) { background: #ececec; box-shadow: inset 0 0 0 1px #111; }
+:root[data-theme='nebula'][data-popups='b'] :is(.reminder-choice-number input, .reminder-choice-units button[aria-checked='true']) { color: #111; }
+
+/* ── Pixel: square steps, no smoothing, the lines a little stronger so they keep their shape small. ─────────── */
+:root[data-pixel] .entry-icon { stroke-width: 2.4; stroke-linecap: square; stroke-linejoin: miter; shape-rendering: crispEdges; }
+:root[data-pixel] .cal-item-icon { filter: none; }
+:root[data-pixel] :is(.icon-option, .reminder-choice-option, .reminder-choice-number, .reminder-choice-units, .reminder-choice-units button) { border-radius: 0; }
+:root[data-pixel] .icon-option[aria-selected='true'] { transform: none; box-shadow: inset 0 0 0 2px currentColor; }
+:root[data-pixel] :is(.reminder-choice-option, .reminder-choice-amount, .reminder-choice-units button) { font-size: 15px; }
+:root[data-pixel] .reminder-choice-number input { font-size: 15px; }
+@media (prefers-reduced-motion: reduce) { .icon-option { transition: none; } .icon-option[aria-selected='true'] { transform: none; } }

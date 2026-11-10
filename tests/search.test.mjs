@@ -33,3 +33,29 @@ test('results fit every word (accents aside), any chosen type and the tag', () =
   assert.deepEqual(highlights('Müll und Müll', ['mull']), [[0, 4], [9, 13]]);
   assert.match(excerpt('a '.repeat(80) + 'Ziel ' + 'b '.repeat(80), ['ziel'], 40), /^….*Ziel.*…$/);
 });
+
+test('cards: found where they hang (day, month or year board, notebook); taken-down images and links are not offered', async () => {
+  const { cardBoard, cardItem } = await import('../src/search.ts');
+  const card = (id, kind, extra = {}) => ({ id, kind, title:id, text:'', dates:[], order:0, ...extra });
+  const note = card('n', 'note', { dates:['2026-11-05'] });
+  const cards = [
+    note,
+    card('loose', 'note'),
+    card('monthly', 'note', { boards:{ 'month:2026-10':{ x:1 }, 'year:2025':{ x:1 }, 'month:2026-09':null } }),
+    card('yearly', 'image', { boards:{ 'year:2026':{ x:1 } } }),
+    card('gone', 'image', { boards:{ 'month:2026-10':null } }),
+    card('orphan', 'link', { url:'https://example.org' }),
+    card('attached', 'link', { links:['n'] }),
+  ];
+  const found = Object.fromEntries(cards.map(c => [c.id, cardItem(c, cards, 'Ohne Titel')]));
+  assert.deepEqual(cardBoard(cards[2]), { date:'2026-10-01', period:'month' });
+  assert.equal(found.n.type, 'board-note');
+  assert.deepEqual(found.n.target, { kind:'card', id:'n', date:'2026-11-05', notebook:false, period:undefined });
+  assert.equal(found.loose.type, 'notebook');
+  assert.equal(found.monthly.type, 'board-note');
+  assert.deepEqual(found.monthly.target, { kind:'card', id:'monthly', date:'2026-10-01', notebook:false, period:'month' });
+  assert.deepEqual(found.yearly.target, { kind:'card', id:'yearly', date:'2026-01-01', notebook:false, period:'year' });
+  assert.equal(found.gone, null);
+  assert.equal(found.orphan, null);
+  assert.deepEqual(found.attached.target, { kind:'card', id:'n', date:null, notebook:true });
+});
