@@ -383,7 +383,7 @@ try {
   await widget.input('.title-input', 'Independent next day');
   await widget.click('.kind-picker button:has([data-icon="task"])');
   await widget.type('.entry-text', 'Tomorrow from widget');
-  const tomorrow = await widget.eval("document.querySelector('.desktop-widget-status > span').textContent.split('.').reverse().join('-')");
+  const tomorrow = await widget.eval("document.querySelector('.desktop-widget').dataset.date");
   await main.event('journal:navigate', { date: tomorrow, entry: null });
   await main.until("document.querySelector('.title-input').value==='Independent next day' && document.querySelector('.entries').textContent.includes('Tomorrow from widget')");
   await main.event('history:flush',{id:'before-main-reload'});await pause(200);
@@ -466,7 +466,9 @@ try {
   await main.invoke('plugin:window|close',{label:'main'});
   await main.until("window.__TAURI_INTERNALS__.invoke('plugin:window|is_visible',{label:'main'}).then(value=>!value)");
   assert.equal((await main.invoke('desktop_widget_state')).widgets.find(widget=>widget.id==='entries').enabled,true);
-  await widget.click('.widget-close');
+  // Hiding is in the header's right-click menu (no close button on the widget).
+  await widget.eval("(()=>{const h=document.querySelector('.desktop-widget-head'),r=h.getBoundingClientRect();h.dispatchEvent(new MouseEvent('contextmenu',{button:2,bubbles:true,cancelable:true,clientX:r.right-120,clientY:r.top+10}));})()");
+  await widget.click('.ctx-item[data-item=hide]');
   await main.until("window.__TAURI_INTERNALS__.invoke('plugin:window|get_all_windows').then(windows=>!windows.includes('widget-entries'))");
   assert.equal((await main.invoke('desktop_widget_state')).widgets.find(widget=>widget.id==='entries').enabled,false);
   await main.invoke('desktop_widget_update',{id:'entries',update:{enabled:true}});

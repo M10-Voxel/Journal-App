@@ -307,6 +307,8 @@ function App() {
     const stops = [
       listen('journal:hello', () => { void emit('journal:date', dateRef.current); void emit('journal:board-context', boardContextRef.current); }),
       listen<{ date: string; entry: string | null }>('journal:navigate', event => showFromCalendar(event.payload.date, event.payload.entry)),
+      // A note opened from the notebook widget ("open in Journal"): the notebook comes out with that note.
+      listen<string>('journal:show-note', event => openNote(event.payload)),
       // Reminders while this window is in front (otherwise the popup shows them, see reminders.rs), and "Erledigt" from there.
       listen<Reminder>('journal:reminder', event => {
         const reminder = event.payload;
@@ -783,6 +785,10 @@ function App() {
   // Turning both pages at once, a sheet (calendar or notebook) does not cover a page: the book shows one page beside it.
   const besideCalendar = bookMode && (drawer.open || notebook.open) && !bothSheets && settings.bookPaging === 'spread';
   const notebookView = !ownLayout && notebook.open;
+  const openNote = useStableCallback((id: string) => {
+    if (!notebook.open) toggleNotebook();
+    requestAnimationFrame(() => window.dispatchEvent(new CustomEvent('journal:open-note', { detail: id })));
+  });
   // A search result opens where it was made: the entry in its day (focused), a calendar entry with the calendar out,
   // a day by its title, a board card on its day's board, a notebook note in the notebook.
   const openResult = useStableCallback((result: SearchResult) => {
@@ -794,11 +800,7 @@ function App() {
       showFromCalendar(target.date, target.id);
       return;
     }
-    if (target.notebook || !target.date) {
-      if (!notebook.open) toggleNotebook();
-      requestAnimationFrame(() => window.dispatchEvent(new CustomEvent('journal:open-note', { detail: target.id })));
-      return;
-    }
+    if (target.notebook || !target.date) { openNote(target.id); return; }
     if (notebookView) notebook.setOpen(false);
     navigate(target.date);
     // A card on a month's or year's board opens there.

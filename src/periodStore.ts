@@ -1,6 +1,8 @@
 import { listen } from '@tauri-apps/api/event';
 import { useEffect, useSyncExternalStore } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { getCurrentWindow } from '@tauri-apps/api/window';
+const ownLabel = () => { try { return getCurrentWindow().label; } catch { return ''; } };
 import { normalizePeriodData } from './periodData';
 import type { PeriodData } from './periodData';
 import { activityTags, entryMinutes } from './activityCalendar';
@@ -15,13 +17,16 @@ let listening = false;
 function listenForHistory() {
   if (listening) return;
   listening = true;
-  void listen('history:restored', async () => {
+  const reload = async () => {
     const version = ++revision;
     try {
       const raw = await invoke<string>('load_period_data');
       if (version === revision) publish({ data: normalizePeriodData(JSON.parse(raw)), error: '', saving: false });
     } catch (reason) { publish({ ...snapshot, error: String(reason) }); }
-  });
+  };
+  void listen('history:restored', reload);
+  // Saved by another window (the app or a widget; its label is the payload) or restored from Drive (no payload).
+  void listen<string | null>('period:changed', event => { if (event.payload !== ownLabel()) void reload(); });
 }
 const listeners = new Set<() => void>();
 function publish(next: typeof snapshot) { snapshot = next; listeners.forEach(listener => listener()); }

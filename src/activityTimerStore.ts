@@ -10,4 +10,10 @@ export function writeActivityTimer(date: string,id: string,timer: ActivityTimerS
   const next = { ...timers }; if (timer) next[activityTimerKey(date,id)] = timer; else delete next[activityTimerKey(date,id)];
   localStorage.setItem(key,JSON.stringify(next)); timers = next; listeners.forEach(listener => listener());
 }
+// Another window (the app, a widget) started or stopped a timer.
+if (typeof window !== 'undefined') window.addEventListener('storage', event => {
+  if (event.key !== key && event.key !== null) return;
+  try { const parsed = JSON.parse(localStorage.getItem(key) ?? '{}'); timers = parsed && typeof parsed === 'object' ? parsed : {}; } catch { timers = {}; }
+  listeners.forEach(listener => listener());
+});
 export function useActivityTimers() { return useSyncExternalStore(listener => { listeners.add(listener); return () => { listeners.delete(listener); }; }, () => timers); }

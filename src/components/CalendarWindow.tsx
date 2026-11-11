@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import { calendarDaysWithSpans, calendarSpanLanes, calendarSpanSegment } from '../calendarSpans';
 import { useViewHistory } from '../viewHistory';
 import { readCalendarEntry } from '../calendarClipboard';
@@ -50,7 +51,7 @@ export function CalendarWindow() {
 // Memoized: in the sidebar it must not re-render while the journal is being typed in (`onOpen` is stable).
 /** An entry being edited (right click): its day and the element the card is placed at. */
 type Editing = { entry: Entry; date: string; element: HTMLElement };
-export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, onEdit, onMove, onRemove, onExport, onImport, embedded = false, autoFocus = false, fixedView, withoutDay = false, showDate, onDateChange, preferencesKey = calendarPreferencesKey, tagScope = 'calendar', rememberDate = false, onStateChange }: {
+export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, onEdit, onMove, onRemove, onExport, onImport, embedded = false, autoFocus = false, fixedView, withoutDay = false, showDate, onDateChange, preferencesKey = calendarPreferencesKey, tagScope = 'calendar', rememberDate = false, onStateChange, headerSlot }: {
   onExport?: () => Promise<CalendarDay[]>; onImport?: (entries: CalendarImport[]) => Promise<void>;
   journalDate: string | null; onOpen: (date: string, entry?: string) => void; embedded?: boolean; autoFocus?: boolean;
   /** Always this view, without the view tabs (Nebula's day beside the overview); the stored view stays the other calendars'. */
@@ -62,6 +63,9 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
   /** Hears the day the calendar shows. */
   onDateChange?: (date: string) => void;
   preferencesKey?: string; tagScope?: TagScope; rememberDate?: boolean; onStateChange?: (location: CalendarLocation) => void;
+  /** Elsewhere for the turning, the title and the view tabs (a desktop widget's header). The calendar then has no bar of
+   *  its own and no filters: the widget's settings choose the tags and kinds shown (stored under preferencesKey/tagScope). */
+  headerSlot?: Element | null;
   onCreate?: (date: string, entry: NewEntry) => Promise<void>; onEdit?: (date: string, id: string, change: EntryEdit, scope?: ScopeOption) => Promise<void>; onRemove?: (date: string, id: string, others: { id: string; date: string }[]) => Promise<void>;
   onMove?: (entry: Entry, from: string, to: string, time: string | null, end: string | null) => Promise<void>;
 }) {
@@ -228,6 +232,24 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
     window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key);
   },[date,onCreate]);
   const selectedIndex = views.findIndex(item => item.view === view);
+  const nav = <div className="cal-nav"><NavCluster label={t("Kalendernavigation")} prev={{ label: t("Zurück"), tip: t("Zurück · ←") }} next={{ label: t("Weiter"), tip: t("Weiter · →") }} today={{ tip: t("Heute · H") }}
+    atToday={viewDates(view, date).includes(today)} onPrev={() => step(-1)} onToday={() => go(today)} onNext={() => step(1)} /></div>;
+  const heading = <h1 className="cal-title" title={`${title.main} ${title.sub}`} key={`${view}-${title.main}-${title.sub}`}><strong><span className="cal-title-long">{title.main}</span><span className="cal-title-short" aria-hidden="true">{shortTitle(title.main)}</span></strong>{title.sub && <> <span className="cal-title-sub">{title.sub}</span></>}</h1>;
+  const actions = <div className="cal-actions">
+    <TagFilter label={t("Tags im Kalender")} hidden={hiddenTags} onChange={setHiddenTags} />
+    {/* Like the orbit's satellites: round, the shown kinds lit. */}
+    <div className="cal-filter" role="group" aria-label={t("Angezeigte Einträge")}>
+      {(['event', 'task', 'note'] as EntryKind[]).map(kind => <button key={kind} type="button" className={`cal-filter-${kind}`} aria-pressed={kinds[kind]} title={`${kindPlurals()[kind]} ${kinds[kind] ? 'ausblenden' : 'zeigen'}`}
+        onClick={() => setPrefs(current => ({ ...current, kinds: { ...current.kinds, [kind]: !current.kinds[kind] } }))}><Icon name={kind} /></button>)}
+    </div>
+  </div>;
+  // Long, short and one-letter names; which one shows is up to the space (the letter only in a narrow widget header).
+  const viewTabs = <div className="cal-views" role="tablist" aria-label={t("Ansicht")} style={{ '--index': selectedIndex, '--count': views.length } as CSSProperties}>
+    <span className="cal-views-indicator" aria-hidden="true" />
+    {views.map((item, index) => <button key={item.view} type="button" role="tab" aria-selected={item.view === view} aria-label={item.label} title={`${item.label} · ${item.key} ${t('oder')} ${index + 1}`} onClick={() => setView(item.view)}>
+      <span className="cal-view-long">{item.label}</span><span className="cal-view-short" aria-hidden="true">{item.short}</span><span className="cal-view-key" aria-hidden="true">{item.key}</span>
+    </button>)}
+  </div>;
   return <OpenInJournal.Provider value={onOpen}><EditInCalendar.Provider value={editContext}>
     <div ref={rootRef} className={`cal${embedded ? ' is-embedded' : ''}${fixedView ? ' is-fixed' : ''}`} data-view={view} tabIndex={-1} aria-label={t("Kalender")} onKeyDown={event => {
       if (calendarSelection().size && !(event.target as Element).closest('input, textarea, [contenteditable="true"], .cal-composer, .popover')) {
@@ -244,29 +266,13 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
       {rangeDraw && <div className="cal-action-notice">{formatDate(rangeDraw.start)} – {formatDate(rangeDraw.end)}</div>}
       {notice && <div className="cal-action-notice" role="status">{notice}</div>}
       {pasting && <Popover anchor={rootRef.current} label={t('Einfügen')} onClose={()=>setPasting(null)}><div className="cal-paste-choice"><p>{t('Wiederholung einfügen')}</p><button type="button" onClick={()=>void paste(pasting.entry,pasting.date,false)}>{t('Nur diesen Tag')}</button><button type="button" onClick={()=>void paste(pasting.entry,pasting.date,true)}>{t('Mit Wiederholung')}</button></div></Popover>}
-      {!fixedView && <nav className="cal-viewbar" aria-label={t("Kalenderansicht")}>
-        <div className="cal-views" role="tablist" aria-label={t("Ansicht")} style={{ '--index': selectedIndex, '--count': views.length } as CSSProperties}>
-          <span className="cal-views-indicator" aria-hidden="true" />
-          {views.map((item, index) => <button key={item.view} type="button" role="tab" aria-selected={item.view === view} aria-label={item.label} title={`${item.label} · ${item.key} ${t('oder')} ${index + 1}`} onClick={() => setView(item.view)}>
-            <span className="cal-view-long">{item.label}</span><span className="cal-view-short" aria-hidden="true">{item.short}</span>
-          </button>)}
-        </div>
+      {!fixedView && !headerSlot && <nav className="cal-viewbar" aria-label={t("Kalenderansicht")}>
+        {viewTabs}
         {onExport && onImport && <CalendarTransfer onExport={onExport} onImport={onImport} />}
       </nav>}
-      {/* The same toolbar as the journal's: turning first (the same capsule), then the title, the filters at the end. */}
-      <header className="cal-toolbar toolbar">
-        <div className="cal-nav"><NavCluster label={t("Kalendernavigation")} prev={{ label: t("Zurück"), tip: t("Zurück · ←") }} next={{ label: t("Weiter"), tip: t("Weiter · →") }} today={{ tip: t("Heute · H") }}
-          atToday={viewDates(view, date).includes(today)} onPrev={() => step(-1)} onToday={() => go(today)} onNext={() => step(1)} /></div>
-        <h1 className="cal-title" title={`${title.main} ${title.sub}`} key={`${view}-${title.main}-${title.sub}`}><strong><span className="cal-title-long">{title.main}</span><span className="cal-title-short" aria-hidden="true">{shortTitle(title.main)}</span></strong>{title.sub && <> <span className="cal-title-sub">{title.sub}</span></>}</h1>
-        <div className="cal-actions">
-          <TagFilter label={t("Tags im Kalender")} hidden={hiddenTags} onChange={setHiddenTags} />
-          {/* Like the orbit's satellites: round, the shown kinds lit. */}
-          <div className="cal-filter" role="group" aria-label={t("Angezeigte Einträge")}>
-            {(['event', 'task', 'note'] as EntryKind[]).map(kind => <button key={kind} type="button" className={`cal-filter-${kind}`} aria-pressed={kinds[kind]} title={`${kindPlurals()[kind]} ${kinds[kind] ? 'ausblenden' : 'zeigen'}`}
-              onClick={() => setPrefs(current => ({ ...current, kinds: { ...current.kinds, [kind]: !current.kinds[kind] } }))}><Icon name={kind} /></button>)}
-          </div>
-        </div>
-      </header>
+      {/* The same toolbar as the journal's: turning first (the same capsule), then the title, the filters at the end. With
+          a header slot (desktop widget) turning, title and view tabs go there; the filters are the widget's settings. */}
+      {headerSlot ? createPortal(<>{nav}{heading}{!fixedView && viewTabs}</>, headerSlot) : <header className="cal-toolbar toolbar">{nav}{heading}{actions}</header>}
       {error && <div className="cal-error" role="alert">{error}</div>}
       <div className="cal-body">
         <div className={`cal-page${slide ? ` slide-${slide}` : ''}`}>

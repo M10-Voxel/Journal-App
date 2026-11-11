@@ -6,12 +6,12 @@ pub const VERSION:u32=2;
 pub const LEGACY_ID:&str="entries";
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all="kebab-case")]
-pub enum WidgetKind { DailyNote, Calendar }
+pub enum WidgetKind { DailyNote, Calendar, Board, DayValues, Activities, Notebook }
 impl WidgetKind {
     pub fn available(self)->bool{true}
-    pub fn default_size(self)->(f64,f64){match self{Self::DailyNote=>(600.0,600.0),Self::Calendar=>(980.0,720.0)}}
-    pub fn minimum_size(self)->(f64,f64){match self{Self::DailyNote=>(360.0,260.0),Self::Calendar=>(480.0,360.0)}}
-    pub fn title(self)->&'static str{match self{Self::DailyNote=>crate::ui_language::text("Tagesnotiz","Daily note"),Self::Calendar=>crate::ui_language::text("Kalender","Calendar")}}
+    pub fn default_size(self)->(f64,f64){match self{Self::DailyNote=>(600.0,600.0),Self::Calendar=>(980.0,720.0),Self::Board=>(720.0,560.0),Self::DayValues=>(420.0,380.0),Self::Activities=>(460.0,440.0),Self::Notebook=>(560.0,640.0)}}
+    pub fn minimum_size(self)->(f64,f64){match self{Self::DailyNote=>(360.0,260.0),Self::Calendar=>(480.0,360.0),Self::Board=>(360.0,300.0),Self::DayValues=>(300.0,200.0),Self::Activities=>(320.0,220.0),Self::Notebook=>(340.0,300.0)}}
+    pub fn title(self)->&'static str{match self{Self::DailyNote=>crate::ui_language::text("Tagesnotiz","Daily note"),Self::Calendar=>crate::ui_language::text("Kalender","Calendar"),Self::Board=>crate::ui_language::text("Pinnwand","Pinboard"),Self::DayValues=>crate::ui_language::text("Tageswerte","Day values"),Self::Activities=>crate::ui_language::text("Aktivitäten","Activities"),Self::Notebook=>crate::ui_language::text("Notizen","Notes")}}
 }
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub struct WidgetConfig {
@@ -82,7 +82,9 @@ impl Config {
         assert!(Config::decode(br#"{"version":3,"widgets":[]}"#).is_err());assert!(Config::decode(br#"{"unrelated":true}"#).is_err());
     }
     #[test] fn only_available_types_can_be_created_and_labels_are_scoped(){
-        assert!(WidgetKind::DailyNote.available());assert!(WidgetKind::Calendar.available());
+        assert!(WidgetKind::DailyNote.available());assert!(WidgetKind::Calendar.available());assert!(WidgetKind::Board.available());
+        for (kind,name) in [(WidgetKind::DayValues,"day-values"),(WidgetKind::Activities,"activities"),(WidgetKind::Notebook,"notebook")]{assert_eq!(serde_json::to_value(kind).unwrap(),serde_json::json!(name));assert!(kind.available());}
+        assert_eq!(serde_json::to_value(WidgetKind::Board).unwrap(),serde_json::json!("board"));assert_eq!(WidgetKind::Board.minimum_size(),(360.0,300.0));
         assert_eq!(WidgetKind::Calendar.default_size(),(980.0,720.0));assert_eq!(WidgetKind::Calendar.minimum_size(),(480.0,360.0));
         assert_eq!(widget_id(&window_label("entries")),Some("entries"));assert_eq!(widget_id("main"),None);assert_eq!(widget_id("widget-../main"),None);
         assert_eq!(normalized_name("  Zuhause  ").unwrap(),"Zuhause");assert!(normalized_name("A\nB").is_err());

@@ -42,7 +42,9 @@ export const periodEyebrow = (mode: Exclude<Mode, 'day'>) => {
  */
 export type PeriodPart = 'rating' | 'scales' | 'activities' | 'note' | 'ratings' | 'notes';
 export type ManageTab = 'activities' | 'scales';
-export function PeriodNotes({ date, mode, onManage, onImport, part }: { date: string; mode: Mode; onManage: (tab?: ManageTab) => void; onImport: (entries: CalendarImport[]) => Promise<void>; part?: PeriodPart }) {
+/** `bare`: only the values themselves (a desktop widget): no headings, hints or "manage" buttons; with nothing set up yet,
+ *  the hint itself opens the settings. */
+export function PeriodNotes({ date, mode, onManage, onImport, part, bare = false }: { date: string; mode: Mode; onManage: (tab?: ManageTab) => void; onImport: (entries: CalendarImport[]) => Promise<void>; part?: PeriodPart; bare?: boolean }) {
   const en = getLanguage() === 'en';
   const tr = (de: string, english: string) => en ? english : de;
   useActivityTimers();
@@ -76,9 +78,10 @@ export function PeriodNotes({ date, mode, onManage, onImport, part }: { date: st
   ];
   const heading = mode === 'day' ? part === 'scales' ? tr('Tageswerte','Day values') : has('rating') ? tr('Tagesbewertung', 'Daily rating') : null
     : has('note', 'notes') ? tr('Notiz & Auswertung', 'Note & analytics') : null;
-  return <section className="period-section" data-part={part} aria-label={tr('Checkliste und Auswertung', 'Checklist and analytics')}>
+  const empty = (text: string, tab: ManageTab) => bare ? <button type="button" className="checklist-empty is-action" onClick={() => onManage(tab)}><Icon name="settings" />{text}</button> : <p className="checklist-empty">{text}</p>;
+  return <section className={`period-section${bare ? ' is-bare' : ''}`} data-part={part} aria-label={tr('Checkliste und Auswertung', 'Checklist and analytics')}>
     {mode !== 'day' && !part && <div className="document-header"><div className="eyebrow">{periodEyebrow(mode)}</div><h1>{periodTitle(date, mode)}</h1></div>}
-    {heading && <div className="section-heading"><div className="section-title"><h2>{heading}</h2></div>{part === 'scales' && manageScales}</div>}
+    {heading && !bare && <div className="section-heading"><div className="section-title"><h2>{heading}</h2></div>{part === 'scales' && manageScales}</div>}
     {error && <div className="error" role="alert">{tr('Speichern fehlgeschlagen: ', 'Save failed: ')}{error}</div>}
     {mode === 'day' ? <>
       {has('rating') && <div className="period-rating">
@@ -88,7 +91,7 @@ export function PeriodNotes({ date, mode, onManage, onImport, part }: { date: st
       </div>}
       {has('scales') && <div className="period-scales">
         {part !== 'scales' && <div className="checklist-section-heading"><div><h3>{tr('Tageswerte','Day values')}</h3><p className="page-hint">{tr('Deine eigenen Werte für diesen Tag.','Your own values for this day.')}</p></div>{manageScales}</div>}
-        {!scales.some(item => item.active) ? <p className="checklist-empty">{tr('Lege Tageswerte wie Stress oder Schlaf in den Einstellungen fest.','Set up day values such as stress or sleep in settings.')}</p>
+        {!scales.some(item => item.active) ? empty(tr('Lege Tageswerte wie Stress oder Schlaf in den Einstellungen fest.','Set up day values such as stress or sleep in settings.'), 'scales')
           : <div className="scale-list">{scales.filter(item => item.active).map(item => { const value = day.scales?.[item.id]; return <div className="scale-row" data-scale-id={item.id} key={item.id} style={{ '--scale-color': item.color } as CSSProperties}>
             <span className="scale-name">{item.name || tr('Ohne Namen','Unnamed')}</span>
             <ScaleInput label={item.name || tr('Tageswert','Day value')} value={value} min={item.min} max={item.max} color={item.color} onChange={next => setScale(item.id, next)} />
@@ -96,8 +99,8 @@ export function PeriodNotes({ date, mode, onManage, onImport, part }: { date: st
           </div>; })}</div>}
       </div>}
       {has('activities') && <>
-      <div className="checklist-section-heading"><div><h3>{tr('Checkliste','Checklist')}</h3><p className="page-hint">{tr('Deine Aktivitäten für diesen Tag.','Your activities for this day.')}</p></div><button type="button" className="checklist-manage" onClick={() => onManage('activities')}><Icon name="settings" />{tr('Aktivitäten','Activities')}</button></div>
-      {!data.definitions.some(item => item.active) && <p className="checklist-empty">{tr('Lege deine Aktivitäten in den Einstellungen fest.','Set up your activities in settings.')}</p>}
+      {!bare && <div className="checklist-section-heading"><div><h3>{tr('Checkliste','Checklist')}</h3><p className="page-hint">{tr('Deine Aktivitäten für diesen Tag.','Your activities for this day.')}</p></div><button type="button" className="checklist-manage" onClick={() => onManage('activities')}><Icon name="settings" />{tr('Aktivitäten','Activities')}</button></div>}
+      {!data.definitions.some(item => item.active) && empty(tr('Lege deine Aktivitäten in den Einstellungen fest.','Set up your activities in settings.'), 'activities')}
       {/* One line per activity, like a journal entry: check box in the symbol slot, name, optional note and time. Turning
           the note or time off leaves the row's height unchanged, so the rows below never move. */}
       {/* Time from the calendar (entries with the activity's tag, e.g. from the timer) is added to the typed minutes;

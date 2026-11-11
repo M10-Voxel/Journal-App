@@ -95,12 +95,12 @@ const bootstrap = `
   const mail = { accounts:[], pending:[], candidates:[], notices:[], delivered:new Set(), analyzed:[], model:{installed:false,enabled:false,installing:false,downloaded:0,total:0,error:''} };
   window.__uiTest.mail = mail;
   const mailChanged = () => { void window.__TAURI_INTERNALS__.invoke('plugin:event|emit', { event:'mail:changed', payload:null }); };
-  const widgetRegistry = {supported:true,autostart:false,error:null,types:[{kind:'daily-note',available:true},{kind:'calendar',available:true}],widgets:[{id:label.startsWith('widget-')?label.slice(7):'entries',kind:label.startsWith('widget-calendar')?'calendar':'daily-note',name:'',enabled:label.startsWith('widget-'),locked:false,placement:null,error:null}]};
+  const widgetRegistry = {supported:true,autostart:false,error:null,types:['daily-note','calendar','board','day-values','activities','notebook'].map(kind=>({kind,available:true})),widgets:[{id:label.startsWith('widget-')?label.slice(7):'entries',kind:['calendar','board','day-values','activities','notebook'].find(kind=>label.startsWith('widget-'+kind))??'daily-note',name:'',enabled:label.startsWith('widget-'),locked:false,placement:null,error:null}]};
   window.__uiTest.widgets = widgetRegistry;
   const widgetChanged = () => { void window.__uiTest.emit('desktop-widget:state', structuredClone(widgetRegistry));return structuredClone(widgetRegistry); };
   mockIPC((command, payload) => {
     if (command === 'desktop_widget_state') return structuredClone(widgetRegistry);
-    if (command === 'desktop_widget_create') {if(!['daily-note','calendar'].includes(payload.kind))throw Error('Widget type unavailable');const original=widgetRegistry.widgets.find(widget=>widget.id===payload.source);widgetRegistry.widgets.push({id:crypto.randomUUID(),kind:payload.kind,name:original?.name?original.name+' · Kopie':'',enabled:true,locked:false,placement:null,error:null});return widgetChanged();}
+    if (command === 'desktop_widget_create') {if(!['daily-note','calendar','board','day-values','activities','notebook'].includes(payload.kind))throw Error('Widget type unavailable');const original=widgetRegistry.widgets.find(widget=>widget.id===payload.source);widgetRegistry.widgets.push({id:crypto.randomUUID(),kind:payload.kind,name:original?.name?original.name+' · Kopie':'',enabled:true,locked:false,placement:null,error:null});return widgetChanged();}
     if (command === 'desktop_widget_update') {if(payload.update.autostart!==undefined)widgetRegistry.autostart=payload.update.autostart;const widget=widgetRegistry.widgets.find(widget=>widget.id===(payload.id??label.slice(7)));if(widget){for(const key of ['enabled','locked','name'])if(payload.update[key]!==undefined)widget[key]=payload.update[key];if(payload.update.reset)widget.placement=null;}return widgetChanged();}
     if (command === 'desktop_widget_remove') {widgetRegistry.widgets=widgetRegistry.widgets.filter(widget=>widget.id!==payload.id);return widgetChanged();}
     if (command === 'vault_status') return {path:'C:/Test/Journal-A',legacy:true,preferences:null,error:null};
@@ -324,7 +324,10 @@ const bootstrap = `
     }
     if (command === 'plugin:window|is_maximized') return Boolean(window.__uiTest.maximized);
     if (command === 'plugin:window|toggle_maximize') { window.__uiTest.maximized = !window.__uiTest.maximized; invoked.push([command, payload]); return null; }
-    if (command === 'open_window' || command === 'show_day' || command === 'panel_detach' || command.startsWith('plugin:window|')) { invoked.push([command, payload]); return null; }
+    // The desktop wallpaper behind a transparent widget (WidgetBackdrop): a stand-in picture.
+    if (command === 'desktop_wallpaper_info') return { path:'C:\\Wallpaper.svg', style:localStorage.getItem('test.wallStyle') ?? '10', tile:false, modified:Number(localStorage.getItem('test.wallModified') ?? 1) };
+    if (command === 'desktop_wallpaper') return new TextEncoder().encode(localStorage.getItem('test.wallpaper') ?? '<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900"><rect width="1600" height="900" fill="#203a43"/><circle cx="380" cy="260" r="260" fill="#3a8fd6"/><circle cx="1180" cy="620" r="300" fill="#c2304f"/><path d="M0 700 L1600 300" stroke="#ffd166" stroke-width="60"/></svg>').buffer;
+    if (command === 'open_window' || command === 'show_day' || command === 'show_note' || command === 'desktop_widget_open_settings' || command === 'panel_detach' || command.startsWith('plugin:window|')) { invoked.push([command, payload]); return null; }
     if (command === 'load_linked') {
       const where = id => { for (const [day, value] of days) { const found = value.entries.find(entry => entry.id === id); if (found) return [day, found]; } };
       const group = [payload.id], queue = [payload.id];
@@ -2977,6 +2980,14 @@ try {
     await command('Page.navigate',{url:`http://127.0.0.1:${server.address().port}/?window=widget-calendar`});
     await until("!!document.querySelector('.desktop-widget.is-calendar .cal') && document.querySelectorAll('.cal-month-day').length===42");
     await evaluate('document.fonts.ready.then(()=>true)');
+    // Turning, title and view tabs are in the widget's header; no bar, filters or import/export in the widget itself.
+    assert(await evaluate("!!document.querySelector('.desktop-widget-head .cal-nav .nav-cluster') && !!document.querySelector('.desktop-widget-head .cal-title') && document.querySelectorAll('.desktop-widget-head .cal-views [role=tab]').length===5 && !document.querySelector('.desktop-widget :is(.cal-toolbar, .cal-viewbar, .cal-filter, .tag-filter-button, .cal-transfer)')"),'Calendar navigation and views in the header, nothing else around the calendar');
+    // Narrow, the view tabs shorten to one letter each (J M W A T).
+    await command('Emulation.setDeviceMetricsOverride',{width:430,height:720,deviceScaleFactor:1,mobile:false});await pause(150);
+    assert.equal(await evaluate("[...document.querySelectorAll('.desktop-widget-head .cal-views [role=tab]')].map(b=>b.innerText.trim()).join(' ')"),'J M W A T','Narrow header shows one letter per view');
+    assert(await evaluate("(()=>{const h=document.querySelector('.desktop-widget-head');return h.scrollWidth<=h.clientWidth+1;})()"),'The narrow header fits');
+    await screenshot('calendar-widget-narrow.png');
+    await command('Emulation.setDeviceMetricsOverride',{width:980,height:720,deviceScaleFactor:1,mobile:false});await pause(150);
     for(const [index,view,count] of [[0,'year',12],[1,'month',42],[2,'week',7],[3,'workweek',5],[4,'day',1]]){
       await evaluate(`document.querySelectorAll('.cal-views [role=tab]')[${index}].click()`);
       await until(`document.querySelector('.cal').dataset.view==='${view}'`);
@@ -2997,31 +3008,31 @@ try {
     await until("!!document.querySelector('.cal-composer.is-editing') && document.documentElement.classList.contains('widget-popups-ready')");
     await evaluate("document.querySelector('.cal-composer-text').focus();document.querySelector('.cal-composer-text').select()");await command('Input.insertText',{text:'Widget-Kalendereintrag geändert'});await key('Enter');
     await until("!document.querySelector('.cal-composer') && window.__uiTest.day(window.__uiTest.shift(2)).entries.some(entry=>entry.text==='Widget-Kalendereintrag geändert')");
-    await evaluate("document.querySelector('.cal-transfer > button').click()");
-    await until("!!document.querySelector('body > .widget-floating-popup .cal-transfer-panel')");
-    await evaluate("document.querySelectorAll('.cal-transfer-panel button')[1].click()");
-    await until("window.__uiTest.icsOutput?.includes('BEGIN:VCALENDAR')");
-    assert((await evaluate('window.__uiTest.icsOutput')).includes('Widget-Kalendereintrag'),'Export uses the shared calendar data');
-    await evaluate("window.__uiTest.icsInput='BEGIN:VCALENDAR\\r\\nVERSION:2.0\\r\\nBEGIN:VEVENT\\r\\nUID:widget-import-test\\r\\nDTSTART;VALUE=DATE:'+window.__uiTest.shift(2).replaceAll('-','')+'\\r\\nSUMMARY:Aus Widget importiert\\r\\nEND:VEVENT\\r\\nEND:VCALENDAR\\r\\n';document.querySelectorAll('.cal-transfer-panel button')[0].click()");
-    await until("!!document.querySelector('.cal-transfer-confirm')");
-    await evaluate("document.querySelector('.cal-transfer-confirm').click()");
-    await until("window.__uiTest.day(window.__uiTest.shift(2)).entries.some(entry=>entry.text==='Aus Widget importiert')");
-    await evaluate("document.querySelector('.cal-transfer-panel button').focus()");await key('Escape');
-    await until("!document.querySelector('.cal-transfer-panel')");
+    // An .ics file dropped on the calendar is imported at once; while it is dragged over, a frame says so.
+    await evaluate("(()=>{const text='BEGIN:VCALENDAR\\r\\nVERSION:2.0\\r\\nBEGIN:VEVENT\\r\\nUID:widget-import-test\\r\\nDTSTART;VALUE=DATE:'+window.__uiTest.shift(2).replaceAll('-','')+'\\r\\nSUMMARY:Aus Widget importiert\\r\\nEND:VEVENT\\r\\nEND:VCALENDAR\\r\\n';const data=new DataTransfer();data.items.add(new File([text],'termine.ics',{type:'text/calendar'}));window.__uiTest.drop=data;document.querySelector('.cal-body').dispatchEvent(new DragEvent('dragenter',{bubbles:true,cancelable:true,dataTransfer:data}));})()");
+    await until("!!document.querySelector('.desktop-widget-drop')");
+    await screenshot('calendar-widget-drop.png');
+    await evaluate("document.querySelector('.cal-body').dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer:window.__uiTest.drop}))");
+    await until("window.__uiTest.day(window.__uiTest.shift(2)).entries.some(entry=>entry.text==='Aus Widget importiert') && !document.querySelector('.desktop-widget-drop')");
+    await until("document.querySelector('.desktop-widget .widget-message[role=status]')?.textContent.includes('1')");
     await evaluate(`document.querySelector('[data-calendar-entry="${made}"]').dispatchEvent(new MouseEvent('contextmenu',{button:2,bubbles:true,cancelable:true}))`);
     await until("!!document.querySelector('.cal-composer.is-editing')");
     await evaluate("document.querySelector('.cal-composer-remove').click()");
     await until(`!document.querySelector('.cal-composer') && !window.__uiTest.day(window.__uiTest.shift(2)).entries.some(entry=>entry.id==='${made}')`);
-    await evaluate("document.querySelectorAll('.cal-views [role=tab]')[2].click();document.querySelector('.cal-filter-note').click();document.querySelector('.cal-nav .nav-step:last-child').click()");
+    // The kinds shown come from the widget's settings (another window: the storage event).
+    await evaluate("(()=>{const k='journal.calendar.widget-calendar',p=JSON.parse(localStorage.getItem(k));p.kinds.note=true;localStorage.setItem(k,JSON.stringify(p));window.dispatchEvent(new StorageEvent('storage',{key:k}));})()");
+    await pause(100);
+    await evaluate("document.querySelectorAll('.cal-views [role=tab]')[2].click();document.querySelector('.cal-nav .nav-step:last-child').click()");
     await until("JSON.parse(localStorage.getItem('journal.calendar.widget-calendar')).view==='week' && JSON.parse(localStorage.getItem('journal.calendar.widget-calendar')).followToday===false");
     const saved=await evaluate("JSON.parse(localStorage.getItem('journal.calendar.widget-calendar'))");
     await command('Page.reload');await until("document.querySelector('.cal')?.dataset.view==='week'");
-    assert.equal(await evaluate("document.querySelector('.cal-filter-note').getAttribute('aria-pressed')"),'true');
+    assert.equal(await evaluate("JSON.parse(localStorage.getItem('journal.calendar.widget-calendar')).kinds.note"),true,'Kinds chosen in the settings are kept');
     assert.equal(await evaluate("JSON.parse(localStorage.getItem('journal.calendar.widget-calendar')).date"),saved.date,'Chosen date survives widget restart');
     assert.equal(await evaluate("JSON.parse(localStorage.getItem('journal.calendar')).view"),'month','Widget preferences do not replace app preferences');
     await command('Page.navigate',{url:`http://127.0.0.1:${server.address().port}/?window=widget-calendar-other`});
     await until("document.querySelector('.cal')?.dataset.view==='month'");
-    assert.equal(await evaluate("document.querySelector('.cal-filter-note').getAttribute('aria-pressed')"),'false','Another calendar widget has independent filters');
+    await until("!!localStorage.getItem('journal.calendar.widget-calendar-other')");
+    assert.equal(await evaluate("JSON.parse(localStorage.getItem('journal.calendar.widget-calendar-other')).kinds.note"),false,'Another calendar widget has independent filters');
     for(const [theme,popupStyle,pixel] of [['classic','a',false],['classic','b',false],['journal','a',false],['journal','b',false],['nebula','a',false],['nebula','b',false],['classic','a',true],['journal','a',true]]){
       await evaluate(`localStorage.setItem('journal.settings',JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'),theme:${JSON.stringify(theme)},popupStyle:${JSON.stringify(popupStyle)},pixel:${pixel}}))`);
       await command('Page.reload');await until("!!document.querySelector('.desktop-widget.is-calendar .cal')");
@@ -3029,13 +3040,214 @@ try {
       assert(await evaluate("document.documentElement.scrollWidth<=innerWidth && document.documentElement.scrollHeight<=innerHeight"),`${theme}/${popupStyle}/${pixel}: widget viewport fits`);
       await screenshot(`calendar-widget-${theme}-${popupStyle}${pixel?'-pixel':''}.png`);
     }
-    assert.deepEqual(errors,[]);console.log('Calendar widget passed: all five views, create/edit/delete, ICS import/export, restored date/view/filters, independent instances and all themes.');
+    assert.deepEqual(errors,[]);console.log('Calendar widget passed: views in the header (letters when narrow), all five views, create/edit/delete, ICS import by drop, restored date/view/filters, independent instances and all themes.');
+  } else if (process.env.JOURNAL_UI_SCOPE === 'board-widget') {
+    // The pinboard as a desktop widget: the header holds the day's navigation, "+" and "open"; the rest is the cork.
+    await command('Emulation.setFocusEmulationEnabled',{enabled:true});
+    await command('Emulation.setDeviceMetricsOverride',{width:720,height:560,deviceScaleFactor:1,mobile:false});
+    await evaluate("(()=>{const note=(id,title,date,boardX)=>({id,kind:'note',title,text:'Ein Zettel auf dem Desktop',dates:[date],order:1,paper:'yellow',boardX,y:40});sessionStorage.setItem('boardCards',JSON.stringify([note('note-today','Heute angepinnt',window.__uiTest.date,28),note('note-tomorrow','Morgen angepinnt',window.__uiTest.shift(1),300)]));})()");
+    await command('Page.navigate',{url:`http://127.0.0.1:${server.address().port}/?window=widget-board`});
+    await until("!!document.querySelector('.desktop-widget.is-board .board-card[data-board-id=note-today]')");
+    await evaluate('document.fonts.ready.then(()=>true)');
+    assert(await evaluate("!!document.querySelector('.desktop-widget-head .desktop-widget-nav .nav-cluster') && !!document.querySelector('.desktop-widget-head .widget-date') && !!document.querySelector('.desktop-widget-head .desktop-widget-tools .board-add-menu') && !!document.querySelector('.desktop-widget-head .desktop-widget-open')"),'Day navigation, + and open in the header');
+    assert(await evaluate("!document.querySelector('.desktop-widget .board-head, .desktop-widget .board-actions')"),'No board title or add bar in the widget');
+    assert(await evaluate("(()=>{const v=document.querySelector('.board-viewport').getBoundingClientRect(),w=document.querySelector('.desktop-widget').getBoundingClientRect(),h=document.querySelector('.desktop-widget-head').getBoundingClientRect();return Math.abs(v.top-h.bottom)<2 && Math.abs(v.bottom-w.bottom)<3 && v.width>=w.width-3;})()"),'The cork fills the widget under its header');
+    await screenshot('board-widget.png');
+    await evaluate("document.querySelector('.desktop-widget-nav .nav-step:last-child').click()");
+    await until("document.querySelector('.desktop-widget').dataset.date===window.__uiTest.shift(1) && !!document.querySelector('.board-card[data-board-id=note-tomorrow]') && !document.querySelector('.board-card[data-board-id=note-today]')");
+    await evaluate("document.querySelector('.desktop-widget-nav .nav-today').click()");
+    await until("document.querySelector('.desktop-widget').dataset.date===window.__uiTest.date && !!document.querySelector('.board-card[data-board-id=note-today]')");
+    // The plain wheel moves the framed board (there is no page to scroll).
+    await evaluate("document.querySelector('.board-viewport').dispatchEvent(new WheelEvent('wheel',{deltaY:120,bubbles:true,cancelable:true}))");
+    await until("document.querySelector('.board-viewport').style.getPropertyValue('--board-pan-y')==='-120px'");
+    // "+" opens the board's add menu; a new note lands on this day.
+    await evaluate("document.querySelector('.board-add-menu').click()");
+    await until("['note','image','link','existing'].every(id=>!!document.querySelector('.ctx-item[data-item='+id+']'))");
+    await screenshot('board-widget-add.png');
+    await evaluate("document.querySelector('.ctx-item[data-item=note]').click()");
+    await until("JSON.parse(sessionStorage.boardCards).filter(c=>c.dates.includes(window.__uiTest.date)).length===2");
+    for(const [theme,popupStyle,pixel] of [['classic','a',false],['classic','b',false],['journal','a',false],['journal','b',false],['nebula','a',false],['nebula','b',false],['classic','a',true],['journal','a',true]]){
+      await evaluate(`localStorage.setItem('journal.settings',JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'),theme:${JSON.stringify(theme)},popupStyle:${JSON.stringify(popupStyle)},pixel:${pixel}}))`);
+      await command('Page.reload');await until("!!document.querySelector('.desktop-widget.is-board .board-card')");
+      await evaluate('document.fonts.ready.then(()=>true)');await pause(300);
+      assert(await evaluate("document.documentElement.scrollWidth<=innerWidth && document.documentElement.scrollHeight<=innerHeight"),`${theme}/${popupStyle}/${pixel}: board widget fits`);
+      await screenshot(`board-widget-${theme}-${popupStyle}${pixel?'-pixel':''}.png`);
+    }
+    assert.deepEqual(errors,[]);console.log('Board widget passed: header with day navigation, + and open; cork filling the widget; days; wheel panning; adding by +; all themes.');
+  } else if (process.env.JOURNAL_UI_SCOPE === 'more-widgets') {
+    // Day values, activities and notes as desktop widgets: only the values or the note, no headings or bars.
+    await command('Emulation.setFocusEmulationEnabled',{enabled:true});
+    await command('Emulation.setDeviceMetricsOverride',{width:460,height:440,deviceScaleFactor:1,mobile:false});
+    await evaluate("localStorage.setItem('test.scales',JSON.stringify([{id:'stress',name:'Stress',min:0,max:10,color:'#e46a6a',active:true},{id:'sleep',name:'Schlaf',min:0,max:20,color:'#6a8ae4',active:true}]))");
+    const quiet="!document.querySelector('.desktop-widget :is(.section-heading, .checklist-section-heading, .checklist-manage, .document-header)')";
+    const openMenu="(()=>{const h=document.querySelector('.desktop-widget-head'),r=h.getBoundingClientRect();h.dispatchEvent(new MouseEvent('contextmenu',{button:2,bubbles:true,cancelable:true,clientX:r.right-120,clientY:r.top+10}));})()";
+    // Day values: the rating and the values; the day turns in the header.
+    await command('Page.navigate',{url:`http://127.0.0.1:${server.address().port}/?window=widget-day-values`});
+    await until("!!document.querySelector('.desktop-widget.is-day-values #daily-rating') && document.querySelectorAll('.desktop-widget .scale-row').length===2");
+    await evaluate('document.fonts.ready.then(()=>true)');
+    assert(await evaluate(quiet),'Day values without headings or manage buttons');
+    assert(await evaluate("!!document.querySelector('.desktop-widget-head .nav-cluster') && !!document.querySelector('.desktop-widget-head .widget-date')"),'Day navigation in the header');
+    await evaluate("document.querySelector('[data-scale-id=stress] .scale-input').focus()");await key('ArrowRight');
+    await until("window.__uiTest.periodData?.days?.[window.__uiTest.date]?.scales?.stress!=null");
+    await screenshot('widget-day-values.png');
+    await evaluate("document.querySelector('.desktop-widget-nav .nav-step:last-child').click()");
+    await until("document.querySelector('.desktop-widget').dataset.date===window.__uiTest.shift(1)");
+    await evaluate(openMenu);await until("!!document.querySelector('.ctx-item[data-item=manage]')");
+    await evaluate("document.querySelector('.ctx-item[data-item=manage]').click()");
+    await until("window.__uiTest.invoked.some(call=>call[0]==='desktop_widget_open_settings' && call[1]?.tab==='scales')");
+    // Activities: the checklist alone; ticking one off is saved for the shown day.
+    await command('Page.navigate',{url:`http://127.0.0.1:${server.address().port}/?window=widget-activities`});
+    await until("document.querySelectorAll('.desktop-widget.is-activities .period-item').length===2");
+    assert(await evaluate(quiet),'Activities without headings or manage buttons');
+    const sportDone="window.__uiTest.periodData?.days?.[window.__uiTest.date]?.items?.sport?.done";
+    const before=await evaluate(`Boolean(${sportDone})`);
+    await evaluate("document.querySelector('[data-activity-id=sport] input[type=checkbox]').click()");
+    await until(`Boolean(${sportDone})===${!before}`);
+    await screenshot('widget-activities.png');
+    // Another window's save reloads the values (period:changed with that window's label).
+    await evaluate("window.__uiTest.emit('period:changed','main')");
+    await until("document.querySelectorAll('.desktop-widget .period-item').length===2");
+    // Notes: one note, the switcher in the header, folders and paper in the right-click menu.
+    await command('Emulation.setDeviceMetricsOverride',{width:560,height:640,deviceScaleFactor:1,mobile:false});
+    await evaluate(`(()=>{const card=(id,title,extra={})=>({id,kind:'note',title,text:'Notiz mit **Markdown**',dates:[],order:1,created:window.__uiTest.date,notebook:true,...extra});
+      sessionStorage.setItem('boardFolders',JSON.stringify([{id:'work',name:'Arbeit',parent:null,order:1}]));
+      sessionStorage.setItem('boardCards',JSON.stringify([card('first','Projektplan',{folder:'work'}),card('second','Einkauf',{order:2})]));})()`);
+    await command('Page.navigate',{url:`http://127.0.0.1:${server.address().port}/?window=widget-notebook`});
+    await until("!!document.querySelector('.desktop-widget.is-notebook .notebook.is-compact .notebook-page[data-page-id]')");
+    await evaluate('document.fonts.ready.then(()=>true)');
+    assert(await evaluate("!document.querySelector('.desktop-widget :is(.notebook-head, .notebook-side, .notebook-page-tools, .notebook-day, .notebook-page-foot, .notebook-attachments)')"),'Only the note: no tree, tools, day switch, footer or empty attachments');
+    assert(await evaluate("!!document.querySelector('.desktop-widget-head .desktop-widget-nav .notebook-switch') && !!document.querySelector('.desktop-widget-head .desktop-widget-tools .notebook-widget-new')"),'Switcher and + in the header');
+    await screenshot('widget-notebook.png');
+    const pageId="document.querySelector('.notebook-page[data-page-id]').dataset.pageId";
+    const first=await evaluate(pageId);
+    await evaluate("document.querySelector('.notebook-switch-steps .nav-step:last-child').click()");
+    await until(`${pageId}!==${JSON.stringify(first)}`);
+    await evaluate("document.querySelector('.notebook-switch').click()");
+    await until("document.querySelectorAll('.note-switch-option').length===2 && document.activeElement?.matches('.note-switch-panel input')");
+    await command('Input.insertText',{text:'Projekt'});
+    await until("document.querySelectorAll('.note-switch-option').length===1");
+    await screenshot('widget-notebook-switch.png');
+    await key('Enter');
+    await until(`${pageId}==='first' && !document.querySelector('.note-switch-option')`);
+    await evaluate("(()=>{const p=document.querySelector('.notebook-page');p.dispatchEvent(new MouseEvent('contextmenu',{button:2,bubbles:true,cancelable:true,clientX:200,clientY:200}));})()");
+    await until("['move','paper','on-day','attach-image','attach-link','delete'].every(id=>!!document.querySelector('.ctx-item[data-item='+id+']'))");
+    await key('Escape','Escape');
+    await evaluate("document.querySelector('.notebook-widget-new').click()");
+    await until("JSON.parse(sessionStorage.boardCards).length===3");
+    await until(`${pageId}!=='first' && ${pageId}!=='second'`);
+    assert.equal(await evaluate("JSON.parse(sessionStorage.boardCards).find(c=>c.id===document.querySelector('.notebook-page').dataset.pageId).dates.length"),0,'A new note stays off the day');
+    await evaluate("document.querySelector('.desktop-widget-open').click()");
+    await until(`(${lastCall})?.[0]==='show_note'`);
+    for(const [theme,popupStyle,pixel] of [['classic','a',false],['classic','b',false],['journal','a',false],['journal','b',false],['nebula','a',false],['nebula','b',false],['classic','a',true],['journal','a',true]]){
+      await evaluate(`localStorage.setItem('journal.settings',JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'),theme:${JSON.stringify(theme)},popupStyle:${JSON.stringify(popupStyle)},pixel:${pixel}}))`);
+      for (const kind of ['day-values','activities','notebook']) {
+        await command('Page.navigate',{url:`http://127.0.0.1:${server.address().port}/?window=widget-${kind}`});
+        await until(`!!document.querySelector('.desktop-widget.is-${kind} ${kind==='notebook'?'.notebook-page':'.period-section'}')`);
+        await evaluate('document.fonts.ready.then(()=>true)');await pause(250);
+        assert(await evaluate("document.documentElement.scrollWidth<=innerWidth && document.documentElement.scrollHeight<=innerHeight"),`${kind} ${theme}/${popupStyle}/${pixel}: widget fits`);
+        await screenshot(`widget-${kind}-${theme}-${popupStyle}${pixel?'-pixel':''}.png`);
+      }
+    }
+    assert.deepEqual(errors,[]);console.log('More widgets passed: day values, activities and notes without headings or bars, day navigation, saving, managing from the header menu, note switcher with search, new note off the day, open in Journal, all themes.');
+  } else if (process.env.JOURNAL_UI_SCOPE === 'glass-design') {
+    // The transparent look over a stand-in wallpaper (dark picture: light type; light picture: dark type), clear and with
+    // background blur, every widget and some popups. The wallpaper is also the page's background, as on the desktop.
+    await command('Emulation.setFocusEmulationEnabled',{enabled:true});
+    await evaluate("localStorage.setItem('test.scales',JSON.stringify([{id:'stress',name:'Stress',min:0,max:10,color:'#e46a6a',active:true},{id:'sleep',name:'Schlaf',min:0,max:20,color:'#6a8ae4',active:true}]))");
+    await evaluate(`(()=>{const note=(id,title,date,boardX,extra={})=>({id,kind:'note',title,text:'Ein Zettel auf dem Desktop',dates:[date],order:1,paper:'yellow',boardX,y:30,created:date,...extra});
+      sessionStorage.setItem('boardCards',JSON.stringify([note('n1','Heute angepinnt',window.__uiTest.date,24),note('n2','Ideen',window.__uiTest.date,290,{paper:'blue',y:120}),{id:'nb',kind:'note',title:'Projektplan',text:'Erste Schritte: Entwurf, **Review** am Freitag',dates:[],order:3,created:window.__uiTest.date,notebook:true}]));})()`);
+    const walls={
+      light:'<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900"><rect width="1600" height="900" fill="#14232e"/><circle cx="300" cy="240" r="240" fill="#3a8fd6"/><circle cx="1150" cy="600" r="320" fill="#b02a4a"/><path d="M0 760 L1600 260" stroke="#ffd166" stroke-width="50"/><circle cx="800" cy="120" r="70" fill="#7ee0b0"/></svg>',
+      dark:'<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900"><rect width="1600" height="900" fill="#eef2f6"/><circle cx="320" cy="260" r="260" fill="#ffd9a8"/><circle cx="1150" cy="620" r="300" fill="#a8d8ff"/><path d="M0 700 L1600 300" stroke="#f4a3b8" stroke-width="50"/><circle cx="820" cy="140" r="80" fill="#c8f0d8"/></svg>'};
+    const sizes={'entries':[600,600],'calendar':[900,640],'board':[720,560],'day-values':[420,380],'activities':[460,420],'notebook':[560,560]};
+    for (const [glass,wall] of Object.entries(walls)) for (const blur of [0,14]) for (const [kind,[w,h]] of Object.entries(sizes)) {
+      if (blur && !['entries','calendar','notebook'].includes(kind)) continue;
+      await command('Emulation.setDeviceMetricsOverride',{width:w,height:h,deviceScaleFactor:1,mobile:false});
+      await evaluate(`localStorage.setItem('test.wallpaper',${JSON.stringify(wall)});localStorage.setItem('journal.widget-chrome',JSON.stringify({${JSON.stringify(kind)}:{glass:true,glassText:${JSON.stringify(glass)},glassBlur:${blur},glassRadius:12}}))`);
+      await command('Page.navigate',{url:`http://127.0.0.1:${server.address().port}/?window=widget-${kind}`});
+      await until(`!!document.querySelector('.desktop-widget') && !document.querySelector('.desktop-widget .loading') && document.documentElement.dataset.glass===${JSON.stringify(glass)}${blur?" && !!document.querySelector('.desktop-widget-backdrop')":''}`);
+      await evaluate(`document.documentElement.style.background='center / cover no-repeat url("data:image/svg+xml,'+encodeURIComponent(${JSON.stringify(wall)})+'")'`);
+      await evaluate('document.fonts.ready.then(()=>true)');await pause(400);
+      await screenshot(`glass-${glass}-${kind}${blur?'-blur':''}.png`);
+      if (kind==='entries' && !blur) {
+        await evaluate("document.querySelector('.desktop-widget .widget-date').click()");await pause(400);
+        await screenshot(`glass-${glass}-popup-date.png`);await key('Escape','Escape');
+        await evaluate("document.querySelector('.desktop-widget .entry .entry-symbol')?.click()");await pause(450);
+        await screenshot(`glass-${glass}-popup-actions.png`);await key('Escape','Escape');
+      }
+      if (kind==='calendar' && !blur) {
+        await evaluate("(()=>{const h=document.querySelector('.desktop-widget-head'),r=h.getBoundingClientRect();h.dispatchEvent(new MouseEvent('contextmenu',{button:2,bubbles:true,cancelable:true,clientX:r.right-160,clientY:r.top+12}));})()");await pause(300);
+        await screenshot(`glass-${glass}-popup-menu.png`);await key('Escape','Escape');
+      }
+    }
+    console.log('Glass design screenshots written.');
+  } else if (process.env.JOURNAL_UI_SCOPE === 'widget-glass') {
+    // The transparent look is chosen per widget and leaves the app's design (here Nebula with pixel set) behind.
+    await command('Emulation.setFocusEmulationEnabled',{enabled:true});
+    await command('Emulation.setDeviceMetricsOverride',{width:600,height:600,deviceScaleFactor:1,mobile:false});
+    await evaluate("localStorage.setItem('journal.settings',JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'),theme:'nebula',popupStyle:'a',pixel:true}));localStorage.removeItem('journal.widget-chrome')");
+    await command('Page.navigate',{url:`http://127.0.0.1:${server.address().port}/?window=widget-entries`});
+    await until("!!document.querySelector('.desktop-widget .entry') && document.documentElement.dataset.theme==='nebula'");
+    const chrome=value=>evaluate(`localStorage.setItem('journal.widget-chrome',JSON.stringify({entries:${JSON.stringify(value)}}));window.dispatchEvent(new StorageEvent('storage',{key:'journal.widget-chrome'}))`);
+    await chrome({glass:true});
+    await until("document.documentElement.dataset.glass==='light' && document.documentElement.dataset.theme==='classic' && document.documentElement.dataset.popups==='b' && !('pixel' in document.documentElement.dataset) && !document.querySelector('.desktop-widget.nebula-terminal')");
+    await pause(300);
+    assert.equal(await evaluate("getComputedStyle(document.querySelector('.desktop-widget')).backgroundColor"),'rgba(0, 0, 0, 0)','No background');
+    assert.equal(await evaluate("getComputedStyle(document.querySelector('.desktop-widget .desktop-widget-head')).backgroundColor"),'rgba(0, 0, 0, 0)','No header bar');
+    assert.equal(await evaluate("!!document.querySelector('.desktop-widget-backdrop')"),false,'No wallpaper layer when blur is off');
+    // The header is painted without layers of its own (no opacity, transition or filter) and without any fill.
+    assert.deepEqual(await evaluate("[document.querySelector('.desktop-widget-head'),...document.querySelectorAll('.desktop-widget-head *')].filter(e=>{const c=getComputedStyle(e);return c.backgroundColor!=='rgba(0, 0, 0, 0)'||c.opacity!=='1'||c.filter!=='none'||(c.transitionDuration.split(',').some(d=>parseFloat(d)>0)&&!e.matches(':hover'))||c.backdropFilter!=='none';}).map(e=>{const c=getComputedStyle(e);return [e.tagName,String(e.className?.baseVal ?? e.className),c.backgroundColor,c.opacity,c.filter,c.transitionDuration,c.transitionProperty]})"),[],'Header without fills or extra layers');
+    // A click into a field draws nothing around it or the widget.
+    await command('Input.dispatchMouseEvent',{type:'mouseMoved',x:599,y:599});
+    await evaluate("document.querySelector('.desktop-widget .title-input').focus()");await pause(100);
+    assert.deepEqual(await evaluate("(()=>{const w=getComputedStyle(document.querySelector('.desktop-widget')),i=getComputedStyle(document.activeElement);return [w.boxShadow,i.outlineStyle,i.boxShadow];})()"),['none','none','none'],'No outline on focus');
+    await evaluate("document.activeElement.blur()");
+    // Sliders: blur of the popups and rounding of every curve.
+    await chrome({glass:true,glassBlur:4,glassRadius:0});
+    await until("getComputedStyle(document.documentElement).getPropertyValue('--glass-radius').trim()==='0px'");
+    assert.equal(await evaluate("getComputedStyle(document.querySelector('.desktop-widget-open')).borderRadius"),'0px','Square with rounding 0');
+    await chrome({glass:true,glassBlur:24,glassRadius:20});
+    await until("getComputedStyle(document.documentElement).getPropertyValue('--glass-blur').trim()==='24px'");
+    await until("!!document.querySelector('.desktop-widget-backdrop feGaussianBlur')");
+    assert.equal(await evaluate("document.querySelector('.desktop-widget-backdrop feGaussianBlur').getAttribute('stdDeviation')"),'24','Wallpaper blur follows the slider');
+    assert.equal(await evaluate("getComputedStyle(document.querySelector('.desktop-widget-open')).borderRadius"),'20px','Rounding follows the slider');
+    // A settings broadcast from the app does not bring its design back while the widget is transparent.
+    await evaluate("window.__uiTest.emit('journal:theme',{theme:'journal',pixel:false,popupStyle:'a'})");await pause(100);
+    assert.equal(await evaluate("document.documentElement.dataset.theme"),'classic','Independent of the app design');
+    // Popups: a panel of their own, not transparent.
+    await evaluate("document.querySelector('.desktop-widget .widget-date').click()");
+    await until("!!document.querySelector('.mini-picker-panel')");
+    assert.notEqual(await evaluate("getComputedStyle(document.querySelector('.mini-picker-panel')).backgroundColor"),'rgba(0, 0, 0, 0)','Popups are glass panels');
+    assert.match(await evaluate("getComputedStyle(document.querySelector('.mini-picker-panel')).backdropFilter"),/blur\(18px\)/,'Popup keeps its own readable glass blur');
+    assert.equal(await evaluate("getComputedStyle(document.querySelector('.mini-picker-panel')).borderTopLeftRadius"),'22px','Popup rounding follows the slider');
+    await key('Escape','Escape');await until("!document.querySelector('.mini-picker-panel')");
+    await chrome({glass:true,glassText:'dark'});
+    await until("document.documentElement.dataset.glass==='dark'");
+    assert.equal(await evaluate("getComputedStyle(document.documentElement).getPropertyValue('--text').trim()"),'#1b1b1f','Dark type');
+    await chrome({glass:false});
+    await until("!('glass' in document.documentElement.dataset) && document.documentElement.dataset.theme==='journal'");
+    // The switch and the type choice in the widget's settings.
+    await command('Page.navigate',{url:`http://127.0.0.1:${server.address().port}/`});
+    await until("document.querySelectorAll('.entry').length===5");
+    await evaluate("localStorage.removeItem('journal.widget-chrome');window.__uiTest.emit('journal:settings',{tab:'widgets',widget:'entries'})");
+    await until("!!document.querySelector('.widgets-details [data-widget-setting=glass]')");
+    assert(!await evaluate("!!document.querySelector('.widgets-details [data-glass-text]')"),'Type choice only when transparent');
+    await evaluate("document.querySelector('.widgets-details [data-widget-setting=glass]').click()");
+    await until("JSON.parse(localStorage.getItem('journal.widget-chrome')||'{}').entries?.glass===true && !!document.querySelector('.widgets-details [data-glass-text=dark]')");
+    await evaluate("document.querySelector('.widgets-details [data-glass-text=dark]').click()");
+    await until("JSON.parse(localStorage.getItem('journal.widget-chrome')).entries.glassText==='dark'");
+    for (const [setting,value,field] of [['blur',8,'glassBlur'],['radius',4,'glassRadius']]) {
+      await evaluate(`(()=>{const input=document.querySelector('.widgets-details [data-widget-setting=${setting}]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'${value}');input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+      await until(`JSON.parse(localStorage.getItem('journal.widget-chrome')).entries.${field}===${value}`);
+    }
+    await pause(200);await screenshot('widgets-manager-glass.png');
+    assert.deepEqual(errors,[]);console.log('Widget glass passed: per widget, own palette and base independent of the app design, header without fills or layers, no outline on focus, blur and rounding sliders, glass popups, light/dark type, settings.');
   } else if (process.env.JOURNAL_UI_SCOPE === 'widget-manager') {
     await command('Emulation.setFocusEmulationEnabled',{enabled:true});
     await evaluate("window.__uiTest.emit('journal:settings',{tab:'widgets'})");
     await until("document.querySelectorAll('[data-widget-instance]').length===1");
     await evaluate("document.querySelector('.widgets-add').click()");
-    await until("document.querySelectorAll('[data-widget-type]').length===2");
+    await until("document.querySelectorAll('[data-widget-type]').length===6");
     assert.equal(await evaluate("document.querySelector('[data-widget-type=calendar]').disabled"),false,'Calendar can be added from the catalog');
     await evaluate("document.querySelector('[data-widget-type=\"daily-note\"]').click()");
     await until("document.querySelectorAll('[data-widget-instance]').length===2 && document.querySelector('.desktop-widget-settings').getAttribute('aria-busy')==='false'");
@@ -3064,6 +3276,15 @@ try {
     await pause(350);await screenshot('widgets-manager-actions.png');
     await evaluate("document.querySelector('.widgets-add').click()");
     await pause(350);await screenshot('widgets-manager-catalog.png');
+    // A calendar widget's settings choose its tags and the kinds of entries it shows.
+    await evaluate("document.querySelector('[data-widget-type=calendar]').click()");
+    await until("!!document.querySelector('.widgets-details [data-widget-kind=note]') && document.querySelector('.desktop-widget-settings').getAttribute('aria-busy')==='false'");
+    const calendarWidget=await evaluate("window.__uiTest.widgets.widgets.find(widget=>widget.kind==='calendar').id");
+    assert(await evaluate("!!document.querySelector('.widgets-details .widgets-display .tag-filter-button')"),'Calendar widget settings have the tag filter');
+    assert.equal(await evaluate("document.querySelector('.widgets-details [data-widget-kind=note]').getAttribute('aria-pressed')"),'false');
+    await evaluate("document.querySelector('.widgets-details [data-widget-kind=note]').click()");
+    await until(`JSON.parse(localStorage.getItem('journal.calendar.widget-${calendarWidget}')||'{}').kinds?.note===true && document.querySelector('.widgets-details [data-widget-kind=note]').getAttribute('aria-pressed')==='true'`);
+    await pause(200);await screenshot('widgets-manager-calendar.png');
     for(const [theme,popupStyle,pixel] of [['classic','a',false],['classic','b',false],['journal','a',false],['journal','b',false],['nebula','a',false],['nebula','b',false],['classic','a',true],['journal','a',true]]){
       await evaluate(`localStorage.setItem('journal.settings',JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'),theme:${JSON.stringify(theme)},popupStyle:${JSON.stringify(popupStyle)},pixel:${pixel}}))`);
       await command('Page.reload');await until("document.querySelectorAll('.entry').length===5");
@@ -3117,6 +3338,31 @@ try {
       await until(`Math.abs(document.querySelector('${row}').getBoundingClientRect().height-${initial.height})<1`);
       await screenshot(`widget-actions-${theme}-${popupStyle}${pixel?'-pixel':''}.png`);
     }
+    // The header holds only the navigation and "open in Journal": no lock, settings or close button and no status bar.
+    // A right click on it offers settings, lock and hide; the open button can be switched off per widget.
+    const headButtons="[...document.querySelectorAll('.desktop-widget-head button')].filter(b=>!b.closest('.desktop-widget-nav')).map(b=>b.className)";
+    assert.deepEqual(await evaluate(headButtons),['desktop-widget-open'],'Only the open button sits beside the navigation');
+    assert(await evaluate("!!document.querySelector('.desktop-widget-head .desktop-widget-nav .nav-cluster') && !!document.querySelector('.desktop-widget-head .widget-date') && !document.querySelector('.desktop-widget-status, .desktop-widget-tools')"),'Day navigation in the header, no status bar');
+    assert.equal(await evaluate("document.querySelector('.desktop-widget').dataset.date"),await evaluate("window.__uiTest.date"));
+    await evaluate("document.querySelector('.desktop-widget-nav .nav-step:last-child').click()");
+    await until("document.querySelector('.desktop-widget').dataset.date===window.__uiTest.shift(1)");
+    await evaluate("(()=>{const h=document.querySelector('.desktop-widget-head'),r=h.getBoundingClientRect();h.dispatchEvent(new MouseEvent('contextmenu',{button:2,bubbles:true,cancelable:true,clientX:r.right-120,clientY:r.top+10}));})()");
+    await until("['settings','lock','hide'].every(id=>!!document.querySelector('.ctx-item[data-item='+id+']'))");
+    await key('Escape','Escape');
+    await evaluate("localStorage.setItem('journal.widget-chrome',JSON.stringify({entries:{openButton:false}}));window.dispatchEvent(new StorageEvent('storage',{key:'journal.widget-chrome'}))");
+    await until("!document.querySelector('.desktop-widget-open')");
+    await screenshot('widget-header-without-open.png');
+    // The mini calendar's title: month and year meet in the middle, so turning the month moves neither the year nor the centre.
+    await evaluate("document.querySelector('.desktop-widget .widget-date').click()");
+    await until("!!document.querySelector('.mini-picker-panel .mini-picker-year')");
+    const yearAt="(()=>{const y=document.querySelector('.mini-picker-panel .mini-picker-year').getBoundingClientRect(),h=document.querySelector('.mini-picker-panel .mini-picker-head').getBoundingClientRect();return [Math.round(y.left),Math.round(h.left+h.width/2-y.left)];})()";
+    await pause(450);const before=await evaluate(yearAt);
+    for(let i=0;i<3;i++){await evaluate("document.querySelectorAll('.mini-picker-panel .mini-picker-head .cal-icon-button')[1].click()");await pause(60);assert.deepEqual(await evaluate(yearAt),before,'The year stays in place when the month changes');}
+    assert(Math.abs(before[1])<12,'Month and year meet in the middle');
+    await screenshot('widget-mini-calendar.png');
+    await key('Escape','Escape');await until("!document.querySelector('.mini-picker-panel')");
+    await evaluate("localStorage.removeItem('journal.widget-chrome');window.dispatchEvent(new StorageEvent('storage',{key:'journal.widget-chrome'}))");
+    await until("!!document.querySelector('.desktop-widget-open')");
     assert.deepEqual(errors,[]);console.log('Widget actions passed: hidden on load, symbol toggle, Escape, outside click and no reserved space in all themes/popup styles, including Pixel.');
   } else if (process.env.JOURNAL_UI_SCOPE === 'nebula-tickets') {
     await command('Emulation.setFocusEmulationEnabled',{enabled:true});

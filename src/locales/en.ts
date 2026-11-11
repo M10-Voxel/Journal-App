@@ -1041,6 +1041,21 @@ const english: Record<string, string> = {
   "{0}: nach unten": "{0}: move down",
   "Ø {0} / {1}": "avg {0} / {1}",
   "Ja": "Yes",
-  "Nein": "No"
+  "Nein": "No",
+  "In Journal öffnen": "Open in Journal",
+  "Nur Kalenderdateien (.ics) können importiert werden.": "Only calendar files (.ics) can be imported.",
+  "Die ICS-Datei ist zu groß (höchstens 5 MB)": "The ICS file is too large (5 MB at most)",
+  "Die Datei enthält keine Ereignisse oder Aufgaben.": "The file contains no events or tasks.",
+  "Kalenderdatei loslassen zum Importieren": "Drop the calendar file to import it",
+  "Alle anzeigen": "Show all",
+  "Aktivitäten verwalten …": "Manage activities …",
+  "Tageswerte verwalten …": "Manage day values …",
+  "Bild anhängen …": "Attach image …",
+  "Link anhängen …": "Attach link …",
+  "Zettel blättern": "Turn notes",
+  "Voriger Zettel": "Previous note",
+  "Nächster Zettel": "Next note",
+  "Zettel wählen": "Choose note",
+  "Noch kein Zettel.": "No note yet."
 };
 export default english;

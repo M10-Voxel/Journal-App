@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {upgradeSnapshot,databaseSnapshot} from '../src/sync/snapshot.ts';
+import {upgradeSnapshot,databaseSnapshot,syncPreferences} from '../src/sync/snapshot.ts';
 import {mergeThreeWay} from '../src/sync/merge.ts';
 test('legacy cloud preserves newly added activities, cards and images',()=>{
  const old={schema:11,tables:{}};
@@ -27,4 +27,28 @@ test('mail accounts from both devices merge without losing legacy data',()=>{
  assert.deepEqual(Object.keys(result.value.mailAccounts).sort(),['a','b']);
  assert.equal(databaseSnapshot(result.value).schema,12);
  assert.equal(databaseSnapshot(result.value).mailAccounts,undefined);
+});
+
+test('tag emoji and independent daily scale values survive a complete merged snapshot',()=>{
+ const base=upgradeSnapshot({schema:12,tables:{tags:{tag:{id:'tag',name:'Sport',color:'#123456',position:0}}},settings:{'period-data':{scales:[{id:'sleep',name:'Schlaf',min:0,max:10}],days:{'2026-11-11':{items:{},scales:{sleep:5}}}}}});
+ const local=structuredClone(base),remote=structuredClone(base);
+ local.tables.tags.tag.icon='emoji:🏃';
+ local.settings['period-data'].days['2026-11-11'].scales.sleep=8;
+ remote.settings['period-data'].days['2026-11-12']={items:{},rating:9,scales:{sleep:7}};
+ delete remote.tables.tags.tag.icon; // An older device has not added the icon column yet.
+ const merged=mergeThreeWay(base,upgradeSnapshot(local),upgradeSnapshot(remote));
+ assert.deepEqual(merged.conflicts,[]);
+ const db=databaseSnapshot(merged.value);
+ assert.equal(db.tables.tags.tag.icon,'emoji:🏃');
+ assert.equal(db.settings['period-data'].days['2026-11-11'].scales.sleep,8);
+ assert.equal(db.settings['period-data'].days['2026-11-12'].scales.sleep,7);
+ assert.deepEqual(db.settings['period-data'].scales,base.settings['period-data'].scales);
+});
+
+test('device and widget preferences never enter the cloud, including legacy snapshots',()=>{
+ const prefs={theme:'nebula',pixel:false,widgets:[{id:'private',x:100}],widgetAutostart:true,windowLayout:{x:2}};
+ assert.deepEqual(syncPreferences(prefs),{theme:'nebula',pixel:false});
+ const next=upgradeSnapshot({schema:13,tables:{},preferences:prefs});
+ assert.deepEqual(next.preferences,{theme:'nebula',pixel:false});
+ assert.equal(prefs.widgets[0].x,100);
 });

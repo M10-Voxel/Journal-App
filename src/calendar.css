@@ -237,7 +237,7 @@ button.cal-time-day:hover { background: color-mix(in srgb, var(--strong) 3.137%,
 .cal.is-embedded { flex: 1; height: auto; min-height: 0; background: var(--background); }
 .cal.is-embedded .cal-month-day.is-saturday, .cal.is-embedded .cal-month-day.is-sunday, .cal.is-embedded .cal-time-column.is-saturday, .cal.is-embedded .cal-time-column.is-sunday { background-color: color-mix(in srgb, var(--strong) 2.353%, transparent); }
 .cal.is-embedded .cal-time-top { background: var(--background); }
-.cal-view-short { display: none; }
+.cal-view-short, .cal-view-key { display: none; }
 
 @container cal (max-width: 880px) {
   .cal-year { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: none; grid-auto-rows: minmax(190px, 1fr); padding: 12px 16px 16px; gap: 14px 20px; }

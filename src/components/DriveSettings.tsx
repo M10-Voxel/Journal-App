@@ -4,7 +4,7 @@ import { mergeThreeWay } from '../sync/merge';
 import type { Json, MergeResult } from '../sync/merge';
 import { useLanguage } from '../i18n';
 import { parseDeviceKey } from '../sync/deviceKey';
-import { upgradeSnapshot, databaseSnapshot } from '../sync/snapshot';
+import { upgradeSnapshot, databaseSnapshot, syncPreferences } from '../sync/snapshot';
 import { flushPeriodData } from '../periodStore';
 import { flushBoardData } from '../boardCards';
 import { encodeBase64 as encode } from '../base64';
@@ -38,14 +38,17 @@ export function DriveSettings({beforeSync,onBusy}:{beforeSync:()=>Promise<void>;
       await invoke('board_image_save',{id,data});
     }
     if(mode!=='download'){
-      const data=await encrypt(value,p.key);
+      const data=await encrypt(snapshot,p.key);
       await invoke('drive_write',{vault:p.vault,id:p.remote.id,etag:p.remote.etag,data});
     }
     if(mode!=='upload'){
       await invoke('drive_apply',{expected:databaseSnapshot(p.local),snapshot:databaseSnapshot(snapshot)});
       await invoke('mail_drive_apply',{expected:(p.local as Record<string,Json>).mailAccounts,accounts:snapshot.mailAccounts});
     }
-    if(snapshot.preferences)localStorage.setItem('journal.settings',JSON.stringify(snapshot.preferences));
+    if(snapshot.preferences && mode!=='upload'){
+      const current=JSON.parse(localStorage.getItem('journal.settings')??'{}');
+      localStorage.setItem('journal.settings',JSON.stringify({...current,...syncPreferences(snapshot.preferences)}));
+    }
     localStorage.setItem(`journal.drive.base.${p.vault}`,await encrypt({...snapshot,images:{}},p.key));
     setPending(null);
     location.reload();
@@ -59,7 +62,7 @@ export function DriveSettings({beforeSync,onBusy}:{beforeSync:()=>Promise<void>;
     await flushPeriodData();await flushBoardData();
     const local=upgradeSnapshot(await invoke<Json>('drive_snapshot'));
     local.mailAccounts=await invoke<Json>('mail_drive_snapshot');
-    local.preferences=JSON.parse(localStorage.getItem('journal.settings')??'{}');
+    local.preferences=syncPreferences(JSON.parse(localStorage.getItem('journal.settings')??'{}'));
     const images:Record<string,Json>={};
     for(const card of Object.values(local.settings as Record<string,Json>)){
       if(card&&typeof card==='object'&&!Array.isArray(card)&&typeof card.asset==='string'){

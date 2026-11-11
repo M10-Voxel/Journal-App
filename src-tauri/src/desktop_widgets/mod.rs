@@ -3,6 +3,7 @@ mod config;
 mod geometry;
 pub mod smoke;
 pub mod surface;
+pub mod wallpaper;
 pub use config::{widget_id,window_label};
 use config::{Config,WidgetConfig,WidgetKind};
 use geometry::{Placement,Screen};
@@ -69,7 +70,7 @@ impl DesktopWidgets {
         let config=self.config.lock().map_err(|e|e.to_string())?.clone();
         let runtimes=self.runtimes.lock().map_err(|e|e.to_string())?;
         let widgets=config.widgets.into_iter().map(|config|{let error=runtimes.get(&config.id).and_then(|r|r.error.lock().ok().and_then(|e|e.clone()));WidgetView{config,error}}).collect();
-        Ok(WidgetState{supported:cfg!(windows),autostart:config.autostart,widgets,types:[WidgetKind::DailyNote,WidgetKind::Calendar].into_iter().map(|kind|WidgetType{kind,available:kind.available()}).collect(),error:self.error.lock().ok().and_then(|e|e.clone())})
+        Ok(WidgetState{supported:cfg!(windows),autostart:config.autostart,widgets,types:[WidgetKind::DailyNote,WidgetKind::Calendar,WidgetKind::Board,WidgetKind::DayValues,WidgetKind::Activities,WidgetKind::Notebook].into_iter().map(|kind|WidgetType{kind,available:kind.available()}).collect(),error:self.error.lock().ok().and_then(|e|e.clone())})
     }
     fn broadcast(&self,app:&tauri::AppHandle)->Result<WidgetState,String>{let state=self.state()?;app.emit("desktop-widget:state",&state).map_err(|e|e.to_string())?;Ok(state)}
 }
@@ -209,7 +210,9 @@ async fn open_report(app:tauri::AppHandle,id:String){
     state.runtimes.lock().map_err(|e|e.to_string())?.remove(&id);state.broadcast(&app)
 }
 #[tauri::command] pub async fn desktop_widget_open_settings(app:tauri::AppHandle,window:tauri::WebviewWindow,tab:Option<String>)->Result<(),String>{
-    crate::show_main(&app);app.emit_to("main","journal:settings",serde_json::json!({"tab":if tab.as_deref()==Some("tags"){"tags"}else{"widgets"},"widget":widget_id(window.label())})).map_err(|e|e.to_string())
+    // Tags, activities and day values have settings pages of their own; everything else is the widget's own settings.
+    let tab=match tab.as_deref(){Some(name@("tags"|"activities"|"scales"))=>name,_=>"widgets"};
+    crate::show_main(&app);app.emit_to("main","journal:settings",serde_json::json!({"tab":tab,"widget":widget_id(window.label())})).map_err(|e|e.to_string())
 }
 pub fn window_event(window:&tauri::Window,event:&tauri::WindowEvent){
     let Some(id)=widget_id(window.label())else{return;};let state=window.state::<DesktopWidgets>();

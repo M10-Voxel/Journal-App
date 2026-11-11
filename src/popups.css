@@ -15,7 +15,10 @@
    its arrows, the same weekday letters, today ringed in the calendar's colour for now, the chosen day filled. */
 .mini-picker-head { height: 32px; margin-bottom: 6px; }
 .mini-picker-head strong { order: 1; flex: 1; text-align: center; font: 600 12px var(--sans); color: var(--text); }
-.mini-picker-head strong span { color: var(--muted); font-weight: 400; }
+/* Month and year meet in the middle (month right-aligned, year left-aligned), so turning the month moves neither. */
+.mini-picker-head strong { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: .45em; min-width: 0; white-space: nowrap; }
+.mini-picker-head .mini-picker-month { text-align: right; }
+.mini-picker-head .mini-picker-year { color: var(--muted); font-weight: 400; text-align: left; }
 .mini-picker-head .cal-icon-button:first-of-type { order: 0; }
 .mini-picker-head .cal-icon-button:last-of-type { order: 2; }
 :is(.mini-picker-head .cal-icon-button, .planner-nav) { width: 28px; height: 26px; border-radius: 7px; }

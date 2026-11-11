@@ -1,4 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -15,6 +16,7 @@ import { resizeBoardView } from '../boardViewport';
 import { TagPicker } from './TagPicker';
 import { isShown, tagOf } from '../tags';
 import { useHiddenTags, useTags } from '../tagStore';
+import type { TagScope } from '../tagStore';
 import { boardKey, cardGroups, cardWidth, copyCards, copyLayout, copyableCard, groupFrames, layoutBoard, libraryNotes, scopedBoardPatch } from '../boardPlacement';
 import type { BoardPeriod, BoardBox } from '../boardPlacement';
 import { copySyncPatches } from '../boardSync';
@@ -65,7 +67,16 @@ function GroupName({ value, label, placeholder, onSave }: { value: string; label
     }} />;
 }
 
-export function BulletinBoard({ date, period = 'day' }: { date: string; period?: BoardPeriod }) {
+/** A board in a frame of its own size (a Nebula window with a set height, a desktop widget): it does not grow with its
+ *  cards and resizing the frame zooms the view. In a widget (`.board-framed`, nothing around it to scroll) the plain wheel
+ *  also moves the board. */
+const framed = '.nebula-panel-body.has-height, .board-framed';
+
+/**
+ * `tagScope`: whose tag filter hides notes (the journal's, or a widget's). `toolsSlot`: elsewhere for adding (a desktop
+ * widget's header); the board then has no head of its own, only a "+" there that opens the same menu as a right click.
+ */
+export function BulletinBoard({ date, period = 'day', tagScope = 'journal', toolsSlot }: { date: string; period?: BoardPeriod; tagScope?: TagScope; toolsSlot?: Element | null }) {
   const threadMaskId = `board-threads-${useId().replace(/:/g, '')}`;
   const { cards, patch: savePatch, error } = useCards(); const en = useLanguage() === 'en'; const tr = (de: string, enText: string) => en ? enText : de;
   const key = boardKey(date, period);
@@ -110,7 +121,14 @@ export function BulletinBoard({ date, period = 'day' }: { date: string; period?:
         setPan({ x: current.pan.x - delta, y: current.pan.y });
         return;
       }
-      if (!event.ctrlKey) return; event.preventDefault(); event.stopPropagation();
+      if (!event.ctrlKey) {
+        if (!viewport.closest('.board-framed')) return;
+        event.preventDefault(); event.stopPropagation();
+        const current = camera.current;
+        setPan({ x: current.pan.x - event.deltaX, y: current.pan.y - event.deltaY });
+        return;
+      }
+      event.preventDefault(); event.stopPropagation();
       const current = camera.current, next = Math.max(.02, Math.min(8, current.zoom * Math.exp(-event.deltaY * .002)));
       const rect = viewport.getBoundingClientRect(), ratio = viewport.clientWidth / rect.width;
       const point = { x: (event.clientX - rect.left) * ratio, y: (event.clientY - rect.top) * ratio };
@@ -142,7 +160,7 @@ export function BulletinBoard({ date, period = 'day' }: { date: string; period?:
   }
   const upload = useRef<HTMLInputElement>(null), boardRef = useRef<HTMLDivElement>(null);
   // A note whose tag is hidden in the journal (its tag filter) is left off the board, with its threads.
-  const [hiddenTags] = useHiddenTags('journal');
+  const [hiddenTags] = useHiddenTags(tagScope);
   const laidOut = layoutBoard(cards, key, width);
   const layout = laidOut.filter(item => !item.card.tag || isShown(hiddenTags, item.card.tag));
   const hiddenByTag = laidOut.length - layout.length;
@@ -168,7 +186,7 @@ export function BulletinBoard({ date, period = 'day' }: { date: string; period?:
       else if (size.width !== previous.width || size.height !== previous.height) {
         // Only a window with a set height is resized by hand; otherwise the board's own height follows its cards, and
         // that growth must neither zoom nor shift the view (nor undo a drag by zooming out).
-        if (size.width === previous.width && (!viewport.closest('.nebula-panel-body.has-height') || Math.abs(size.height - growingHeight.current) < 2)) {
+        if (size.width === previous.width && (!viewport.closest(framed) || Math.abs(size.height - growingHeight.current) < 2)) {
           resizeReference.current = { ...size, scale: view.scale };
           growingHeight.current = 0;
         } else {
@@ -320,7 +338,7 @@ export function BulletinBoard({ date, period = 'day' }: { date: string; period?:
       else setDragging({ id: card.id, ...last });
       // Ordinary boards grow with the card. A deliberately sized window keeps its
       // frame and reveals more world space by panning at its edge instead.
-      if (!viewport.closest('.nebula-panel-body.has-height')) {
+      if (!viewport.closest(framed)) {
         const view = camera.current;
         setViewportHeight(current => {
           const bottom = groupIds ? Math.max(...members.map(item => item.y + last.y - y + (heights[item.card.id] ?? 220))) : last.y + (heights[card.id] ?? element.offsetHeight);
@@ -336,7 +354,7 @@ export function BulletinBoard({ date, period = 'day' }: { date: string; period?:
         const box = viewport.getBoundingClientRect(), ratio = viewport.clientWidth / box.width;
         const speed = (value: number, min: number, max: number) => value < min ? Math.min(700, (min - value) * 5 + 100) : value > max ? -Math.min(700, (value - max) * 5 + 100) : 0;
         const dx = speed(point.x, box.left, box.right) * ratio * seconds;
-        const dy = point.y < box.top || viewport.closest('.nebula-panel-body.has-height') ? speed(point.y, box.top, box.bottom) * ratio * seconds : 0;
+        const dy = point.y < box.top || viewport.closest(framed) ? speed(point.y, box.top, box.bottom) * ratio * seconds : 0;
         if (dx || dy) {
           const pan = { x: camera.current.pan.x + dx, y: camera.current.pan.y + dy };
           camera.current = { ...camera.current, pan }; setPan(pan);
@@ -487,7 +505,8 @@ export function BulletinBoard({ date, period = 'day' }: { date: string; period?:
       onPointerDown={event => event.stopPropagation()} onClick={() => void run(() => patchCards(copySyncPatches(cards, copies.map(card => card.id), !enabled, width, key)), true)}><Icon name="repeat" /><span>{group ? '' : 'Sync'}</span><i aria-hidden="true" /></button>;
   }
   return <section className={`bulletin-board${pixelTheme ? ' is-pixel' : ''}`} data-board-key={key} aria-label={boardTitle} onKeyDown={e => { if (!(e.ctrlKey && e.shiftKey && e.code === 'KeyN')) e.stopPropagation(); }}>
-    <div className="board-head">
+    {toolsSlot ? createPortal(<button type="button" className="board-add-menu" disabled={busy} aria-label={tr('Anpinnen', 'Pin')} title={tr('Zettel, Bild oder Link anpinnen · Rechtsklick auf die Fläche', 'Pin a note, image or link · right click on the board')} onClick={surfaceMenu}><span aria-hidden="true">+</span></button>, toolsSlot)
+    : <div className="board-head">
       <div><h3>{boardTitle}</h3><p className="page-hint">{tr('Zettel, Bilder und Links – frei anpinnen und verschieben.', 'Notes, images and links – pin and move them freely.')}</p></div>
       <div className="board-actions" role="toolbar" aria-label={tr('Hinzufügen', 'Add')}>
         <button type="button" className="is-create" disabled={busy} onClick={() => void run(() => add('note'))} title={tr('Neuer Zettel', 'New note')}><Icon name="pencil" /><span>{tr('Zettel', 'Note')}</span></button>
@@ -495,7 +514,7 @@ export function BulletinBoard({ date, period = 'day' }: { date: string; period?:
         <button type="button" className="is-create" disabled={busy} aria-expanded={link !== null} onClick={() => setLink(link === null ? '' : null)} title={tr('Link anpinnen', 'Pin a link')}><Icon name="jump" /><span>{tr('Link', 'Link')}</span></button>
         <button type="button" disabled={busy} aria-expanded={picker} onClick={() => setPicker(!picker)} title={tr('Zettel von anderen Tagen', 'Notes from other days')}><Icon name="search" /><span>{tr('Vorhandene', 'Existing')}</span></button>
       </div>
-    </div>
+    </div>}
     <input ref={upload} type="file" accept="image/*" hidden onChange={e => {
       const file = e.target.files?.[0]; e.target.value = ''; if (!file) return; void run(async () => { await add('image', await storeImage(file)); });
     }} />

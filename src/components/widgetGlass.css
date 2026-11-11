@@ -1,0 +1,115 @@
+/* ── Transparent widgets ("Durchsichtig", per widget in its settings) ─────────────────────────────────────────────────
+   The widget is no block on the desktop: no background, frame or bars, only its content over the wallpaper, legible by
+   a soft shadow around the type. It does not follow the app's design: the window takes the plain base (classic, glass
+   popups, no pixel look) and the palette below, with light type for dark wallpapers (`data-glass="light"`) or dark type
+   for light ones (`data-glass="dark"`). Only while pointed at does the widget show a faint outline of its area.
+   Popups are small tinted glass panels of their own, readable over anything. The palette overrides the app's colours,
+   which are set inline on :root, hence !important. */
+
+:root[data-glass] {
+  /* From the widget's settings (WidgetLook): how strongly the wallpaper behind the widget is blurred (its constant
+     frosted background, 0 = none) and the rounding of every curve. */
+  --glass-blur: 0px; --glass-radius: 12px;
+}
+:root[data-glass='light'] {
+  --background: transparent !important; --surface: transparent !important; --inset: #ffffff14 !important; --hover: #ffffff24 !important;
+  --selected: #ffffff33 !important; --focus: #ffffff3d !important; --border: #ffffff1f !important; --divider: #ffffff2e !important;
+  --edge: #ffffff40 !important; --line: #ffffff26 !important; --scrollbar: #ffffff4d !important;
+  --text: #f5f5f7 !important; --strong: #ffffff !important; --muted: #ffffffc2 !important; --placeholder: #ffffff94 !important; --disabled: #ffffff66 !important;
+  --accent: #9ecbff !important; --success: #8ff0b8 !important; --error: #ff9a9a !important; --priority: #ffd479 !important; --now: #ff8a80 !important;
+  --event: #9ecbff !important; --event-background: #9ecbff33 !important; --event-text: #ffffff !important; --task-background: #ffffff1f !important;
+  --saturday: #c8d8ff !important; --sunday: #ffc2c2 !important;
+  --glass-panel: #17171cdb; --glass-panel-edge: #ffffff26; --glass-tint: #0000001f; --glass-quiet: #ffffff8c;
+  color-scheme: dark !important;
+}
+:root[data-glass='dark'] {
+  --background: transparent !important; --surface: transparent !important; --inset: #0000000f !important; --hover: #0000001a !important;
+  --selected: #00000024 !important; --focus: #0000002e !important; --border: #00000014 !important; --divider: #00000026 !important;
+  --edge: #00000038 !important; --line: #0000001f !important; --scrollbar: #0000004d !important;
+  --text: #1b1b1f !important; --strong: #000000 !important; --muted: #000000b3 !important; --placeholder: #00000080 !important; --disabled: #00000059 !important;
+  --accent: #1f5fbf !important; --success: #137a45 !important; --error: #b3261e !important; --priority: #9a6400 !important; --now: #c62828 !important;
+  --event: #1f5fbf !important; --event-background: #1f5fbf26 !important; --event-text: #0b2a57 !important; --task-background: #0000000f !important;
+  --saturday: #2f4f9f !important; --sunday: #a33030 !important;
+  --glass-panel: #f7f7f9e6; --glass-panel-edge: #0000001f; --glass-tint: #ffffff33; --glass-quiet: #00000073;
+  color-scheme: light !important;
+}
+
+/* The frame: nothing but the content. The header's controls are quiet until the widget is pointed at. */
+:root[data-glass] .desktop-widget { isolation: isolate; border: 0; border-radius: calc(var(--glass-radius) + 4px); background: transparent; box-shadow: none; text-shadow: none; }
+/* Pointing changes nothing about the widget, and a click into a field draws nothing around it. The header is painted
+   without opacity, transitions or filters. */
+/* The frosted background: the wallpaper, exactly where it lies on the screen, blurred and lightly tinted
+   (WidgetBackdrop). It fills the widget's rounded area and lies under everything in it. */
+.desktop-widget-backdrop { position: absolute; inset: 0; z-index: -1; overflow: hidden; border-radius: inherit; pointer-events: none; }
+.desktop-widget-backdrop > i { position: absolute; background-repeat: no-repeat; }
+.desktop-widget-backdrop > svg { position: absolute; }
+.desktop-widget-backdrop::after { content: ''; position: absolute; inset: 0; background: var(--glass-tint); }
+:root[data-glass] .desktop-widget .desktop-widget-head, :root[data-glass] .desktop-widget .desktop-widget-head * { background-color: transparent; }
+:root[data-glass] .desktop-widget .desktop-widget-head { min-height: 34px; padding: 0 4px; border: 0; background: none; box-shadow: none; }
+:root[data-glass] .desktop-widget-head :is(.nav-cluster, .desktop-widget-open, .desktop-widget-tools, .cal-views, .widget-date, .cal-title) { opacity: 1; transition: none; }
+:root[data-glass] .desktop-widget-head :is(button, .nav-step, .nav-today, .cal-views button) { color: var(--muted); transition: none; }
+:root[data-glass] .desktop-widget-head :is(svg, .icon) { transition: none !important; transform: none !important; }
+:root[data-glass] .desktop-widget-head :is(button:disabled, .nav-today.is-current) { opacity: 1; color: color-mix(in srgb, var(--glass-quiet) 55%, transparent) !important; }
+:root[data-glass] .desktop-widget-head :is(.widget-date, .cal-views button[aria-selected='true']) { color: var(--strong) !important; }
+:root[data-glass] .desktop-widget :focus { outline: none; }
+:root[data-glass] .desktop-widget :is(input, textarea, [contenteditable], .cal, .editor, .cm-editor, .desktop-widget-body, .notebook-page, .board-viewport):is(:focus, :focus-visible, :focus-within) { outline: none; box-shadow: none; }
+:root[data-glass] .desktop-widget-head .nav-cluster { background: transparent; box-shadow: none; }
+:root[data-glass] .desktop-widget-head .nav-cluster .nav-today { background: transparent; }
+:root[data-glass] .desktop-widget .widget-date { font: 600 14px var(--sans); letter-spacing: .01em; }
+:root[data-glass] .desktop-widget-head .cal-title { font-size: 15px; }
+:root[data-glass] .desktop-widget-head .cal-views button[aria-selected='true'] { box-shadow: inset 0 -2px 0 currentColor; }
+:root[data-glass] .desktop-widget .widget-message { border: 0; border-radius: var(--glass-radius); margin: 4px 8px; background: var(--glass-panel); text-shadow: none; }
+:root[data-glass] .desktop-widget ::selection { background: color-mix(in srgb, var(--accent) 45%, transparent); }
+
+/* Content: lines and fields are hairlines; nothing fills an area. */
+:root[data-glass] .desktop-widget :is(input, textarea, [contenteditable='true']) { background: transparent; }
+:root[data-glass] .desktop-widget .title-input { font-weight: 600; }
+:root[data-glass] .desktop-widget .section-heading .kind-picker { background: transparent; box-shadow: none; }
+:root[data-glass] .desktop-widget .section-heading .kind-picker button { background: transparent; }
+:root[data-glass] .desktop-widget :is(.entry, .entry-row) { background: transparent; }
+/* Calendar: the grid as faint lines, today and chosen days as outlines; entries keep their colour as tinted chips. */
+:root[data-glass] .desktop-widget .cal { background: transparent; }
+:root[data-glass] .desktop-widget :is(.cal-month-day, .cal-time-column, .cal-year-month, .cal-time-allday-cell) { background: transparent; }
+:root[data-glass] .desktop-widget :is(.cal-item, .cal-event) { text-shadow: none; }
+:root[data-glass] .desktop-widget .cal-month-day.is-weekend, :root[data-glass] .desktop-widget .cal-time-column.is-weekend { background: transparent; }
+/* Pinboard: no cork; the notes, pictures and links float on the wallpaper with their own paper and shadow. */
+:root[data-glass] .desktop-widget .board-surface { background: transparent !important; background-image: none !important; box-shadow: none !important; }
+:root[data-glass] .desktop-widget .board-empty { color: var(--muted); }
+/* Notes: the page is the wallpaper; the pager a thin line. */
+:root[data-glass] .desktop-widget :is(.notebook, .notebook-body, .notebook-page) { background: transparent !important; background-image: none !important; }
+:root[data-glass] .desktop-widget .notebook-pager { border-top-color: var(--divider); background: transparent; backdrop-filter: none; }
+:root[data-glass] .desktop-widget .notebook-title { font-weight: 700; }
+/* Day values and activities: cells and boxes as outlines. */
+:root[data-glass] .desktop-widget .scale-input .scale-cell:not([data-on]) { background: transparent; }
+:root[data-glass] .desktop-widget .activity-time, :root[data-glass] .desktop-widget .activity-checkbox { background: transparent; }
+
+/* Popups (planner, pickers, menus, the entry's actions …): small panels of tinted glass with their own solid palette,
+   without the type shadow. They lie outside the widget (the popup canvas), so they set their colours themselves. */
+:root[data-glass] :is(.popover, .planner, .cal-composer, .ctx-menu, .mini-picker-panel, .format-menu, .tag-filter-list, .color-picker-panel, .cal-transfer-panel, .repeat-suggest, .sheet, .reminder, .widget-floating-popup .entry-dock) {
+  --surface: var(--glass-panel) !important; --background: transparent !important; text-shadow: none;
+  border: 0 !important; border-radius: calc(var(--glass-radius) + 2px) !important; background: var(--glass-panel) !important; background-image: none !important;
+  box-shadow: 0 0 0 1px var(--glass-panel-edge), 0 18px 40px -12px #00000080 !important;
+  -webkit-backdrop-filter: blur(18px) saturate(1.4); backdrop-filter: blur(18px) saturate(1.4);
+}
+:root[data-glass='light'] :is(.popover, .planner, .cal-composer, .ctx-menu, .mini-picker-panel, .format-menu, .tag-filter-list, .color-picker-panel, .cal-transfer-panel, .repeat-suggest, .sheet, .reminder, .widget-floating-popup .entry-dock) {
+  --inset: #ffffff12 !important; --hover: #ffffff1f !important; --selected: #ffffff2e !important; --divider: #ffffff1f !important; --edge: #ffffff26 !important;
+}
+:root[data-glass='dark'] :is(.popover, .planner, .cal-composer, .ctx-menu, .mini-picker-panel, .format-menu, .tag-filter-list, .color-picker-panel, .cal-transfer-panel, .repeat-suggest, .sheet, .reminder, .widget-floating-popup .entry-dock) {
+  --inset: #0000000d !important; --hover: #00000014 !important; --selected: #00000021 !important; --divider: #0000001a !important; --edge: #00000021 !important;
+}
+:root[data-glass] .widget-floating-popup .sheet .sheet-group { background: transparent; }
+:root[data-glass] :is(.planner, .cal-composer)::before { display: none; }
+:root[data-glass] .ctx-menu .ctx-item:is(:hover, :focus-visible, [data-active]) { background: var(--hover); }
+:root[data-glass] .popover :is(input, textarea), :root[data-glass] .cal-composer :is(input, textarea) { background: var(--inset); }
+
+/* Rounding: every curve follows the setting (0 = square corners), round marks (dots, pins, the clock) stay round. */
+:root[data-glass] :is(button, input, textarea, select, .nav-cluster, .segmented, .widget-date, .cal-item, .cal-month-day, .cal-time-event, .cal-views,
+  .board-card, .board-link, .board-image, .notebook-attachment, .notebook-link, .entry-tag, .kind-picker, .activity-time, .activity-note-input, .scale-input,
+  .tag-filter-button, .ctx-item, .sheet-action, .sheet-group, .planner-day, .cal-compact-day, .time-option, .field-trigger, .note-switch-option, .notebook-search,
+  .widget-recovery > button, .board-link-form, .board-library):not(.tag-dot, .board-pin, .clock-face, .clock-knob, .clock-pivot, .scale-cell) {
+  border-radius: var(--glass-radius) !important;
+}
+:root[data-glass] .activity-checkbox { border-radius: calc(var(--glass-radius) / 2.5) !important; }
+:root[data-glass] .ctx-menu { border-radius: calc(var(--glass-radius) + 2px) !important; }
+/* The chosen view keeps a straight underline. */
+:root[data-glass] .desktop-widget-head .cal-views button[aria-selected='true'] { border-radius: 0 !important; }

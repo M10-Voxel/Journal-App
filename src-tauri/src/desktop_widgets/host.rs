@@ -53,12 +53,21 @@ mod windows {
     #[link(name="dwmapi")]
     unsafe extern "system" { fn DwmSetWindowAttribute(hwnd:Hwnd,attribute:u32,value:*const c_void,size:u32)->i32; }
     static PLACING: AtomicBool = AtomicBool::new(false);
+    /// The canvas is a plain popup without any frame: no caption or sizing border (WS_CAPTION, WS_THICKFRAME). Otherwise
+    /// Windows can paint its white caption strip where a widget lies at the top of the screen.
+    fn frameless(style:u32)->u32{(style|0x8000_0000)&!(0x00C0_0000|0x0004_0000)}
     const SUBCLASS_ID: usize = 0x4a4457;
     unsafe extern "system" fn subclass(hwnd:Hwnd,msg:u32,wparam:usize,lparam:isize,_id:usize,_data:usize)->isize {
         if msg==0x007c && wparam as isize == -20 && lparam!=0 {
             let style=&mut *(lparam as *mut Style);
             style.new=(style.new|0x80)&!0x40000&!0x08000000;
         }
+        if msg==0x007c && wparam as isize == -16 && lparam!=0 {
+            let style=&mut *(lparam as *mut Style);
+            style.new=frameless(style.new);
+        }
+        // WM_NCCALCSIZE: the whole window is client area, so there is no non-client strip to paint.
+        if msg==0x0083 && wparam!=0 { return 0; }
         if msg == 0x0046 && lparam != 0 && !PLACING.load(Ordering::Relaxed) {
             // WM_WINDOWPOSCHANGING: focusing an editor must not lift its desktop surface.
             (*(lparam as *mut WindowPos)).flags |= 0x0004;
@@ -78,8 +87,15 @@ mod windows {
         SetWindowLongPtrW(hwnd,-20,(style | 0x80) & !0x40000 & !0x08000000);
         let yes=1i32;
         for attribute in [11,12] { let _=DwmSetWindowAttribute(hwnd,attribute,&yes as *const _ as *const c_void,4); }
-        place(hwnd,true);
+        // DWMWA_NCRENDERING_POLICY = DWMNCRP_DISABLED: DWM draws no frame or caption for the canvas either.
+        let disabled=1i32;
+        let _=DwmSetWindowAttribute(hwnd,2,&disabled as *const _ as *const c_void,4);
         if SetWindowSubclass(hwnd,subclass,SUBCLASS_ID,0)==0 {return Err("Der Desktop-Modus konnte nicht eingerichtet werden.".into());}
+        let frame=GetWindowLongPtrW(hwnd,-16) as u32;
+        SetWindowLongPtrW(hwnd,-16,frameless(frame) as i32 as isize);
+        // SWP_FRAMECHANGED (with NOMOVE, NOSIZE, NOZORDER, NOACTIVATE) recomputes the now frameless client area.
+        SetWindowPos(hwnd,0,0,0,0,0,0x0001|0x0002|0x0004|0x0010|0x0020);
+        place(hwnd,true);
         Ok(())
     }}
     unsafe extern "system" fn find_icons(window:Hwnd,data:isize)->i32 {
@@ -114,6 +130,8 @@ mod windows {
         if GetWindowLongPtrW(hwnd,-8)!=shell { SetWindowLongPtrW(hwnd,-8,shell); }
         let style=GetWindowLongPtrW(hwnd,-20);let desktop_style=(style|0x80)&!0x40000&!0x08000000;
         if style!=desktop_style{SetWindowLongPtrW(hwnd,-20,desktop_style);}
+        let frame=GetWindowLongPtrW(hwnd,-16) as u32;
+        if frame!=frameless(frame){SetWindowLongPtrW(hwnd,-16,frameless(frame) as i32 as isize);SetWindowPos(hwnd,0,0,0,0,0,0x0001|0x0002|0x0004|0x0010|0x0020);}
         place(hwnd,false);
         if IsWindowVisible(hwnd)==0 || IsIconic(hwnd)!=0 { ShowWindow(hwnd,4); place(hwnd,false); }
     }}

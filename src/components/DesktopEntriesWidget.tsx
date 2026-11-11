@@ -1,17 +1,15 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import { DayEditor } from './DayEditor';
 import { WidgetEditorClient } from '../editorBridge';
 import { changeOperation } from '../dayOperations';
 import { registerEditorFlush } from '../editorFlush';
-import { updateDesktopWidget } from '../desktopWidgets';
 import type { DesktopWidgetInstance, DesktopWidgetState } from '../desktopWidgets';
-import { formatDate, localDate, shiftDate } from '../journal';
+import { localDate, shiftDate } from '../journal';
 import type { Entry, EntryKind } from '../journal';
 import type { EntryChange } from './JournalEntry';
 import { entryLabels } from './JournalEntry';
-import { useTags, useHiddenTags, manageTags } from '../tagStore';
+import { useTags, useHiddenTags } from '../tagStore';
 import { isShown, tagOf } from '../tags';
 import { moveEntryByOffset, sameGroup } from '../entries';
 import { loadSettings, swipeAvailable } from '../settings';
@@ -19,11 +17,11 @@ import { usePopupLook } from '../popupLook';
 import { t, useLanguage } from '../i18n';
 import { useEntryDrag } from './useEntryDrag';
 import { useListMotion } from './useListMotion';
-import { TagFilter } from './TagFilter';
-import { MiniCalendarPicker } from './MiniCalendarPicker';
-import { NavCluster } from './NavCluster';
+import { WidgetDayNav } from './WidgetDayNav';
 import { useViewHistory } from '../viewHistory';
-import { DesktopWidgetFrame, ensureWidgetSurface } from './DesktopWidgetFrame';
+import { DesktopWidgetFrame } from './DesktopWidgetFrame';
+import { useWidgetHost } from './useWidgetHost';
+import type { WidgetSaveState } from './DesktopWidgetFrame';
 
 function useLatest<A extends unknown[], R>(fn: (...args: A) => R): (...args: A) => R {
   const ref = useRef(fn); ref.current = fn;
@@ -58,19 +56,14 @@ export function DesktopEntriesWidget({ widget, registry }: {widget: DesktopWidge
     finally { navigating.current = false; }
   });
   useViewHistory({ date, followToday }, value => navigate(value.date, value.followToday));
-  const close = useLatest(async () => {
-    try { await client.flush(); await updateDesktopWidget({ enabled: false }, widget.id); }
-    catch (reason) { setHostError(String(reason)); }
-  });
+  const close = useWidgetHost({ id: widget.id, flush: () => client.flush(), prepare: () => client.open(date), onError: setHostError });
+  // Pending text is saved when the app saves all windows and whenever the widget loses the focus.
   useEffect(() => {
-    void Promise.all([client.open(date), ensureWidgetSurface()]).catch(reason => setHostError(String(reason))).finally(() => void invoke('desktop_widget_ready').catch(reason => setHostError(String(reason))));
     const unregister = registerEditorFlush(() => client.flush());
-    const stop = listen('desktop-widget:close', () => void close());
     const blur = () => { void client.flush().catch(() => {}); };
     globalThis.addEventListener('blur', blur);
-    return () => { unregister(); client.dispose(); void stop.then(unlisten => unlisten()); globalThis.removeEventListener('blur', blur); };
+    return () => { unregister(); client.dispose(); globalThis.removeEventListener('blur', blur); };
   }, []);
-  useEffect(() => manageTags.register(() => { void invoke('desktop_widget_open_settings', { tab: 'tags' }).catch(reason => setHostError(String(reason))); }), []);
   useEffect(() => {
     if (!day || !editor.unsaved || editor.error || editor.paused) return;
     const timer = globalThis.setTimeout(() => { void client.flush().catch(() => {}); }, 700);
@@ -130,14 +123,11 @@ export function DesktopEntriesWidget({ widget, registry }: {widget: DesktopWidge
   });
   useEffect(() => { globalThis.addEventListener('keydown', onKey); return () => globalThis.removeEventListener('keydown', onKey); }, []);
   const error = editor.conflict ? en ? 'This text changed in another window. Your local draft is retained below.' : 'Dieser Text wurde inzwischen in einem anderen Fenster geändert. Dein lokaler Entwurf bleibt erhalten.' : editor.error || hostError;
-  return <DesktopWidgetFrame widget={widget} registry={registry} command={`./entries.sh --day ${date}`} onError={setHostError}
-    onOpen={() => void client.flush().then(() => invoke('show_day', { date, entry: null })).catch(reason => setHostError(String(reason)))} onClose={() => void close()}
-    footer={<><span>{followToday ? en ? 'Follows today' : 'Folgt dem heutigen Tag' : date.split('-').reverse().join('.')}</span><span role="status">{error ? t('Nicht gespeichert') : editor.saving ? t('Wird gespeichert ?') : editor.pending || editor.unsaved ? t('Wird gleich gespeichert ?') : day ? t('Gespeichert') : t('Wird ge?ffnet ?')}</span></>}>
-    <div className="desktop-widget-nav">
-      <NavCluster label={t('Tagesnavigation')} prev={{ label: t('Vorheriger Tag'), tip: t('Vorheriger Tag · Alt ←') }} next={{ label: t('Nächster Tag'), tip: t('Nächster Tag · Alt →') }} today={{ tip: t('Heute · Alt H'), disabled: followToday && date === today }} atToday={date === today} onPrev={() => void navigate(shiftDate(date, -1), false)} onToday={() => void navigate(localDate(), true)} onNext={() => void navigate(shiftDate(date, 1), false)} />
-      <MiniCalendarPicker date={date} open={picker} onOpenChange={setPicker} onPick={target => void navigate(target)} buttonRef={dateButton} className="widget-date">{formatDate(date)}</MiniCalendarPicker>
-      <TagFilter label={t('Tags im Journal')} hidden={hiddenTags} onChange={next => { setNewEntryId(null); setHiddenTags(next); }} />
-    </div>
+  const save: WidgetSaveState = error ? 'error' : editor.saving ? 'saving' : editor.pending || editor.unsaved ? 'pending' : 'saved';
+  // The header holds the day's navigation (back, today, forward, the date with its calendar); nothing else.
+  const nav = <WidgetDayNav date={date} today={today} followToday={followToday} picker={picker} onPickerChange={setPicker} onNavigate={(target, follow) => void navigate(target, follow)} dateRef={dateButton} />;
+  return <DesktopWidgetFrame widget={widget} registry={registry} date={date} nav={nav} save={save} onError={setHostError} onClose={() => void close()}
+    onOpen={() => void client.flush().then(() => invoke('show_day', { date, entry: null })).catch(reason => setHostError(String(reason)))}>
     {editor.paused && <p className="widget-message" role="status">{en ? 'Applying changes. Editing will resume shortly.' : 'Änderungen werden übernommen. Gleich kannst du weiter bearbeiten.'}</p>}
     {error && <div className="widget-message is-error" role="alert"><p>{error}</p>{editor.error && <div className="widget-recovery"><button type="button" onClick={() => setRecovery(open => !open)}>{en ? 'Show local draft' : 'Lokalen Entwurf anzeigen'}</button><button type="button" onClick={() => { setHostError(''); void client.reload().catch(() => {}); }}>{en ? 'Discard draft and reload' : 'Entwurf verwerfen und neu laden'}</button></div>}
       {recovery && <textarea className="widget-draft" readOnly aria-label={en ? 'Local draft (copy before reloading)' : 'Lokaler Entwurf (vor dem Neuladen kopieren)'} value={JSON.stringify(day, null, 2)} onFocus={event => event.target.select()} />}</div>}

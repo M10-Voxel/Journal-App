@@ -63,9 +63,22 @@ export const pixelActive = ({ theme, pixel }: Pick<Settings, 'theme' | 'pixel'>)
 /** The design on the page: `data-theme` is the base design, `data-pixel` the pixel look over it. */
 export function applyTheme({ theme, pixel, popupStyle }: Pick<Settings, 'theme' | 'pixel'> & { popupStyle?: PopupStyle }) {
   const root = document.documentElement;
+  appDesign = { theme, pixel, popupStyle };
+  // A transparent desktop widget leaves the app's design: the plain base with glass popups, its own palette (widgetGlass.css).
+  if (glassLook) { root.dataset.theme = 'classic'; root.dataset.popups = 'b'; delete root.dataset.pixel; root.dataset.glass = glassLook; return; }
+  delete root.dataset.glass;
   root.dataset.theme = isTheme(theme) ? theme : 'classic';
   root.dataset.popups = popupStyle === 'b' ? 'b' : 'a';
   if (pixelActive({ theme, pixel })) root.dataset.pixel = ''; else delete root.dataset.pixel;
+}
+let glassLook: 'light' | 'dark' | null = null;
+// The app's design as last heard, to return to when the transparent look is switched off.
+let appDesign: (Pick<Settings, 'theme' | 'pixel'> & { popupStyle?: PopupStyle }) | null = null;
+/** A desktop widget window in the transparent look (null: the app's design again). */
+export function setGlassLook(look: 'light' | 'dark' | null) {
+  if (look === glassLook) return;
+  glassLook = look;
+  applyTheme(appDesign ?? loadSettings());
 }
 /**
  * Choosing a style. The journal style brings its paper palette (only when switching to it, and only if none of its own

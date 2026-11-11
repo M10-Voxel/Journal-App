@@ -22,10 +22,10 @@ export function mergeThreeWay(base: Json | undefined, local: Json | undefined, r
     if (equal(l, b)) return r;
     if (equal(r, b)) return l;
     const object = (value: Json | undefined): value is { [key: string]: Json } => value !== undefined && value !== null && typeof value === 'object' && !Array.isArray(value);
-    if (object(b) && object(l) && object(r)) {
+    if ((b === undefined || object(b)) && object(l) && object(r)) {
       const result: { [key: string]: Json } = {};
-      for (const key of new Set([...Object.keys(b), ...Object.keys(l), ...Object.keys(r)])) {
-        const value = merge(b[key], l[key], r[key], `${path}/${key.replace(/~/g, '~0').replace(/\//g, '~1')}`);
+      for (const key of new Set([...Object.keys(b ?? {}), ...Object.keys(l), ...Object.keys(r)])) {
+        const value = merge(b?.[key], l[key], r[key], `${path}/${key.replace(/~/g, '~0').replace(/\//g, '~1')}`);
         if (value !== undefined) Object.defineProperty(result,key,{value,writable:true,enumerable:true,configurable:true});
       }
       return result;

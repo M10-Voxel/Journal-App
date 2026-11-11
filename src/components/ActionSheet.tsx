@@ -89,14 +89,23 @@ export function ActionSheet({ look, title, items, onClose }: { look: PopupLook; 
     </div>;
   }
 
-  // nebula-b: a window.
+  // nebula-b: a compact window. Its menu doubles as a filter (the active group again shows all). The full toolbar has
+  // two rows of about the same width: status, planning and deleting; the entry's kind and details, moving.
+  const rowOf: Record<SheetGroup, number> = { status: 0, plan: 0, remove: 0, entry: 1, order: 1 };
+  const toolbarRows = tab ? [groups.filter(group => group.id === tab)]
+    : [0, 1].map(row => groups.filter(group => rowOf[group.id] === row)).filter(row => row.length);
   return <div className="entry-dock sheet sheet-window">
     <div className="sheet-titlebar"><span className="sheet-title">{title || t('Eintrag')}.exe</span>
       <button type="button" className="sheet-close" aria-label={t('Schließen')} onClick={onClose}><Icon name="done" /></button></div>
-    <div className="sheet-menubar" aria-hidden="true">{groups.map(group => <span key={group.id}><u>{group.title[0]}</u>{group.title.slice(1)}</span>)}</div>
-    {/* Two fixed rows (status and kind; planning, order, removal), so the window is as wide as its widest row. */}
-    <div className="sheet-toolbar">
-      {[groups.slice(0, 2), groups.slice(2)].map((row, at) => <div className="sheet-toolbar-row" key={at}>
+    <div className="sheet-menubar" role="tablist" aria-label={t('Bereiche')}>
+      {groups.map(group => <button key={group.id} type="button" role="tab" aria-selected={tab === group.id}
+        title={tab === group.id ? t('Alle anzeigen') : group.title}
+        onClick={() => setTab(current => current === group.id ? null : group.id)}>
+        <u>{group.title[0]}</u>{group.title.slice(1)}
+      </button>)}
+    </div>
+    <div className={`sheet-toolbar${tab ? ' is-filtered' : ''}`}>
+      {toolbarRows.map((row, index) => <div className="sheet-toolbar-row" key={index}>
         {row.map(group => <div className="sheet-group" key={group.id} role="group" aria-label={group.title}>
           {group.items.map(item => button(item, <><Icon name={item.icon} /><span>{item.short}</span></>))}
         </div>)}

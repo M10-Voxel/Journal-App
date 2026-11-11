@@ -231,7 +231,7 @@ pub async fn drive_apply(app:tauri::AppHandle,store:tauri::State<'_,Mutex<Store>
     let mut dates:Vec<String>=expected["tables"]["days"].as_object().into_iter().flat_map(|v|v.keys().cloned()).collect();
     dates.extend(snapshot["tables"]["days"].as_object().into_iter().flat_map(|v|v.keys().cloned()));
     let tags={let mut db=store.lock().map_err(|e|e.to_string())?;db.sync_apply(expected,snapshot)?;db.tags().map_err(|e|e.to_string())?};
-    let _=app.emit("journal:changed",dates);let _=app.emit("journal:tags",tags);let _=app.emit("board:reset",());Ok(())
+    let _=app.emit("journal:changed",dates);let _=app.emit("journal:tags",tags);let _=app.emit("period:changed",());let _=app.emit("board:reset",());Ok(())
 }
 
 #[cfg(test)]
@@ -375,6 +375,28 @@ mod tests {
         assert!(db.sync_apply(now,broken).is_err());
         assert!(db.period_data().unwrap().contains("rating"));
         drop(db);let _=std::fs::remove_file(p);
+    }
+
+    #[test] fn sync_preserves_tag_emoji_daily_scales_and_device_local_widgets(){
+        let p=std::env::temp_dir().join(format!("journal-drive-content-{}.sqlite",uuid::Uuid::new_v4()));
+        let source=Store::open(&p).unwrap();
+        let tag=uuid::Uuid::new_v4().to_string();
+        source.conn.execute("INSERT INTO tags(id,name,color,position,icon) VALUES(?1,'Sport','#123456',0,?2)",rusqlite::params![&tag,"emoji:🏃"]).unwrap();
+        source.save_period_data(r##"{"definitions":[],"scales":[{"id":"sleep","name":"Schlaf","color":"#123456","min":0,"max":10,"active":true}],"days":{"2026-11-11":{"rating":8,"items":{},"scales":{"sleep":7}}}}"##).unwrap();
+        source.conn.execute("INSERT INTO settings(key,value) VALUES('desktop-widgets','{\"device\":\"source\"}')",[]).unwrap();
+        let cloud=source.sync_snapshot().unwrap();
+        assert!(cloud["settings"].get("desktop-widgets").is_none());
+        let q=std::env::temp_dir().join(format!("journal-drive-target-{}.sqlite",uuid::Uuid::new_v4()));
+        let mut target=Store::open(&q).unwrap();
+        target.conn.execute("INSERT INTO settings(key,value) VALUES('desktop-widgets','{\"device\":\"target\"}')",[]).unwrap();
+        target.sync_apply(target.sync_snapshot().unwrap(),cloud.clone()).unwrap();
+        assert_eq!(target.sync_snapshot().unwrap(),cloud);
+        assert_eq!(target.tags().unwrap()[0].icon.as_deref(),Some("emoji:🏃"));
+        let period:Value=serde_json::from_str(&target.period_data().unwrap()).unwrap();
+        assert_eq!(period["days"]["2026-11-11"]["scales"]["sleep"],json!(7));
+        let widget:String=target.conn.query_row("SELECT value FROM settings WHERE key='desktop-widgets'",[],|r|r.get(0)).unwrap();
+        assert_eq!(widget,r#"{"device":"target"}"#);
+        drop(source);drop(target);let _=std::fs::remove_file(p);let _=std::fs::remove_file(q);
     }
 
     #[test] fn bulk_import_keeps_validation_backup_rollback_and_history() {

@@ -108,7 +108,7 @@ button:active:not(:disabled) > .icon { transform: scale(.92); }
 .mini-picker-panel button { border: 0; background: transparent; color: inherit; }
 .mini-picker-head { display: flex; align-items: center; gap: 3px; margin-bottom: 8px; font: 12px var(--sans); }
 .mini-picker-head strong { flex: 1; }
-.mini-picker-head strong span { color: var(--muted); font-weight: 400; }
+.mini-picker-head .mini-picker-year { color: var(--muted); font-weight: 400; }
 .mini-picker-panel .cal-icon-button { padding: 0; }
 .mini-picker-panel .cal-icon-button:hover { background: var(--hover); }
 .mini-picker-foot { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }

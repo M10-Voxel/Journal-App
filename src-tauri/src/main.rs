@@ -43,8 +43,11 @@ fn load_period_data(store: tauri::State<'_, Mutex<Store>>) -> Result<String, Str
     store.lock().map_err(|e| e.to_string())?.period_data().map_err(|e| e.to_string())
 }
 #[tauri::command]
-fn save_period_data(data: String, store: tauri::State<'_, Mutex<Store>>) -> Result<(), String> {
-    store.lock().map_err(|e| e.to_string())?.save_period_data(&data).map_err(|e| e.to_string())
+fn save_period_data(data: String, store: tauri::State<'_, Mutex<Store>>, app: tauri::AppHandle, window: tauri::WebviewWindow) -> Result<(), String> {
+    store.lock().map_err(|e| e.to_string())?.save_period_data(&data).map_err(|e| e.to_string())?;
+    // Other windows (the app, desktop widgets) reload the day values and activities; the saving window knows them already.
+    let _ = app.emit("period:changed", window.label());
+    Ok(())
 }
 
 /// Brings the journal window back (from the background, minimised or behind others).
@@ -245,6 +248,16 @@ async fn show_day(app: tauri::AppHandle, date: String, entry: Option<String>) ->
     main.set_focus().map_err(|e| e.to_string())
 }
 
+/// Opens a note in the journal window's notebook (the notebook widget's "open in Journal") and brings that window forward.
+#[tauri::command]
+async fn show_note(app: tauri::AppHandle, id: String) -> Result<(), String> {
+    let main = app.get_webview_window("main").ok_or("Das Journal-Fenster ist geschlossen")?;
+    app.emit_to("main", "journal:show-note", id).map_err(|e| e.to_string())?;
+    let _ = main.unminimize();
+    let _ = main.show();
+    main.set_focus().map_err(|e| e.to_string())
+}
+
 fn main() {
     if std::env::args().nth(1).as_deref() == Some("--mail-ml-worker") {
         if let Some(root) = std::env::args_os().nth(2) { if mail::ml::worker(std::path::Path::new(&root)).is_err() { std::process::exit(1); } }
@@ -322,6 +335,6 @@ fn main() {
             }
             if window.label() == "main" && matches!(event, tauri::WindowEvent::Destroyed) { window.app_handle().exit(0); }
         })
-        .invoke_handler(tauri::generate_handler![desktop_widgets::desktop_widget_create, desktop_widgets::desktop_widget_remove, desktop_widgets::surface::desktop_widget_surface, desktop_widgets::smoke::widget_smoke_cdp, desktop_widgets::desktop_widget_ready, desktop_widgets::desktop_widget_state, desktop_widgets::desktop_widget_restore, desktop_widgets::desktop_widget_update, desktop_widgets::desktop_widget_open_settings, startup_update_check, vault::vault_status, vault::vault_choose, vault::vault_save_preferences, vault::vault_activate, move_calendar_entry, panel_detach, history::history_step,board::board_list, board::board_patch, board::board_patch_many, board::board_image_save, board::board_image_load, board::board_link_preview, board::board_open_link, board::board_detach, board::board_remove, board::board_folders, board::board_folder_save, board::board_folder_remove,drive::drive_help, drive::drive_validate, drive::drive_restore, drive::drive_status, drive::drive_connect, drive::drive_cancel, drive::drive_disconnect, drive::drive_read, drive::drive_write, drive::drive_snapshot, drive::drive_apply,load_period_data, save_period_data, ui_language::set_ui_language, load_day, load_range, load_activity_minutes, save_day, load_linked, change_linked, edit_linked, load_series, extend_series, load_tags, save_tags, search_entries, snooze_reminder, quit_app, popup_reminders, fit_popup, reminder_action, background_hint, open_window, show_day, export_calendar, import_calendar, read_calendar_file, write_calendar_file, mail::mail_drive_snapshot, mail::mail_drive_validate, mail::mail_drive_apply, mail::mail_accounts, mail::mail_save, mail::mail_cancel, mail::mail_sync, mail::mail_remove, mail::mail_pending, mail::mail_stage, mail::mail_candidates, mail::mail_resolve, mail::mail_enabled, mail::mail_auto_import, mail::mail_notices, mail::mail_help, mail::ml::mail_ml_status, mail::ml::mail_ml_enabled, mail::ml::mail_ml_install, mail::ml::mail_ml_analyze])
+        .invoke_handler(tauri::generate_handler![desktop_widgets::desktop_widget_create, desktop_widgets::desktop_widget_remove, desktop_widgets::surface::desktop_widget_surface, desktop_widgets::smoke::widget_smoke_cdp, desktop_widgets::desktop_widget_ready, desktop_widgets::desktop_widget_state, desktop_widgets::desktop_widget_restore, desktop_widgets::desktop_widget_update, desktop_widgets::desktop_widget_open_settings, desktop_widgets::wallpaper::desktop_wallpaper_info, desktop_widgets::wallpaper::desktop_wallpaper, startup_update_check, vault::vault_status, vault::vault_choose, vault::vault_save_preferences, vault::vault_activate, move_calendar_entry, panel_detach, history::history_step,board::board_list, board::board_patch, board::board_patch_many, board::board_image_save, board::board_image_load, board::board_link_preview, board::board_open_link, board::board_detach, board::board_remove, board::board_folders, board::board_folder_save, board::board_folder_remove,drive::drive_help, drive::drive_validate, drive::drive_restore, drive::drive_status, drive::drive_connect, drive::drive_cancel, drive::drive_disconnect, drive::drive_read, drive::drive_write, drive::drive_snapshot, drive::drive_apply,load_period_data, save_period_data, ui_language::set_ui_language, load_day, load_range, load_activity_minutes, save_day, load_linked, change_linked, edit_linked, load_series, extend_series, load_tags, save_tags, search_entries, snooze_reminder, quit_app, popup_reminders, fit_popup, reminder_action, background_hint, open_window, show_day, show_note, export_calendar, import_calendar, read_calendar_file, write_calendar_file, mail::mail_drive_snapshot, mail::mail_drive_validate, mail::mail_drive_apply, mail::mail_accounts, mail::mail_save, mail::mail_cancel, mail::mail_sync, mail::mail_remove, mail::mail_pending, mail::mail_stage, mail::mail_candidates, mail::mail_resolve, mail::mail_enabled, mail::mail_auto_import, mail::mail_notices, mail::mail_help, mail::ml::mail_ml_status, mail::ml::mail_ml_enabled, mail::ml::mail_ml_install, mail::ml::mail_ml_analyze])
         .run(context).expect("Journal konnte nicht gestartet werden");
 }

@@ -1,33 +1,41 @@
 /* A native desktop surface. The viewport is fixed; only its editor scrolls. */
 html.is-desktop-widget, .is-desktop-widget body, .is-desktop-widget #root { width: 100%; height: 100%; min-width: 0; margin: 0; overflow: hidden; background: transparent; }
+/* The widget itself is quieter than the app: one header line with only its navigation (and, if wanted, "open in
+   Journal"), no status bar, fewer lines and smaller headings in the content. Locking, hiding and the settings are in
+   the header's right-click menu (DesktopWidgetFrame). */
 .desktop-widget { position: relative; display: flex; flex-direction: column; width: 100%; height: 100%; min-width: 0; box-sizing: border-box; border: 1px solid var(--edge); border-radius: 12px; background: var(--surface); color: var(--text); overflow: hidden; box-shadow: none; }
-.desktop-widget .desktop-widget-head { display: flex; flex: none; align-items: center; min-height: 36px; padding: 0 0 0 12px; gap: 6px; background: var(--inset); border-bottom: 1px solid var(--divider); cursor: grab; user-select: none; touch-action: none; }
+.desktop-widget .desktop-widget-head { display: flex; flex: none; align-items: center; gap: 6px; min-height: 38px; padding: 0 5px 0 7px; background: var(--inset); border-bottom: 1px solid var(--divider); cursor: grab; user-select: none; touch-action: none; }
 .desktop-widget[data-locked] .desktop-widget-head { cursor: default; }
-.desktop-widget-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 12px var(--sans); }
-.widget-plain-name { display: flex; align-items: center; gap: 8px; }
-.widget-plain-name > .icon { width: 15px; height: 15px; color: var(--accent); }
-.widget-nebula-prompt { display: none; }
-.desktop-widget-tools { align-self: stretch; display: flex; flex: none; }
-.desktop-widget-tools > button { display: grid; place-items: center; width: 32px; padding: 0; border: 0; border-left: 1px solid transparent; border-radius: 0; background: transparent; color: var(--muted); cursor: pointer; }
-.desktop-widget-tools > button:hover, .desktop-widget-tools > button[aria-pressed='true'] { background: var(--hover); color: var(--accent); }
-.desktop-widget-tools > .widget-close { font: 20px/1 var(--sans); }
-.desktop-widget-tools > .widget-close:hover { background: var(--error); color: var(--on-error); }
-.desktop-widget .desktop-widget-nav { display: flex; flex: none; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 8px 12px; border-bottom: 1px solid var(--divider); }
-.desktop-widget-nav .nav-cluster { flex: none; }
-.desktop-widget-nav .mini-calendar-picker { flex: 1; min-width: 100px; }
-.desktop-widget .widget-date { display: block; width: 100%; padding: 4px 2px; border: 0; background: transparent; color: var(--muted); font: 11px var(--sans); text-align: right; cursor: pointer; }
-.desktop-widget .widget-date:hover { color: var(--strong); }
-.desktop-widget .desktop-widget-body { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 20px 20px 24px; scrollbar-gutter: stable; }
+.desktop-widget-nav { display: flex; flex: 1; align-items: center; gap: 8px; min-width: 0; }
+.desktop-widget-nav > :is(.nav-cluster, .cal-nav) { flex: none; }
+.desktop-widget-head .nav-cluster { height: 26px; }
+.desktop-widget-head .nav-cluster button { height: 26px; }
+.desktop-widget-nav .mini-calendar-picker { flex: 0 1 auto; min-width: 0; }
+.desktop-widget .widget-date { display: block; max-width: 100%; padding: 4px 6px; border: 0; border-radius: 6px; background: transparent; color: var(--strong); font: 600 12.5px var(--sans); text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.desktop-widget .widget-date:is(:hover, :focus-visible) { background: var(--hover); outline: 0; }
+.desktop-widget-head .cal-title { min-width: 0; margin: 0; overflow: hidden; color: var(--strong); font-size: 14px; line-height: 1.2; white-space: nowrap; text-overflow: ellipsis; }
+.desktop-widget-head .cal-title-sub { color: var(--muted); font-size: 12px; }
+.desktop-widget-open { display: grid; place-items: center; flex: none; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 7px; background: transparent; color: var(--muted); cursor: pointer; }
+.desktop-widget-open .icon { width: 14px; height: 14px; }
+.desktop-widget-open:is(:hover, :focus-visible) { background: var(--hover); color: var(--accent); outline: 0; }
+/* Saving: a small dot while something is not yet saved (nothing at all once it is). */
+.desktop-widget-save { flex: none; width: 6px; height: 6px; margin: 0 4px; border-radius: 50%; background: var(--muted); opacity: .7; }
+.desktop-widget-save.is-saving { background: var(--accent); animation: widget-save 900ms ease-in-out infinite alternate; }
+.desktop-widget-save.is-error { background: var(--error); opacity: 1; }
+@keyframes widget-save { to { opacity: .25; } }
+
+/* The daily note: the journal's editor, a size smaller and with less around it. */
+.desktop-widget .desktop-widget-body { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 16px 18px 22px; scrollbar-gutter: stable; scrollbar-width: thin; }
 .desktop-widget .editor { min-width: 0; }
 /* Hidden floating menus must not extend the widget's scroll area. */
 .desktop-widget :is(.actions-orbit, .actions-sheet, .actions-swipe) .entry-dock-shell:not(.is-open) { width: 0; height: 0; overflow: clip; }
-.desktop-widget .section-heading { flex-wrap: wrap; gap: 10px; }
+.desktop-widget .title-input { min-width: 0; font-size: 22px; }
+.desktop-widget .section-heading { flex-wrap: wrap; gap: 8px; margin-top: 14px; padding-bottom: 6px; border-bottom: 0; }
 .desktop-widget .section-title { min-width: 0; }
-.desktop-widget .section-heading .kind-picker { flex-wrap: wrap; }
-.desktop-widget .title-input { min-width: 0; }
-.desktop-widget .empty { padding: 28px 4px; }
-.desktop-widget .desktop-widget-status { display: flex; flex: none; justify-content: space-between; align-items: center; gap: 10px; min-height: 24px; padding: 0 12px; border-top: 1px solid var(--divider); color: var(--muted); font: 10px var(--sans); }
-.desktop-widget .widget-message { flex: none; padding: 8px 12px; margin: 0; border-bottom: 1px solid var(--divider); background: var(--inset); color: var(--muted); font: 12px var(--sans); overflow-wrap: anywhere; }
+.desktop-widget .section-heading .kind-picker { flex-wrap: wrap; opacity: .7; transition: opacity var(--fast) ease; }
+.desktop-widget .section-heading:is(:hover, :focus-within) .kind-picker { opacity: 1; }
+.desktop-widget .empty { padding: 22px 4px; }
+.desktop-widget .widget-message { flex: none; padding: 7px 12px; margin: 0; border-bottom: 1px solid var(--divider); background: var(--inset); color: var(--muted); font: 12px var(--sans); overflow-wrap: anywhere; }
 .desktop-widget .widget-message.is-error { color: var(--error); max-height: 50%; overflow: auto; }
 .widget-message p { margin: 0 0 6px; }
 .widget-recovery { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -41,18 +49,40 @@ html.is-desktop-widget, .is-desktop-widget body, .is-desktop-widget #root { widt
 .widget-grip:is(.is-ne,.is-nw,.is-se,.is-sw) { width: 9px; height: 9px; }
 .widget-grip.is-ne { right: 0; top: 0; cursor: nesw-resize; } .widget-grip.is-sw { left: 0; bottom: 0; cursor: nesw-resize; }
 .widget-grip.is-nw { left: 0; top: 0; cursor: nwse-resize; } .widget-grip.is-se { right: 0; bottom: 0; cursor: nwse-resize; }
+
+/* Journal: a single sheet; the header a strip of the same paper with a fine rule, the date in the book's type. */
 :root[data-theme='journal'] .desktop-widget { border-color: var(--divider); border-radius: 4px; }
+:root[data-theme='journal'] .desktop-widget-head { background: var(--surface); border-bottom-color: var(--divider); }
+:root[data-theme='journal'] .desktop-widget .widget-date { font: italic 600 14px var(--display); }
+:root[data-theme='journal'] .desktop-widget-head .cal-title { font-size: 16px; }
+:root[data-theme='journal'] :is(.desktop-widget-open, .desktop-widget .widget-date) { border-radius: 3px; }
 :root[data-theme='journal'] .desktop-widget-body { background: var(--surface); }
+/* Nebula: the terminal's light title bar holds the navigation in ink; square keys, mono type. */
 :root[data-theme='nebula'] .desktop-widget { border: 1px solid var(--nb-line); border-radius: 0; box-shadow: none; }
-:root[data-theme='nebula'] .desktop-widget-head { min-height: 30px; padding-left: 10px; background: var(--nb-paper); color: var(--nb-ink); border-bottom-color: var(--nb-line); }
-:root[data-theme='nebula'] .widget-nebula-prompt { display: block; overflow: hidden; text-overflow: ellipsis; font: 11px var(--mono); }
-:root[data-theme='nebula'] .widget-nebula-prompt b { color: var(--nb-violet); }
-:root[data-theme='nebula'] .widget-plain-name { display: none; }
-:root[data-theme='nebula'] .desktop-widget-tools > button { color: var(--nb-ink); border-left-color: var(--nb-ink); }
-:root[data-theme='nebula'] .desktop-widget-tools > button:hover, :root[data-theme='nebula'] .desktop-widget-tools > button[aria-pressed='true'] { background: var(--nb-ink); color: var(--nb-paper); }
-:root[data-theme='nebula'] .desktop-widget-body { padding: 22px 22px 24px 32px; }
-:root[data-theme='nebula'] .desktop-widget .title-input { font-size: clamp(26px,5cqw,36px); }
-:root[data-pixel] .desktop-widget { border-radius: 0; }
+:root[data-theme='nebula'] .desktop-widget-head { min-height: 32px; padding: 0 3px 0 4px; background: var(--nb-paper); color: var(--nb-ink); border-bottom-color: var(--nb-line); }
+:root[data-theme='nebula'] .desktop-widget-head .nav-cluster { border-color: var(--nb-ink); background: transparent; }
+:root[data-theme='nebula'] .desktop-widget-head .nav-cluster button { background: transparent; color: var(--nb-ink); }
+:root[data-theme='nebula'] .desktop-widget-head .nav-cluster .nav-today.is-current { color: #555; }
+:root[data-theme='nebula'] .desktop-widget-head .nav-cluster button:is(:hover, :focus-visible):not(:disabled) { background: var(--nb-ink); color: var(--nb-paper); }
+:root[data-theme='nebula'] .desktop-widget .widget-date, :root[data-theme='nebula'] .desktop-widget-head .cal-title { color: var(--nb-ink); font: 600 11.5px var(--mono); letter-spacing: .02em; }
+:root[data-theme='nebula'] .desktop-widget-head .cal-title-sub { color: #444; font: 11px var(--mono); }
+:root[data-theme='nebula'] :is(.desktop-widget-open, .desktop-widget .widget-date) { border-radius: 0; }
+:root[data-theme='nebula'] .desktop-widget-open { color: var(--nb-ink); }
+:root[data-theme='nebula'] .desktop-widget-open:is(:hover, :focus-visible), :root[data-theme='nebula'] .desktop-widget .widget-date:is(:hover, :focus-visible) { background: var(--nb-ink); color: var(--nb-paper); }
+:root[data-theme='nebula'][data-popups='b'] .desktop-widget-open:is(:hover, :focus-visible) { background: var(--holo); color: #111; box-shadow: inset 0 0 0 1px #111; }
+:root[data-theme='nebula'] .desktop-widget-save { border-radius: 0; background: var(--nb-ink); }
+:root[data-theme='nebula'] .desktop-widget-body { padding: 18px 18px 22px 26px; }
+:root[data-theme='nebula'] .desktop-widget .title-input { font-size: clamp(22px,4.4cqw,30px); }
+/* Pixel: square, the pixel face a size up. */
+:root[data-pixel] :is(.desktop-widget, .desktop-widget-open, .desktop-widget .widget-date, .desktop-widget-save) { border-radius: 0; }
+:root[data-pixel] .desktop-widget .widget-date { font-size: 15px; }
+:root[data-theme='journal'] .desktop-widget-head .cal-views button { font: italic 13px var(--display); }
+:root[data-theme='nebula'] .desktop-widget-head .cal-views button { height: 22px; color: #444; font: 600 10.5px var(--mono); text-transform: lowercase; border-radius: 0; }
+:root[data-theme='nebula'] .desktop-widget-head .cal-views button:is(:hover, :focus-visible) { background: var(--nb-ink); color: var(--nb-paper); }
+:root[data-theme='nebula'] .desktop-widget-head .cal-views button[aria-selected='true'] { background: var(--nb-ink); color: var(--nb-paper); box-shadow: none; }
+:root[data-theme='nebula'][data-popups='b'] .desktop-widget-head .cal-views button[aria-selected='true'] { background: var(--holo); color: #111; box-shadow: inset 0 0 0 1px #111; }
+:root[data-theme='nebula'] .desktop-widget-drop { border-radius: 0; border-color: var(--nb-violet-light, #b388ff); }
+:root[data-pixel] :is(.desktop-widget-head .cal-views button, .desktop-widget-drop, .desktop-widget-drop span) { border-radius: 0; }
 /* Widget layout follows its visible rectangle even while the native popup canvas grows. */
 .desktop-widget { container: desktop-widget / inline-size; }
 .widget-popup-canvas .desktop-widget { position: fixed; left: var(--widget-left); top: var(--widget-top); width: var(--widget-width); height: var(--widget-height); }
@@ -66,16 +96,105 @@ html.is-desktop-widget, .is-desktop-widget body, .is-desktop-widget #root { widt
 .is-desktop-widget:not(.widget-popups-ready) .widget-floating-popup * { visibility: hidden !important; }
 .desktop-widget-calendar { flex: 1; display: flex; flex-direction: column; min-height: 0; min-width: 0; overflow: hidden; }
 .desktop-widget.is-calendar .cal { flex: 1; height: 100%; min-height: 0; min-width: 0; background: var(--surface); }
-.desktop-widget.is-calendar .cal-viewbar { height: auto; min-height: 40px; }
-.desktop-widget.is-calendar .cal-views { align-items: center; }
-.desktop-widget.is-calendar .cal-toolbar { flex: none; }
+/* The calendar: turning, title and view tabs are all in the header (no bar in the body); its filters are the widget's
+   settings. The tabs are plain words, the chosen one underlined; narrower, they shorten to Mo–Fr and then to J M W A T. */
+.desktop-widget.is-calendar .desktop-widget-head { container: widget-head / inline-size; }
+.desktop-widget-head .cal-title { flex: 0 1 auto; }
+.desktop-widget-head .cal-views { display: flex; flex: none; gap: 1px; margin-left: auto; padding: 0; border-radius: 0; background: none; box-shadow: none; }
+.desktop-widget-head .cal-views-indicator { display: none; }
+.desktop-widget-head .cal-views button { height: 26px; padding: 0 7px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font: 500 12px var(--sans); cursor: pointer; }
+.desktop-widget-head .cal-views button:is(:hover, :focus-visible) { background: var(--hover); color: var(--text); outline: 0; }
+.desktop-widget-head .cal-views button[aria-selected='true'] { color: var(--strong); box-shadow: inset 0 -2px 0 var(--accent); border-radius: 0; }
+.desktop-widget-head .cal-views button[aria-selected='true']:hover { background: transparent; }
+@container widget-head (max-width: 620px) {
+  .desktop-widget-head .cal-view-long { display: none; }
+  .desktop-widget-head .cal-view-short { display: inline; }
+}
+@container widget-head (max-width: 500px) {
+  .desktop-widget-head .cal-view-short { display: none; }
+  .desktop-widget-head .cal-view-key { display: inline; }
+  .desktop-widget-head .cal-views button { min-width: 24px; padding: 0 5px; }
+  .desktop-widget-head .cal-title-sub { display: none; }
+}
+@container widget-head (max-width: 360px) {
+  .desktop-widget-head .cal-title-long { display: none; }
+  .desktop-widget-head .cal-title-short { display: inline; }
+}
+/* The pinboard: the cork alone, edge to edge under the header (no title, hint or add bar: "+" sits in the header).
+   Notices, the link form and the note picker appear above the cork only while needed. */
+.desktop-widget-board { flex: 1; display: flex; flex-direction: column; min-height: 0; min-width: 0; overflow: hidden; }
+.desktop-widget-board > .bulletin-board { display: flex; flex: 1; flex-direction: column; min-height: 0; margin: 0; padding: 0; }
+.desktop-widget-board .board-viewport.board-surface { flex: 1; height: auto !important; min-height: 0; border-radius: 0; box-shadow: none; }
+.desktop-widget-board :is(.board-link-form, .board-library, .board-status, .board-hidden-hint) { margin: 8px 10px; }
+.desktop-widget-board .board-empty .page-hint { display: block; margin-top: 4px; }
+.desktop-widget-tools { display: flex; flex: none; align-items: center; }
+.desktop-widget-tools:empty { display: none; }
+.board-add-menu { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 7px; background: transparent; color: var(--muted); font: 300 20px/1 var(--sans); cursor: pointer; }
+.board-add-menu:is(:hover, :focus-visible) { background: var(--hover); color: var(--success, var(--accent)); outline: 0; }
+:root[data-theme='journal'] .desktop-widget-board .board-viewport.board-surface { box-shadow: none; }
+:root[data-theme='nebula'] .board-add-menu { border-radius: 0; color: var(--nb-ink); font-family: var(--mono); }
+:root[data-theme='nebula'] .board-add-menu:is(:hover, :focus-visible) { background: var(--nb-ink); color: var(--nb-paper); }
+:root[data-theme='nebula'][data-popups='b'] .board-add-menu:is(:hover, :focus-visible) { background: var(--holo-positive); color: #111; box-shadow: inset 0 0 0 1px #111; }
+:root[data-pixel] .board-add-menu { border-radius: 0; }
+
+/* Day values and activities: only the values, a little apart; no headings, hints or manage buttons. */
+.desktop-widget-period .period-section.is-bare { padding: 0; }
+.desktop-widget-period .period-section.is-bare + .period-section.is-bare { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--divider); }
+.desktop-widget-period .period-rating { padding: 0; }
+.desktop-widget-period .rating-heading { margin-bottom: 8px; color: var(--muted); font: 600 11px var(--sans); letter-spacing: .06em; text-transform: uppercase; }
+.desktop-widget-period .rating-scale { margin-top: 4px; font-size: 10.5px; }
+.desktop-widget-period .scale-list { gap: 2px; margin: 0; }
+.desktop-widget-period .scale-row { grid-template-columns: minmax(64px, 30%) minmax(0, 1fr) 22px; gap: 10px; min-height: 34px; }
+.desktop-widget-period .period-list { margin: 0; }
+.desktop-widget-period .period-item { min-height: 34px; }
+.period-section.is-bare .checklist-empty.is-action { display: flex; align-items: center; gap: 8px; width: 100%; border: 1px dashed var(--divider); border-radius: 6px; background: transparent; color: var(--muted); font: 12.5px var(--sans); text-align: left; cursor: pointer; }
+.period-section.is-bare .checklist-empty.is-action .icon { flex: none; width: 14px; height: 14px; }
+.period-section.is-bare .checklist-empty.is-action:is(:hover, :focus-visible) { border-color: var(--accent); color: var(--text); outline: 0; }
+@container desktop-widget (max-width: 380px) {
+  .desktop-widget-period .scale-row { grid-template-columns: 1fr 22px; }
+  .desktop-widget-period .scale-row .scale-input { grid-column: 1 / -1; grid-row: 2; }
+}
+
+/* The notebook: one note, edge to edge. The switcher (arrows, the title as a list) sits in the header's navigation. */
+.desktop-widget-notebook { flex: 1; display: flex; min-height: 0; min-width: 0; overflow: hidden; }
+.notebook.is-compact .notebook-body { display: flex; }
+.notebook.is-compact .notebook-page { flex: 1; gap: 10px; }
+:root[data-theme='classic'] .desktop-widget .notebook.is-compact .notebook-page { background: var(--surface); }
+.notebook.is-compact .notebook-title { font-size: 19px; }
+.notebook.is-compact .notebook-page.is-empty { align-items: center; text-align: center; }
+.notebook.is-compact .notebook-attachments { padding-top: 6px; border-top: 1px solid var(--divider); }
+.desktop-widget-nav .notebook-switch-steps { flex: none; }
+.desktop-widget-nav .notebook-switch { min-width: 0; }
+.notebook-widget-new { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 7px; background: transparent; color: var(--muted); font: 300 20px/1 var(--sans); cursor: pointer; }
+.notebook-widget-new:is(:hover, :focus-visible) { background: var(--hover); color: var(--success, var(--accent)); outline: 0; }
+.note-switch-panel { display: flex; flex-direction: column; gap: 6px; width: min(300px, calc(100vw - 32px)); padding: 6px; }
+.note-switch-list { display: flex; flex-direction: column; max-height: min(320px, 60vh); overflow-y: auto; }
+.note-switch-option { display: grid; grid-template-columns: 8px minmax(0, 1fr); align-items: center; column-gap: 8px; padding: 6px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--text); font: 12.5px var(--sans); text-align: left; cursor: pointer; }
+.note-switch-option i { width: 8px; height: 8px; border-radius: 2px; background: #e9d77a; }
+.note-switch-option.paper-blue i { background: #a9c8e8; } .note-switch-option.paper-green i { background: #b5dcae; } .note-switch-option.paper-pink i { background: #f0b8c8; }
+.note-switch-option strong { overflow: hidden; font-weight: 500; white-space: nowrap; text-overflow: ellipsis; }
+.note-switch-option small { grid-column: 2; overflow: hidden; color: var(--muted); font-size: 11px; white-space: nowrap; text-overflow: ellipsis; }
+.note-switch-option[aria-selected='true'] { background: var(--hover); }
+.note-switch-option.is-current strong { color: var(--accent); }
+:root[data-theme='journal'] .desktop-widget .notebook.is-compact { background: var(--surface); }
+:root[data-theme='journal'] .note-switch-option { font-family: var(--serif, var(--sans)); }
+:root[data-theme='nebula'] :is(.notebook-widget-new, .note-switch-option, .note-switch-option i) { border-radius: 0; }
+:root[data-theme='nebula'] .notebook-widget-new { color: var(--nb-ink); font-family: var(--mono); }
+:root[data-theme='nebula'] .notebook-widget-new:is(:hover, :focus-visible) { background: var(--nb-ink); color: var(--nb-paper); }
+:root[data-theme='nebula'][data-popups='b'] .notebook-widget-new:is(:hover, :focus-visible) { background: var(--holo-positive); color: #111; box-shadow: inset 0 0 0 1px #111; }
+:root[data-theme='nebula'] .note-switch-option { font-family: var(--mono); }
+:root[data-pixel] :is(.notebook-widget-new, .note-switch-option, .note-switch-option i, .period-section.is-bare .checklist-empty.is-action) { border-radius: 0; }
+
+/* An .ics file dragged over the calendar: a quiet frame and a line saying that dropping imports it. */
+.desktop-widget-calendar { position: relative; }
+.desktop-widget-drop { position: absolute; inset: 6px; z-index: 30; display: grid; place-items: center; border: 1.5px dashed var(--accent); border-radius: 10px; background: color-mix(in srgb, var(--surface) 82%, transparent); pointer-events: none; }
+.desktop-widget-drop span { padding: 6px 12px; border-radius: 6px; background: var(--surface); color: var(--strong); font: 600 12.5px var(--sans); box-shadow: 0 0 0 1px var(--edge); }
 .widget-floating-popup > .cal-transfer-panel { position: relative; inset: auto; max-width: 100%; max-height: calc(100vh - 24px); overflow-y: auto; }
 .is-desktop-widget .cal-composer { overflow-y: auto; box-sizing: border-box; }
 @container desktop-widget (max-width: 420px) {
-  .desktop-widget .desktop-widget-nav { gap: 6px; padding: 6px 9px; }
-  .desktop-widget .widget-date { font-size: 10px; }
-  .desktop-widget .desktop-widget-body { padding: 16px 12px 22px; }
+  .desktop-widget-nav { gap: 4px; }
+  .desktop-widget .widget-date { font-size: 11.5px; }
+  .desktop-widget .desktop-widget-body { padding: 14px 12px 20px; }
   .desktop-widget .section-heading { align-items: flex-start; }
   .desktop-widget .section-heading .kind-picker { width: 100%; }
-  .desktop-widget .desktop-widget-status { font-size: 9px; }
 }

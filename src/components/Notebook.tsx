@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties, DragEvent, KeyboardEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { isShown, tagOf } from '../tags';
 import { useHiddenTags, useTags } from '../tagStore';
+import type { TagScope } from '../tagStore';
 import { invoke } from '@tauri-apps/api/core';
 import { t, useLanguage } from '../i18n';
 import { formatDate, formatShortDate, localDate } from '../dates';
@@ -25,18 +27,26 @@ import './notebook.css';
  * them it is one page that scrolls. Each design dresses it its own way (notebook.css).
  */
 type Choice = 'all' | 'none' | string;
-const choiceKey = 'journal.notebookFolder', noteKey = 'journal.notebookNote', collapsedKey = 'journal.notebookCollapsed', sortKey = 'journal.notebookSort';
+const choiceKey = 'journal.notebookFolder', notebookNoteKey = 'journal.notebookNote', collapsedKey = 'journal.notebookCollapsed', sortKey = 'journal.notebookSort';
 const read = (key: string) => { try { return localStorage.getItem(key); } catch { return null; } };
 const write = (key: string, value: string) => { try { localStorage.setItem(key, value); } catch { /* this session */ } };
 const readCollapsed = () => { try { const value: unknown = JSON.parse(read(collapsedKey) ?? '[]'); return new Set(Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : []); } catch { return new Set<string>(); } };
 const noteType = 'application/x-journal-note', folderType = 'application/x-journal-folder';
 
-export function Notebook({ onClose, onOpenDay }: { onClose?: () => void; onOpenDay?: (date: string) => void }) {
+/**
+ * `widget`: the notebook as a desktop widget, reduced to the note itself. The note switcher goes to the widget header's
+ * navigation (`nav`), the "+" for a new note beside it (`tools`); folders, paper, the day switch and attaching are in the
+ * note's right-click menu. The widget remembers its own note (`id`); `tagScope` whose tag filter hides notes.
+ */
+export function Notebook({ onClose, onOpenDay, tagScope = 'journal', widget }: { onClose?: () => void; onOpenDay?: (date: string) => void; tagScope?: TagScope;
+  widget?: { id: string; nav: Element | null; tools: Element | null; onPage?: (id: string | null) => void } }) {
   useLanguage();
+  const compact = !!widget;
+  const noteKey = widget ? `${notebookNoteKey}.widget-${widget.id}` : notebookNoteKey;
   const { cards, patch, error } = useCards();
   const { folders, save, remove, error: folderError } = useFolders();
   const tags = useTags();
-  const [choice, setChoiceState] = useState<Choice>(() => read(choiceKey) ?? 'all');
+  const [choice, setChoiceState] = useState<Choice>(() => compact ? 'all' : read(choiceKey) ?? 'all');
   const [selected, setSelectedState] = useState<string | null>(() => read(noteKey));
   const [pageIndex, setPageIndex] = useState(0);
   const [query, setQuery] = useState('');
@@ -53,7 +63,7 @@ export function Notebook({ onClose, onOpenDay }: { onClose?: () => void; onOpenD
 
   const known = new Set(folders.map(folder => folder.id));
   const shownChoice: Choice = choice === 'all' || choice === 'none' || known.has(choice) ? choice : 'all';
-  const setChoice = (value: Choice) => { setChoiceState(value); write(choiceKey, value); };
+  const setChoice = (value: Choice) => { setChoiceState(value); if (!compact) write(choiceKey, value); };
   const select = (id: string | null) => { setSelectedState(id); setPageIndex(0); write(noteKey, id ?? ''); };
   // A search result opens its note here (all notes shown, so it is in the list).
   useEffect(() => {
@@ -62,7 +72,7 @@ export function Notebook({ onClose, onOpenDay }: { onClose?: () => void; onOpenD
     return () => window.removeEventListener('journal:open-note', open);
   }, []);
   // Notes whose tag is hidden in the journal's tag filter stay out of the list, like on the board.
-  const [hiddenTags] = useHiddenTags('journal');
+  const [hiddenTags] = useHiddenTags(tagScope);
   const notes = sortNotes(notesIn(cards, folders, shownChoice, query), sort).filter(note => !note.tag || isShown(hiddenTags, note.tag));
   const books=notebookGroups(cards),bookPages=new Map(books.map(group=>[group[0].id,group]));
   const owners = new Map(books.flatMap(group=>group.map(card=>[card.id,group[0].id] as const)));
@@ -85,6 +95,7 @@ export function Notebook({ onClose, onOpenDay }: { onClose?: () => void; onOpenD
     setPageIndex(requested > 0 ? requested : Math.max(0, matched));
   }, [current?.id, selected, query]);
   useEffect(() => { setLink(null); setMessage(''); }, [page?.id]);
+  useEffect(() => { widget?.onPage?.(page?.id ?? null); }, [page?.id]);
 
   async function run(action: () => Promise<unknown>) { setBusy(true); setMessage(''); try { await action(); } catch (e) { setMessage(String(e)); } finally { setBusy(false); } }
   const base = (kind: Card['kind']): Partial<Card> => ({ kind, text: '', dates: [], created: today, notebook: true, order: nextOrder(cards) });
@@ -259,6 +270,10 @@ export function Notebook({ onClose, onOpenDay }: { onClose?: () => void; onOpenD
       { id: 'paper', command: 'color', label: t('Papierfarbe'), icon: 'pipette', items: paperNames().map(([paper, name]) => ({ id: `paper-${paper}`, command: paper, label: name, swatch: `paper-${paper}`, checked: (note.paper ?? 'yellow') === paper, run: () => void patch(note.id, { paper }) })) },
       { id: 'open-day', command: 'day', label: t('Tag mit dieser Notiz öffnen'), icon: 'calendar', disabled: !note.dates.length, run: () => openDay(note) },
       { id: 'on-day', command: 'pin --day', label: t('Auf dem Tag zeigen'), icon: 'calendar', checked: on, run: () => void run(() => patch(note.id, onDayPatch(note, !on, today))) },
+      // The widget has no attachment bar: images and links are attached from here.
+      ...(compact && note.id === page?.id ? ['-' as const,
+        { id: 'attach-image', command: 'attach --image', label: t('Bild anhängen …'), icon: 'layout', positive: true, disabled: busy, run: () => upload.current?.click() } as MenuItem,
+        { id: 'attach-link', command: 'attach --link', label: t('Link anhängen …'), icon: 'jump', positive: true, disabled: busy, run: () => setLink('') } as MenuItem] : []),
       '-',
       { id: 'delete', command: 'rm', label: t('Zettel endgültig löschen'), icon: 'trash', danger: true, disabled: busy, run: () => void run(() => deleteNote(note)) },
     ] };
@@ -276,16 +291,18 @@ export function Notebook({ onClose, onOpenDay }: { onClose?: () => void; onOpenD
   const onDay = page ? page.dates.length > 0 : false;
   const status = busy ? t('Wird verarbeitet …') : message || error || folderError;
 
-  return <section className="notebook" aria-label={t('Notizen')} onKeyDown={onKey}>
-    <header className="notebook-head">
+  return <section className={`notebook${compact ? ' is-compact' : ''}`} aria-label={t('Notizen')} onKeyDown={onKey}>
+    {widget?.nav && createPortal(<NoteSwitcher notes={notes} current={current} folders={folders} onPick={id => select(id)} />, widget.nav)}
+    {widget?.tools && createPortal(<button type="button" className="notebook-widget-new" disabled={busy} aria-label={t('Neuer Zettel')} title={t('Neuer Zettel')} onClick={() => newNote()}><span aria-hidden="true">+</span></button>, widget.tools)}
+    {!compact && <header className="notebook-head">
       <h2><Icon name="note" />{t('Notizen')}</h2>
       <span className="notebook-head-count">{t('{0} Zettel', listed.size)}</span>
       <span className="notebook-head-space" />
       <button type="button" className="notebook-new" disabled={busy} onClick={() => newNote()} title={t('Neuer Zettel im gewählten Ordner')}><Icon name="pencil" /><span>{t('Neuer Zettel')}</span></button>
       {onClose && <button type="button" className="notebook-close" aria-label={t('Notizen schließen')} title={t('Notizen schließen · Strg ⇧ N')} onClick={onClose}><Icon name="done" /></button>}
-    </header>
+    </header>}
     <div className="notebook-body">
-      <aside className="notebook-side" aria-label={t('Ordner und Zettel')} onContextMenu={sideMenu}>
+      {!compact && <aside className="notebook-side" aria-label={t('Ordner und Zettel')} onContextMenu={sideMenu}>
         <label className="notebook-search"><Icon name="search" /><input value={query} placeholder={t('Zettel suchen …')} aria-label={t('Zettel suchen')} onChange={e => setQuery(e.target.value)}
           onKeyDown={e => { if (e.key === 'Escape' && query) { e.preventDefault(); e.stopPropagation(); setQuery(''); } }} /></label>
         <nav className="notebook-tree" aria-label={t('Ordner')}>
@@ -347,32 +364,32 @@ export function Notebook({ onClose, onOpenDay }: { onClose?: () => void; onOpenD
           })}
           {!notes.length && <p className="notebook-empty">{query ? t('Kein Zettel passt.') : t('Hier liegt noch kein Zettel.')}</p>}
         </div>
-      </aside>
+      </aside>}
 
       {page ? <article className={`notebook-page paper-${page.paper ?? 'yellow'}${pages.length > 1 ? ' has-pages' : ''}`} aria-label={t('Zettel: {0}', noteTitle(page))} data-page-id={page.id} key={page.id} onContextMenu={noteMenu(page)}>
         <header className="notebook-page-head">
           <input ref={titleRef} className="notebook-title" aria-label={t('Titel')} placeholder={t('Titel')} value={page.title} onChange={e => void patch(page.id, { title: e.target.value })} />
-          <div className="notebook-page-tools">
+          {!compact && <div className="notebook-page-tools">
             <BoardScopePicker cards={cards} id={page.id} date={page.created ?? page.dates[0] ?? today} />
             <FolderPick value={page.folder && known.has(page.folder) ? page.folder : null} tree={tree} onPick={folder => moveNote(page.id, folder)} />
             <button type="button" className="notebook-delete" title={t('Zettel endgültig löschen')} aria-label={t('Zettel endgültig löschen')} onClick={() => void run(() => deleteNote(page))}><Icon name="trash" /></button>
             {chosen.length > 1 && <button type="button" className="notebook-delete" disabled={busy} title={t('Alle ausgewählten Zettel löschen')} aria-label={t('Alle ausgewählten Zettel löschen')} onClick={() => void run(() => deleteNotes(chosen))}><Icon name="trash" /><span>{chosen.length}</span></button>}
-          </div>
+          </div>}
         </header>
-        <div className="notebook-day">
+        {!compact && <div className="notebook-day">
           <button type="button" role="switch" className="switch" aria-checked={onDay} aria-labelledby="notebook-on-day" onClick={() => void run(() => patch(page.id, onDayPatch(page, !onDay, today)))}><span /></button>
           <label id="notebook-on-day">{t('Auf dem Tag zeigen')}</label>
           {onDay ? <button type="button" className="notebook-day-link" onClick={() => openDay(page)} title={t('Tag mit dieser Notiz öffnen')}>{page.dates.length > 1 ? t('auf {0} Tagen', page.dates.length) : formatDate(page.dates[0])}</button> : <small>{formatDate(created)}</small>}
-        </div>
+        </div>}
         <div className="notebook-text board-note"><Note card={page} patch={patch} label={noteTitle(page)} /></div>
-        <section className="notebook-attachments" aria-label={t('Anhänge')}>
-          <div className="notebook-attachments-head">
+        {(!compact || attachments.length > 0 || link !== null) && <section className="notebook-attachments" aria-label={t('Anhänge')}>
+          {!compact && <div className="notebook-attachments-head">
             <h3>{t('Anhänge')}{attachments.length > 0 && <small>{attachments.length}</small>}</h3>
             <div className="notebook-attach-actions">
               <button type="button" disabled={busy} onClick={() => upload.current?.click()} title={t('Bild anhängen (wird als AVIF komprimiert)')}><Icon name="layout" /><span>{t('Bild')}</span></button>
               <button type="button" disabled={busy} aria-expanded={link !== null} onClick={() => setLink(link === null ? '' : null)} title={t('Link anhängen')}><Icon name="jump" /><span>Link</span></button>
             </div>
-          </div>
+          </div>}
           <input ref={upload} type="file" accept="image/*" hidden onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; if (file) void run(async () => attach({ kind: 'image', ...await storeImage(file) })); }} />
           {link !== null && <form className="board-link-form notebook-link-form" onSubmit={e => { e.preventDefault(); void run(addLink); }}><Icon name="jump" />
             <input autoFocus type="url" required placeholder="https://…" aria-label="URL" value={link} onChange={e => setLink(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setLink(null); } }} />
@@ -386,8 +403,8 @@ export function Notebook({ onClose, onOpenDay }: { onClose?: () => void; onOpenD
               <span className="notebook-attachment-foot"><small>{card.kind === 'image' ? card.title || t('Bild') : hostOf(card.url)}</small>
                 <button type="button" title={t('Vom Zettel lösen')} aria-label={t('„{0}“ vom Zettel lösen', card.title || t('Anhang'))} onClick={() => void run(() => detach(card))}><Icon name="cancel" /></button></span>
             </li>)}
-          </ul> : <p className="notebook-empty">{t('Keine Anhänge. Auf der Pinnwand: Bild oder Link mit einem Faden an den Zettel binden.')}</p>}
-        </section>
+          </ul> : !compact && <p className="notebook-empty">{t('Keine Anhänge. Auf der Pinnwand: Bild oder Link mit einem Faden an den Zettel binden.')}</p>}
+        </section>}
         {pages.length > 1 && <nav className="notebook-pager" aria-label={t('Seiten')}>
           <button type="button" className="notebook-turn is-prev" disabled={index === 0} aria-label={t('Vorige Seite')} title={t('Vorige Seite · Bild↑')} onClick={() => setPageIndex(index - 1)}><Icon name="left" /></button>
           <span className="notebook-dots">{pages.map((value, at) => <button type="button" key={value.id} aria-current={at === index || undefined} aria-label={t('Seite {0}: {1}', at + 1, noteTitle(value))} title={noteTitle(value)} onClick={() => setPageIndex(at)} />)}</span>
@@ -395,16 +412,54 @@ export function Notebook({ onClose, onOpenDay }: { onClose?: () => void; onOpenD
           <button type="button" className="notebook-turn is-next" disabled={index === pages.length - 1} aria-label={t('Nächste Seite')} title={t('Nächste Seite · Bild↓')} onClick={() => setPageIndex(index + 1)}><Icon name="right" /></button>
         </nav>}
         {status && <p className="notebook-status" role="status">{status}</p>}
-        <footer className="notebook-page-foot" aria-hidden="true">{t('Erstellt {0}', formatShortDate(created))}{folderPath(folders, page.folder).length > 0 && ` · ${folderPath(folders, page.folder).join(' / ')}`}</footer>
+        {!compact && <footer className="notebook-page-foot" aria-hidden="true">{t('Erstellt {0}', formatShortDate(created))}{folderPath(folders, page.folder).length > 0 && ` · ${folderPath(folders, page.folder).join(' / ')}`}</footer>}
       </article>
         : <div className="notebook-page is-empty">
-          <p>{t('Noch kein Zettel. Lege einen an – er erscheint nicht auf der Tagesnotiz, bis du es einschaltest.')}</p>
+          <p>{compact ? t('Noch kein Zettel.') : t('Noch kein Zettel. Lege einen an – er erscheint nicht auf der Tagesnotiz, bis du es einschaltest.')}</p>
           <button type="button" className="notebook-new" onClick={() => newNote()}><Icon name="pencil" /><span>{t('Neuer Zettel')}</span></button>
           {status && <p className="notebook-status" role="status">{status}</p>}
         </div>}
     </div>
     {lightbox && <Lightbox card={lightbox} onClose={() => setLightbox(null)} />}
   </section>;
+}
+
+/**
+ * The widget's note switcher: back and forward through the notes, and the note's title, which opens the list of all notes
+ * (with their folder) and a search over titles and text.
+ */
+function NoteSwitcher({ notes, current, folders, onPick }: { notes: Card[]; current: Card | null; folders: Folder[]; onPick: (id: string) => void }) {
+  useLanguage();
+  const [open, setOpen] = useState(false), [query, setQuery] = useState(''), [active, setActive] = useState(0);
+  const button = useRef<HTMLButtonElement>(null);
+  const at = current ? notes.findIndex(note => note.id === current.id) : -1;
+  const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const shown = notes.filter(note => words.every(word => `${note.title} ${note.text}`.toLowerCase().includes(word)));
+  const pick = (id: string) => { setOpen(false); setQuery(''); onPick(id); button.current?.focus(); };
+  const title = (note: Card) => note.title || t('Ohne Titel');
+  return <>
+    <span className="nav-cluster notebook-switch-steps" role="group" aria-label={t('Zettel blättern')}>
+      <button type="button" className="nav-step" disabled={at <= 0} aria-label={t('Voriger Zettel')} title={t('Voriger Zettel')} onClick={() => onPick(notes[at - 1].id)}><Icon name="left" /></button>
+      <button type="button" className="nav-step" disabled={at < 0 || at >= notes.length - 1} aria-label={t('Nächster Zettel')} title={t('Nächster Zettel')} onClick={() => onPick(notes[at + 1].id)}><Icon name="right" /></button>
+    </span>
+    <button ref={button} type="button" className="widget-date notebook-switch" aria-haspopup="listbox" aria-expanded={open} title={t('Zettel wählen')} disabled={!notes.length}
+      onClick={() => { setActive(Math.max(0, at)); setOpen(value => !value); }}>{current ? title(current) : t('Notizen')}</button>
+    {open && <Popover anchor={button.current} className="note-switch" label={t('Zettel wählen')} onClose={byKey => { setOpen(false); setQuery(''); if (byKey) button.current?.focus(); }}>
+      <div className="note-switch-panel" onKeyDown={event => {
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); setActive(index => Math.max(0, Math.min(shown.length - 1, index + (event.key === 'ArrowDown' ? 1 : -1)))); }
+        else if (event.key === 'Enter' && shown[active]) { event.preventDefault(); pick(shown[active].id); }
+      }}>
+        <label className="notebook-search"><Icon name="search" /><input data-autofocus value={query} placeholder={t('Zettel suchen …')} aria-label={t('Zettel suchen')} onChange={event => { setQuery(event.target.value); setActive(0); }} /></label>
+        <div className="note-switch-list" role="listbox" aria-label={t('Zettel')}>
+          {shown.map((note, index) => { const path = folderPath(folders, note.folder).join(' / '); return <button key={note.id} type="button" role="option" tabIndex={-1} data-note-id={note.id} aria-selected={index === active}
+            className={`note-switch-option paper-${note.paper ?? 'yellow'}${note.id === current?.id ? ' is-current' : ''}`} onPointerMove={() => setActive(index)} onClick={() => pick(note.id)}>
+            <i aria-hidden="true" /><strong>{title(note)}</strong>{path && <small>{path}</small>}
+          </button>; })}
+          {!shown.length && <p className="notebook-empty">{t('Kein Zettel passt.')}</p>}
+        </div>
+      </div>
+    </Popover>}
+  </>;
 }
 
 /**

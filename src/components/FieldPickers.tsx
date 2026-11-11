@@ -38,7 +38,7 @@ function DateBody({ value, onPick }: { value: string; onPick: (date: string) => 
   // The chosen day takes the focus, like in the mini calendar.
   useLayoutEffect(() => { ref.current?.querySelector<HTMLElement>('.cal-compact-day[tabindex="0"]')?.focus({ preventScroll: true }); }, []);
   return <div ref={ref}>
-    <div className="mini-picker-head"><strong>{formatMonthName(`${month}-01`)} <span>{month.slice(0, 4)}</span></strong>
+    <div className="mini-picker-head"><strong><span className="mini-picker-month">{formatMonthName(`${month}-01`)}</span> <span className="mini-picker-year">{month.slice(0, 4)}</span></strong>
       <button type="button" className="cal-icon-button" aria-label={t("Vorheriger Monat")} onClick={() => setMonth(shiftMonth(month, -1))}><Icon name="left" /></button>
       <button type="button" className="cal-icon-button" aria-label={t("Nächster Monat")} onClick={() => setMonth(shiftMonth(month, 1))}><Icon name="right" /></button>
     </div>
