@@ -6,6 +6,7 @@ import type { Tag } from '../tags';
 import { createTag, manageTags, useTags } from '../tagStore';
 import { Icon } from './Icon';
 import { Popover } from './Popover';
+import { EntryIcon } from './EntryIcon';
 import { kindOfTag, orderedTags, tagKindLabel, useTagKindOrder } from '../tagKinds';
 import { useActivityTagIds } from '../tagGroups';
 
@@ -74,7 +75,7 @@ export function TagPicker({ anchor, value, onPick, onClose }: {
         return <button key={option.kind === 'tag' ? option.tag.id : option.kind} id={`tag-option-${index}`} type="button" disabled={busy} role="option" tabIndex={-1} aria-selected={index === shown}
           className={`tag-option is-${option.kind}${selected ? ' is-current' : ''}${tag && !query && index > 0 && (() => { const before = options[index - 1]; return before.kind === 'tag' && kindOfTag(before.tag.id, activityIds) !== kindOfTag(tag.id, activityIds); })() ? ' is-kind-start' : ''}`} data-kind-label={tag ? tagKindLabel(kindOfTag(tag.id, activityIds)) : undefined} style={{ '--tag': tag?.color ?? (option.kind === 'create' ? nextTagColor(tags) : undefined) } as CSSProperties}
           onPointerMove={() => setActive(index)} onClick={() => void choose(option)}>
-          {option.kind === 'none' ? <span className="tag-dot is-empty" /> : option.kind === 'create' ? <Icon name="tag" /> : <span className="tag-dot" />}
+          {option.kind === 'none' ? <span className="tag-dot is-empty" /> : option.kind === 'create' ? <Icon name="tag" /> : tag?.icon ? <EntryIcon name={tag.icon} className="tag-icon" /> : <span className="tag-dot" />}
           <span className="tag-option-name">{option.kind === 'none' ? t('Kein Tag') : option.kind === 'create' ? <>{t('Neuer Tag')} <strong>„{option.name}“</strong></> : tag!.name}</span>
           {selected && <Icon name="check" />}
           {number >= 0 && number <= 9 && !query && <kbd>{number}</kbd>}

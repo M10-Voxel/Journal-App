@@ -1,17 +1,27 @@
 /* Nebula's grid of windows in the middle (NebulaDesk: Panel, nebulaLayout.ts). Twelve columns: a window takes some of
-   them (`--span`, set at its right edge); narrow, every window takes the whole row. A minimized window keeps only its
+   them (`--span`, set at its right edge; a stack of windows takes its first window's); narrow, every window takes the
+   whole row. A minimized window keeps only its
    bar; a window's lower edge sets its height. A carried window follows the pointer; a violet bar marks where it lands. */
 .nebula-grid { position: relative; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 18px; align-items: stretch; }
 .nebula-grid > * { grid-column: 1 / -1; min-width: 0; }
-.nebula-grid > .nebula-panel { grid-column: span var(--span, 12); }
+.nebula-grid > :is(.nebula-panel, .nebula-stack) { grid-column: span var(--span, 12); }
 /* Rows as nebulaLayout lays them out: the first window of a row starts at the first column (else a narrow upright bar
    could slip into the row above). */
-.nebula-grid > .nebula-panel.is-row-start { grid-column: 1 / span var(--span, 12); }
+.nebula-grid > :is(.nebula-panel, .nebula-stack).is-row-start { grid-column: 1 / span var(--span, 12); }
 @container nebula-center (max-width: 520px) {
-  .nebula-grid > .nebula-panel, .nebula-grid > .nebula-panel.is-row-start { grid-column: 1 / -1; }
+  .nebula-grid > :is(.nebula-panel, .nebula-stack), .nebula-grid > :is(.nebula-panel, .nebula-stack).is-row-start { grid-column: 1 / -1; }
 }
+/* A stack: windows one above the other in one column (nebulaLayout: stacked). The window beside it stretches to its
+   height; the stack's last window takes what is left when the row is taller. */
+.nebula-stack { position: relative; display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.nebula-stack > .nebula-panel { flex: none; align-self: stretch; }
+.nebula-stack > .nebula-panel:last-child:not(.is-custom-height, .is-minimized) { flex: 1 0 auto; }
+.nebula-stack.is-sizing { outline: 1px dashed var(--nb-violet-light); outline-offset: 3px; }
+.nebula-stack.is-sizing > .nebula-panel.is-sizing { outline: 0; }
+.nebula-stack.is-drop-top::before { content: ''; position: absolute; z-index: 5; left: 0; right: 0; top: -12px; height: 4px; background: var(--nb-violet-light); box-shadow: 0 0 14px var(--nb-violet); pointer-events: none; }
 .nebula-panel { position: relative; display: flex; flex-direction: column; }
 .nebula-panel:is(.is-custom-height, .is-minimized) { align-self: start; }
+.nebula-stack > .nebula-panel:is(.is-custom-height, .is-minimized) { align-self: stretch; }
 .nebula-panel:not(.is-custom-height) > .nebula-panel-body { flex: 1; }
 .nebula-panel-head { flex: none; }
 
@@ -54,8 +64,11 @@
 .nebula-panel:hover > .nebula-panel-width::after, .nebula-panel.is-sizing > .nebula-panel-width::after { opacity: .7; }
 .nebula-panel.is-sizing { outline: 1px dashed var(--nb-violet-light); outline-offset: 3px; }
 @container nebula-center (max-width: 520px) { .nebula-panel-width { display: none; } }
-.nebula-panel:is(.is-drop-top, .is-drop-split-left, .is-drop-split-right)::before { content: ''; position: absolute; z-index: 5; background: var(--nb-violet-light); box-shadow: 0 0 14px var(--nb-violet); pointer-events: none; }
+.nebula-panel:is(.is-drop-top, .is-drop-split-left, .is-drop-split-right, .is-drop-stack-above, .is-drop-stack-below)::before { content: ''; position: absolute; z-index: 5; background: var(--nb-violet-light); box-shadow: 0 0 14px var(--nb-violet); pointer-events: none; }
 .nebula-panel.is-drop-top::before { left: 0; right: 0; top: -12px; height: 4px; }
+/* Into a stack: a bar above or below the window, inside its column. */
+.nebula-panel.is-drop-stack-above::before { left: 0; right: 0; top: -11px; height: 4px; }
+.nebula-panel.is-drop-stack-below::before { left: 0; right: 0; bottom: -11px; height: 4px; }
 /* Beside a window: a bar on that side, and the half the dropped window would take tinted (the two share the width). */
 .nebula-panel.is-drop-split-left::before { top: 0; bottom: 0; left: -12px; width: 4px; }
 .nebula-panel.is-drop-split-right::before { top: 0; bottom: 0; right: -12px; width: 4px; }
@@ -108,7 +121,7 @@
    The bar keeps its column but closes up to its open window, which reaches over the rest of the column (--pull-*:
    how many bars lie between its column edge and it; a step is a column plus the gap, a bar 30 px plus the gap). */
 .nebula-grid { --bar: 30px; --step: calc((100cqw - 11 * 18px) / 12 + 18px); }
-.nebula-grid > .nebula-panel { margin-left: calc(var(--pull-left, 0) * (var(--bar) + 18px - var(--step))); margin-right: calc(var(--pull-right, 0) * (var(--bar) + 18px - var(--step))); }
+.nebula-grid > :is(.nebula-panel, .nebula-stack) { margin-left: calc(var(--pull-left, 0) * (var(--bar) + 18px - var(--step))); margin-right: calc(var(--pull-right, 0) * (var(--bar) + 18px - var(--step))); }
 .nebula-panel.is-upright { display: flex; width: var(--bar); justify-self: start; align-self: stretch; min-height: 180px; box-shadow: 4px 4px 0 #ffffff12 !important; }
 .nebula-panel.is-upright.is-before { justify-self: end; }
 .nebula-panel.is-upright .nebula-panel-head { flex: 1; flex-direction: column; align-items: stretch; gap: 0; min-height: 0; padding: 0; border-bottom: 0; cursor: grab; }
@@ -118,7 +131,7 @@
 .nebula-panel.is-upright .nebula-window-tools > button { width: 100% !important; height: 30px !important; min-height: 30px; border-left: 0 !important; border-bottom: 1px solid var(--nb-ink) !important; }
 /* Narrow, every window has its own row: a minimized one lies flat again (after the upright rules, so it wins). */
 @container nebula-center (max-width: 520px) {
-  .nebula-grid > .nebula-panel { margin: 0; }
+  .nebula-grid > :is(.nebula-panel, .nebula-stack) { margin: 0; }
   .nebula-panel.is-upright { display: block; width: auto; min-height: 0; }
   .nebula-panel.is-upright .nebula-panel-head { flex-direction: row; align-items: center; padding: 0 0 0 10px; }
   .nebula-panel.is-upright .nebula-prompt { writing-mode: horizontal-tb; padding: 0; align-self: auto; }

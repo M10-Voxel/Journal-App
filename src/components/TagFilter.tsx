@@ -5,6 +5,7 @@ import { untagged } from '../tags';
 import { manageTags, useTags } from '../tagStore';
 import { Icon } from './Icon';
 import { Popover } from './Popover';
+import { EntryIcon } from './EntryIcon';
 import { groupTags, orderedTags, tagKindLabel, useTagKindOrder } from '../tagKinds';
 import { useActivityTagIds } from '../tagGroups';
 
@@ -49,7 +50,7 @@ export function TagFilter({ hidden, onChange, label }: { hidden: ReadonlySet<str
           {group.tags.map(tag => { const index = tags.indexOf(tag); return <button key={tag.id} type="button" role="checkbox" className="tag-filter-row" aria-checked={!hidden.has(tag.id)} style={{ '--tag': tag.color } as CSSProperties}
             data-autofocus={index === 0 && groupIndex === 0 ? true : undefined} onClick={event => event.altKey ? only(tag.id) : toggle(tag.id)}
             onKeyDown={event => { if (event.key === 'Enter' && event.shiftKey) { event.preventDefault(); only(tag.id); } }}>
-            <span className="tag-check" aria-hidden="true"><Icon name="check" /></span><span className="tag-filter-name">{tag.name}</span>{index < 9 && <kbd>{index + 1}</kbd>}
+            <span className="tag-check" aria-hidden="true"><Icon name="check" /></span>{tag.icon && <EntryIcon name={tag.icon} className="tag-icon" />}<span className="tag-filter-name">{tag.name}</span>{index < 9 && <kbd>{index + 1}</kbd>}
           </button>; })}
         </div>)}
         <button type="button" role="checkbox" className="tag-filter-row is-untagged" aria-checked={!hidden.has(untagged)}

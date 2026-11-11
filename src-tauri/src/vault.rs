@@ -46,7 +46,7 @@ fn empty(path: &Path) -> Result<()> {
 fn validate(path: &Path) -> Result<()> {
     let db = Connection::open_with_flags(path.join(DB), OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(error)?;
     let version: i64 = db.pragma_query_value(None, "user_version", |r| r.get(0)).map_err(error)?;
-    if !(1..=13).contains(&version) { return Err(error("Kein unterstützter Journal-Vault. Eventuell benötigt er eine neuere App-Version.")); }
+    if !(1..=14).contains(&version) { return Err(error("Kein unterstützter Journal-Vault. Eventuell benötigt er eine neuere App-Version.")); }
     for table in ["days", "entries"] { db.prepare(&format!("SELECT * FROM {table} LIMIT 0")).map_err(error)?; }
     let check: String = db.query_row("PRAGMA quick_check", [], |r| r.get(0)).map_err(error)?;
     if check != "ok" { return Err(error("Die Datenbankprüfung ist fehlgeschlagen.")); }

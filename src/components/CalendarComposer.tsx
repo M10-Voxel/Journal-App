@@ -274,7 +274,7 @@ export function CalendarComposer({ date, draft, entry, span, onSpanChange, tag: 
           : longSpan ? <span className="cal-composer-untimed">– {formatShortDate(longEndDate)}</span> : <span className="cal-composer-untimed">{entry?.time ? formatSpan(entry.time, entry.end) : t("ohne Uhrzeit")}</span>}
       </div>
       <button ref={tagButton} type="button" className={`cal-satellite cal-composer-tag${tag ? ' has-tag' : ''}`} style={satellite(tag ? { '--tag': tag.color } as CSSProperties : undefined)} aria-pressed={Boolean(tag)} aria-haspopup="dialog" aria-expanded={tagging}
-        aria-label={tag ? t("Tag: {0}", tag.name) : t("Tag zuweisen")} data-tip={tag ? t("{0} · Alt G", tag.name) : t("Tag · Alt G")} onClick={() => setTagging(value => !value)}>{tag ? <span className="tag-dot" /> : <Icon name="tag" />}</button>
+        aria-label={tag ? t("Tag: {0}", tag.name) : t("Tag zuweisen")} data-tip={tag ? t("{0} · Alt G", tag.name) : t("Tag · Alt G")} onClick={() => setTagging(value => !value)}>{tag?.icon ? <EntryIcon name={tag.icon} className="tag-icon" /> : tag ? <span className="tag-dot" /> : <Icon name="tag" />}</button>
       {/* The entry's icon (Alt I), in the tag's colour; the calendar shows it at the entry's lower right. */}
       <button ref={iconButton} type="button" className={`cal-satellite cal-composer-icon${icon ? ' has-icon' : ''}`} style={satellite(tag ? { '--tag': tag.color } as CSSProperties : undefined)} aria-pressed={Boolean(icon)}
         aria-haspopup="dialog" aria-expanded={choosingIcon} aria-label={icon ? t('Icon: {0}', icon) : t('Icon wählen')} data-tip={icon ? t('{0} · Alt I', icon) : t('Icon · Alt I')} onClick={() => setChoosingIcon(value => !value)}>

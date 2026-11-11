@@ -1,7 +1,8 @@
 /** A tag like "Arbeit", "Privat" or "Uni": entries carry one, are coloured by it and grouped under it (see storage.rs). */
 import type { CalendarDay } from './journal';
 
-export interface Tag { id: string; name: string; color: string }
+/** `icon`: a Lucide name (see entryIcons.ts); shown in place of the name at the entries. */
+export interface Tag { id: string; name: string; color: string; icon?: string | null }
 
 /** Colours offered for new tags, in turn: apart from each other and readable on the dark surfaces of every theme. */
 export const tagSwatches = ['#569eff', '#76d982', '#e6a85c', '#c69bff', '#ff7a90', '#4fd1c5', '#e2d36b', '#ff9f5a', '#8fa3ff', '#a8a8a8'] as const;

@@ -65,7 +65,7 @@ fn uid_swaps_remain_undoable_and_redoable() {
 #[test]
 fn native_activity_totals_match_calendar_projection_without_reading_mail_html() {
     let mut db=db();
-    db.conn.execute("INSERT INTO tags VALUES('reading','Reading','#123456',0)",[]).unwrap();
+    db.conn.execute("INSERT INTO tags(id,name,color,position) VALUES('reading','Reading','#123456',0)",[]).unwrap();
     let mut day=db.load("2026-11-08").unwrap();
     for (kind,start,end,cancelled,done) in [("event",Some("09:00"),Some("10:30"),false,false),("task",Some("10:00"),Some("10:45"),false,true),("task",Some("11:00"),Some("12:00"),true,false),("event",Some("22:00"),Some("50:15"),false,false),("event",None,None,false,false),("event",Some("13:00"),None,false,false)] {
         let mut e=item(kind);e.time=start.map(Into::into);e.end=end.map(Into::into);e.cancelled=cancelled;e.done=done;e.tag=Some("reading".into());e.description="<h1>large mail content</h1>".repeat(2000);day.entries.push(e);
@@ -99,7 +99,7 @@ fn reopening_existing_schema_only_adds_indexes_and_keeps_all_content_and_history
     db.conn.execute_batch("DROP INDEX entries_activity_time").unwrap();
     let before=db.sync_snapshot().unwrap();let undo:i64=db.conn.query_row("SELECT COUNT(*) FROM undo_rows",[],|r|r.get(0)).unwrap();drop(db);
     let mut db=Store::open(&path).unwrap();assert_eq!(db.sync_snapshot().unwrap(),before);
-    assert_eq!(db.conn.pragma_query_value(None,"user_version",|r|r.get::<_,i64>(0)).unwrap(),13);
+    assert_eq!(db.conn.pragma_query_value(None,"user_version",|r|r.get::<_,i64>(0)).unwrap(),14);
     assert_eq!(db.conn.query_row("SELECT COUNT(*) FROM undo_rows",[],|r|r.get::<_,i64>(0)).unwrap(),undo);
     assert!(crate::history::step(&mut db,false).unwrap());assert_eq!(db.period_data().unwrap(),"{}");
     assert!(crate::history::step(&mut db,true).unwrap());assert!(db.period_data().unwrap().contains("Existing note"));

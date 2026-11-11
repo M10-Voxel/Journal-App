@@ -12,6 +12,7 @@ import type { RepeatRule } from '../repeat';
 import { ActionSheet } from './ActionSheet';
 import type { SheetGroup, SheetItem } from './ActionSheet';
 import { usePopupLook } from '../popupLook';
+import { EntryIcon } from './EntryIcon';
 import type { Tag } from '../tags';
 
 export type TaskStatus = 'open' | 'done' | 'cancelled';
@@ -71,8 +72,10 @@ const kindActions = (): { kind: EntryKind; label: string; short: string; hint: s
 //   kind belongs to the entry as a whole rather than to one direction;
 // - asking how far removing a linked entry reaches (ScopeChoice) grows out of the trash satellite itself.
 // Icon-only: hovering or keyboard-focusing an action previews its effect on the entry itself.
-export function EntryActionDock({ layout, swipeActions, removeChoice, onClose, entry, day, label, isOpen, planning, plannerView, traceSaved, canMoveUp, canMoveDown, tag, onTag, onStatusChange, onKindChange, onPriorityChange, onMove, onRemove, onPreview, onPlanDatePreview, onPlanningChange, onPlan, onNavigate }: {
-  tag: Tag | null; onTag: () => void;
+export function EntryActionDock({ layout, swipeActions, removeChoice, onClose, entry, day, label, isOpen, planning, plannerView, traceSaved, canMoveUp, canMoveDown, tag, onTag, onIcon, onDescribe, onStatusChange, onKindChange, onPriorityChange, onMove, onRemove, onPreview, onPlanDatePreview, onPlanningChange, onPlan, onNavigate }: {
+  tag: Tag | null; onTag: () => void; onIcon: () => void;
+  /** Opens the description's box under the row (not for traces and mails). */
+  onDescribe?: () => void;
   layout: ActionLayout; swipeActions: SwipeActions<EntryPreview>; removeChoice?: ReactNode; onClose: () => void; entry: Entry; day: string; label: string; isOpen: boolean; planning: boolean; plannerView: PlannerView; traceSaved: boolean; canMoveUp: boolean; canMoveDown: boolean;
   onStatusChange: (status: TaskStatus) => void; onKindChange: (kind: EntryKind) => void; onPriorityChange: () => void; onMove: (offset: -1 | 1) => void; onRemove: () => void; onPreview: (preview: EntryPreview | null) => void;
   onPlanDatePreview: (date: string | null, count?: number) => void; onPlanningChange: (planning: boolean, view?: PlannerView) => void; onPlan: (change: PlanUpdate) => void; onNavigate: (date: string) => void;
@@ -123,12 +126,17 @@ export function EntryActionDock({ layout, swipeActions, removeChoice, onClose, e
   // The tag: a dot in its colour (or the tag symbol), opening the tag picker.
   const tagGroup = () => <div className="dock-tag" role="group" aria-label={t("Tag zuweisen")}>
     <button type="button" className={`dock-tag-button${tag ? ' has-tag' : ''}`} style={stagger(tag ? { '--tag': tag.color } as CSSProperties : {})} aria-label={tag ? t("Tag {0} ändern", tag.name) : t("Tag zuweisen")} aria-haspopup="dialog"
-      data-tip={tag ? t("{0} · Alt G", tag.name) : t("Tag · Alt G")} onClick={onTag}>{tag ? <span className="tag-dot" /> : <Icon name="tag" />}</button>
+      data-tip={tag ? t("{0} · Alt G", tag.name) : t("Tag · Alt G")} onClick={onTag}>{tag?.icon ? <EntryIcon name={tag.icon} /> : tag ? <span className="tag-dot" /> : <Icon name="tag" />}</button>
+    {/* The entry's own icon: shown when it has one, else the icon symbol. */}
+    <button type="button" className={`dock-icon-button${entry.icon ? ' has-icon' : ''}`} style={stagger(tag ? { '--tag': tag.color } as CSSProperties : {})} aria-label={entry.icon ? t("Icon ändern") : t("Icon wählen")} aria-haspopup="dialog"
+      data-tip={t("Icon · Alt I")} onClick={onIcon}>{entry.icon ? <EntryIcon name={entry.icon} /> : <Icon name="icon" />}</button>
+    {onDescribe && <button type="button" className={`dock-description-button${entry.description ? ' has-description' : ''}`} style={stagger()} aria-label={entry.description ? t("Beschreibung bearbeiten") : t("Beschreibung hinzufügen")}
+      data-tip={t("Beschreibung · Alt B")} onClick={onDescribe}><Icon name="details" /></button>}
   </div>;
   const isTask = entry.kind === 'task' && !trace;
   // Inline groups: the actions as short, lower-case words as they read in a sentence.
-  const groupOf: Record<string, number> = { jump: 0, unplan: 0, open: 1, done: 1, cancelled: 1, priority: 2, tag: 2, 'kind-event': 2.5, 'kind-task': 2.5, 'kind-note': 2.5, tomorrow: 3, plan: 3, days: 3, repeat: 3, up: 4, down: 4, remove: 5 };
-  const shortWords: Record<string, string> = { jump: t("zum tag"), unplan: t("zurücknehmen"), open: t('offen'), done: t('erledigt'), cancelled: t('abbrechen'), priority: t("priorität"), tag: tag ? tag.name.toLowerCase() : t("tag"), 'kind-event': t("als ereignis"), 'kind-task': t("als aufgabe"), 'kind-note': t("als notiz"), tomorrow: t('morgen'), plan: t('planen'), days: t("mehrere tage"), repeat: t('wiederholen'), up: '', down: '', remove: t("löschen") };
+  const groupOf: Record<string, number> = { jump: 0, unplan: 0, open: 1, done: 1, cancelled: 1, priority: 2, tag: 2, icon: 2, description: 2, 'kind-event': 2.5, 'kind-task': 2.5, 'kind-note': 2.5, tomorrow: 3, plan: 3, days: 3, repeat: 3, up: 4, down: 4, remove: 5 };
+  const shortWords: Record<string, string> = { jump: t("zum tag"), unplan: t("zurücknehmen"), open: t('offen'), done: t('erledigt'), cancelled: t('abbrechen'), priority: t("priorität"), tag: tag ? tag.name.toLowerCase() : t("tag"), icon: t("icon"), description: t("beschreibung"), 'kind-event': t("als ereignis"), 'kind-task': t("als aufgabe"), 'kind-note': t("als notiz"), tomorrow: t('morgen'), plan: t('planen'), days: t("mehrere tage"), repeat: t('wiederholen'), up: '', down: '', remove: t("löschen") };
   const inlineGroups = () => {
     const items = actionItems().map(item => ({ ...item, short: shortWords[item.id] }));
     const order = ['open', 'done', 'cancelled'];
@@ -148,7 +156,9 @@ export function EntryActionDock({ layout, swipeActions, removeChoice, onClose, e
       { id: 'open', label: t("Wieder öffnen"), icon: 'task' as const, preview: 'open' as const, current: status === 'open', run: () => onStatusChange('open') },
     ] : [],
     ...!trace ? [{ id: 'priority', label: entry.priority ? t("Priorität entfernen") : t("Hohe Priorität"), icon: priorityIcon(entry.kind), preview: 'priority' as const, run: onPriorityChange },
-      { id: 'tag', label: tag ? t("Tag {0} ändern", tag.name) : t("Tag zuweisen"), icon: 'tag' as const, run: onTag }] : [],
+      { id: 'tag', label: tag ? t("Tag {0} ändern", tag.name) : t("Tag zuweisen"), icon: 'tag' as const, run: onTag },
+      { id: 'icon', label: entry.icon ? t("Icon ändern") : t("Icon wählen"), icon: 'icon' as const, run: onIcon }] : [],
+    ...onDescribe ? [{ id: 'description', label: entry.description ? t("Beschreibung bearbeiten") : t("Beschreibung hinzufügen"), icon: 'details' as const, run: onDescribe }] : [],
     ...kindActions().filter(action => action.kind !== entry.kind && (action.kind !== 'note' || canBeNote(entry))).map(action => ({ id: `kind-${action.kind}`, label: action.label, icon: action.kind, preview: action.kind, run: () => onKindChange(action.kind) })),
     ...canPlan(entry) ? [
       ...entry.kind === 'task' ? [{ id: 'tomorrow', label: t("Auf morgen"), icon: 'plan-tomorrow' as const, preview: 'tomorrow' as const, run: () => onPlan(tomorrowChange(entry, day)) }] : [],
@@ -163,15 +173,15 @@ export function EntryActionDock({ layout, swipeActions, removeChoice, onClose, e
 
   // The other popup looks (ActionSheet): the same actions, grouped, with a command word and their keys.
   const look = usePopupLook();
-  const sheetGroupOf: Record<string, SheetGroup> = { jump: 'status', unplan: 'status', open: 'status', done: 'status', cancelled: 'status', priority: 'entry', tag: 'entry', 'kind-event': 'entry', 'kind-task': 'entry', 'kind-note': 'entry', tomorrow: 'plan', plan: 'plan', days: 'plan', repeat: 'plan', up: 'order', down: 'order', remove: 'remove' };
-  const commands: Record<string, string> = { jump: 'goto', unplan: 'unplan', open: 'reopen', done: 'done', cancelled: 'cancel', priority: 'prio', tag: 'tag', 'kind-event': 'as-event', 'kind-task': 'as-task', 'kind-note': 'as-note', tomorrow: 'tomorrow', plan: 'plan', days: 'days', repeat: 'repeat', up: 'up', down: 'down', remove: 'rm' };
-  const keysOf: Record<string, string> = { jump: 'Alt T', done: 'Alt D', cancelled: 'Alt X', priority: 'Alt P', tag: 'Alt G', 'kind-event': 'Alt ⇧ E', 'kind-task': 'Alt ⇧ A', 'kind-note': 'Alt ⇧ N', tomorrow: 'Alt M', plan: 'Alt T', days: 'Alt ⇧ T', repeat: 'Alt W', up: 'Alt ↑', down: 'Alt ↓', remove: t('Alt Entf') };
+  const sheetGroupOf: Record<string, SheetGroup> = { jump: 'status', unplan: 'status', open: 'status', done: 'status', cancelled: 'status', priority: 'entry', tag: 'entry', icon: 'entry', description: 'entry', 'kind-event': 'entry', 'kind-task': 'entry', 'kind-note': 'entry', tomorrow: 'plan', plan: 'plan', days: 'plan', repeat: 'plan', up: 'order', down: 'order', remove: 'remove' };
+  const commands: Record<string, string> = { jump: 'goto', unplan: 'unplan', open: 'reopen', done: 'done', cancelled: 'cancel', priority: 'prio', tag: 'tag', icon: 'icon', description: 'desc', 'kind-event': 'as-event', 'kind-task': 'as-task', 'kind-note': 'as-note', tomorrow: 'tomorrow', plan: 'plan', days: 'days', repeat: 'repeat', up: 'up', down: 'down', remove: 'rm' };
+  const keysOf: Record<string, string> = { jump: 'Alt T', done: 'Alt D', cancelled: 'Alt X', priority: 'Alt P', tag: 'Alt G', icon: 'Alt I', description: 'Alt B', 'kind-event': 'Alt ⇧ E', 'kind-task': 'Alt ⇧ A', 'kind-note': 'Alt ⇧ N', tomorrow: 'Alt M', plan: 'Alt T', days: 'Alt ⇧ T', repeat: 'Alt W', up: 'Alt ↑', down: 'Alt ↓', remove: t('Alt Entf') };
   const sheetItems = (): SheetItem[] => actionItems().map(item => ({
     ...item, group: sheetGroupOf[item.id] ?? 'entry', command: commands[item.id] ?? item.id, keys: keysOf[item.id],
     short: shortWords[item.id] || item.label, primary: (isTask && item.id === (status === 'open' ? 'done' : 'open')) || (trace !== null && trace !== undefined && item.id === 'jump'),
     preview: item.preview ? previewing(item.preview) : undefined,
     // Moving and planning keep the popup (the planner opens in it); everything else closes it once done.
-    run: () => { item.run(); if (!['plan', 'days', 'repeat', 'up', 'down', 'remove', 'tag'].includes(item.id)) onClose(); },
+    run: () => { item.run(); if (!['plan', 'days', 'repeat', 'up', 'down', 'remove', 'tag', 'icon'].includes(item.id)) onClose(); },
   }));
 
   useLayoutEffect(() => {

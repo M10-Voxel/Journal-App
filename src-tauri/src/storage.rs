@@ -100,9 +100,10 @@ pub struct CalendarImport { pub date: String, pub entry: Entry, #[serde(default)
 /// A search hit: an entry on its day, or a day by its title.
 #[derive(Clone, Debug, Serialize)]
 pub struct SearchHit { pub date: String, #[serde(skip_serializing_if = "Option::is_none")] pub title: Option<String>, #[serde(skip_serializing_if = "Option::is_none")] pub entry: Option<Entry> }
-/// A tag like "Arbeit" or "Uni" with its colour (`#rrggbb`); entries are grouped and coloured by it. The list is ordered.
+/// A tag like "Arbeit" or "Uni" with its colour (`#rrggbb`) and optionally an icon (a Lucide name, see `valid_icon`) shown
+/// in its place at the entries; entries are grouped and coloured by it. The list is ordered.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub struct Tag { pub id: String, pub name: String, pub color: String }
+pub struct Tag { pub id: String, pub name: String, pub color: String, #[serde(default, skip_serializing_if = "Option::is_none")] pub icon: Option<String> }
 /// A reminder that is due: an open task or event with the bell, at its time (without one at `REMINDER_DEFAULT`).
 #[derive(Clone, Debug, Serialize, PartialEq)]
 pub struct Reminder {
@@ -209,8 +210,8 @@ impl Store {
         tx.commit()?; Ok(touched.into_iter().collect())
     }
     pub fn tags(&self) -> Result<Vec<Tag>> {
-        let mut stmt = self.conn.prepare_cached("SELECT id, name, color FROM tags ORDER BY position")?;
-        let tags = stmt.query_map([], |r| Ok(Tag { id: r.get(0)?, name: r.get(1)?, color: r.get(2)? }))?.collect::<rusqlite::Result<Vec<_>>>()?;
+        let mut stmt = self.conn.prepare_cached("SELECT id, name, color, icon FROM tags ORDER BY position")?;
+        let tags = stmt.query_map([], |r| Ok(Tag { id: r.get(0)?, name: r.get(1)?, color: r.get(2)?, icon: r.get(3)? }))?.collect::<rusqlite::Result<Vec<_>>>()?;
         Ok(tags)
     }
     /// Replaces the list of tags (in this order). Tags left out are removed and their entries keep no tag; the days of
@@ -221,7 +222,7 @@ impl Store {
         for tag in tags {
             let name = tag.name.trim();
             let hex = tag.color.len() == 7 && tag.color.starts_with('#') && tag.color[1..].chars().all(|c| c.is_ascii_hexdigit());
-            if Uuid::parse_str(&tag.id).is_err() || !ids.insert(tag.id.as_str()) || name.is_empty() || name.chars().count() > 40 || name != tag.name || !names.insert(name.to_lowercase()) || !hex { return Err("Ungültiger Tag".into()); }
+            if Uuid::parse_str(&tag.id).is_err() || !ids.insert(tag.id.as_str()) || name.is_empty() || name.chars().count() > 40 || name != tag.name || !names.insert(name.to_lowercase()) || !hex || !tag.icon.as_deref().is_none_or(valid_icon) { return Err("Ungültiger Tag".into()); }
         }
         let tx = self.conn.transaction()?;
         crate::history::begin(&tx)?;
@@ -233,8 +234,8 @@ impl Store {
             tx.execute("DELETE FROM tags WHERE id=?1", [id])?;
         }
         for (position, tag) in tags.iter().enumerate() {
-            tx.execute("INSERT INTO tags(id,name,color,position) VALUES(?1,?2,?3,?4) ON CONFLICT(id) DO UPDATE SET name=excluded.name, color=excluded.color, position=excluded.position",
-                params![tag.id, tag.name, tag.color.to_lowercase(), position as i64])?;
+            tx.execute("INSERT INTO tags(id,name,color,position,icon) VALUES(?1,?2,?3,?4,?5) ON CONFLICT(id) DO UPDATE SET name=excluded.name, color=excluded.color, position=excluded.position, icon=excluded.icon",
+                params![tag.id, tag.name, tag.color.to_lowercase(), position as i64, tag.icon])?;
         }
         for date in &touched { tx.execute("UPDATE days SET revision=revision+1 WHERE date=?1", [date])?; }
         tx.commit()?;
@@ -1115,7 +1116,7 @@ mod tests {
         let mut db=store();let rule=serde_json::json!({"start":"2026-11-03","unit":"week","every":1,"icsUid":"work-series"});
         let mut first=entry("event");first.calendar_uid=Some("work-series#first".into());first.repeat=Some(repeat(rule.clone(),&[],"2028-12-31"));
         let mut second=first.clone();second.id=Uuid::new_v4().to_string();second.calendar_uid=Some("work-series#second".into());
-        let tag=Tag{id:Uuid::new_v4().to_string(),name:"Arbeit".into(),color:"#AEFF00".into()};
+        let tag=Tag{id:Uuid::new_v4().to_string(),name:"Arbeit".into(),color:"#AEFF00".into(),icon:None};
         let batch=vec![CalendarImport{date:"2026-11-03".into(),entry:first.clone(),tag:Some(tag.clone())},CalendarImport{date:"2026-11-10".into(),entry:second.clone(),tag:Some(tag.clone())}];
         db.import_calendar(batch.clone()).unwrap();assert_eq!(db.linked(&first.id).unwrap().len(),2);assert_eq!(db.tags().unwrap().len(),1);
         let saved=db.load("2026-11-03").unwrap();let series=saved.entries[0].repeat.as_ref().unwrap().series.clone();assert_eq!(saved.entries[0].tag,Some(db.tags().unwrap()[0].id.clone()));
@@ -1141,7 +1142,7 @@ mod tests {
     }
     #[test] fn search_finds_words_kinds_tags_and_titles_on_every_day() {
         let mut db = store();
-        let work = Tag { id: Uuid::new_v4().to_string(), name: "Arbeit".into(), color: "#569eff".into() };
+        let work = Tag { id: Uuid::new_v4().to_string(), name: "Arbeit".into(), color: "#569eff".into(), icon: None };
         db.save_tags(&[work.clone()]).unwrap();
         let mut day = db.load("2020-01-02").unwrap(); day.title = "Umzug geplant".into();
         let mut task = entry("task"); task.text = "Kisten **packen**".into(); task.tag = Some(work.id.clone());
@@ -1154,7 +1155,17 @@ mod tests {
         assert_eq!(ids(db.search(&["umzug".into()], &["title".into()], &[], 50).unwrap()), ["Umzug geplant".to_string()]);
         assert!(db.search(&["100%".into()], &[], &[], 50).unwrap().is_empty(), "Wildcards are taken literally.");
     }
-    fn tag(name: &str, color: &str) -> Tag { Tag { id: Uuid::new_v4().to_string(), name: name.into(), color: color.into() } }
+    fn tag(name: &str, color: &str) -> Tag { Tag { id: Uuid::new_v4().to_string(), name: name.into(), color: color.into(), icon: None } }
+    #[test] fn a_tag_keeps_its_icon_and_a_wrong_one_is_refused() {
+        let mut db = store();
+        let mut uni = tag("Uni", "#76d982"); uni.icon = Some("graduation-cap".into());
+        db.save_tags(&[uni.clone()]).unwrap();
+        assert_eq!(db.tags().unwrap()[0].icon.as_deref(), Some("graduation-cap"));
+        uni.icon = None; db.save_tags(&[uni.clone()]).unwrap();
+        assert_eq!(db.tags().unwrap()[0].icon, None);
+        uni.icon = Some("Not an icon!".into());
+        assert!(db.save_tags(&[uni]).is_err());
+    }
     #[test] fn tags_are_ordered_validated_and_removing_one_untags_its_entries() {
         let mut db = store();
         let (work, uni) = (tag("Arbeit", "#569EFF"), tag("Uni", "#76d982"));
@@ -1257,7 +1268,7 @@ mod tests {
         day.entries[0].plan = Some(plan("tomorrow", &["2026-10-29"], None, false));
         db.save(day).unwrap();
         assert_eq!(db.load("2026-10-29").unwrap().entries[0].text, "Bestehend");
-        assert_eq!(db.conn.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0)).unwrap(), 13);
+        assert_eq!(db.conn.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0)).unwrap(), 14);
     }
     #[test] fn save_reload_and_isolate_days() {
         let mut db = store(); let mut day = db.load("2024-02-29").unwrap(); day.title="Ein Tag".into(); day.entries=vec![entry("task"),entry("event"),entry("note")];

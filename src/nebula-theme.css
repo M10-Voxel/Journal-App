@@ -165,20 +165,25 @@
 .nebula-prompt b { color: var(--nb-violet); font-weight: 700; }
 .nebula-terminal-glyphs { padding: 0 10px; font: 700 13px var(--mono); letter-spacing: .2em; }
 .nebula-terminal-body { padding: 20px 24px 24px 38px; }
-.nebula-terminal.is-board .nebula-terminal-body, .nebula-terminal.is-data .nebula-terminal-body { padding-left: 24px; }
+.nebula-terminal.is-board .nebula-terminal-body, .nebula-terminal:is(.is-rating, .is-scales, .is-activities) .nebula-terminal-body { padding-left: 24px; }
 .nebula-pair { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; align-items: start; }
 @container nebula-center (min-width: 900px) { .nebula-pair { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
 
 /* What runs inside the terminals: mono text, editorial title, brutal headings. */
 .nebula-terminal .title-input { margin-bottom: 22px; padding: 2px 0 8px; border-bottom: 1px dashed var(--edge); color: var(--strong); font: italic 400 34px/1.15 var(--display); letter-spacing: -.01em; }
 .nebula-terminal .title-input::placeholder { color: var(--placeholder); }
-.nebula-terminal :is(.section-title h2, .checklist-section-heading h3, .board-head h3, .period-section h3, .rating-heading label) { color: var(--strong); font: 700 11px var(--sans); letter-spacing: .16em; text-transform: uppercase; }
+.nebula-terminal :is(.section-title h2, .checklist-section-heading h3, .board-head h3, .period-section h3, .rating-heading label, .rating-heading > span) { color: var(--strong); font: 700 11px var(--sans); letter-spacing: .16em; text-transform: uppercase; }
 .nebula-terminal .section-heading { border-bottom: 1px solid var(--edge); }
 .nebula-terminal .entry-count { color: var(--accent); font: 700 11px var(--mono); }
 .nebula-terminal .kind-picker { gap: 0; }
 .nebula-terminal .kind-picker button { margin-left: -1px; padding: 4px 9px; border: 1px solid var(--edge); color: var(--text); font: 10.5px var(--mono); text-transform: lowercase; }
 .nebula-terminal .kind-picker button:hover { border-color: var(--accent); background: var(--event-background); color: var(--strong); }
 .nebula-terminal .period-section { margin-top: 0; }
+.nebula-terminal:is(.is-rating, .is-scales, .is-activities) .period-section { padding: 0; }
+.nebula-terminal:is(.is-rating, .is-scales, .is-activities) > .nebula-panel-body { padding-top: 14px; padding-bottom: 14px; }
+.nebula-terminal.is-activities .period-section > .checklist-section-heading { display: none; }
+.nebula-terminal.is-rating .period-rating { padding: 0; }
+.nebula-terminal.is-rating .rating-heading { margin-bottom: 10px; }
 .nebula-terminal :is(.period-section > .section-heading) { display: none; }
 .nebula-terminal .period-rating output { color: var(--strong); font: 400 30px var(--display); }
 .nebula-terminal .activity-name { font: 13px var(--mono); }

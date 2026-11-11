@@ -197,10 +197,11 @@ impl Store {
             for (id,record) in records {
                 if *table=="days" {chrono::NaiveDate::parse_from_str(id,"%Y-%m-%d").map_err(|_|"Ungültiges Datum im Cloud-Stand")?;} else {uuid::Uuid::parse_str(id).map_err(|_|"Ungültige ID im Cloud-Stand")?;}
                 // Columns added after schema 12 (reminder lead time, icon) may be missing in a snapshot of an older version: they get their default.
-                let later=|col:&str|*table=="entries" && later_column(col).is_some();
+                // A tag's icon (schema 14) as well.
+                let later=|col:&str|(*table=="entries" && later_column(col).is_some()) || (*table=="tags" && col=="icon");
                 let present=columns.iter().filter(|col|record.get(col.as_str()).is_some()).count();
                 if record[*key].as_str()!=Some(id.as_str()) || record.as_object().map(|v|v.len())!=Some(present) || columns.iter().any(|col|record.get(col.as_str()).is_none() && !later(col)){return Err("Ungültiger Cloud-Datensatz".into())}
-                let fallback=|col:&str|if *table=="entries" {later_column(col)} else {None};
+                let fallback=|col:&str|if *table=="entries" {later_column(col)} else if *table=="tags" && col=="icon" {Some(Value::Null)} else {None};
                 let mut values=Vec::new();for col in &columns {let missing=record.get(col).is_none();let default=if missing {fallback(col).ok_or("Spalte fehlt")?} else {Value::Null};let v=if missing {&default} else {record.get(col).ok_or("Spalte fehlt")?};values.push(match v {Value::Null=>rusqlite::types::Value::Null,Value::String(s)=>rusqlite::types::Value::Text(s.clone()),Value::Number(n)=>rusqlite::types::Value::Integer(n.as_i64().ok_or("Ungültige Zahl")?),_=>return Err("Ungültiger Wert".into())});}
                 if let Some(i)=revision {values[i]=rusqlite::types::Value::Integer(revisions.get(id).copied().unwrap_or(0)+1);}
                 insert.execute(rusqlite::params_from_iter(values)).map_err(|e|e.to_string())?;

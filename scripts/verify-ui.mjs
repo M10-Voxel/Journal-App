@@ -169,7 +169,9 @@ const bootstrap = `
     if (command === 'drive_apply') {sessionStorage.setItem('driveApplied',JSON.stringify(payload.snapshot));return null;}
 
     // Activities bring their own tags; the tag checks start without any (localStorage 'test.noActivities').
-    if (command === 'load_period_data') return JSON.stringify({ definitions:localStorage.getItem('test.noActivities') ? [] : [{id:'reading',name:'Lesen',trackTime:!localStorage.getItem('test.activitySizes')},{id:'sport',name:'Sport'},...(localStorage.getItem('test.activitySizes')?[{id:'binary-extra',name:'Magnesium',trackTime:false}]:[])], notes:{}, days:Object.fromEntries(Array.from({length:28},(_,i)=>[shift(-i),{rating:i%4===0?undefined:4+i%7,items:{reading:{done:i%2===0,minutes:30},sport:{done:i%3===0,minutes:45}}}])) });
+    if (command === 'load_period_data') return JSON.stringify({ definitions:localStorage.getItem('test.noActivities') ? [] : [{id:'reading',name:'Lesen',trackTime:!localStorage.getItem('test.activitySizes')},{id:'sport',name:'Sport'},...(localStorage.getItem('test.activitySizes')?[{id:'binary-extra',name:'Magnesium',trackTime:false}]:[])], notes:{}, ...(localStorage.getItem('test.scales') ? { scales:JSON.parse(localStorage.getItem('test.scales')) } : {}),
+      // With day values (test.scales): the first on every day, the second (0–20) with a gap every third day.
+      days:Object.fromEntries(Array.from({length:28},(_,i)=>{ const scales=JSON.parse(localStorage.getItem('test.scales') ?? '[]'); return [shift(-i),{rating:i%4===0?undefined:4+i%7,...(scales.length && i>0 ? { scales:{ [scales[0].id]:i%5*2, ...(i%3===1 ? {} : { [scales[1].id]:20-i%9 }) } } : {}),items:{reading:{done:i%2===0,minutes:30},sport:{done:i%3===0,minutes:45}}}]; })) });
     if (command === 'save_period_data') { if (window.__uiTest.failPeriodSave) { window.__uiTest.failPeriodSave=false; throw new Error('Timer save test failure'); } window.__uiTest.periodData=JSON.parse(payload.data); return; }
     if (command === 'mail_ml_status') return structuredClone(mail.model);
     if (command === 'mail_ml_install') { mail.model.installed=true; mail.model.enabled=true; void window.__uiTest.emit('mail:ml',null); mailChanged(); return; }
@@ -897,6 +899,305 @@ async function checkDrive() {
   console.log('Drive UI passed: connection setup, key generation, encrypted exchange and application in Classic/Pixel (mock transport).');
 }
 
+// Icons in the journal: an entry's icon before its text (Alt I), a tag's icon in place of its name – in every theme.
+async function checkEntryIcons() {
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  await command('Emulation.setDeviceMetricsOverride', { width:1180, height:780, deviceScaleFactor:1, mobile:false });
+  const first = "document.querySelector('[data-entry-id=\"10000000-0000-4000-8000-000000000001\"]')";
+  for (const [theme, pixel] of [['classic', false], ['journal', false], ['nebula', false], ['classic', true]]) {
+    await evaluate(`localStorage.setItem('journal.settings', JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'), theme:'${theme}', pixel:${pixel}, popupStyle:'a', language:'de', colorTheme:'${theme === 'journal' ? 'paper' : 'original'}'})); localStorage.setItem('test.noActivities', '1')`);
+    await command('Page.navigate', { url:origin });
+    await until("document.querySelectorAll('.entry').length===5");
+    if (!(await evaluate("window.__uiTest.tags().some(tag => tag.name==='Uni')"))) {
+      await evaluate("window.__TAURI_INTERNALS__.invoke('save_tags',{tags:[{id:crypto.randomUUID(),name:'Uni',color:'#76d982',icon:'graduation-cap'}]})");
+      await until("window.__uiTest.tags().some(tag => tag.name==='Uni')"); await pause(200);
+    }
+    // The tag (Alt G, 1): its pill shows the icon, the name stays its label.
+    await evaluate(`${first}.querySelector('.entry-text').focus()`);
+    await key('g', 'KeyG', 1); await until("document.activeElement===document.querySelector('.tag-picker input')");
+    await key('1', 'Digit1'); await until("!document.querySelector('.tag-picker')");
+    await until(`Boolean(${first}.querySelector('.entry-tag.has-icon svg.entry-icon'))`);
+    assert.equal(await evaluate(`${first}.querySelector('.entry-tag').textContent.trim()`), '', `The tag shows its icon, not its name (${theme}${pixel ? ' pixel' : ''}).`);
+    assert.match(await evaluate(`${first}.querySelector('.entry-tag').getAttribute('aria-label')`), /Uni/);
+    // The entry's icon (Alt I): chosen in the picker and stored; the journal shows nothing before the text (the
+    // calendar shows it, checked below).
+    await evaluate(`${first}.querySelector('.entry-text').focus()`);
+    await key('i', 'KeyI', 1);
+    await until("document.activeElement===document.querySelector('.icon-picker input')");
+    await command('Input.insertText', { text:'kaffee' }); await until("Boolean(document.querySelector('.icon-picker [data-icon-index=\"0\"]'))");
+    await key('Enter', 'Enter'); await until("!document.querySelector('.icon-picker')");
+    await saveNow(); await until("window.__uiTest.day().entries.find(e => e.id==='10000000-0000-4000-8000-000000000001')?.icon === 'coffee'");
+    assert(await evaluate(`[...${first}.querySelectorAll('.entry-main .entry-icon')].every(icon => icon.closest('.entry-tag'))`), `No icon before the text (${theme}${pixel ? ' pixel' : ''}).`);
+    assert(await evaluate(`(() => { const t=${first}.querySelector('.entry-text').getBoundingClientRect(), s=${first}.querySelector('.entry-symbol').getBoundingClientRect(); return t.left-s.right < 16; })()`), 'The text follows the symbol directly.');
+    await evaluate(`${first}.scrollIntoView({block:'center'})`); await pause(250);
+    await screenshot(`icons-${theme}${pixel ? '-pixel' : ''}.png`);
+  }
+  // The actions offer it too (orbit cluster, beside the tag).
+  await evaluate(`${first}.querySelector('.entry-symbol').click()`);
+  await until(`Boolean(${first}.querySelector('.dock-icon-button.has-icon svg.entry-icon'))`);
+  await key('Escape');
+  // The calendar shows the entry's icon.
+  await key('k', 'KeyK', 2);
+  await until("Boolean(document.querySelector('[data-calendar-entry=\"10000000-0000-4000-8000-000000000001\"] .cal-item-icon'))");
+  await key('k', 'KeyK', 2);
+  await evaluate("localStorage.removeItem('test.noActivities'); localStorage.setItem('journal.settings', JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'), theme:'classic', pixel:false}))");
+  console.log('Icon checks passed: entry icon (Alt I, picker, stored, shown in the calendar and not before the text), tag icon in place of the name, in the normal, journal, Nebula and pixel looks, and in the actions.');
+}
+
+/** Day values (Tageswerte): set up in the settings, entered with the mouse in every look, shown as lines in the overviews. */
+async function checkScales() {
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  const date = await evaluate('window.__uiTest.date');
+  const look = async (theme, pixel) => {
+    await evaluate(`localStorage.setItem('journal.settings', JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'), theme:'${theme}', pixel:${pixel}, popupStyle:'a', language:'de', colorTheme:'${theme === 'journal' ? 'paper' : 'original'}'})); localStorage.setItem('journal.calendarDrawer','0'); localStorage.setItem('journal.notebookDrawer','0'); localStorage.removeItem('journal.nebulaLayout.v1')`);
+    await command('Page.navigate', { url:origin });
+    await until("document.querySelectorAll('.entry').length>=5 && Boolean(window.__uiTest.periodData || document.querySelector('.period-section'))");
+  };
+  await command('Emulation.setDeviceMetricsOverride', { width:1280, height:900, deviceScaleFactor:1, mobile:false });
+  await evaluate("localStorage.removeItem('test.scales'); localStorage.removeItem('journal.hiddenScales')");
+  await look('classic', false);
+  // None at first: a hint, and the way to the settings.
+  await until("Boolean(document.querySelector('.period-scales .checklist-empty'))");
+  await evaluate("document.querySelector('.checklist-manage.is-scales').click()");
+  await until("Boolean(document.querySelector('#settings-scales .scale-settings-row.is-rating'))");
+  assert.equal(await evaluate("document.querySelectorAll('#settings-scales .scale-settings-row').length"), 1, 'Only the daily rating: no day values by default.');
+  assert.deepEqual(await evaluate("[...document.querySelectorAll('#settings-scales .is-rating .scale-range input')].map(i => i.value)"), ['0', '10'], 'The daily rating runs from 0 to 10.');
+  const add = async name => {
+    await evaluate("document.querySelector('#settings-scales .activity-settings-add input').focus()");
+    await command('Input.insertText', { text:name }); await key('Enter', 'Enter');
+  };
+  await add('Stress'); await until("window.__uiTest.periodData?.scales?.length===1");
+  await add('Schlaf'); await until("window.__uiTest.periodData?.scales?.length===2");
+  assert.deepEqual(await evaluate("window.__uiTest.periodData.scales.map(s => [s.name, s.min, s.max, s.active])"), [['Stress', 0, 10, true], ['Schlaf', 0, 10, true]]);
+  const [stress, sleep] = await evaluate("window.__uiTest.periodData.scales.map(s => s.id)");
+  // Schlaf runs to 20; Stress gets a colour of its own.
+  await evaluate(`(() => { const i=document.querySelector('[data-scale-id="${sleep}"] input[aria-label$="größter Wert"]'); i.focus(); i.select(); })()`);
+  await command('Input.insertText', { text:'20' });
+  await until(`window.__uiTest.periodData.scales[1].max===20`);
+  await evaluate(`document.querySelector('[data-scale-id="${stress}"] .color-well').click()`);
+  await until("Boolean(document.querySelector('.color-picker-swatches'))");
+  await evaluate("document.querySelector('.color-picker-swatches button[aria-label=\"#e6a85c\"]').click()");
+  await key('Escape');
+  await until("window.__uiTest.periodData.scales[0].color==='#e6a85c'");
+  // A lowest value above the highest is not taken.
+  await evaluate(`(() => { const i=document.querySelector('[data-scale-id="${stress}"] input[aria-label$="kleinster Wert"]'); i.focus(); i.select(); })()`);
+  await command('Input.insertText', { text:'12' }); await pause(150);
+  assert.equal(await evaluate("window.__uiTest.periodData.scales[0].min"), 0);
+  await evaluate("document.activeElement.blur()");
+  await pause(200); await screenshot('scales-settings.png');
+  await evaluate("document.querySelector('#settings-scales-tab').focus()");
+  await key('Escape'); await until("!document.querySelector('.settings')");
+  // From here on the mock keeps them (and some values on earlier days, with gaps) across reloads.
+  await evaluate("localStorage.setItem('test.scales', JSON.stringify(window.__uiTest.periodData.scales))");
+
+  // Entering with the mouse: a click sets, dragging moves along – in every look its own drawing, never a slider.
+  const trackOf = selector => evaluate(`(() => { const t=document.querySelector(${JSON.stringify(selector)} + ' .scale-track'); t.scrollIntoView({block:'center'}); const r=t.getBoundingClientRect(); return { left:r.left, top:r.top, width:r.width, height:r.height }; })()`);
+  const at = (box, value, steps) => ({ x:box.left + (value + .5) / steps * box.width, y:box.top + box.height / 2 });
+  const mouse = (type, point, buttons = 0) => command('Input.dispatchMouseEvent', { type, x:point.x, y:point.y, button:type === 'mouseMoved' ? (buttons ? 'left' : 'none') : 'left', buttons, clickCount:type === 'mouseMoved' ? 0 : 1 });
+  const looks = [['classic', false, 3, 15, 9], ['journal', false, 6, 7, 4], ['nebula', false, 8, 19, 7], ['classic', true, 2, 11, 10]];
+  for (const [theme, pixel, stressValue, sleepValue, ratingValue] of looks) {
+    const name = `${theme}${pixel ? '-pixel' : ''}`;
+    await look(theme, pixel);
+    // The journal's book shows the day's data on a page of its own.
+    if (await evaluate("!document.querySelector('.scale-row') && Boolean(document.querySelector('.book-cut-tab[data-page=data]'))")) await evaluate("document.querySelector('.book-cut-tab[data-page=data]').click()");
+    await until(`document.querySelectorAll('.scale-row').length===2 && Boolean(document.querySelector('#daily-rating'))`);
+    assert.equal(await evaluate("document.querySelectorAll('.period-section input[type=range]').length"), 0, `${name}: no sliders.`);
+    assert.equal(await evaluate("document.querySelector('#daily-rating').getAttribute('role')"), 'slider');
+    // Click: Stress.
+    const stressBox = await trackOf(`[data-scale-id="${stress}"]`);
+    await mouse('mouseMoved', at(stressBox, stressValue, 11)); await mouse('mousePressed', at(stressBox, stressValue, 11), 1); await mouse('mouseReleased', at(stressBox, stressValue, 11));
+    await until(`window.__uiTest.periodData.days[${JSON.stringify(date)}]?.scales?.[${JSON.stringify(stress)}]===${stressValue}`);
+    // Drag: Schlaf from near the start to its value (it follows the pointer on the way).
+    const sleepBox = await trackOf(`[data-scale-id="${sleep}"]`);
+    await mouse('mouseMoved', at(sleepBox, 1, 21)); await mouse('mousePressed', at(sleepBox, 1, 21), 1);
+    await until(`window.__uiTest.periodData.days[${JSON.stringify(date)}]?.scales?.[${JSON.stringify(sleep)}]===1`);
+    for (let step = 1; step <= 6; step++) await mouse('mouseMoved', at(sleepBox, 1 + (sleepValue - 1) * step / 6, 21), 1);
+    await mouse('mouseReleased', at(sleepBox, sleepValue, 21));
+    await until(`window.__uiTest.periodData.days[${JSON.stringify(date)}]?.scales?.[${JSON.stringify(sleep)}]===${sleepValue}`);
+    // The daily rating the same way.
+    const ratingBox = await trackOf('#daily-rating');
+    await mouse('mouseMoved', at(ratingBox, ratingValue, 11)); await mouse('mousePressed', at(ratingBox, ratingValue, 11), 1); await mouse('mouseReleased', at(ratingBox, ratingValue, 11));
+    await until(`window.__uiTest.periodData.days[${JSON.stringify(date)}]?.rating===${ratingValue}`);
+    assert.equal(await evaluate(`document.querySelector('[data-scale-id="${sleep}"] .scale-input').getAttribute('aria-valuenow')`), String(sleepValue));
+    // Hovering previews without setting.
+    const hoverPoint = at(stressBox, 10 - stressValue, 11);
+    await evaluate(`document.querySelector('[data-scale-id="${stress}"]').scrollIntoView({block:'center'})`);
+    const stressBox2 = await trackOf(`[data-scale-id="${stress}"]`);
+    await mouse('mouseMoved', at(stressBox2, 10 - stressValue, 11)); await pause(120);
+    assert(await evaluate(`document.querySelector('[data-scale-id="${stress}"] .scale-input').classList.contains('is-hovering')`), `${name}: hovering previews.`);
+    assert.equal(await evaluate(`window.__uiTest.periodData.days[${JSON.stringify(date)}].scales[${JSON.stringify(stress)}]`), stressValue, 'Hovering sets nothing.');
+    void hoverPoint;
+    await mouse('mouseMoved', { x:5, y:5 }); await pause(150);
+    // Each look draws it its own way.
+    const drawn = await evaluate(`(() => { const input=document.querySelector('[data-scale-id="${stress}"] .scale-input'), cell=input.querySelector('.scale-cell[data-on]'), before=getComputedStyle(cell, '::before');
+      return { content: before.content, radius: before.borderRadius, ink: getComputedStyle(input.querySelector('.scale-ink') ?? input).display, term: getComputedStyle(input.querySelector('.scale-term')).display, bracket: getComputedStyle(input.querySelector('.scale-bracket')).display }; })()`);
+    if (theme === 'journal') assert.equal(drawn.ink, 'block', 'Journal: the value circled in ink.');
+    else if (theme === 'nebula') { assert.equal(drawn.content, '"█"', 'Nebula: blocks.'); assert.notEqual(drawn.term, 'none'); assert.notEqual(drawn.bracket, 'none'); assert.match(await evaluate(`document.querySelector('[data-scale-id="${stress}"] .scale-term').textContent`), new RegExp(`^${String(stressValue).padStart(2, '0')}/10$`)); }
+    else if (pixel) assert.equal(drawn.radius, '0px', 'Pixel: square cells.');
+    else assert.equal(drawn.radius, '50%', 'Classic: dots.');
+    if (theme === 'nebula') {
+      // Nebula: rating, day values and activities in three windows stacked right of the entries.
+      assert.equal(await evaluate("getComputedStyle(document.querySelector('.scale-cell[data-on]'),'::before').textShadow"),'none');
+      assert(await evaluate("parseFloat(getComputedStyle(document.querySelector('.scale-cell[data-on]'),'::before').scale.split(' ')[1])<1"),'Nebula rating blocks are flatter.');
+      assert.equal(await evaluate("getComputedStyle(document.querySelector('.nebula-panel.is-activities .checklist-section-heading')).display"),'none');
+      for (const id of ['rating','scales','activities']) {
+        await evaluate(`document.querySelector('.nebula-panel.is-${id}').scrollIntoView({block:'center'})`);
+        const before=await evaluate(`(() => {const p=document.querySelector('.nebula-panel.is-${id}'),r=p.getBoundingClientRect(),g=p.querySelector('.nebula-panel-resize').getBoundingClientRect();return {width:r.width,x:g.left+g.width/2,y:g.top+g.height/2};})()`);
+        await command('Input.dispatchMouseEvent',{type:'mouseMoved',x:before.x,y:before.y});
+        await command('Input.dispatchMouseEvent',{type:'mousePressed',x:before.x,y:before.y,button:'left',buttons:1,clickCount:1});
+        await command('Input.dispatchMouseEvent',{type:'mouseMoved',x:before.x,y:before.y-240,button:'left',buttons:1});
+        assert(Math.abs(await evaluate(`document.querySelector('.nebula-panel.is-${id}').getBoundingClientRect().width`)-before.width)<1,'Changing height keeps the stack width during dragging.');
+        await command('Input.dispatchMouseEvent',{type:'mouseReleased',x:before.x,y:before.y-240,button:'left',buttons:0,clickCount:1});
+        assert(Math.abs(await evaluate(`document.querySelector('.nebula-panel.is-${id}').getBoundingClientRect().width`)-before.width)<1,'The saved height keeps the stack width.');
+        assert.equal(await evaluate(`JSON.parse(localStorage.getItem('journal.nebulaLayout.v1')).heights.${id}`),64);
+      }
+      assert(await evaluate("(() => { const e=document.querySelector('.nebula-panel.is-entries').getBoundingClientRect(), s=document.querySelector('.nebula-stack[data-stack=rating]'); return Boolean(s) && [...s.children].map(p => p.dataset.panel).join()==='rating,scales,activities' && s.getBoundingClientRect().left>e.right; })()"), 'Nebula: a stack right of the entries.');
+      assert.equal(await evaluate("document.querySelector('.nebula-poster-prose').textContent.includes('Bewertung " + ratingValue + " / 10')"), true);
+      await evaluate("document.querySelector('.nebula-desk').scrollTop=0");
+    }
+    await pause(200); await screenshot(`scales-${name}.png`);
+  }
+
+  // Nebula: a window dropped on another's lower rim joins its stack; pulled out between rows it leaves it.
+  await look('nebula', false);
+  await until("Boolean(document.querySelector('.nebula-stack[data-stack=rating]'))");
+  const pull = async (from, to) => {
+    await command('Input.dispatchMouseEvent',{type:'mouseMoved',x:from.x,y:from.y});
+    await command('Input.dispatchMouseEvent',{type:'mousePressed',x:from.x,y:from.y,button:'left',buttons:1,clickCount:1});
+    for (let step = 1; step <= 8; step++) await command('Input.dispatchMouseEvent',{type:'mouseMoved',x:from.x+(to.x-from.x)*step/8,y:from.y+(to.y-from.y)*step/8,button:'left',buttons:1});
+    await pause(120);
+  };
+  const release = at => command('Input.dispatchMouseEvent',{type:'mouseReleased',x:at.x,y:at.y,button:'left',buttons:0,clickCount:1});
+  // The entries into the stack below the activities, then back out (above the board, a row of their own).
+  await evaluate("document.querySelector('.nebula-desk').scrollTop=0"); await pause(150);
+  const entriesBar = await evaluate("(() => { const r=document.querySelector('.nebula-panel.is-entries .nebula-prompt').getBoundingClientRect(); return { x:r.left+30, y:r.top+r.height/2 }; })()");
+  const scalesRim = await evaluate("(() => { const r=document.querySelector('.nebula-panel.is-scales').getBoundingClientRect(); return { x:r.left+r.width/2, y:r.bottom-8 }; })()");
+  await pull(entriesBar, scalesRim);
+  assert(await evaluate("document.querySelector('.nebula-panel.is-scales').classList.contains('is-drop-stack-below')"), 'The landing place below the window is marked.');
+  await release(scalesRim);
+  await until("[...document.querySelector('.nebula-stack[data-stack=rating]')?.children ?? []].map(p => p.dataset.panel).join()==='rating,scales,entries,activities'");
+  assert.equal(await evaluate("JSON.parse(localStorage.getItem('journal.nebulaLayout.v1')).stacked.day.includes('entries')"), true);
+  await pause(200); await screenshot('scales-nebula-stacked.png');
+  await evaluate("document.querySelector('.nebula-layout-reset').click()");
+  await until("[...document.querySelector('.nebula-stack[data-stack=rating]')?.children ?? []].map(p => p.dataset.panel).join()==='rating,scales,activities'");
+  // The overview: the note with the ratings below it, the activities right.
+  await key('2', 'Digit2', 2);
+  await until("Boolean(document.querySelector('.nebula-stack[data-stack=notes]')) && [...document.querySelector('.nebula-stack[data-stack=notes]').children].map(p => p.dataset.panel).join()==='notes,ratings' && Boolean(document.querySelector('.nebula-grid > .nebula-panel.is-activities'))");
+  assert(await evaluate("document.querySelector('.nebula-grid > .nebula-panel.is-activities').getBoundingClientRect().left > document.querySelector('.nebula-stack[data-stack=notes]').getBoundingClientRect().right"), 'The activities stand right of the note and ratings.');
+  await until("Boolean(document.querySelector('.nebula-panel.is-ratings .value-chart svg'))");
+  await pause(200); await screenshot('scales-nebula-week.png');
+
+  // The overviews' chart: one line per value, points joined, gaps where a day has none; the y axis spans all shown lines.
+  for (const [theme, pixel] of [['classic', false], ['journal', false], ['classic', true]]) {
+    const name = `${theme}${pixel ? '-pixel' : ''}`;
+    await look(theme, pixel);
+    await key('3', 'Digit3', 2);
+    if (await evaluate("!document.querySelector('.value-chart svg') && Boolean(document.querySelector('.book-cut-tab'))")) await pause(400);
+    await until("Boolean(document.querySelector('.value-chart svg .chart-series'))");
+    assert.deepEqual(await evaluate("[...document.querySelectorAll('.value-chart .chart-series')].map(s => s.dataset.series)"), ['rating', stress, sleep]);
+    assert.deepEqual(await evaluate("[document.querySelector('.value-chart > svg').dataset.min, document.querySelector('.value-chart > svg').dataset.max]"), ['0', '20'], `${name}: 0–10 and 0–20 together: an axis from 0 to 20.`);
+    assert(await evaluate(`Boolean(document.querySelector('.chart-series[data-series="${sleep}"] .chart-point[data-date="' + window.__uiTest.shift(-2) + '"]'))`), `${name}: a point per day with a value.`);
+    // Gaps: Schlaf has no value every third day, so its line is broken into several pieces.
+    assert(await evaluate(`document.querySelectorAll('.chart-series[data-series="${sleep}"] ${pixel ? '.chart-step' : '.chart-line'}').length > 1`), `${name}: the line breaks at missing days.`);
+    assert.equal(await evaluate(`getComputedStyle(document.querySelector('.chart-series[data-series="${sleep}"] .chart-line')).display`), pixel ? 'none' : 'inline', `${name}: ${pixel ? 'steps' : 'slopes'}.`);
+    await evaluate("document.querySelector('.value-chart').scrollIntoView({block:'center'})"); await pause(250);
+    await screenshot(`scales-chart-${name}.png`);
+  }
+  // Hiding a line (like the tags): the axis follows the lines still shown; remembered on the device.
+  await evaluate("document.querySelector('.value-chart-filter').click()");
+  await until("Boolean(document.querySelector('.tag-filter .tag-filter-row'))");
+  await evaluate(`document.querySelector('.tag-filter .tag-filter-row[data-series="${sleep}"]').click()`);
+  await until(`document.querySelector('.value-chart > svg').dataset.max==='10' && !document.querySelector('.chart-series[data-series="${sleep}"]')`);
+  assert.deepEqual(await evaluate("JSON.parse(localStorage.getItem('journal.hiddenScales'))"), [sleep]);
+  await key('Escape');
+  // A detail line names every value of the day pointed at (two days ago in the mock: rating 6, Stress 4).
+  const sample = await evaluate('window.__uiTest.shift(-2)');
+  if (sample.slice(0, 7) === date.slice(0, 7)) {
+    const hit = await evaluate(`(() => { const r=document.querySelector('.chart-hit[data-date="${sample}"]').getBoundingClientRect(); return { x:r.left+r.width/2, y:r.top+r.height/2 }; })()`);
+    await command('Input.dispatchMouseEvent', { type:'mouseMoved', x:hit.x, y:hit.y }); await pause(150);
+    assert.match(await evaluate("document.querySelector('.value-chart .rating-chart-detail').textContent"), /Tagesbewertung 6, Stress 4$/);
+  }
+  await evaluate("localStorage.removeItem('journal.hiddenScales')");
+  // The year: months' averages.
+  await key('5', 'Digit5', 2);
+  await until("document.querySelectorAll('.value-chart .chart-hit').length===12");
+  // A focused month must not leave an invalid point index when switching back to a week.
+  await evaluate("[...document.querySelectorAll('.value-chart .chart-hit')].at(-1).focus()");
+  await key('2', 'Digit2', 2);
+  await until("document.querySelectorAll('.value-chart .chart-hit').length===7");
+  await evaluate("localStorage.removeItem('test.scales'); localStorage.setItem('journal.settings', JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'), theme:'classic', pixel:false}))");
+  // If all custom scales are removed, a previously hidden rating must still be recoverable.
+  await evaluate("localStorage.setItem('journal.hiddenScales',JSON.stringify(['rating']));location.reload()");
+  await until("Boolean(document.querySelector('.period-rating'))");
+  await key('2', 'Digit2', 2);
+  await until("Boolean(document.querySelector('.value-chart-empty'))");
+  assert(await evaluate("Boolean(document.querySelector('.value-chart-filter'))"),'The only remaining hidden series can be shown again.');
+  await evaluate("document.querySelector('.value-chart-filter').click()");
+  await until("Boolean(document.querySelector('.tag-filter-row[data-series=rating]'))");
+  await evaluate("document.querySelector('.tag-filter-row[data-series=rating]').click()");
+  await until("Boolean(document.querySelector('.value-chart .chart-series[data-series=rating]'))");
+  await key('Escape');
+  assert.deepEqual(errors, []);
+  console.log('Day value checks passed: settings (none at first, add, colour, span 0–20, invalid span kept out), mouse click and drag in the classic, journal, Nebula and pixel looks (no sliders, hover preview), Nebula stacks (default, drop into a stack, reset, overview), line chart with gaps, shared y axis, hiding lines and yearly averages.');
+}
+
+/** Descriptions in the journal: Alt B or the actions open a box under the row; a click on one edits it; mails keep theirs. */
+async function checkDescriptions() {
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  await command('Emulation.setDeviceMetricsOverride', { width:1180, height:820, deviceScaleFactor:1, mobile:false });
+  for (const [theme, pixel] of [['classic', false], ['journal', false], ['nebula', false], ['classic', true]]) {
+    const name = `${theme}${pixel ? '-pixel' : ''}`;
+    await evaluate(`localStorage.setItem('journal.settings', JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'), theme:'${theme}', pixel:${pixel}, popupStyle:'a', actionLayout:'orbit', language:'de', colorTheme:'${theme === 'journal' ? 'paper' : 'original'}'})); localStorage.setItem('journal.calendarDrawer','0'); localStorage.setItem('journal.notebookDrawer','0')`);
+    await command('Page.navigate', { url:origin });
+    await until("document.querySelectorAll('.entry').length===5");
+    const first = "document.querySelector('[data-entry-id=\"10000000-0000-4000-8000-000000000001\"]')";
+    // Alt B from the text: an empty box, focused.
+    await evaluate(`${first}.querySelector('.entry-text').focus()`);
+    await key('b', 'KeyB', 1);
+    await until(`Boolean(${first}.querySelector('.entry-description-box')) && Boolean(document.activeElement?.closest('.entry-description-field'))`);
+    await command('Input.insertText', { text:'Erste Zeile' }); await key('Enter', 'Enter'); await command('Input.insertText', { text:'zweite Zeile' });
+    assert(await evaluate(`Boolean(${first}.querySelector('.entry-description-box'))`), 'Enter is a new line, the box stays.');
+    await pause(200); await screenshot(`description-${name}.png`);
+    await key('Escape');
+    await until(`!${first}.querySelector('.entry-description-box') && document.activeElement?.classList.contains('entry-text')`);
+    await saveNow(); await until("window.__uiTest.day().entries.find(e => e.id==='10000000-0000-4000-8000-000000000001')?.description==='Erste Zeile\\nzweite Zeile'");
+    assert.equal(await evaluate(`${first}.querySelector('.entry-description').textContent`), 'Erste Zeile\nzweite Zeile');
+    // A click on it edits it; emptied, it is removed.
+    await evaluate(`${first}.querySelector('.entry-description').click()`);
+    await until(`Boolean(document.activeElement?.closest('.entry-description-field'))`);
+    await evaluate("(() => { const f=document.activeElement; f.setSelectionRange(0, f.value.length); })()"); await key('Backspace', 'Backspace');
+    await evaluate("document.activeElement.blur()");
+    await until(`!${first}.querySelector('.entry-description-box') && !${first}.querySelector('.entry-description')`);
+    await saveNow(); await until("!window.__uiTest.day().entries.find(e => e.id==='10000000-0000-4000-8000-000000000001')?.description");
+    // From the actions (orbit cluster).
+    await evaluate(`${first}.querySelector('.entry-symbol').click()`);
+    await until(`Boolean(${first}.querySelector('.dock-description-button'))`);
+    await evaluate(`${first}.querySelector('.dock-description-button').click()`);
+    await until(`Boolean(${first}.querySelector('.entry-description-box')) && Boolean(document.activeElement?.closest('.entry-description-field'))`);
+    await command('Input.insertText', { text:'Aus den Aktionen' });
+    await key('Escape');
+    await saveNow(); await until("window.__uiTest.day().entries.find(e => e.id==='10000000-0000-4000-8000-000000000001')?.description==='Aus den Aktionen'");
+  }
+  // A mail keeps its own view: no box, no action.
+  await evaluate("(() => { const d=window.__uiTest.day(); d.entries[2].description='journal-mail:v1\n'+JSON.stringify({subject:'Lieferung',sender:'demo@example.org',text:'Heute',html:'<p>Heute</p>'}); window.__uiTest.store(d); window.__uiTest.emit('history:restored', null); })()");
+  const mail = "document.querySelectorAll('.entry')[2]";
+  await until(`window.__uiTest.day().entries[2].description.startsWith('journal-mail:v1') && Boolean(${mail})`); await pause(300);
+  const mailId = await evaluate("window.__uiTest.day().entries[2].id");
+  const mailRow = `document.querySelector('[data-entry-id="${mailId}"]')`;
+  await until(`Boolean(${mailRow})`);
+  assert.equal(await evaluate(`Boolean(${mailRow}.querySelector('.entry-description'))`), false, 'A mail shows no description line.');
+  await evaluate(`${mailRow}.querySelector('.entry-text').focus()`);
+  await key('b', 'KeyB', 1); await pause(200);
+  assert.equal(await evaluate(`Boolean(${mailRow}.querySelector('.entry-description-box'))`), false, 'Alt B opens no box for a mail.');
+  await evaluate(`${mailRow}.querySelector('.entry-symbol').click()`);
+  await until(`Boolean(${mailRow}.querySelector('.dock-tag-button'))`);
+  assert.equal(await evaluate(`Boolean(${mailRow}.querySelector('.dock-description-button'))`), false, 'No description action for a mail.');
+  await key('Escape');
+  await evaluate("localStorage.setItem('journal.settings', JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'), theme:'classic', pixel:false}))");
+  assert.deepEqual(errors, []);
+  console.log('Description checks passed: Alt B opens an empty box (Enter: new line, Esc: back to the text), saved, a click edits it, emptied it is removed, the actions open it – in the classic, journal, Nebula and pixel looks.');
+}
+
 async function checkTags() {
   const origin = `http://127.0.0.1:${server.address().port}`;
   await evaluate("localStorage.setItem('journal.settings', JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'), theme:'classic', language:'de'})); localStorage.removeItem('journal.hiddenTags')");
@@ -1479,7 +1780,7 @@ async function checkNebulaTheme() {
   await until("!document.querySelector('.settings') && Boolean(document.querySelector('.nebula-desk'))");
   // Its own layout: no sidebar, toolbar or title bar; rail, terminals, poster; the window's controls in its own bar.
   assert.deepEqual(await evaluate("[...document.querySelectorAll('.app > .sidebar, .main > .toolbar, .main > .topbar, .book-stage')].map(e => e.className)"), []);
-  assert(await evaluate("['.nebula-window-bar .nebula-tabs','.nebula-cal-panel .nebula-calendar-toggle','.nebula-terminal.is-entries','.nebula-terminal.is-data','.nebula-terminal.is-board','.nebula-poster','.nebula-backdrop'].every(s => document.querySelector(s))"));
+  assert(await evaluate("['.nebula-window-bar .nebula-tabs','.nebula-cal-panel .nebula-calendar-toggle','.nebula-terminal.is-entries','.nebula-terminal.is-rating','.nebula-terminal.is-board','.nebula-poster','.nebula-backdrop'].every(s => document.querySelector(s))"));
   assert.equal(await evaluate("document.querySelectorAll('.nebula-window-bar .window-controls button').length"), 3);
   assert.equal(await evaluate("document.querySelector('.nebula-backdrop').getAttribute('aria-hidden')"), 'true');
   assert.equal(await evaluate("getComputedStyle(document.querySelector('.nebula-backdrop')).pointerEvents"), 'none');
@@ -1533,7 +1834,7 @@ async function checkNebulaTheme() {
   await until(`document.querySelectorAll('.nebula-cal-strip button').length===7 && document.querySelectorAll('${panelCal} .cal-time-column').length===1`);
   assert.equal(await evaluate(`document.querySelectorAll('${panelCal} .cal-time-hours span').length`), 24);
   assert.equal(await evaluate(`document.querySelectorAll('${panelCal} .cal-viewbar').length`), 0);
-  assert.equal(await evaluate("document.querySelector('.nebula-calendar .cal').dataset.view"), 'month');
+  assert.equal(await evaluate("document.querySelector('.nebula-calendar .cal')?.dataset.view ?? 'month'"), 'month', 'The main calendar (when open) keeps its view.');
   assert.equal(await evaluate("JSON.parse(localStorage.getItem('journal.calendar') ?? '{}').view ?? 'month'"), 'month');
   // In the week, the strip moves the calendar to another of its days; the overview stays.
   const otherDay = await evaluate("[...document.querySelectorAll('.nebula-cal-strip button')].find(b => b.getAttribute('aria-pressed')!=='true').dataset.stripDate");
@@ -1698,23 +1999,24 @@ async function checkNebulaTheme() {
   await evaluate("document.querySelector('.nebula-cal-panel .nebula-window-focus').click()");
   await until("document.querySelector('.nebula-panel.is-entries').classList.contains('is-focused') && document.querySelector('.nebula-cal-panel').classList.contains('is-focused') && Boolean(document.querySelector('.nebula-dim'))");
   assert(await evaluate("['.nebula-panel.is-entries .entry-text', '.nebula-cal-panel .nebula-cal-views button'].every(s => { const e=document.querySelector(s), r=e.getBoundingClientRect(), hit=document.elementFromPoint(r.left+r.width/2, r.top+r.height/2); return e===hit || e.contains(hit); })"), 'Focused windows lie above the veil.');
-  assert(await evaluate("(() => { const r=document.querySelector('.nebula-panel.is-data').getBoundingClientRect(); return document.elementFromPoint(r.left+r.width/2, r.top+r.height/2)?.matches('.nebula-panel.is-data.is-dimmed'); })()"), 'The others lie under a veil of their own.');
+  assert(await evaluate("(() => { const r=document.querySelector('.nebula-panel.is-rating').getBoundingClientRect(); return document.elementFromPoint(r.left+r.width/2, r.top+r.height/2)?.matches('.nebula-panel.is-rating.is-dimmed'); })()"), 'The others lie under a veil of their own.');
   // The ◐ of a window under its veil shows through and lights up when pointed at; a click focuses it as well.
-  const dataFocus = await evaluate("(() => { const r=document.querySelector('.nebula-panel.is-data .nebula-window-focus').getBoundingClientRect(); return { x:r.left+r.width/2, y:r.top+r.height/2 }; })()");
-  assert(await evaluate(`document.elementFromPoint(${dataFocus.x}, ${dataFocus.y})?.matches('.nebula-panel.is-data .nebula-window-focus')`), 'The ◐ shows through the veil.');
+  const dataFocus = await evaluate("(() => { const r=document.querySelector('.nebula-panel.is-rating .nebula-window-focus').getBoundingClientRect(); return { x:r.left+r.width/2, y:r.top+r.height/2 }; })()");
+  assert(await evaluate(`document.elementFromPoint(${dataFocus.x}, ${dataFocus.y})?.matches('.nebula-panel.is-rating .nebula-window-focus')`), 'The ◐ shows through the veil.');
   await command('Input.dispatchMouseEvent', { type:'mouseMoved', x:dataFocus.x, y:dataFocus.y }); await pause(150);
-  assert.equal(await evaluate("getComputedStyle(document.querySelector('.nebula-panel.is-data .nebula-window-focus')).backgroundColor"), await evaluate("getComputedStyle(document.querySelector('.nebula-panel.is-entries .nebula-window-focus')).backgroundColor"), 'Pointed at, it is lit like a focused one.');
+  const colorOf = selector => evaluate(`getComputedStyle(document.querySelector(${JSON.stringify(selector)})).backgroundColor.replace(/^rgba\((.*), 1\)$/, 'rgb($1)')`);
+  assert.equal(await colorOf('.nebula-panel.is-rating .nebula-window-focus'), await colorOf('.nebula-panel.is-entries .nebula-window-focus'), 'Pointed at, it is lit like a focused one.');
   await pause(200); await screenshot('nebula-focus-hover.png');
   await command('Input.dispatchMouseEvent', { type:'mousePressed', x:dataFocus.x, y:dataFocus.y, button:'left', buttons:1, clickCount:1 });
   await command('Input.dispatchMouseEvent', { type:'mouseReleased', x:dataFocus.x, y:dataFocus.y, button:'left', buttons:0, clickCount:1 });
-  await until("document.querySelector('.nebula-panel.is-data').classList.contains('is-focused') && document.querySelector('.nebula-panel.is-entries').classList.contains('is-focused')");
+  await until("document.querySelector('.nebula-panel.is-rating').classList.contains('is-focused') && document.querySelector('.nebula-panel.is-entries').classList.contains('is-focused')");
   await pause(300); await screenshot('nebula-focus-several.png');
-  await evaluate("document.querySelector('.nebula-panel.is-data .nebula-window-focus').click()");
-  await until("!document.querySelector('.nebula-panel.is-data').classList.contains('is-focused')");
+  await evaluate("document.querySelector('.nebula-panel.is-rating .nebula-window-focus').click()");
+  await until("!document.querySelector('.nebula-panel.is-rating').classList.contains('is-focused')");
   await evaluate("document.querySelector('.nebula-cal-panel .nebula-window-focus').click()");
   await until("!document.querySelector('.nebula-cal-panel').classList.contains('is-focused') && Boolean(document.querySelector('.nebula-dim'))");
   // A click on a window under its veil ends every focus.
-  const veiled = await evaluate("(() => { const r=document.querySelector('.nebula-panel.is-data').getBoundingClientRect(); return { x:r.left+r.width/2, y:r.top+r.height/2 }; })()");
+  const veiled = await evaluate("(() => { const r=document.querySelector('.nebula-panel.is-rating').getBoundingClientRect(); return { x:r.left+r.width/2, y:r.top+r.height/2 }; })()");
   await command('Input.dispatchMouseEvent', { type:'mousePressed', x:veiled.x, y:veiled.y, button:'left', buttons:1, clickCount:1 });
   await command('Input.dispatchMouseEvent', { type:'mouseReleased', x:veiled.x, y:veiled.y, button:'left', buttons:0, clickCount:1 });
   await until("!document.querySelector('.nebula-dim') && !document.querySelector('.is-focused') && !document.querySelector('.is-dimmed')");
@@ -1737,15 +2039,17 @@ async function checkNebulaTheme() {
   await evaluate("localStorage.removeItem('journal.nebulaLayout.v1')");
   await command('Page.reload');
   await until("Boolean(document.querySelector('.nebula-grid .nebula-panel.is-entries .entry'))"); await pause(400);
-  // By default: entries and data side by side (7 + 5 columns, as tall as each other), the board below over the whole row.
-  assert(await evaluate("(() => { const r=id=>document.querySelector('.nebula-panel.is-'+id).getBoundingClientRect(), e=r('entries'), d=r('data'), b=r('board'); return document.querySelector('.nebula-panel.is-entries').dataset.span==='7' && document.querySelector('.nebula-panel.is-data').dataset.span==='5' && document.querySelector('.nebula-panel.is-board').dataset.span==='12' && Math.abs(e.top-d.top)<2 && Math.abs(e.height-d.height)<2 && b.top>e.bottom && b.height>e.height; })()"), 'The default layout: entries and data in a row, the board below.');
+  // By default: the entries left, the rating, day values and activities stacked right of them (7 + 5 columns, the entries
+  // as tall as the stack), the board below over the whole row.
+  assert(await evaluate("(() => { const r=s=>document.querySelector(s).getBoundingClientRect(), e=r('.nebula-panel.is-entries'), st=r('.nebula-stack[data-stack=rating]'), a=r('.nebula-panel.is-rating'), c=r('.nebula-panel.is-scales'), d=r('.nebula-panel.is-activities'), b=r('.nebula-panel.is-board'); return document.querySelector('.nebula-panel.is-entries').dataset.span==='7' && document.querySelector('.nebula-stack').dataset.span==='5' && document.querySelector('.nebula-panel.is-board').dataset.span==='12' && Math.abs(e.top-st.top)<2 && Math.abs(e.height-st.height)<2 && e.right<st.left && a.bottom<c.top && c.bottom<d.top && Math.abs(a.left-d.left)<1 && Math.abs(a.width-st.width)<1 && b.top>st.bottom; })()"), 'The default layout: entries beside the stack, the board below.');
+  assert.deepEqual(await evaluate("[...document.querySelectorAll('.nebula-panel.is-rating, .nebula-panel.is-scales, .nebula-panel.is-activities')].map(p => p.querySelector('.nebula-prompt').textContent.trim())"), ['[journal@~]$ ./rating.sh', '[journal@~]$ ./scales.sh', `[journal@~]$ ./activities.sh --day ${today}`]);
   await pause(200); await screenshot('nebula-default.png');
-  // The checks below start from the earlier layout: data and board sharing a row, no heights.
-  await evaluate("localStorage.setItem('journal.nebulaLayout.v1', JSON.stringify({ order:{ day:['entries','data','board'], period:['notes','activities'] }, minimized:[], spans:{ data:6, board:6 }, docked:[], floating:[], heights:{} }))");
+  // The checks below start from an earlier kind of layout: no stacks, the rating and board sharing a row, no heights.
+  await evaluate("localStorage.setItem('journal.nebulaLayout.v1', JSON.stringify({ order:{ day:['entries','rating','board','scales','activities'], period:['notes','ratings','activities'] }, minimized:[], spans:{ rating:6, board:6 }, docked:[], floating:[], heights:{}, stacked:{ day:[], period:[] } }))");
   await command('Page.reload');
   await until("Boolean(document.querySelector('.nebula-grid .nebula-panel.is-entries .entry'))"); await pause(400);
   const order = () => evaluate("[...document.querySelectorAll('.nebula-grid > .nebula-panel')].map(p => p.dataset.panel).join()");
-  assert.equal(await order(), 'entries,data,board');
+  assert.equal(await order(), 'entries,rating,board,scales,activities');
   await evaluate("document.querySelector('.nebula-panel.is-entries .nebula-panel-minimize').click()");
   await until("document.querySelector('.nebula-panel.is-entries').classList.contains('is-minimized') && document.querySelector('.nebula-panel.is-entries .nebula-panel-body').hidden");
   assert(await evaluate("document.querySelector('.nebula-panel.is-entries').getBoundingClientRect().height < 40"), 'Minimized: only the bar.');
@@ -1757,7 +2061,7 @@ async function checkNebulaTheme() {
   await until("Boolean(document.querySelector('.nebula-calendar.is-open'))"); await pause(300);
   await evaluate("document.querySelector('.nebula-calendar .nebula-window-grid').click()");
   await until("Boolean(document.querySelector('.nebula-grid > .nebula-panel.is-calendar .cal')) && !document.querySelector('section.nebula-calendar')");
-  assert.equal(await order(), 'entries,data,board,calendar');
+  assert.equal(await order(), 'entries,rating,board,scales,activities,calendar');
   // Moving by the bar: the calendar dragged to the top lands before the entries.
   const barOf = id => evaluate(`(() => { const r=document.querySelector('.nebula-panel.is-${id} .nebula-prompt').getBoundingClientRect(); return { x:r.left+30, y:r.top+r.height/2 }; })()`);
   const pull = async (from, to, shift = false) => {
@@ -1769,17 +2073,18 @@ async function checkNebulaTheme() {
   };
   const release = (at, shift = false) => command('Input.dispatchMouseEvent',{type:'mouseReleased',x:at.x,y:at.y,button:'left',buttons:0,clickCount:1,modifiers:shift ? 8 : 0});
   await evaluate("document.querySelector('.nebula-desk').scrollTop=0");
-  const top = await evaluate("(() => { const r=document.querySelector('.nebula-panel.is-entries').getBoundingClientRect(); return { x:r.left+r.width/2, y:r.top+20 }; })()");
-  // The data window dropped over the middle of the entries lands in a row of its own above them; the board fills the
-  // row the data window left.
-  const dataBar = await barOf('data');
+  // Below the upper rim (the rim stacks; see the stack checks below).
+  const top = await evaluate("(() => { const r=document.querySelector('.nebula-panel.is-entries').getBoundingClientRect(); return { x:r.left+r.width/2, y:r.top+60 }; })()");
+  // The rating dropped over the middle of the entries lands in a row of its own above them; the board fills the
+  // row the rating left.
+  const dataBar = await barOf('rating');
   await pull(dataBar, top);
-  assert(await evaluate("document.querySelector('.nebula-panel.is-entries').classList.contains('is-drop-top') && document.querySelector('.nebula-panel.is-data').classList.contains('is-held')"), 'A violet bar marks the landing place.');
-  assert(await evaluate(`(() => { const r=document.querySelector('.nebula-panel.is-data').getBoundingClientRect(); return Math.abs(r.top-(${top.y}-20)) < 60; })()`), 'The carried window follows the pointer.');
+  assert(await evaluate("document.querySelector('.nebula-panel.is-entries').classList.contains('is-drop-top') && document.querySelector('.nebula-panel.is-rating').classList.contains('is-held')"), 'A violet bar marks the landing place.');
+  assert(await evaluate(`(() => { const r=document.querySelector('.nebula-panel.is-rating').getBoundingClientRect(); return Math.abs(r.top-(${top.y}-20)) < 80; })()`), 'The carried window follows the pointer.');
   await screenshot('nebula-grid-moving.png');
   await release(top);
-  await until("[...document.querySelectorAll('.nebula-grid > .nebula-panel')].map(p => p.dataset.panel).join()==='data,entries,board,calendar'");
-  assert.deepEqual(await evaluate("['data','board'].map(id => document.querySelector(`.nebula-panel.is-${id}`).dataset.span)"), ['12', '12'], 'A row of its own; the board takes the whole row it is left alone in.');
+  await until("[...document.querySelectorAll('.nebula-grid > .nebula-panel')].map(p => p.dataset.panel).join()==='rating,entries,board,scales,activities,calendar'");
+  assert.deepEqual(await evaluate("['rating','board'].map(id => document.querySelector(`.nebula-panel.is-${id}`).dataset.span)"), ['12', '12'], 'A row of its own; the board takes the whole row it is left alone in.');
   // The board dropped on the right edge of the entries: the two share that row (scrolled so both bars are in view).
   await evaluate("(() => { const d=document.querySelector('.nebula-desk'); d.scrollTop += document.querySelector('.nebula-panel.is-entries').getBoundingClientRect().top - 80; })()"); await pause(250);
   const boardFrom = await barOf('board');
@@ -1788,7 +2093,7 @@ async function checkNebulaTheme() {
   assert(await evaluate("document.querySelector('.nebula-panel.is-entries').classList.contains('is-drop-split-right')"), 'Beside a window: its right half is marked.');
   await screenshot('nebula-grid-beside.png');
   await release(besideEntries);
-  await until("[...document.querySelectorAll('.nebula-grid > .nebula-panel')].map(p => p.dataset.panel).join()==='data,entries,board,calendar' && document.querySelector('.nebula-panel.is-board').dataset.span==='6'");
+  await until("[...document.querySelectorAll('.nebula-grid > .nebula-panel')].map(p => p.dataset.panel).join()==='rating,entries,board,scales,activities,calendar' && document.querySelector('.nebula-panel.is-board').dataset.span==='6'");
   assert(await evaluate("(() => { const a=document.querySelector('.nebula-panel.is-entries').getBoundingClientRect(), b=document.querySelector('.nebula-panel.is-board').getBoundingClientRect(); return document.querySelector('.nebula-panel.is-entries').dataset.span==='6' && Math.abs(a.top-b.top)<2 && a.right<b.left; })()"), 'Two windows share a row.');
   // Half and whole rows by button: back to the whole row, the board moves to the next row.
   await evaluate("document.querySelector('.nebula-panel.is-entries .nebula-panel-half').click()");
@@ -1816,18 +2121,18 @@ async function checkNebulaTheme() {
   await pull(floatBar2, board2, true);
   await until("Boolean(document.querySelector('.nebula-panel.is-board.is-drop-split-left, .nebula-panel.is-board.is-drop-top'))");
   await release(board2, true);
-  await until("[...document.querySelectorAll('.nebula-grid > .nebula-panel')].map(p => p.dataset.panel).join()==='data,entries,calendar,board'");
+  await until("[...document.querySelectorAll('.nebula-grid > .nebula-panel')].map(p => p.dataset.panel).join()==='rating,entries,calendar,board,scales,activities'");
   // Remembered after a reload; then back to the first layout.
   await command('Page.reload');
-  await until("[...document.querySelectorAll('.nebula-grid > .nebula-panel')].map(p => p.dataset.panel).join()==='data,entries,calendar,board'");
+  await until("[...document.querySelectorAll('.nebula-grid > .nebula-panel')].map(p => p.dataset.panel).join()==='rating,entries,calendar,board,scales,activities'");
   await evaluate("document.querySelector('.nebula-layout-reset').click()");
-  await until("[...document.querySelectorAll('.nebula-grid > .nebula-panel')].map(p => p.dataset.panel).join()==='entries,data,board' && Boolean(document.querySelector('section.nebula-calendar.is-open'))");
+  await until("[...document.querySelectorAll('.nebula-grid .nebula-panel')].map(p => p.dataset.panel).join()==='entries,rating,scales,activities,board' && Boolean(document.querySelector('section.nebula-calendar.is-open'))");
   assert.equal(await evaluate("Boolean(document.querySelector('.nebula-layout-reset'))"), false);
   // The running line is off (its code stays).
   assert.equal(await evaluate("document.querySelector('.nebula-marquee')"), null);
-  // Reset gives the default layout; the width checks below start from data and board sharing a row again.
-  assert.equal(await evaluate("document.querySelector('.nebula-panel.is-data').dataset.span"), '5');
-  await evaluate("localStorage.setItem('journal.nebulaLayout.v1', JSON.stringify({ order:{ day:['entries','data','board'], period:['notes','activities'] }, minimized:[], spans:{ data:6, board:6 }, docked:[], floating:[], heights:{} }))");
+  // Reset gives the default layout; the width checks below start from the rating and board sharing a row again.
+  assert.equal(await evaluate("document.querySelector('.nebula-panel.is-rating').dataset.span"), '5');
+  await evaluate("localStorage.setItem('journal.nebulaLayout.v1', JSON.stringify({ order:{ day:['entries','rating','board','scales','activities'], period:['notes','ratings','activities'] }, minimized:[], spans:{ rating:6, board:6 }, docked:[], floating:[], heights:{}, stacked:{ day:[], period:[] } }))");
   await command('Page.reload');
   await until("Boolean(document.querySelector('.nebula-grid .nebula-panel.is-entries .entry'))"); await pause(400);
   // Width: the right edge sets the columns (it snaps); a double click there gives the whole row again. (A floating
@@ -1839,13 +2144,13 @@ async function checkNebulaTheme() {
   await pull(edge, { x:edge.x - edge.column * 4, y:edge.y }); await release({ x:edge.x - edge.column * 4, y:edge.y });
   await until("document.querySelector('.nebula-panel.is-entries').dataset.span==='8'");
   await pause(200); await screenshot('nebula-grid-width.png');
-  // In a row of two the neighbour follows at once: the data window two columns wider, the board two narrower.
-  const dataEdge = await evaluate("(() => { const r=document.querySelector('.nebula-panel.is-data .nebula-panel-width').getBoundingClientRect(), g=document.querySelector('.nebula-grid').getBoundingClientRect(); return { x:r.left+r.width/2, y:r.top+20, column:(g.width-18*11)/12+18 }; })()");
+  // In a row of two the neighbour follows at once: the rating two columns wider, the board two narrower.
+  const dataEdge = await evaluate("(() => { const r=document.querySelector('.nebula-panel.is-rating .nebula-panel-width').getBoundingClientRect(), g=document.querySelector('.nebula-grid').getBoundingClientRect(); return { x:r.left+r.width/2, y:r.top+20, column:(g.width-18*11)/12+18 }; })()");
   await pull(dataEdge, { x:dataEdge.x + dataEdge.column * 2, y:dataEdge.y });
   assert.equal(await evaluate("getComputedStyle(document.querySelector('.nebula-panel.is-board')).getPropertyValue('--span').trim()"), '4', 'The neighbour narrows while the edge is dragged.');
   await release({ x:dataEdge.x + dataEdge.column * 2, y:dataEdge.y });
-  await until("document.querySelector('.nebula-panel.is-data').dataset.span==='8' && document.querySelector('.nebula-panel.is-board').dataset.span==='4'");
-  assert(await evaluate("(() => { const a=document.querySelector('.nebula-panel.is-data').getBoundingClientRect(), b=document.querySelector('.nebula-panel.is-board').getBoundingClientRect(); return Math.abs(a.top-b.top)<2; })()"), 'Still one row.');
+  await until("document.querySelector('.nebula-panel.is-rating').dataset.span==='8' && document.querySelector('.nebula-panel.is-board').dataset.span==='4'");
+  assert(await evaluate("(() => { const a=document.querySelector('.nebula-panel.is-rating').getBoundingClientRect(), b=document.querySelector('.nebula-panel.is-board').getBoundingClientRect(); return Math.abs(a.top-b.top)<2; })()"), 'Still one row.');
   // The column on the right: with the month open the poster stays while the desk scrolls (the month right below it);
   // with the day open the poster scrolls away and the day grows into its room.
   const posterTop = () => evaluate("document.querySelector('.nebula-poster').getBoundingClientRect().top");
@@ -1862,16 +2167,16 @@ async function checkNebulaTheme() {
   assert(await posterTop() < restingTop - 100, 'Day: the poster scrolls away.');
   await evaluate("document.querySelector('.nebula-cal-panel [data-cal-view=month]').click()");
   await evaluate("document.querySelector('.nebula-desk').scrollTop=0");
-  // Minimized beside an open window: the data window stands upright as a narrow bar, the board takes its columns; restored,
+  // Minimized beside an open window: the rating stands upright as a narrow bar, the board takes its columns; restored,
   // both have their widths again.
   await pause(200);
-  await evaluate("document.querySelector('.nebula-panel.is-data .nebula-panel-minimize').click()");
-  await until("document.querySelector('.nebula-panel.is-data').classList.contains('is-upright') && Boolean(document.querySelector('.nebula-panel.is-data .nebula-panel-state')) && document.querySelector('.nebula-panel.is-board').dataset.span==='11'");
-  assert(await evaluate("(() => { const d=document.querySelector('.nebula-panel.is-data').getBoundingClientRect(), b=document.querySelector('.nebula-panel.is-board').getBoundingClientRect(); return d.width < 40 && b.left - d.right < 26 && Math.abs(d.top-b.top) < 2 && Math.abs(d.height-b.height) < 2 && b.left > d.right; })()"), 'An upright bar, as thick as a flat one, as tall as its neighbour and close beside it.');
-  await evaluate("document.querySelector('.nebula-panel.is-data').scrollIntoView({block:'start'})"); await pause(250);
+  await evaluate("document.querySelector('.nebula-panel.is-rating .nebula-panel-minimize').click()");
+  await until("document.querySelector('.nebula-panel.is-rating').classList.contains('is-upright') && Boolean(document.querySelector('.nebula-panel.is-rating .nebula-panel-state')) && document.querySelector('.nebula-panel.is-board').dataset.span==='11'");
+  assert(await evaluate("(() => { const d=document.querySelector('.nebula-panel.is-rating').getBoundingClientRect(), b=document.querySelector('.nebula-panel.is-board').getBoundingClientRect(); return d.width < 40 && b.left - d.right < 26 && Math.abs(d.top-b.top) < 2 && Math.abs(d.height-b.height) < 2 && b.left > d.right; })()"), 'An upright bar, as thick as a flat one, as tall as its neighbour and close beside it.');
+  await evaluate("document.querySelector('.nebula-panel.is-rating').scrollIntoView({block:'start'})"); await pause(250);
   await screenshot('nebula-grid-upright.png');
-  await evaluate("document.querySelector('.nebula-panel.is-data .nebula-panel-minimize').click()");
-  await until("!document.querySelector('.nebula-panel.is-data').classList.contains('is-upright') && document.querySelector('.nebula-panel.is-data').dataset.span==='8' && document.querySelector('.nebula-panel.is-board').dataset.span==='4'");
+  await evaluate("document.querySelector('.nebula-panel.is-rating .nebula-panel-minimize').click()");
+  await until("!document.querySelector('.nebula-panel.is-rating').classList.contains('is-upright') && document.querySelector('.nebula-panel.is-rating').dataset.span==='8' && document.querySelector('.nebula-panel.is-board').dataset.span==='4'");
   // The board window's lower edge: the board inside grows with it while dragging and after.
   await evaluate("document.querySelector('.nebula-panel.is-board .nebula-panel-resize').scrollIntoView({block:'center'})"); await pause(200);
   const boardGrip = await evaluate("(() => { const r=document.querySelector('.nebula-panel.is-board .nebula-panel-resize').getBoundingClientRect(); return { x:r.left+r.width/2, y:r.top+r.height/2, board:document.querySelector('.nebula-panel.is-board .board-viewport').clientHeight }; })()");
@@ -1885,14 +2190,14 @@ async function checkNebulaTheme() {
   await evaluate("document.querySelector('.nebula-panel.is-board .nebula-panel-resize').dispatchEvent(new MouseEvent('dblclick', { bubbles:true }))");
   await until("!document.querySelector('.nebula-panel.is-board .nebula-panel-body').classList.contains('has-height')");
   await evaluate("document.querySelector('.nebula-desk').scrollTop=0");
-  // The day's own windows float too: the data window carried beside the grid floats there, ⊞ docks it again.
-  const dataHead = await barOf('data');
+  // The day's own windows float too: the rating carried beside the grid floats there, ⊞ docks it again.
+  const dataHead = await barOf('rating');
   const beside = await evaluate("(() => { const r=document.querySelector('.nebula-poster').getBoundingClientRect(); return { x:r.left+30, y:r.top+40 }; })()");
   await pull(dataHead, beside); await release(beside);
-  await until("Boolean(document.querySelector('section.nebula-floating.is-data .period-section')) && !document.querySelector('.nebula-grid > .nebula-panel.is-data')");
-  await pause(300); await screenshot('nebula-floating-data.png');
-  await evaluate("document.querySelector('section.nebula-floating.is-data .nebula-window-grid').click()");
-  await until("Boolean(document.querySelector('.nebula-grid > .nebula-panel.is-data')) && !document.querySelector('section.nebula-floating')");
+  await until("Boolean(document.querySelector('section.nebula-floating.is-rating .period-section')) && !document.querySelector('.nebula-grid > .nebula-panel.is-rating')");
+  await pause(300); await screenshot('nebula-floating-rating.png');
+  await evaluate("document.querySelector('section.nebula-floating.is-rating .nebula-window-grid').click()");
+  await until("Boolean(document.querySelector('.nebula-grid > .nebula-panel.is-rating')) && !document.querySelector('section.nebula-floating')");
   // Out of the journal: the board carried past the window's edge becomes a window of its own (here: the command), and
   // comes back into the grid when that window closes.
   const boardHead = await barOf('board');
@@ -4327,7 +4632,7 @@ try {
     await until(`document.querySelector('.activity-metrics strong')?.textContent.includes(${JSON.stringify(weekText)})`);
     await evaluate("document.querySelector('.activity-summary-card').scrollIntoView({block:'center'})");
     await screenshot('period-week-activities.png');
-    await evaluate("document.querySelector('.checklist-manage').click()");
+    await evaluate("document.querySelector('.checklist-manage:not(.is-scales)').click()");
     await until("Boolean(document.querySelector('#settings-activities'))");
     await pause(300);
     await screenshot('period-activity-settings.png');
@@ -4344,7 +4649,7 @@ try {
     await key('Escape');
     await evaluate("document.querySelectorAll('.journal-tab')[0].click()");
     await until("document.querySelectorAll('.period-item')[0].querySelector('input[type=number]')===null && document.querySelectorAll('.period-item')[0].querySelector('input[type=text]')===null");
-    await evaluate("document.querySelector('.checklist-manage').click()");
+    await evaluate("document.querySelector('.checklist-manage:not(.is-scales)').click()");
     await until("Boolean(document.querySelector('#settings-activities'))");
     await evaluate("document.querySelectorAll('.activity-settings-row .activity-options input')[1].click()");
     await key('Escape');
@@ -4382,6 +4687,12 @@ try {
     await checkColors();
   } else if (process.env.JOURNAL_UI_SCOPE === 'tags') {
     await checkTags();
+  } else if (process.env.JOURNAL_UI_SCOPE === 'scales') {
+    await checkScales();
+  } else if (process.env.JOURNAL_UI_SCOPE === 'description') {
+    await checkDescriptions();
+  } else if (process.env.JOURNAL_UI_SCOPE === 'icons') {
+    await checkEntryIcons();
   } else if (process.env.JOURNAL_UI_SCOPE === 'language') {
     await checkLanguage();
   } else if (process.env.JOURNAL_UI_SCOPE === 'journal') {
@@ -4394,16 +4705,16 @@ try {
     await command('Page.reload');
     await until("Boolean(document.querySelector('.nebula-notebook.is-open'))");await pause(500);
     assert(await evaluate("Math.abs(document.querySelector('.nebula-calendar').getBoundingClientRect().right-document.querySelector('.nebula-notebook').getBoundingClientRect().left)<1"),'Windows share a seam');
-    assert(await evaluate("Math.abs(document.querySelector('[data-panel=entries]').getBoundingClientRect().height-document.querySelector('[data-panel=data]').getBoundingClientRect().height)<1"),'Default entries and data heights match');
-    assert(await evaluate("document.querySelector('[data-panel=board]').getBoundingClientRect().height>document.querySelector('[data-panel=data]').getBoundingClientRect().height"),'The full-width board keeps its taller default height');
+    assert(await evaluate("Math.abs(document.querySelector('[data-panel=entries]').getBoundingClientRect().height-document.querySelector('[data-stack=rating]').getBoundingClientRect().height)<1"),'The entries are as tall as the stack beside them');
+    assert(await evaluate("document.querySelector('[data-panel=board]').getBoundingClientRect().height>=600"),'The full-width board keeps its tall default height');
     await screenshot('nebula-adjacent.png');
     await evaluate("document.querySelector('.nebula-calendar-close').click();document.querySelector('.nebula-notebook .nebula-calendar-close').click()");
-    const resize = async delta => { await evaluate(`(() => {const grip=document.querySelector('[data-panel=data] .nebula-panel-resize');grip.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,button:0,clientY:0}));window.dispatchEvent(new PointerEvent('pointermove',{clientY:${delta}}));window.dispatchEvent(new PointerEvent('pointerup'));})()`);await pause(150); };
+    const resize = async delta => { await evaluate(`(() => {const grip=document.querySelector('[data-panel=rating] .nebula-panel-resize');grip.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,button:0,clientY:0}));window.dispatchEvent(new PointerEvent('pointermove',{clientY:${delta}}));window.dispatchEvent(new PointerEvent('pointerup'));})()`);await pause(150); };
     await resize(1000);
-    assert.equal(await evaluate("getComputedStyle(document.querySelector('[data-panel=data] .nebula-panel-body')).overscrollBehaviorY"),'auto','A resized panel without overflow lets the desk scroll');
+    assert.equal(await evaluate("getComputedStyle(document.querySelector('[data-panel=rating] .nebula-panel-body')).overscrollBehaviorY"),'auto','A resized panel without overflow lets the desk scroll');
     await resize(-2000);
-    assert.equal(await evaluate("getComputedStyle(document.querySelector('[data-panel=data] .nebula-panel-body')).overscrollBehaviorY"),'contain','Overflowing panel keeps scrolling inside');
-    assert.deepEqual(errors,[]);console.log('Nebula sizing passed: adjacent windows, equal entries/data heights, taller board and overflow-dependent scroll containment.');
+    assert.equal(await evaluate("getComputedStyle(document.querySelector('[data-panel=rating] .nebula-panel-body')).overscrollBehaviorY"),'contain','Overflowing panel keeps scrolling inside');
+    assert.deepEqual(errors,[]);console.log('Nebula sizing passed: adjacent windows, entries as tall as the stack, taller board and overflow-dependent scroll containment.');
   } else if (process.env.JOURNAL_UI_SCOPE === 'nebula') {
     await checkNebulaTheme();
   } else if (process.env.JOURNAL_UI_SCOPE === 'popups') {
@@ -5696,6 +6007,8 @@ try {
   await checkLanguage();
   await checkColors();
   await checkTags();
+  await checkScales();
+  await checkDescriptions();
   }
   assert.deepEqual(errors, [], 'No browser runtime errors.');
   console.log('UI checks passed: calendar window (month, week, work week, year, day; keys, swiping, filters, remembered, live updates, open in journal), compact month window, calendar in the resizable sidebar (creating entries by marking quarter hours, composer, editing by right click), changing kinds (keys, orbit cluster, preview), saving by itself (after a pause, before leaving the day), actions reaching linked entries (following / all, Escape cancels), calendar edits applied to this one / every weekday / all, editable traces passing edits to their copies, swiping days, settings (orbit/inline/swipe layout, remembered), swipe gestures (the icon stays at the symbol, a bar in each action’s own colour grows, full height sideways; right: tomorrow/plan/several days, left: remove, down: done/cancel, up: priority, tap, hold is a tap, keys, trackpad), planning several days (range by two clicks, right-click flips, copies per day, linked removal), embedded inline actions (in the flow, no surface, preview, calendar), IBM Plex Sans UI and bold Lilex title, live-preview Markdown (markers only at the cursor, hidden when not editing, click into hidden parts), format shortcuts with undo, colours, right-click format menu; shortcuts (F1, Alt+A/Enter/Backspace outliner, Alt+D/X/P/U/T/M/Enter/Entf, Ctrl+arrows, Alt+arrows/H), clock as large as the calendar with back button, Tab and typed digits; clock dial (tap on both rings, wheel, keys, quick times), calendar stays open on inner clicks, time after text, linked removal both ways; planning (calendar keyboard, time, reminder, traces >/</outlined <, undo, tomorrow, same-day time, copies on target days), asterisk/outlined event/thick note priority symbols, automatic priority order, drag and keyboard boundaries, toolbar focus, saved priority; action pill, previews, removal, grouping, caret, saving, cached navigation, wrapping and reduced motion.');

@@ -180,7 +180,7 @@ export function CalendarItem({ entry, date, variant = 'line', short = false, sty
       {entry.time && <span className="cal-details-time"><Icon name="clock" />{formatSpan(entry.time,entry.end)}</span>}
       {entry.reminder && <span className="cal-details-reminder"><Icon name="bell" />{reminderLeadLabel(entry.reminderBefore)}</span>}
       {entry.icon && <span className="cal-details-icon"><EntryIcon name={entry.icon} />{entry.icon}</span>}
-      {tag && <span className="cal-details-tag"><span className="tag-dot" />{tag.name}</span>}
+      {tag && <span className="cal-details-tag">{tag.icon ? <EntryIcon name={tag.icon} className="tag-icon" /> : <span className="tag-dot" />}{tag.name}</span>}
     </div>
   </div> : null;
   const spanning=Boolean(entry.end && Number(entry.end.split(':')[0])>=24);

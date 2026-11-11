@@ -8,7 +8,7 @@ impl Store {
         // WAL needs fewer syncs per save than the rollback journal and keeps reads independent of writes.
         conn.pragma_update_and_check(None, "journal_mode", "WAL", |r| r.get::<_, String>(0))?;
         let version: i64 = conn.pragma_query_value(None, "user_version", |r| r.get(0))?;
-        if version > 13 { return Err("Die Datenbank wurde mit einer neueren Version erstellt".into()); }
+        if version > 14 { return Err("Die Datenbank wurde mit einer neueren Version erstellt".into()); }
         if version == 0 {
             let tx = conn.transaction()?;
             tx.execute_batch("CREATE TABLE days (date TEXT PRIMARY KEY, title TEXT NOT NULL, body TEXT NOT NULL, revision INTEGER NOT NULL CHECK(revision > 0));
@@ -125,6 +125,13 @@ impl Store {
             if !has("reminder_before")? { tx.execute_batch("ALTER TABLE entries ADD COLUMN reminder_before INTEGER NOT NULL DEFAULT 0 CHECK(reminder_before BETWEEN 0 AND 43200);")?; }
             if !has("icon")? { tx.execute_batch("ALTER TABLE entries ADD COLUMN icon TEXT CHECK(icon IS NULL OR length(icon) BETWEEN 1 AND 64);")?; }
             tx.execute_batch("PRAGMA user_version = 13;")?;
+            tx.commit()?;
+        }
+        // A tag may carry an icon, shown in its place at the entries (see `valid_icon`).
+        if version < 14 {
+            let tx = conn.transaction()?;
+            if !tx.prepare("SELECT 1 FROM pragma_table_info('tags') WHERE name='icon'")?.exists([])? { tx.execute_batch("ALTER TABLE tags ADD COLUMN icon TEXT CHECK(icon IS NULL OR length(icon) BETWEEN 1 AND 64);")?; }
+            tx.execute_batch("PRAGMA user_version = 14;")?;
             tx.commit()?;
         }
         // Additive index only: schema version, persisted rows and older app compatibility stay unchanged.

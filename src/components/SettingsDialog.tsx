@@ -14,16 +14,17 @@ import { ColorSettings } from './ColorSettings';
 import { TagSettings } from './TagSettings';
 import { factorOf, screenWidth } from '../uiScale';
 import type { UiScale } from '../uiScale';
+import { ScaleSettings } from './ScaleSettings';
 import { ActivitySettings } from './ActivitySettings';
 import { StorageSettings } from './StorageSettings';
 import { UpdateSettings } from './UpdateSettings';
 import '../settings.css';
 
-const tabs = ['appearance', 'colors', 'tags', 'activities', 'storage', 'drive', 'mail', 'updates'] as const;
+const tabs = ['appearance', 'colors', 'tags', 'activities', 'scales', 'storage', 'drive', 'mail', 'updates'] as const;
 export type SettingsTab = typeof tabs[number];
 const tabInfo = (): Record<SettingsTab, { icon: IconName; label: string }> => ({
   appearance: { icon: 'layout', label: t("Darstellung") }, colors: { icon: 'pencil', label: t('Farben') }, tags: { icon: 'tag', label: t('Tags') },
-  activities: { icon: 'check', label: t('Aktivitäten') }, storage: { icon: 'save', label: t('Speicherort') }, drive: { icon: 'transfer', label: 'Google Drive' }, mail: { icon: 'mail', label: t("E-Mail-Konten") }, updates: { icon: 'repeat', label: t('Updates') },
+  activities: { icon: 'check', label: t('Aktivitäten') }, scales: { icon: 'week', label: t('Tageswerte') }, storage: { icon: 'save', label: t('Speicherort') }, drive: { icon: 'transfer', label: 'Google Drive' }, mail: { icon: 'mail', label: t("E-Mail-Konten") }, updates: { icon: 'repeat', label: t('Updates') },
 });
 
 const themeInfo = (): Record<Theme, { title: string; text: string }> => ({
@@ -112,7 +113,7 @@ export function SettingsDialog({ settings, onChange, onClose, onImport, mailStat
   useEffect(() => { void screenWidth().then(setScreenSize); }, []);
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
-    const selector = initialTab === 'tags' ? '#settings-tags .tag-name' : initialTab === 'activities' ? '#settings-activities input' : '[data-theme-choice][aria-checked="true"]';
+    const selector = initialTab === 'tags' ? '#settings-tags .tag-name' : initialTab === 'activities' ? '#settings-activities input' : initialTab === 'scales' ? '#settings-scales input' : '[data-theme-choice][aria-checked="true"]';
     (dialogRef.current?.querySelector<HTMLElement>(selector) ?? dialogRef.current?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]'))?.focus();
     return () => previous?.focus({ preventScroll: true });
   }, []);
@@ -200,7 +201,7 @@ export function SettingsDialog({ settings, onChange, onClose, onImport, mailStat
   </>;
 
   const panels: Record<SettingsTab, ReactNode> = {
-    appearance, colors: <ColorSettings settings={settings} onChange={onChange} />, tags: <TagSettings />, activities: <ActivitySettings />,
+    appearance, colors: <ColorSettings settings={settings} onChange={onChange} />, tags: <TagSettings />, activities: <ActivitySettings />, scales: <ScaleSettings />,
     storage: <StorageSettings beforeChange={beforeSync} onBusy={value => { setDriveBusy(value); onDriveBusy(value); }} />,
     updates: <UpdateSettings beforeChange={beforeSync} onBusy={value => { setDriveBusy(value); onDriveBusy(value); }} />,
     drive: <DriveSettings beforeSync={beforeSync} onBusy={value => { setDriveBusy(value); onDriveBusy(value); }} />,

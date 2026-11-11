@@ -28,6 +28,7 @@ export const shortcutGroups = (): { id: string; title: string; icon: IconName; i
     ['Alt+D', t("Erledigt")], ['Alt+X', t("Abbrechen")], ['Alt+P', t("Priorität")], ['Alt+M', t("Auf morgen")],
     ['Alt+T', t("Planen · bei einer Spur: zum Tag springen")], ['Alt+⇧+T', t("Mehrere Tage planen")], ['Alt+U', t("Uhrzeit")], ['Alt+W', t("Wiederholen")],
     ['Alt+G', t("Tag zuweisen (0–9 direkt, tippen: suchen oder neu)")],
+    ['Alt+B', t("Beschreibung schreiben (Enter: neue Zeile, Esc: schließen)")],
     ['Alt+⇧+E', t("Als Ereignis")], ['Alt+⇧+A', t("Als Aufgabe")], ['Alt+⇧+N', t("Als Notiz")],
     ['Alt+Enter', t("Aktionen öffnen")], ['Alt+Entf', t("Löschen (verknüpfte: ← / → und Enter wählen)")],
   ] },
@@ -36,7 +37,7 @@ export const shortcutGroups = (): { id: string; title: string; icon: IconName; i
     ['↑', t("Priorität")], ['⇧+←', t("Löschen")], ['~Antippen', t("Aufgabe weiterschalten")],
   ] },
   { id: 'tags', title: t("Tags"), icon: 'tag', items: [
-    ['Alt+G', t("Tag zuweisen")], ['1–9', t("Tag nehmen oder ein-/ausblenden (in der Liste)")], ['0', t("Kein Tag / Einträge ohne Tag")],
+    ['Alt+G', t("Tag zuweisen")], ['Alt+I', t("Icon des Eintrags wählen")], ['1–9', t("Tag nehmen oder ein-/ausblenden (in der Liste)")], ['0', t("Kein Tag / Einträge ohne Tag")],
     ['A', t("Filter: alle Tags zeigen")], ['Alt+~Klick / ⇧+Enter', t("Filter: nur diesen Tag zeigen")], ['Enter', t("Tippen und Enter: neuen Tag anlegen")],
   ] },
   { id: 'board', title: t("Pinnwand"), icon: 'pin', items: [

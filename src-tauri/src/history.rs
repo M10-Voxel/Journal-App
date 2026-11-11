@@ -113,7 +113,7 @@ pub(crate) fn step(store:&mut Store,redo:bool)->rusqlite::Result<bool>{
   let mut db=Store::open(&path).unwrap();
   {let tx=db.conn.transaction().unwrap();begin(&tx).unwrap();
    tx.execute_batch("INSERT INTO days VALUES('2026-11-03','Title','Body',1);
-    INSERT INTO tags VALUES('tag','Work','#aaff00',0);
+    INSERT INTO tags(id,name,color,position) VALUES('tag','Work','#aaff00',0);
     INSERT INTO entries(id,day_date,kind,text,done,position,tag) VALUES('entry','2026-11-03','task','Task',0,0,'tag');
     INSERT INTO settings VALUES('board:card:test','{\"title\":\"Note\"}');").unwrap();tx.commit().unwrap();}
   {let tx=db.conn.transaction().unwrap();begin(&tx).unwrap();tx.execute_batch("DELETE FROM tags; DELETE FROM settings WHERE key='board:card:test';").unwrap();tx.commit().unwrap();}

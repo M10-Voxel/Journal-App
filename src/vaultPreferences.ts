@@ -1,6 +1,6 @@
 /** Content-dependent browser state must never leak from one vault into another. */
 const keys = new Set([
-  'journal.activityTimers.v1', 'journal.calendarClipboard', 'journal.hiddenTags',
+  'journal.activityTimers.v1', 'journal.calendarClipboard', 'journal.hiddenTags', 'journal.hiddenScales',
   'journal.notebookFolder', 'journal.notebookNote', 'journal.notebookCollapsed', 'journal.notebookSort',
 ]);
 export const vaultPreferenceKey = (key: string) => keys.has(key) || key.startsWith('journal.drive.base.');

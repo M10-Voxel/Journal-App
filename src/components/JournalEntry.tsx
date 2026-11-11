@@ -23,12 +23,14 @@ import type { SwipeAction, SwipeActions, SwipeDirection } from './useSwipe';
 import type { TextField } from './entryEditor';
 import type { EntryDragHandlers } from './useEntryDrag';
 import { TagPicker } from './TagPicker';
+import { EntryIcon, IconPicker } from './EntryIcon';
+import { MarkdownField } from './MarkdownField';
 import { filterKey } from '../tags';
 import { useDismissLayer } from './useDismissLayer';
 import type { Tag } from '../tags';
 
 export const entryLabels = () => ({ task: t("Aufgabe"), event: t("Ereignis"), note: t("Notiz") });
-export type EntryChange = Partial<Pick<Entry, 'kind' | 'text' | 'done' | 'cancelled' | 'priority' | 'time' | 'end' | 'reminder' | 'plan' | 'repeat' | 'tag'>>;
+export type EntryChange = Partial<Pick<Entry, 'kind' | 'text' | 'done' | 'cancelled' | 'priority' | 'time' | 'end' | 'reminder' | 'plan' | 'repeat' | 'tag' | 'icon' | 'description'>>;
 export type DragState = 'source' | 'drop-before' | 'drop-after' | null;
 interface TextSelection { start: number; end: number; direction: 'forward' | 'backward' | 'none' }
 
@@ -64,6 +66,10 @@ export const JournalEntry = memo(function JournalEntry({ layout, entry, day, tag
   const [planCount, setPlanCount] = useState(1);
   const [tagging, setTagging] = useState(false);
   const tagRef = useRef<HTMLButtonElement>(null);
+  // The entry's icon (Alt I or the actions), the same as the calendar's; it shows in the calendar, not before the text.
+  const [choosingIcon, setChoosingIcon] = useState(false);
+  // The description (Alt B, the actions, or a click on it): a box under the row while written in.
+  const [describing, setDescribing] = useState(false);
   const [scopeAsk, setScopeAsk] = useState<{ action: ScopeAction; options: ScopeOption[]; apply: () => void; fromOrbit: boolean } | null>(null);
   const trace = entry.plan ?? null;
   const rule = entry.repeat?.rule ?? null;
@@ -84,8 +90,8 @@ export const JournalEntry = memo(function JournalEntry({ layout, entry, day, tag
   const statusLabel = trace ? t(", geplant auf {0}", trace.targets.map(target => formatShortDate(target.date)).join(', ')) : status === 'done' ? t(", erledigt") : status === 'cancelled' ? t(", abgebrochen") : status === 'open' ? t(", offen") : '';
 
   useLayoutEffect(() => {
-    // Keep the saved caret until the tag popup closes; restoring it now steals its search focus.
-    if (tagging) return;
+    // Keep the saved caret until the tag or icon popup closes; restoring it now steals its search focus.
+    if (tagging || choosingIcon) return;
     if (restorePriorityFocus.current) {
       const button = rootRef.current?.querySelector<HTMLButtonElement>('.dock-priority');
       button?.focus({ preventScroll: true });
@@ -196,6 +202,37 @@ export const JournalEntry = memo(function JournalEntry({ layout, entry, day, tag
     onOpenChange(entry.id, false);
     setTagging(true);
   }
+  function chooseIcon(text: TextField | null = null) {
+    if (text) restoreSelection.current = { start: text.selectionStart, end: text.selectionEnd, direction: text.selectionDirection };
+    onOpenChange(entry.id, false);
+    setChoosingIcon(true);
+  }
+  // Mails keep their own view (the calendar's); a trace is not edited here, like its text.
+  const mail = entry.description ? decodeMailContent(entry.description) : null;
+  const canDescribe = !trace && !mail;
+  function openDescription() {
+    if (!canDescribe) return;
+    onOpenChange(entry.id, false);
+    setDescribing(true);
+    // After the actions have given the focus back: into the box, at the end of the text.
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const field = rootRef.current?.querySelector<TextField>('.entry-description-field .markdown-text');
+      field?.focus({ preventScroll: true });
+      field?.setSelectionRange(field.value.length, field.value.length);
+      field?.scrollIntoView({ block: 'nearest' });
+    }));
+  }
+  /** Leaves the box; an empty description is removed. `toText`: the cursor goes back to the entry's text (Esc). */
+  function closeDescription(toText: boolean) {
+    setDescribing(false);
+    if (entry.description && !entry.description.trim()) onChange(entry.id, { description: '' });
+    if (toText) requestAnimationFrame(() => rootRef.current?.querySelector<TextField>('.entry-text')?.focus({ preventScroll: true }));
+  }
+  function pickIcon(name: string | null) {
+    if (name === (entry.icon ?? null)) return;
+    if (!restoreSelection.current) restoreSymbolFocus.current = true;
+    onChange(entry.id, { icon: name });
+  }
   function pickTag(id: string | null) {
     if (id === (entry.tag ?? null)) return;
     if (!restoreSelection.current) restoreSymbolFocus.current = true;
@@ -227,6 +264,8 @@ export const JournalEntry = memo(function JournalEntry({ layout, entry, day, tag
         case 'KeyU': if (!canPlan(entry)) return false; openPlanner('time', Boolean(text)); return true;
         case 'KeyW': if (!canPlan(entry)) return false; openPlanner('repeat', Boolean(text)); return true;
         case 'KeyG': if (trace) return false; chooseTag(text); return true;
+        case 'KeyI': if (trace) return false; chooseIcon(text); return true;
+        case 'KeyB': if (!canDescribe) return false; openDescription(); return true;
         case 'Enter': if (isOpen) closeActions(); else { returnToText.current = Boolean(text); onOpenChange(entry.id, true); } return true;
         case 'Delete': { if (linked) { remove(); return true; } const neighbor = adjacentText(rootRef.current, 1) ?? adjacentText(rootRef.current, -1); remove(); if (!focusText(neighbor)) titleInput()?.focus(); return true; }
       }
@@ -372,14 +411,25 @@ export const JournalEntry = memo(function JournalEntry({ layout, entry, day, tag
         <span>{trace.targets.length > 1 ? t("{0} Tage", trace.targets.length) : formatShortDate(trace.targets[0].date)}</span>{trace.time && <span className="entry-trace-time">{formatSpan(trace.time, trace.end)}</span>}{trace.reminder && <Icon name="bell" />}{trace.repeat?.rule && <Icon name="repeat" className="entry-repeat" />}
       </button>}
       {/* The tag is always the last thing in the row, after the time or the date. */}
-      {tag && tagFirst && <button ref={tagRef} type="button" className="entry-tag" aria-label={t("Tag {0} ändern", tag.name)} data-tip={t("Tag · Alt G")} aria-haspopup="dialog" aria-expanded={tagging}
-        onClick={() => chooseTag()}><span className="tag-dot" />{tag.name}</button>}
+      {/* A tag with an icon shows the icon in place of its name (the name stays its label and tip). */}
+      {tag && tagFirst && <button ref={tagRef} type="button" className={`entry-tag${tag.icon ? ' has-icon' : ''}`} aria-label={t("Tag {0} ändern", tag.name)} data-tip={tag.icon ? t("{0} · Alt G", tag.name) : t("Tag · Alt G")} aria-haspopup="dialog" aria-expanded={tagging}
+        onClick={() => chooseTag()}>{tag.icon ? <EntryIcon name={tag.icon} /> : <><span className="tag-dot" />{tag.name}</>}</button>}
     </div>
-    {/* The calendar description, faintly under the text (its first lines, without Markdown marks; imported mails have their own view). */}
-    {description && <p className="entry-description" title={description}>{description}</p>}
+    {/* The description, faintly under the text (its first lines, without Markdown marks; imported mails have their own
+        view). A click (or Alt B, or the actions) opens it as a box to write in, like the calendar's: Enter is a new line,
+        Esc or leaving the box closes it. */}
+    {describing ? <div className="entry-description-box" onKeyDown={event => {
+        if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closeDescription(true); return; }
+        if (!event.altKey) event.stopPropagation();
+      }} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) closeDescription(false); }}>
+      <MarkdownField className="entry-description-field" label={t("Beschreibung von {0}", entry.text || t("ohne Text"))} placeholder={t("Beschreibung hinzufügen …")} value={entry.description ?? ''} onChange={text => onChange(entry.id, { description: text })} />
+    </div>
+      : description && <p className={`entry-description${canDescribe ? ' is-editable' : ''}`} title={canDescribe ? `${description}\n\n${t("Klicken zum Bearbeiten · Alt B")}` : description} onClick={() => { if (canDescribe && !window.getSelection()?.toString()) openDescription(); }}>{description}</p>}
     {scopeAsk && !fromSatellite && scopeChoice()}
+    {choosingIcon && <IconPicker anchor={triggerRef.current} value={entry.icon} color={tag?.color} onPick={pickIcon}
+      onClose={() => { setChoosingIcon(false); const selection = restoreSelection.current; if (selection) { restoreSelection.current = null; const text = rootRef.current?.querySelector<TextField>('.entry-text'); text?.focus({ preventScroll: true }); text?.setSelectionRange(selection.start, selection.end, selection.direction); } }} />}
     {tagging && <TagPicker anchor={tagRef.current ?? triggerRef.current} value={tag?.id ?? null} onPick={pickTag}
       onClose={() => { setTagging(false); const selection = restoreSelection.current; if (selection) { restoreSelection.current = null; const text = rootRef.current?.querySelector<TextField>('.entry-text'); text?.focus({ preventScroll: true }); text?.setSelectionRange(selection.start, selection.end, selection.direction); } }} />}
-    <EntryActionDock layout={layout} swipeActions={swipeActions} removeChoice={fromSatellite ? scopeChoice('satellite') : undefined} onClose={closeActions} entry={entry} day={day} label={label} isOpen={isOpen} planning={planning} plannerView={plannerView} traceSaved={traceSaved} onPlanningChange={changePlanning} onPlanDatePreview={(date, count = 1) => { setPlanDate(date); setPlanCount(count); }} onPlan={plan} onNavigate={onNavigate} canMoveUp={canMoveUp} canMoveDown={canMoveDown} onPreview={next => { if (!restorePriorityFocus.current) setPreview(next); }} onRemove={remove} onPriorityChange={() => togglePriority(null)} onMove={offset => { setPreview(null); onMoveOffset(entry.id, offset); }} onStatusChange={changeStatus} onKindChange={kind => changeKind(kind)} tag={tag} onTag={() => chooseTag()} />
+    <EntryActionDock layout={layout} swipeActions={swipeActions} removeChoice={fromSatellite ? scopeChoice('satellite') : undefined} onClose={closeActions} entry={entry} day={day} label={label} isOpen={isOpen} planning={planning} plannerView={plannerView} traceSaved={traceSaved} onPlanningChange={changePlanning} onPlanDatePreview={(date, count = 1) => { setPlanDate(date); setPlanCount(count); }} onPlan={plan} onNavigate={onNavigate} canMoveUp={canMoveUp} canMoveDown={canMoveDown} onPreview={next => { if (!restorePriorityFocus.current) setPreview(next); }} onRemove={remove} onPriorityChange={() => togglePriority(null)} onMove={offset => { setPreview(null); onMoveOffset(entry.id, offset); }} onStatusChange={changeStatus} onKindChange={kind => changeKind(kind)} tag={tag} onTag={() => chooseTag()} onIcon={() => chooseIcon()} onDescribe={canDescribe ? openDescription : undefined} />
   </div>;
 });

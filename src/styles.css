@@ -159,6 +159,23 @@ h2 { margin: 0; font-size: 12px; font-weight: 600; }
 .entry[data-status='done'] .entry-description, .entry[data-status='cancelled'] .entry-description { opacity: .7; }
 :root[data-theme='journal'] .entry-description { font-family: var(--write); font-size: 13px; font-style: italic; }
 :root[data-pixel] .entry-description { font-size: 15px; line-height: 1.2; }
+/* A description can be written in the journal too (JournalEntry: Alt B, the actions, a click on it): a box under the row
+   with the calendar's Markdown field; Enter is a new line, Esc or leaving it closes it. */
+.entry-description.is-editable { cursor: text; border-radius: 4px; transition: background-color var(--fast) ease, color var(--fast) ease; }
+.entry-description.is-editable:hover { background: var(--hover); color: var(--muted); }
+.entry-description-box { margin: -4px 0 8px 40px; animation: fade-in var(--normal) ease; }
+.entry-description-field { min-height: 44px; padding: 7px 10px; border-radius: 6px; background: color-mix(in srgb, var(--surface) 55%, transparent); box-shadow: inset 0 0 0 1px var(--divider); color: var(--text); font: 13px/1.5 var(--sans); }
+.entry-description-field:focus-within { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tag, var(--accent)) 60%, transparent); }
+:root[data-theme='journal'] .entry-description-field { border-radius: 2px; background: transparent; box-shadow: none; border-left: 2px solid color-mix(in srgb, var(--tag, var(--accent)) 50%, transparent); font: italic 15px/1.45 var(--write); }
+:root[data-theme='journal'] .entry-description-field:focus-within { box-shadow: none; border-left-color: var(--tag, var(--accent)); }
+:root[data-theme='nebula'] .entry-description { font-family: var(--mono); font-size: 11px; }
+:root[data-theme='nebula'] .entry-description::before { content: '> '; color: var(--tag, var(--accent)); }
+:root[data-theme='nebula'] .entry-description-field { position: relative; border-radius: 0; background: #0006; box-shadow: none; border-left: 1px solid var(--tag, var(--accent)); padding-left: 22px; font: 12px/1.5 var(--mono); }
+:root[data-theme='nebula'] .entry-description-field::before { content: '>'; position: absolute; left: 9px; top: 7px; color: var(--tag, var(--accent)); font: 700 12px/1.5 var(--mono); }
+:root[data-theme='nebula'] .entry-description-field:focus-within { box-shadow: 0 0 0 1px color-mix(in srgb, var(--tag, var(--accent)) 45%, transparent); }
+:root[data-pixel] .entry-description-field { border-radius: 0; font: 15px/1.2 var(--mono); box-shadow: 0 0 0 2px var(--divider); }
+:root[data-pixel] .entry-description-field:focus-within { box-shadow: 0 0 0 2px var(--tag, var(--accent)); }
+@media (prefers-reduced-motion: reduce) { .entry-description-box { animation: none; } }
 .entry-group-start { margin-top: 20px; }
 .entry-new { animation: entry-in 300ms var(--spring); }
 .entry-actions { position: relative; flex: none; margin-top: 3px; }

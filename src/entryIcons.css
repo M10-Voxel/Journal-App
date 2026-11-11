@@ -154,3 +154,26 @@
 :root[data-theme='nebula'][data-popups='b'] .reminder-choice-steps button { color: #333; }
 :root[data-theme='nebula'][data-popups='b'] .reminder-choice-own { border-top-color: #111; }
 :root[data-pixel] .reminder-choice-units button[aria-checked='true'] { box-shadow: inset 0 0 0 2px currentColor; }
+
+/* ── In the journal: a tag's icon in place of its name (an entry's own icon shows in the calendar only) ─────── */
+/* A tag with an icon: the pill holds only the icon. */
+.entry-tag.has-icon { justify-content: center; min-width: 30px; padding: 0 7px; color: color-mix(in srgb, var(--tag) 80%, var(--strong)); }
+.entry-tag.has-icon .entry-icon { width: 14px; height: 14px; }
+/* In the pickers, the filter and the calendar's details: the icon before the name, in the tag's colour. */
+.tag-icon { flex: none; width: 13px; height: 13px; color: var(--tag, var(--accent)); }
+.tag-option .tag-icon { width: 14px; height: 14px; }
+/* The actions: the entry's icon beside the tag. */
+.actions-orbit .dock-tag .dock-icon-button .entry-icon, .dock-tag-button .entry-icon { width: 14px; height: 14px; color: var(--tag, currentColor); }
+.actions-orbit .dock-tag .dock-icon-button.has-icon { color: var(--tag, var(--accent)); }
+/* Settings: the icon button before the name; the sample shows the tag as the entries do. */
+.tag-icon-button .entry-icon { width: 15px; height: 15px; color: var(--tag); }
+.tag-icon-button:not(.has-icon) { opacity: .7; }
+.tag-icon-button:not(.has-icon):hover { opacity: 1; }
+.tag-row-sample.has-icon { justify-content: center; min-width: 30px; padding: 0 7px; color: color-mix(in srgb, var(--tag) 80%, var(--strong)); }
+.tag-row-sample.has-icon .entry-icon { width: 14px; height: 14px; }
+
+/* Journal: drawn in ink, the tag's colour mixed with it; the tag a stamp. */
+:root[data-theme='journal'] :is(.entry-tag.has-icon, .tag-row-sample.has-icon) { color: color-mix(in srgb, var(--tag) 85%, var(--text)); }
+/* Nebula: a glyph that glows. */
+:root[data-theme='nebula'] :is(.entry-tag.has-icon, .tag-row-sample.has-icon) .entry-icon { filter: drop-shadow(0 0 3px color-mix(in srgb, var(--tag) 60%, transparent)); }
+:root[data-theme='nebula'] .tag-icon { filter: drop-shadow(0 0 2px color-mix(in srgb, var(--tag, var(--accent)) 50%, transparent)); }

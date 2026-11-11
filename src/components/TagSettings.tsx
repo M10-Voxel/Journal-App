@@ -6,6 +6,7 @@ import type { Tag } from '../tags';
 import { saveTags, useTags } from '../tagStore';
 import { ColorButton } from './ColorPicker';
 import { Icon } from './Icon';
+import { EntryIcon, IconPicker } from './EntryIcon';
 import { groupTags, moveKind, moveWithinKind, orderedTags, resetKindOrder, tagKindLabel, tagKinds, useTagKindOrder } from '../tagKinds';
 import { useActivityTagIds } from '../tagGroups';
 
@@ -29,6 +30,7 @@ export function TagSettings() {
   const [name, setName] = useState('');
   const [color, setColor] = useState<string | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
+  const [choosingIcon, setChoosingIcon] = useState<{ id: string; anchor: HTMLElement } | null>(null);
   // Dragging in the colour picker changes the colour continuously; it is shown at once and stored a moment later.
   const [colors, setColors] = useState<Record<string, string>>({});
   const pending = useRef<number | undefined>(undefined);
@@ -87,7 +89,7 @@ export function TagSettings() {
 
   return <div className="tag-settings">
     <h3 id="settings-tags-title">{t('Tags')}</h3>
-    <p className="settings-hint">{t('Tags wie Arbeit, Privat oder Uni gruppieren Einträge im Journal und färben sie im Kalender. Zuweisen mit ')}<kbd>Alt</kbd> <kbd>G</kbd>{t(' am Eintrag oder im Kalender-Popup; ein- und ausblenden über das Tag-Symbol in der Leiste.')}</p>
+    <p className="settings-hint">{t('Tags wie Arbeit, Privat oder Uni gruppieren Einträge im Journal und färben sie im Kalender. Zuweisen mit ')}<kbd>Alt</kbd> <kbd>G</kbd>{t(' am Eintrag oder im Kalender-Popup; ein- und ausblenden über das Tag-Symbol in der Leiste. Mit einem Icon zeigt ein Tag an den Einträgen das Icon statt seines Namens.')}</p>
     <div ref={listRef} className="tag-list" role="list" aria-labelledby="settings-tags-title">
       {groups.map(group => <div key={group.kind} className={`tag-group is-${group.kind}`} role="group" aria-label={tagKindLabel(group.kind)}>
       <h4 className="tag-group-label">{tagKindLabel(group.kind)}
@@ -98,8 +100,11 @@ export function TagSettings() {
         </span></h4>
       {group.tags.map((tag, place) => { const index = shown.indexOf(tag); return <div key={tag.id} className="tag-row" role="listitem" style={{ '--tag': tag.color } as CSSProperties} data-tag-row={tag.name} data-tag-id={tag.id}>
         <ColorButton value={tag.color} label={tag.name} swatches={tagSwatches} onChange={value => recolor(tag.id, value)} />
+        <button type="button" className={`cal-icon-button tag-icon-button${tag.icon ? ' has-icon' : ''}`} aria-label={tag.icon ? t('Icon von {0} ändern', tag.name) : t('Icon für {0} wählen', tag.name)}
+          data-tip={tag.icon ? t('Icon ändern · an Einträgen statt des Namens') : t('Icon wählen · an Einträgen statt des Namens')} aria-haspopup="dialog" aria-expanded={choosingIcon?.id === tag.id}
+          onClick={event => setChoosingIcon({ id: tag.id, anchor: event.currentTarget })}>{tag.icon ? <EntryIcon name={tag.icon} /> : <Icon name="icon" />}</button>
         <NameField tag={tag} onRename={value => store(current => current.map(other => other.id === tag.id ? { ...other, name: value } : other))} />
-        <span className="tag-row-sample" aria-hidden="true"><i />{tag.name}</span>
+        <span className={`tag-row-sample${tag.icon ? ' has-icon' : ''}`} aria-hidden="true">{tag.icon ? <EntryIcon name={tag.icon} /> : <><i />{tag.name}</>}</span>
         <kbd className="tag-row-key" title={t('Taste in Auswahl und Filter')}>{index < 9 ? index + 1 : ''}</kbd>
         <button type="button" className="cal-icon-button tag-up" aria-label={t('{0} nach oben', tag.name)} data-tip={t('Nach oben')} disabled={place === 0} onClick={() => move(index, -1)}><Icon name="up" /></button>
         <button type="button" className="cal-icon-button tag-down" aria-label={t('{0} nach unten', tag.name)} data-tip={t('Nach unten')} disabled={place === group.tags.length - 1} onClick={() => move(index, 1)}><Icon name="down" /></button>
@@ -117,5 +122,8 @@ export function TagSettings() {
       <button type="submit" className="tag-add" disabled={!name.trim()}><Icon name="check" />{t('Anlegen')}</button>
     </form>
     {error && <p className="tag-error" role="alert">{error}</p>}
+    {choosingIcon && (() => { const tag = tags.find(other => other.id === choosingIcon.id); return tag ? <IconPicker anchor={choosingIcon.anchor} value={tag.icon} color={tag.color}
+      onPick={name => void store(current => current.map(other => other.id === tag.id ? { ...other, icon: name } : other))}
+      onClose={() => { const anchor = choosingIcon.anchor; setChoosingIcon(null); requestAnimationFrame(() => anchor.isConnected && anchor.focus({ preventScroll: true })); }} /> : null; })()}
   </div>;
 }

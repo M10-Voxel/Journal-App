@@ -159,6 +159,8 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<SettingsTab>('appearance');
   const openSettings = (tab: SettingsTab = 'appearance') => { setSettingsTab(tab); setSettingsOpen(true); };
+  /** The checklist's and the day values' settings, from their windows and pages. */
+  const manageData = (tab: 'activities' | 'scales' = 'activities') => openSettings(tab);
   useEffect(() => manageTags.register(() => openSettings('tags')), []);
   const tags = useTags();
   const [hiddenTags, setHiddenTags] = useHiddenTags('journal');
@@ -669,7 +671,7 @@ function App() {
   };
   const bookPage = (page: BookPage) => page.page === 'entries' ? entriesPage(page.date)
     : page.page === 'board' ? <BulletinBoard key={`${boardPeriod}:${page.date}`} date={page.date} period={boardPeriod} />
-    : <PeriodNotes date={page.date} mode={page.page === 'data' ? 'day' : periodMode} part={page.page === 'data' ? undefined : page.page} onManage={() => openSettings('activities')} onImport={importFromCalendar} />;
+    : <PeriodNotes date={page.date} mode={page.page === 'data' ? 'day' : periodMode} part={page.page === 'data' ? undefined : page.page} onManage={manageData} onImport={importFromCalendar} />;
   const stepLabels = {
     prev: { label: periodMode === 'day' ? t("Vorheriger Tag") : language === 'en' ? 'Previous period' : 'Vorheriger Zeitraum', tip: periodMode === 'day' ? t("Vorheriger Tag · Alt ←") : language === 'en' ? 'Previous period' : 'Vorheriger Zeitraum' },
     next: { label: periodMode === 'day' ? t("Nächster Tag") : language === 'en' ? 'Next period' : 'Nächster Zeitraum', tip: periodMode === 'day' ? t("Nächster Tag · Alt →") : language === 'en' ? 'Next period' : 'Nächster Zeitraum' },
@@ -785,9 +787,12 @@ function App() {
           onMode={setPeriodMode} onStep={stepPeriod} onToday={() => navigate(today)} stepLabels={stepLabels} disabled={driveBusy}
           datePicker={<MiniCalendarPicker date={date} open={datePickerOpen} onOpenChange={setDatePickerOpen} onPick={navigate} buttonRef={datePickerButtonRef} className="nebula-date">{pageHeading(date, periodMode)}</MiniCalendarPicker>}
           tagFilter={<TagFilter label={t("Tags im Journal")} hidden={hiddenTags} onChange={next => { setNewEntryId(null); setHiddenTags(next); }} />}
-          entries={entriesPage()} data={<PeriodNotes date={date} mode="day" onManage={() => openSettings('activities')} onImport={importFromCalendar} />} board={<BulletinBoard key={`${boardPeriod}:${date}`} date={date} period={boardPeriod} />}
-          notes={<PeriodNotes date={date} mode={periodMode} part="notes" onManage={() => openSettings('activities')} onImport={importFromCalendar} />}
-          activities={<PeriodNotes date={date} mode={periodMode} part="activities" onManage={() => openSettings('activities')} onImport={importFromCalendar} />}
+          entries={entriesPage()} board={<BulletinBoard key={`${boardPeriod}:${date}`} date={date} period={boardPeriod} />}
+          rating={<PeriodNotes date={date} mode="day" part="rating" onManage={manageData} onImport={importFromCalendar} />}
+          scales={<PeriodNotes date={date} mode="day" part="scales" onManage={manageData} onImport={importFromCalendar} />}
+          notes={<PeriodNotes date={date} mode={periodMode} part="note" onManage={manageData} onImport={importFromCalendar} />}
+          ratings={<PeriodNotes date={date} mode={periodMode} part="ratings" onManage={manageData} onImport={importFromCalendar} />}
+          activities={<PeriodNotes date={date} mode={periodMode} part="activities" onManage={manageData} onImport={importFromCalendar} />}
           calendar={calendar} calendarOpen={drawer.open} onCalendarToggle={() => toggleDrawer()} onCalendarClose={() => toggleDrawer(true)}
           notebook={<Notebook onOpenDay={target => openFromCalendar(target)} />} notebookOpen={notebook.open} onNotebookToggle={() => toggleNotebook()} onNotebookClose={() => toggleNotebook(true)} onOpenDay={(target, entry) => showFromCalendar(target, entry ?? null)} onNavigate={navigate} scrollRef={scrollRef}
           dayCalendar={(showDate, onDateChange) => <Calendar embedded fixedView="day" journalDate={date} showDate={showDate} onDateChange={onDateChange} onOpen={openFromCalendar} onCreate={createFromCalendar} onEdit={editFromCalendar} onMove={moveFromCalendar} onRemove={removeFromCalendar} />} />
@@ -795,7 +800,7 @@ function App() {
         : <div className="scroll" ref={scrollRef}>
           <div className="content">
             {periodMode === 'day' && entriesPage()}
-            <PeriodNotes date={date} mode={periodMode} onManage={() => openSettings('activities')} onImport={importFromCalendar} />
+            <PeriodNotes date={date} mode={periodMode} onManage={manageData} onImport={importFromCalendar} />
             {hasPinboard(periodMode) && <BulletinBoard key={`${boardPeriod}:${date}`} date={date} period={boardPeriod} />}
           </div>
         </div>}

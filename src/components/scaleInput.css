@@ -1,0 +1,74 @@
+/* A day's value set with the mouse (ScaleInput.tsx). One markup, four looks: a row of dots (classic), a ruler with the
+   value circled in ink (journal), a terminal bar of block characters (nebula), an HP bar of square cells (pixel).
+   --scale-color is the value's colour (settings: Tageswerte). */
+.scale-input { --scale-color: var(--accent); position: relative; display: flex; align-items: center; gap: 14px; min-width: 0; padding: 4px 0; border-radius: 6px; outline: none; user-select: none; }
+.scale-input:focus-visible { outline: 1px solid var(--scale-color); outline-offset: 3px; }
+.scale-track { position: relative; display: grid; grid-template-columns: repeat(var(--scale-cells), minmax(0, 1fr)); flex: 1; min-width: 0; height: 26px; align-items: center; cursor: pointer; touch-action: none; }
+.scale-bracket, .scale-term, .scale-ink, .scale-tick { display: none; }
+.scale-value { display: flex; flex: none; align-items: baseline; gap: 4px; min-width: 52px; justify-content: flex-end; color: var(--scale-color); font-variant-numeric: tabular-nums; }
+.scale-number { font: 600 20px var(--sans); }
+.scale-max { color: var(--muted); font: 11px var(--mono); }
+.scale-input.is-empty .scale-number { color: var(--placeholder); }
+.scale-input.is-hovering .scale-number { opacity: .55; }
+
+/* Classic: a dot per step, filled up to the value; with many steps narrow segments. */
+.scale-cell { position: relative; display: grid; place-items: center; height: 100%; }
+.scale-cell::before { content: ''; width: 12px; height: 12px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--scale-color) 45%, transparent);
+  transition: background-color var(--fast, 120ms) ease, transform 160ms ease, box-shadow var(--fast, 120ms) ease; }
+.scale-cell[data-on]::before { background: var(--scale-color); box-shadow: inset 0 0 0 1.5px var(--scale-color); }
+.scale-input.is-hovering .scale-cell[data-hover]:not([data-on])::before { background: color-mix(in srgb, var(--scale-color) 30%, transparent); }
+.scale-input.is-hovering .scale-cell:not([data-hover])[data-on]::before { opacity: .45; }
+.scale-cell[data-current]::before { transform: scale(1.3); }
+.scale-input.is-condensed .scale-cell::before { width: calc(100% - 3px); height: 10px; border-radius: 3px; }
+.scale-input.is-condensed .scale-cell[data-current]::before { transform: scaleY(1.4); }
+
+/* Journal: a ruler of ink strokes with numbers; the value is circled by hand, hovering pencils a circle in. */
+:root[data-theme='journal'] .scale-track { height: 40px; align-items: end; border-bottom: 1.5px solid color-mix(in srgb, var(--text) 70%, transparent); }
+:root[data-theme='journal'] .scale-cell { align-content: end; }
+:root[data-theme='journal'] .scale-cell::before { width: 1.5px; height: 9px; border-radius: 1px; background: color-mix(in srgb, var(--text) 75%, transparent); box-shadow: none; transform: rotate(-3deg); }
+:root[data-theme='journal'] .scale-cell:nth-child(odd)::before { height: 13px; transform: rotate(2deg); }
+:root[data-theme='journal'] .scale-cell[data-on]::before { background: var(--scale-color); }
+:root[data-theme='journal'] .scale-input.is-hovering .scale-cell::before { opacity: 1; }
+:root[data-theme='journal'] .scale-input.is-condensed .scale-cell::before { width: 1.5px; height: 9px; border-radius: 1px; }
+:root[data-theme='journal'] .scale-tick { display: block; position: absolute; top: 2px; left: 50%; transform: translateX(-50%); color: var(--muted); font: 15px/1 var(--write); }
+:root[data-theme='journal'] .scale-input:is(.is-dense, .is-condensed) .scale-cell:not(:first-child, :last-child, :nth-child(5n+1), [data-current]) .scale-tick { display: none; }
+:root[data-theme='journal'] .scale-cell[data-on] .scale-tick { color: var(--text); }
+:root[data-theme='journal'] .scale-ink { display: block; position: absolute; top: -4px; width: 34px; height: 26px; margin-left: -17px; overflow: visible; pointer-events: none; }
+:root[data-theme='journal'] .scale-ink path { fill: none; stroke: var(--scale-color); stroke-width: 2; stroke-linecap: round; stroke-dasharray: 120; stroke-dashoffset: 0; animation: scale-ink 420ms ease-out; }
+:root[data-theme='journal'] .scale-ink.is-pencil path { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 2 3; animation: none; opacity: .8; }
+:root[data-theme='journal'] .scale-number { font: 28px var(--display); }
+:root[data-theme='journal'] .scale-max { font: 14px var(--write); }
+@keyframes scale-ink { from { stroke-dashoffset: 120; } }
+
+/* Nebula: a terminal bar of block characters, `[██████░░░░] 06/10`; hovering lights the blocks up. */
+:root[data-theme='nebula'] .scale-input { gap: 2px; font: 15px/1 var(--mono); }
+:root[data-theme='nebula'] .scale-bracket { display: block; color: var(--muted); }
+:root[data-theme='nebula'] .scale-track { height: 18px; }
+:root[data-theme='nebula'] .scale-cell::before { content: '░'; width: auto; height: auto; border-radius: 0; box-shadow: none; background: none; color: color-mix(in srgb, var(--scale-color) 45%, #fff3); font: 18px/1 var(--mono); transform: none; transition: color 80ms linear, text-shadow 80ms linear; }
+:root[data-theme='nebula'] .scale-cell[data-on]::before { content: '█'; color: var(--scale-color); background: none; text-shadow: none; }
+:root[data-theme='nebula'] .scale-input.is-hovering .scale-cell[data-hover]::before { content: '▓'; color: color-mix(in srgb, var(--scale-color) 75%, #fff); background: none; opacity: 1; }
+:root[data-theme='nebula'] .scale-input.is-condensed .scale-cell::before { width: auto; height: auto; transform: none; }
+:root[data-theme='nebula'] .scale-cell[data-current]::before { transform: none; }
+:root[data-theme='nebula'] .scale-number, :root[data-theme='nebula'] .scale-max { display: none; }
+:root[data-theme='nebula'] .scale-value { min-width: 0; margin-left: 10px; }
+:root[data-theme='nebula'] .scale-term { display: inline; color: var(--strong); font: 700 13px var(--mono); letter-spacing: .04em; }
+:root[data-theme='nebula'] .scale-input.is-empty .scale-term { color: var(--muted); }
+:root[data-theme='nebula'] .scale-input:focus-visible { outline: 1px dashed var(--scale-color); }
+:root[data-theme='nebula']:not([data-pixel]) .scale-cell::before { scale: 1 .6; text-shadow: none; }
+
+/* Pixel: an HP bar of square cells with crisp edges, lit up to the value. */
+:root[data-pixel] .scale-input { gap: 10px; border-radius: 0; }
+:root[data-pixel] .scale-track { height: 24px; gap: 2px; padding: 3px; background: var(--background); box-shadow: 0 0 0 2px var(--edge, var(--border)), 3px 3px 0 2px #0008; image-rendering: pixelated; }
+:root[data-pixel] .scale-cell::before { width: 100%; height: 100%; border-radius: 0; box-shadow: none; background: color-mix(in srgb, var(--scale-color) 16%, var(--background)); transform: none; transition: none; }
+:root[data-pixel] .scale-cell[data-on]::before { background: var(--scale-color); box-shadow: inset 0 -4px 0 color-mix(in srgb, var(--scale-color) 60%, #000), inset 0 3px 0 color-mix(in srgb, var(--scale-color) 55%, #fff); }
+:root[data-pixel] .scale-input.is-hovering .scale-cell[data-hover]:not([data-on])::before { background: color-mix(in srgb, var(--scale-color) 45%, var(--background)); }
+:root[data-pixel] .scale-input.is-condensed .scale-cell::before { width: 100%; height: 100%; border-radius: 0; transform: none; }
+:root[data-pixel] .scale-cell[data-current]::before { transform: none; }
+:root[data-pixel] .scale-number { font: 26px var(--mono); }
+:root[data-pixel] .scale-max { font: 15px var(--mono); }
+:root[data-pixel] .scale-input:focus-visible { outline: 2px solid var(--scale-color); outline-offset: 4px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .scale-cell::before { transition: none; }
+  :root[data-theme='journal'] .scale-ink path { animation: none; }
+}

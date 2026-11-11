@@ -2,7 +2,7 @@ import type { Entry, EntryKind } from '../journal';
 import { PixelIcon } from './PixelIcon';
 
 export type IconName = 'play' | 'pause' | 'stop' | 'week' | 'quarter' | 'year' | 'journal' | 'calendar' | 'plan-tomorrow' | 'plan-days' | 'date-range' | 'left' | 'right' | 'up' | 'down' | 'grip' | 'offline' | 'save' | 'task' | 'note' | 'event' | 'done' | 'cancel' | 'trash' | 'tomorrow' | 'priority' | 'priority-event' | 'priority-note'
-  | 'migrated' | 'migrated-event' | 'scheduled' | 'scheduled-event' | 'scheduled-multi' | 'scheduled-multi-event' | 'clock' | 'bell' | 'check' | 'undo' | 'jump' | 'settings' | 'search' | 'pin' | 'month' | 'transfer' | 'repeat' | 'mail' | 'layout' | 'pencil' | 'tag' | 'pipette' | 'details' | 'copy';
+  | 'migrated' | 'migrated-event' | 'scheduled' | 'scheduled-event' | 'scheduled-multi' | 'scheduled-multi-event' | 'clock' | 'bell' | 'check' | 'undo' | 'jump' | 'settings' | 'search' | 'pin' | 'month' | 'transfer' | 'repeat' | 'mail' | 'layout' | 'pencil' | 'tag' | 'pipette' | 'details' | 'copy' | 'icon';
 
 export const priorityIcon = (kind: EntryKind): IconName => kind === 'event' ? 'priority-event' : kind === 'note' ? 'priority-note' : 'priority';
 
@@ -65,6 +65,7 @@ export function Icon({ name, className = '' }: { name: IconName; className?: str
     {name === 'settings' && <><path d="M6.54 3.22 L6.85 1.50 L9.15 1.50 L9.46 3.22 L10.35 3.59 L11.79 2.59 L13.41 4.21 L12.41 5.65 L12.78 6.54 L14.50 6.85 L14.50 9.15 L12.78 9.46 L12.41 10.35 L13.41 11.79 L11.79 13.41 L10.35 12.41 L9.46 12.78 L9.15 14.50 L6.85 14.50 L6.54 12.78 L5.65 12.41 L4.21 13.41 L2.59 11.79 L3.59 10.35 L3.22 9.46 L1.50 9.15 L1.50 6.85 L3.22 6.54 L3.59 5.65 L2.59 4.21 L4.21 2.59 L5.65 3.59Z" strokeWidth="1.2" /><circle cx="8" cy="8" r="2.1" /></>}
     {name === 'pencil' && <><path d="M10.5 2.8 13.2 5.5 6 12.7l-3.2.5.5-3.2Z" /><path d="m9.2 4.1 2.7 2.7" /></>}
     {/* A label with its hole: tags. */}
+    {name === 'icon' && <><rect x="2.5" y="2.5" width="11" height="11" rx="3" /><path d="M5.6 9.4c.6.9 1.4 1.3 2.4 1.3s1.8-.4 2.4-1.3" /><path d="M6 6.2v.6M10 6.2v.6" strokeWidth="1.8" /></>}
     {name === 'tag' && <><path d="M2.5 3.3v4.1a1 1 0 0 0 .3.7l5.6 5.6a1 1 0 0 0 1.4 0l3.8-3.8a1 1 0 0 0 0-1.4L8 2.8a1 1 0 0 0-.7-.3H3.3a.8.8 0 0 0-.8.8Z" /><circle cx="5.4" cy="5.4" r="1" /></>}
     {/* Lines of text: an entry's description. */}
     {name === 'copy' && <><rect x="5.5" y="5.5" width="8" height="8" rx="1.5" /><path d="M10.5 3.5v-.5a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h.5" /></>}
