@@ -5,7 +5,7 @@ import { useDismissLayer } from './useDismissLayer';
 import { shiftDate } from '../dates';
 import { copyCalendarEntry } from '../calendarClipboard';
 import { t, useLanguage } from '../i18n';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { CSSProperties, KeyboardEvent, WheelEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { journal } from '../journal';
@@ -29,6 +29,7 @@ import { PopupHead, PopupKeys } from './PopupChrome';
 import { usePopupLook } from '../popupLook';
 import { tagOf } from '../tags';
 import { useTags } from '../tagStore';
+import { getWidgetSurface, inDesktopWidget, popupViewport, subscribeWidgetSurface } from '../widgetSurface';
 
 /** A range marked in the time grid, in minutes of its day. */
 export interface Draft { date: string; start: number; end: number }
@@ -60,7 +61,9 @@ export function CalendarComposer({ date, draft, entry, span, onSpanChange, tag: 
   useLanguage();
   const editing = Boolean(entry);
   const look = usePopupLook();
-  const width = widths[editing ? 'edit' : 'create'];
+  const surface = useSyncExternalStore(subscribeWidgetSurface, getWidgetSurface);
+  const bounds = surface?.bounds ?? popupViewport();
+  const width = inDesktopWidget() ? Math.min(widths[editing ? 'edit' : 'create'], bounds.width - 16) : widths[editing ? 'edit' : 'create'];
   // A range marked in the calendar becomes a calendar entry unless chosen otherwise (it is the first choice, too).
   const [kind, setKind] = useState<EntryKind>(entry?.kind ?? 'event');
   const [text, setText] = useState(entry?.text ?? '');
@@ -110,11 +113,12 @@ export function CalendarComposer({ date, draft, entry, span, onSpanChange, tag: 
       const card = cardRef.current;
       if (!rect || !card) return;
       const height = card.offsetHeight, gap = 10, margin = 8;
+      const bounds = popupViewport(), right = bounds.left + bounds.width, bottom = bounds.top + bounds.height;
       let side: 'left' | 'right' | 'below' = 'right';
       let left = rect.right + gap;
-      if (left + width > innerWidth - margin) { side = 'left'; left = rect.left - gap - width; }
-      if (left < margin) { side = 'below'; left = Math.min(innerWidth - margin - width, Math.max(margin, rect.left + rect.width / 2 - width / 2)); }
-      const top = side === 'below' ? Math.min(rect.bottom + gap, innerHeight - margin - height) : Math.min(innerHeight - margin - height, Math.max(margin, rect.top));
+      if (left + width > right - margin) { side = 'left'; left = rect.left - gap - width; }
+      if (left < bounds.left + margin) { side = 'below'; left = Math.min(right - margin - width, Math.max(bounds.left + margin, rect.left + rect.width / 2 - width / 2)); }
+      const top = Math.max(bounds.top + margin, side === 'below' ? Math.min(rect.bottom + gap, bottom - margin - height) : Math.min(bottom - margin - height, Math.max(bounds.top + margin, rect.top)));
       setPlace(current => current && current.left === left && current.top === top && current.side === side ? current : { left, top, side });
     };
     position();
@@ -123,14 +127,15 @@ export function CalendarComposer({ date, draft, entry, span, onSpanChange, tag: 
     const scrollers = [window, ...document.querySelectorAll('.cal-time, .cal-month-day')];
     for (const target of scrollers) target.addEventListener('scroll', position, true);
     window.addEventListener('resize', position);
-    return () => { observer.disconnect(); for (const target of scrollers) target.removeEventListener('scroll', position, true); window.removeEventListener('resize', position); };
-  }, [draft]);
+    window.addEventListener('widget:popup-geometry', position);
+    return () => { observer.disconnect(); for (const target of scrollers) target.removeEventListener('scroll', position, true); window.removeEventListener('resize', position); window.removeEventListener('widget:popup-geometry', position); };
+  }, [draft, width]);
   // Focused once the click that ended the marking has settled (it would otherwise leave the focus on the calendar).
   useEffect(() => {
     const frame = requestAnimationFrame(() => { inputRef.current?.focus({ preventScroll: true }); if (editing) inputRef.current?.select(); });
     return () => cancelAnimationFrame(frame);
   }, []);
-  useDismissLayer({element:()=>cardRef.current,inside:target=>!!target.closest('.cal-selection, .shortcut-backdrop'),onDismiss:()=>latest.current.onCancel(false)});
+  useDismissLayer({element:()=>cardRef.current,inside:target=>!!target.closest('.cal-selection, .shortcut-backdrop'),ignore:()=>busy,onDismiss:()=>latest.current.onCancel(false)});
   // Selected-range handles stay interactive; another press only dismisses the card.
   useEffect(() => {
     // Escape also discards while the focus is still elsewhere (right after marking).
@@ -251,7 +256,7 @@ export function CalendarComposer({ date, draft, entry, span, onSpanChange, tag: 
   const title = editing ? t("{0} bearbeiten", label) : selectedKind === 'calendar' ? t("Neuer Kalendereintrag") : kind === 'event' ? t("Neues Ereignis") : t("Neue Aufgabe");
 
   return createPortal(<div ref={cardRef} className={`cal-composer is-${place?.side ?? 'right'}${place ? ' is-placed' : ''}${editing ? ' is-editing' : ''}${tag ? ' has-tag' : ''}`} role="dialog" aria-label={t("{0} am {1}", title, formatShortDate(date))}
-    style={{ left: place?.left ?? -9999, top: place?.top ?? 0, width, '--tag': tag?.color, ...tag ? { '--accent': tag.color, '--on-accent': contrastRatio('#ffffff', tag.color) > contrastRatio('#06101f', tag.color) ? '#ffffff' : '#06101f' } : {} } as CSSProperties} onKeyDown={onKeyDown}>
+    style={{ left: place?.left ?? -9999, top: place?.top ?? 0, width, maxHeight: inDesktopWidget() ? bounds.height - 16 : undefined, '--tag': tag?.color, ...tag ? { '--accent': tag.color, '--on-accent': contrastRatio('#ffffff', tag.color) > contrastRatio('#06101f', tag.color) ? '#ffffff' : '#06101f' } : {} } as CSSProperties} onKeyDown={onKeyDown}>
     <PopupHead look={look} title={title} command={editing ? 'entry --edit' : 'entry --new'} onClose={() => onCancel(false)} />
     <div className="cal-composer-head">
       <div className="cal-composer-kinds" role="radiogroup" aria-label={t("Art")}>

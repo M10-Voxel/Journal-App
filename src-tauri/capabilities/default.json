@@ -8,7 +8,8 @@
     "mini",
     "reminder",
     "board-*",
-    "panel-*"
+    "panel-*",
+    "widget-*"
   ],
   "permissions": [
     "core:default",

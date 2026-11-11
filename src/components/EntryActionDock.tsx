@@ -14,6 +14,7 @@ import type { SheetGroup, SheetItem } from './ActionSheet';
 import { usePopupLook } from '../popupLook';
 import { EntryIcon } from './EntryIcon';
 import type { Tag } from '../tags';
+import { inDesktopWidget, WidgetFloatingPanel } from './WidgetPopupSurface';
 
 export type TaskStatus = 'open' | 'done' | 'cancelled';
 export type EntryPreview = TaskStatus | EntryKind | 'remove' | 'up' | 'down' | 'priority' | 'tomorrow' | 'unplan';
@@ -189,19 +190,22 @@ export function EntryActionDock({ layout, swipeActions, removeChoice, onClose, e
     if (!isOpen || !dock) return;
     const primary = dock.querySelector<HTMLElement>('[data-primary-action="true"]');
     (primary ?? dock).focus({ preventScroll: true });
-    dock.scrollIntoView({ block: 'nearest', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+    if (!inDesktopWidget()) dock.scrollIntoView({ block: 'nearest', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
   }, [isOpen]);
   useLayoutEffect(() => {
     if (wasPlanning.current && !planning && isOpen) dockRef.current?.querySelector<HTMLButtonElement>('.dock-plan-date')?.focus({ preventScroll: true });
     wasPlanning.current = planning;
   }, [planning]);
 
-  if (planning) return <div ref={dockRef} className={`entry-dock-shell${isOpen ? ' is-open' : ''}`} inert={!isOpen} aria-hidden={!isOpen}>
+  const floating = (content: ReactNode) => inDesktopWidget() && isOpen && (planning || layout !== 'inline')
+    ? <WidgetFloatingPanel anchor={() => document.querySelector<HTMLElement>(`[data-entry-id="${entry.id}"]`)} layout={layout} orbit={layout === 'orbit' && !planning} inset={30}>{content}</WidgetFloatingPanel>
+    : content;
+  if (planning) return floating(<div ref={dockRef} data-entry-actions={entry.id} className={`entry-dock-shell${isOpen ? ' is-open' : ''}`} inert={!isOpen} aria-hidden={!isOpen}>
     <PlanCalendar day={day} initialView={plannerView} initial={{ date: day, time: entry.time ?? null, reminder: entry.reminder ?? false, reminderBefore: entry.reminderBefore ?? 0, repeat: entry.repeat?.rule ?? null }} onPreview={onPlanDatePreview}
       onCancel={() => onPlanningChange(false)} onConfirm={(dates: string[], schedule: Schedule, repeat: RepeatRule | null) => onPlan(repeatChange(entry, day, dates, { ...schedule, end: keepDuration(entry, schedule.time) }, repeat, localDate()))} />
-  </div>;
+  </div>);
 
-  return <div ref={dockRef} className={`entry-dock-shell${isOpen ? ' is-open' : ''}`} inert={!isOpen} aria-hidden={!isOpen} role="toolbar" aria-label={t("Aktionen für {0}", label)} tabIndex={-1} onKeyDown={event => {
+  return floating(<div ref={dockRef} data-entry-actions={entry.id} className={`entry-dock-shell${isOpen ? ' is-open' : ''}`} inert={!isOpen} aria-hidden={!isOpen} role="toolbar" aria-label={t("Aktionen für {0}", label)} tabIndex={-1} onKeyDown={event => {
     if (event.altKey || !navigationKeys.includes(event.key) || (event.target as HTMLElement).tagName === 'INPUT') return;
     event.preventDefault();
     const buttons = Array.from(dockRef.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') ?? []);
@@ -235,5 +239,5 @@ export function EntryActionDock({ layout, swipeActions, removeChoice, onClose, e
       {isTask && states(statusActions())}
       <div className="dock-clusters">{!trace && tagGroup()}{kindGroup()}{canPlan(entry) && planningGroup()}</div>
     </div>}
-  </div>;
+  </div>);
 }

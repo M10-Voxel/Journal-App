@@ -1,9 +1,16 @@
+import type { CalendarDay } from './journal';
 import { WindowActivity } from './components/WindowActivity';
 import { useViewHistory } from './viewHistory';
 import { UndoShortcuts, flushHistoryWindows } from './components/UndoShortcuts';
 import { t, useLanguage, setLanguage } from './i18n.ts';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { flushSync } from 'react-dom';
+import { DayEditor } from './components/DayEditor';
+import { DesktopWidgetWindow } from './components/DesktopWidgetWindow';
+import { isDesktopWidgetLabel } from './widgetIdentity';
+import type { DesktopWidgetState } from './desktopWidgets';
+import { flushEditorSessions, hasEditorDrafts, installEditorHost, loadEditorDay, publishEditorDay, reloadEditorSessions, serializeEditorMutation } from './editorBridge';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { invoke } from '@tauri-apps/api/core';
 import { emit, listen } from '@tauri-apps/api/event';
@@ -13,7 +20,7 @@ import type { ScopeOption } from './planning';
 import type { CalendarRequest } from './calendarRequests';
 import { ReminderPopup, ReminderToasts, chime } from './components/ReminderToasts';
 import { Icon } from './components/Icon';
-import { EntryChange, JournalEntry, entryLabels } from './components/JournalEntry';
+import { EntryChange, entryLabels } from './components/JournalEntry';
 import { useEntryDrag } from './components/useEntryDrag';
 import { useListMotion } from './components/useListMotion';
 import { ShortcutHelp } from './components/ShortcutHelp';
@@ -22,7 +29,7 @@ import type { SettingsTab } from './components/SettingsDialog';
 import { TagFilter } from './components/TagFilter';
 import { manageTags, saveTags, useHiddenTags, useTags } from './tagStore';
 import { ensureMailTags } from './mailTags';
-import { filterKey, isShown, tagOf, tagRank } from './tags';
+import { isShown, tagOf, tagRank } from './tags';
 
 import { useMailImport } from './components/useMailImport';
 import { MailImportToast } from './components/MailImportToast';
@@ -36,7 +43,7 @@ import { usePopupLook } from './popupLook';
 import { ThemeSync } from './components/ThemeSync';
 import { adjacentText, focusText, titleInput } from './components/focus';
 import type { TextField } from './components/entryEditor';
-import { entryKindOrder, orderEntries, moveEntry, moveEntryByOffset, mergeCalendarImport, sameGroup } from './entries';
+import { orderEntries, moveEntry, moveEntryByOffset, mergeCalendarImport, sameGroup } from './entries';
 import { Calendar, CalendarWindow } from './components/CalendarWindow';
 import type { EntryEdit, NewEntry } from './components/CalendarComposer';
 import { useSidebarWidth } from './components/useSidebarWidth';
@@ -105,6 +112,7 @@ import './popup-chrome.css';
 import './search.css';
 import './components/mailDetails.css';
 import './components/appNotices.css';
+import './components/desktopWidgets.css';
 import { applyColors } from './colors';
 
 applyTheme(loadSettings());
@@ -158,7 +166,8 @@ function App() {
   const [driveBusy, setDriveBusy] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<SettingsTab>('appearance');
-  const openSettings = (tab: SettingsTab = 'appearance') => { setSettingsTab(tab); setSettingsOpen(true); };
+  const [settingsWidgetId, setSettingsWidgetId] = useState<string | null>(null);
+  const openSettings = (tab: SettingsTab = 'appearance', widgetId: string | null = null) => { setSettingsWidgetId(widgetId); setSettingsTab(tab); setSettingsOpen(true); };
   /** The checklist's and the day values' settings, from their windows and pages. */
   const manageData = (tab: 'activities' | 'scales' = 'activities') => openSettings(tab);
   useEffect(() => manageTags.register(() => openSettings('tags')), []);
@@ -226,8 +235,8 @@ function App() {
     let active = true;
     if (day?.date !== date) {
       setError('');
-      journal.load(date).then(value => {
-        if (active) { setDay(prepareDay(value)); setDirty(false); }
+      loadEditorDay(date, value => {
+        if (active) { flushSync(() => { setDay(prepareDay(value)); setDirty(false); }); }
       }).catch(reason => { if (active) setError(String(reason)); });
     }
     // Warm the cache for the days that are one click away, once the current day is on screen.
@@ -243,8 +252,11 @@ function App() {
     // fails, going on anyway is up to the user.
     const whenSaved = (then: () => Promise<void>, question: string) => {
       closing.current = async () => {
-        if (errorRef.current) { await getCurrentWindow().show(); if (!window.confirm(`${errorRef.current}\n${question}`)) return; }
+        try { await emit('editor:paused', true); await flushHistoryWindows(); }
+        catch (reason) { setError(String(reason)); await emit('editor:paused', false); await getCurrentWindow().show(); return; }
+        if (errorRef.current) { await getCurrentWindow().show(); if (!window.confirm(`${errorRef.current}\n${question}`)) { await emit('editor:paused', false); return; } }
         await then();
+        await emit('editor:paused', false);
       };
       if (!busyRef.current && !dirtyRef.current) { const run = closing.current; closing.current = null; void run(); }
       else if (!busyRef.current) void save();
@@ -275,13 +287,18 @@ function App() {
   const boardContext = { date, period: boardPeriod };
   const boardContextRef = useRef(boardContext); boardContextRef.current = boardContext;
   useEffect(() => { void emit('journal:board-context', { date, period: boardPeriod }); }, [date, boardPeriod]);
+  const historyWrite = useRef(false);
+  const restoreMainDay = useStableCallback(async () => {
+    journal.invalidate();
+    const target = dateRef.current;
+    const value = await journal.load(target);
+    if (dateRef.current === target) flushSync(() => { dirtyRef.current = false; setDay(prepareDay(value)); setDirty(false); setOpenEntryId(null); setNewEntryId(null); });
+  });
   useEffect(() => {
     const stop = listen('history:restored', async () => {
-      journal.invalidate();
-      const target = dateRef.current;
+      if (historyWrite.current) return;
       try {
-        const value = await journal.load(target);
-        if (dateRef.current === target) { setDay(prepareDay(value)); setDirty(false); setOpenEntryId(null); setNewEntryId(null); }
+        await restoreMainDay(); await reloadEditorSessions();
       } catch (reason) { setError(String(reason)); }
     });
     return () => { void stop.then(fn => fn()); };
@@ -320,6 +337,7 @@ function App() {
 
   function update(change: (current: Day) => Day) {
     editCount.current += 1;
+    dirtyRef.current = true;
     setDay(current => current ? change(current) : current);
     setDirty(true);
     setError('');
@@ -327,6 +345,15 @@ function App() {
   // Returns whether the day changes. With edits still pending, they are saved first and the day changes right after.
   const navigate = useStableCallback((target: string): boolean => {
     if (target === date || !target) return false;
+    if (hasEditorDrafts()) {
+      const running = pendingWidgetNavigation.current !== null;
+      pendingWidgetNavigation.current = target;
+      if (!running) void flushEditorSessions().then(() => {
+        const next = pendingWidgetNavigation.current; pendingWidgetNavigation.current = null;
+        if (next) navigate(next);
+      }).catch(reason => { pendingWidgetNavigation.current = null; setError(String(reason)); });
+      return true;
+    }
     if (busyRef.current || dirtyRef.current) {
       pendingNavigation.current = target;
       if (!busyRef.current) void save();
@@ -389,13 +416,56 @@ function App() {
       // Removing a linked entry can reach back into this very day (a chain planned back to it); then the stored state wins.
       if (unchanged && saved.touched?.includes(saved.date)) setDay(prepareDay(saved));
       else setDay(current => current && current.date === saved.date ? { ...current, revision: saved.revision } : current);
-      if (unchanged) setDirty(false);
+      if (unchanged) { dirtyRef.current = false; setDirty(false); }
       setSavedCount(count => count + 1);
       return unchanged;
     }
     catch (reason) { setError(t("Speichern fehlgeschlagen: {0}", String(reason))); pendingNavigation.current = null; return false; }
     finally { busyRef.current = false; setBusy(false); }
   });
+  const currentDayRef = useRef<Day | null>(null);
+  currentDayRef.current = ready ? day : null;
+  const flushMainEditor = useStableCallback(async () => {
+    const deadline = Date.now() + 25000;
+    while (busyRef.current || dirtyRef.current) {
+      if (Date.now() > deadline) throw new Error(t('Lokale Änderungen konnten nicht gespeichert werden.'));
+      if (!busyRef.current) await save();
+      await new Promise(resolve => setTimeout(resolve, 10));
+      if (errorRef.current) throw new Error(errorRef.current);
+    }
+  });
+  const replaceFromWidget = useStableCallback((next: Day) => {
+    if (next.date !== date || !ready) throw new Error('Der angefragte Tag ist nicht mehr geöffnet.');
+    flushSync(() => { update(() => next); });
+  });
+  const refreshFromWidget = useStableCallback((before: Day, refreshed: Day) => {
+    flushSync(() => setDay(current => current?.date === refreshed.date ? mergeCalendarImport(current, before, refreshed) : current));
+  });
+  const editorHostStarted = useRef(false);
+  const editorHostCleanup = useRef<(() => void) | null>(null);
+  const editorHostDisposed = useRef(false);
+  useEffect(() => {
+    if (!ready || editorHostStarted.current) return;
+    editorHostStarted.current = true;
+    void installEditorHost({ current: () => currentDayRef.current, replace: replaceFromWidget, flush: flushMainEditor, refresh: refreshFromWidget, onError: setError, isDirty: () => dirtyRef.current }).then(stop => {
+      if (editorHostDisposed.current) stop(); else { editorHostCleanup.current = stop; if (currentDayRef.current) publishEditorDay(currentDayRef.current); }
+    }).catch(reason => setError(String(reason)));
+  }, [ready]);
+  useEffect(() => () => { editorHostDisposed.current = true; editorHostCleanup.current?.(); }, []);
+  useEffect(() => { if (ready) publishEditorDay(day); }, [day, ready]);
+  useEffect(() => {
+    const stop = listen<{ tab?: SettingsTab; widget?: string }>('journal:settings', event => openSettings(event.payload.tab ?? 'widgets', event.payload.widget ?? null));
+    const toggle = listen('desktop-widgets:toggle', () => {
+      void (async () => {
+        await flushHistoryWindows();
+        const state = await invoke<DesktopWidgetState>('desktop_widget_state');
+        if (!state.widgets.length) { openSettings('widgets'); return; }
+        const enabled = !state.widgets.some(widget => widget.enabled);
+        for (const widget of state.widgets) await invoke('desktop_widget_update', { id: widget.id, update: { enabled } });
+      })().catch(reason => setError(String(reason)));
+    });
+    return () => { void stop.then(unlisten => unlisten()); void toggle.then(unlisten => unlisten()); };
+  }, []);
   // Saving is automatic; the UI checks ask for an immediate save (to count saves) with this event.
   useEffect(() => {
     const now = () => { void save(); };
@@ -403,6 +473,7 @@ function App() {
     return () => window.removeEventListener('journal:save-now', now);
   }, []);
   const pendingNavigation = useRef<string | null>(null);
+  const pendingWidgetNavigation = useRef<string | null>(null);
   const closing = useRef<(() => Promise<void>) | null>(null);
   const errorRef = useRef(error);
   errorRef.current = error;
@@ -424,60 +495,80 @@ function App() {
   const keepAlone = useRef(new Set<string>());
   useEffect(() => { if (pendingSave.current && !busy && ready) { pendingSave.current = false; void save(); } }, [day, busy]);
   const createFromCalendar = useStableCallback(async (target: string, made: NewEntry) => {
-    const entry: Entry = { id: crypto.randomUUID(), kind: made.kind, text: made.text, description: made.description, tag: made.tag ?? null, done: false, cancelled: false, priority: made.priority, time: made.time, end: made.end, reminder: made.reminder, reminderBefore: made.reminderBefore ?? 0, icon: made.icon ?? null, showInJournal: made.showInJournal, plan: null, repeat: made.repeat ?? null };
-    if (target === date && ready) {
-      captureLayout();
-      update(current => ({ ...current, entries: orderEntries([...current.entries, entry]) }));
-      pendingSave.current = true;
-      return;
-    }
-    const stored = await journal.load(target);
-    await journal.save({ ...stored, entries: [...stored.entries, entry] });
+    await flushHistoryWindows();
+    return serializeEditorMutation(async () => {
+      const entry: Entry = { id: crypto.randomUUID(), kind: made.kind, text: made.text, description: made.description, tag: made.tag ?? null, done: false, cancelled: false, priority: made.priority, time: made.time, end: made.end, reminder: made.reminder, reminderBefore: made.reminderBefore ?? 0, icon: made.icon ?? null, showInJournal: made.showInJournal, plan: null, repeat: made.repeat ?? null };
+      if (target === date && ready) {
+        captureLayout();
+        update(current => ({ ...current, entries: orderEntries([...current.entries, entry]) }));
+        pendingSave.current = true;
+        return;
+      }
+      const stored = await journal.load(target);
+      await journal.save({ ...stored, entries: [...stored.entries, entry] });
+    });
   });
 
   const exportFromCalendar = useStableCallback(async () => {
-    if (!await save()) throw new Error(t("Bitte laufende Änderungen zuerst speichern und erneut versuchen."));
-    return journal.exportCalendar();
+    await flushHistoryWindows();
+    return serializeEditorMutation(async () => {
+      if (!await save()) throw new Error(t("Bitte laufende Änderungen zuerst speichern und erneut versuchen."));
+      return journal.exportCalendar();
+    });
   });
   const importFromCalendar = useStableCallback(async (entries: CalendarImport[]) => {
-    if (!await save()) throw new Error(t("Bitte laufende Änderungen zuerst speichern und erneut versuchen."));
-    const target = date;
-    const before = journal.cached(target);
-    busyRef.current = true; setBusy(true);
-    try {
-      const touched = await journal.importCalendar(entries);
-      if (touched.includes(target)) {
-        const refreshed = await journal.load(target);
-        // Keep typing done during the import, and merge only the imported fields into untouched entries.
-        setDay(current => {
-          if (!current || current.date !== target) return current;
-          return mergeCalendarImport(current, before, refreshed);
-        });
-      }
-    } finally { busyRef.current = false; setBusy(false); }
+    await flushHistoryWindows();
+    return serializeEditorMutation(async () => {
+      if (!await save()) throw new Error(t("Bitte laufende Änderungen zuerst speichern und erneut versuchen."));
+      const target = date;
+      const before = journal.cached(target);
+      busyRef.current = true; setBusy(true);
+      try {
+        const touched = await journal.importCalendar(entries);
+        if (touched.includes(target)) {
+          const refreshed = await journal.load(target);
+          // Keep typing done during the import, and merge only the imported fields into untouched entries.
+          setDay(current => {
+            if (!current || current.date !== target) return current;
+            return mergeCalendarImport(current, before, refreshed);
+          });
+        }
+      } finally { busyRef.current = false; setBusy(false); }
+    });
   });
 
   const mailStatus = useMailImport(importFromCalendar);
 
   const moveFromCalendar = useStableCallback(async (entry: Entry, from: string, to: string, time: string | null, end: string | null) => {
-    if (!await save()) throw new Error(t("Bitte laufende Änderungen zuerst speichern und erneut versuchen."));
-    const target = date, before = journal.cached(target);
-    busyRef.current = true; setBusy(true);
-    try {
-      const touched = await journal.moveCalendarEntry(entry.id, from, to, time, end);
-      if (touched.includes(target)) {
-        const refreshed = await journal.load(target);
-        setDay(current => current?.date === target ? mergeCalendarImport(current, before, refreshed) : current);
-      }
-    } finally { busyRef.current = false; setBusy(false); }
+    await flushHistoryWindows();
+    return serializeEditorMutation(async () => {
+      if (!await save()) throw new Error(t("Bitte laufende Änderungen zuerst speichern und erneut versuchen."));
+      const target = date, before = journal.cached(target);
+      busyRef.current = true; setBusy(true);
+      try {
+        const touched = await journal.moveCalendarEntry(entry.id, from, to, time, end);
+        if (touched.includes(target)) {
+          const refreshed = await journal.load(target);
+          setDay(current => current?.date === target ? mergeCalendarImport(current, before, refreshed) : current);
+        }
+      } finally { busyRef.current = false; setBusy(false); }
+    });
   });
   useEffect(() => {
     const stop=listen<CalendarRequest>('calendar:request', async event => {
       const request=event.payload;
       try {
-        if(request.kind==='move') await moveFromCalendar(request.entry,request.from,request.to,request.time,request.end);
-        else await createFromCalendar(request.date,request.entry);
-        await emit('calendar:request-result',{id:request.id});
+        if(driveWorking.current||historyWrite.current) throw new Error(t('Wird verarbeitet …'));
+        let days: CalendarDay[] | undefined;
+        switch(request.kind){
+          case 'move': await moveFromCalendar(request.entry,request.from,request.to,request.time,request.end); break;
+          case 'create': await createFromCalendar(request.date,request.entry); break;
+          case 'edit': await editFromCalendar(request.date,request.entryId,request.change,request.scope); break;
+          case 'remove': await removeFromCalendar(request.date,request.entryId,request.others); break;
+          case 'export': days=await exportFromCalendar(); break;
+          case 'import': await importFromCalendar(request.entries); break;
+        }
+        await emit('calendar:request-result',{id:request.id,days});
       } catch(error) { await emit('calendar:request-result',{id:request.id,error:String(error)}); }
     });
     return () => { void stop.then(unlisten=>unlisten()); };
@@ -487,33 +578,39 @@ function App() {
   // With a scope (ScopeChoice "only this / every Tuesday / all"), the edit stays with this entry when saved and reaches
   // exactly the chosen others; without one (an entry with no linked ones), saving passes text and kind on as usual.
   const editFromCalendar = useStableCallback(async (target: string, id: string, change: EntryEdit, scope?: ScopeOption) => {
-    const alone = scope ? [id] : [];
-    if (target === date && ready) { changeEntry(id, change); for (const one of alone) keepAlone.current.add(one); pendingSave.current = true; }
-    else {
-      const stored = await journal.load(target);
-      await journal.save({ ...stored, entries: stored.entries.map(entry => entry.id === id ? { ...entry, ...change } : entry), keepAlone: alone });
-    }
-    if (!scope?.others.length || !change.kind) return;
-    const edit: LinkedEdit = { kind: change.kind, text: change.text ?? '', description: change.description ?? '', tag: change.tag ?? null, priority: Boolean(change.priority),
-      reminder: Boolean(change.reminder), showInJournal: change.showInJournal !== false, reminderBefore: change.reminderBefore ?? 0, icon: change.icon ?? null, ...'time' in change ? { times: { time: change.time ?? null, end: change.end ?? null } } : {} };
-    const here = scope.others.filter(other => other.date === date && ready);
-    const same: EntryEdit = { kind: edit.kind, text: edit.text, description: edit.description, tag: edit.tag, priority: edit.priority, reminder: edit.reminder, showInJournal: edit.showInJournal, reminderBefore: edit.reminderBefore, icon: edit.icon,
-      ...edit.times ? { time: edit.times.time, end: edit.times.end } : {}, ...edit.kind === 'task' ? {} : { done: false, cancelled: false } };
-    for (const other of here) changeEntry(other.id, same);
-    if (here.length) { for (const other of here) keepAlone.current.add(other.id); pendingSave.current = true; }
-    const elsewhere = scope.others.filter(other => !here.includes(other)).map(other => other.id);
-    if (elsewhere.length) await journal.editLinked(elsewhere, edit);
+    await flushHistoryWindows();
+    return serializeEditorMutation(async () => {
+      const alone = scope ? [id] : [];
+      if (target === date && ready) { changeEntry(id, change); for (const one of alone) keepAlone.current.add(one); pendingSave.current = true; }
+      else {
+        const stored = await journal.load(target);
+        await journal.save({ ...stored, entries: stored.entries.map(entry => entry.id === id ? { ...entry, ...change } : entry), keepAlone: alone });
+      }
+      if (!scope?.others.length || !change.kind) return;
+      const edit: LinkedEdit = { kind: change.kind, text: change.text ?? '', description: change.description ?? '', tag: change.tag ?? null, priority: Boolean(change.priority),
+        reminder: Boolean(change.reminder), showInJournal: change.showInJournal !== false, reminderBefore: change.reminderBefore ?? 0, icon: change.icon ?? null, ...'time' in change ? { times: { time: change.time ?? null, end: change.end ?? null } } : {} };
+      const here = scope.others.filter(other => other.date === date && ready);
+      const same: EntryEdit = { kind: edit.kind, text: edit.text, description: edit.description, tag: edit.tag, priority: edit.priority, reminder: edit.reminder, showInJournal: edit.showInJournal, reminderBefore: edit.reminderBefore, icon: edit.icon,
+        ...edit.times ? { time: edit.times.time, end: edit.times.end } : {}, ...edit.kind === 'task' ? {} : { done: false, cancelled: false } };
+      for (const other of here) changeEntry(other.id, same);
+      if (here.length) { for (const other of here) keepAlone.current.add(other.id); pendingSave.current = true; }
+      const elsewhere = scope.others.filter(other => !here.includes(other)).map(other => other.id);
+      if (elsewhere.length) await journal.editLinked(elsewhere, edit);
+    });
   });
   const removeFromCalendar = useStableCallback(async (target: string, id: string, others: { id: string; date: string }[] = []) => {
-    if (target === date && ready) { removeEntry(id); pendingSave.current = true; }
-    else {
-      const stored = await journal.load(target);
-      await journal.save({ ...stored, entries: stored.entries.filter(entry => entry.id !== id) });
-    }
-    if (others.length) await changeLinked(others, 'remove');
+    await flushHistoryWindows();
+    return serializeEditorMutation(async () => {
+      if (target === date && ready) { removeEntry(id); pendingSave.current = true; }
+      else {
+        const stored = await journal.load(target);
+        await journal.save({ ...stored, entries: stored.entries.filter(entry => entry.id !== id) });
+      }
+      if (others.length) await changeLinkedDirect(others, 'remove');
+    });
   });
   // An action chosen to reach linked entries too (ScopeChoice): those on the day shown change in the editor, all others in the store.
-  const changeLinked = useStableCallback(async (others: { id: string; date: string }[], action: LinkedAction) => {
+  const changeLinkedDirect = useStableCallback(async (others: { id: string; date: string }[], action: LinkedAction) => {
     const here = others.filter(other => other.date === date && ready);
     for (const other of here) {
       if (action === 'remove') removeEntry(other.id); else changeEntry(other.id, { done: action === 'done', cancelled: action === 'cancelled' });
@@ -521,6 +618,11 @@ function App() {
     const elsewhere = others.filter(other => !here.includes(other));
     try { if (elsewhere.length) await journal.changeLinked(elsewhere.map(other => ({ id: other.id, action }))); }
     catch (reason) { setError(t("Ändern fehlgeschlagen: {0}", String(reason))); }
+  });
+
+  const changeLinked = useStableCallback(async (others: { id: string; date: string }[], action: LinkedAction) => {
+    await flushHistoryWindows();
+    await serializeEditorMutation(() => changeLinkedDirect(others, action));
   });
 
   const dismissReminder = (reminder: Reminder) => setReminders(current => current.filter(item => !(item.id === reminder.id && item.due === reminder.due)));
@@ -547,7 +649,11 @@ function App() {
   // Window-wide shortcuts; entry shortcuts are handled (and marked handled) by the focused entry first. See ShortcutHelp.
   useEffect(()=>{let working=false;const stop=listen<{redo:boolean;emptyEntry?:string}>('history:request',async e=>{
     if(working || driveWorking.current)return;working=true;
-    try {if(!await save())return;await flushHistoryWindows();await invoke('history_step',{redo:e.payload.redo,emptyEntry:e.payload.emptyEntry ?? null});}catch(reason){setError(String(reason));}finally{working=false;}
+    driveWorking.current=true;setDriveBusy(true);historyWrite.current=true;
+    try {
+      await emit('editor:paused',true);await flushHistoryWindows();
+      await serializeEditorMutation(async()=>{if(await invoke<boolean>('history_step',{redo:e.payload.redo,emptyEntry:e.payload.emptyEntry ?? null}))await restoreMainDay();});
+    }catch(reason){setError(String(reason));}finally{historyWrite.current=false;driveWorking.current=false;setDriveBusy(false);working=false;await emit('editor:paused',false);}
   });return()=>{void stop.then(fn=>fn());};},[]);
   const onGlobalKey = useStableCallback((event: KeyboardEvent) => {
     if (event.defaultPrevented || driveWorking.current) return;
@@ -640,34 +746,11 @@ function App() {
       </div>}
       {error && <div className="error" role="alert">{error}</div>}
       {!here && !error && <p className="loading" role="status">{t("Tagesnotiz wird geöffnet …")}</p>}
-      {here && <div className={`editor${slideClass}`}>
-        <label className="visually-hidden" htmlFor="title">{t("Titel des Tages")}</label>
-        <input id="title" className="title-input" placeholder={t("Gib deinem Tag einen Namen …")} value={day.title}
-          onKeyDown={event => { if ((event.key === 'Enter' || event.key === 'ArrowDown') && !event.altKey && !event.shiftKey && focusText(adjacentText(null, 1), 'end')) event.preventDefault(); }} onChange={event => { const title = event.target.value; update(current => ({ ...current, title })); }} />
-        <section className="journal-section" aria-labelledby="entries-heading">
-          <div className="section-heading">
-            <div className="section-title"><h2 id="entries-heading">{t("Einträge")}</h2><span className="entry-count">{entryCount}</span>
-              {hiddenByTag > 0 && <button type="button" className="entry-hidden-count" data-tip={t("Alle Tags zeigen")} onClick={() => setHiddenTags(new Set())}><Icon name="tag" />{t("{0} ausgeblendet", hiddenByTag)}</button>}</div>
-            <div className="kind-picker" role="group" aria-label={t("Eintrag hinzufügen")}>
-              {entryKindOrder.map(kind => <button type="button" key={kind} title={t("Neu · Alt {0}", { task: 'A', event: 'E', note: 'N' }[kind])} onClick={() => addEntry(kind)}><Icon name={kind} />{entryLabels()[kind]}</button>)}
-            </div>
-          </div>
-          <div className="entries" ref={entriesRef}>
-            <span className="visually-hidden" id="entry-reorder-help">{t("Innerhalb desselben Typs und derselben Priorität ziehen oder mit Alt und den Pfeiltasten nach oben und unten verschieben. Das funktioniert auch direkt im Text.")}</span>
-            <span className="visually-hidden" role="status">{moveAnnouncement}</span>
-            {visibleEntries.length === 0 && <div className="empty"><Icon name="journal" /><p>{t("Ein neuer Tag. Platz für deine Gedanken.")}</p><span className="page-hint">{t("Füge oben eine Aufgabe, Notiz oder ein Ereignis hinzu.")}</span></div>}
-            {visibleEntries.map((entry, index) => <JournalEntry key={entry.id} layout={actionLayout} entry={entry} day={day.date} tag={tagOf(tags, entry.tag)}
-              tagFirst={index === 0 || visibleEntries[index - 1].kind !== entry.kind || filterKey(visibleEntries[index - 1].tag) !== filterKey(entry.tag)}
-              tagLast={index === visibleEntries.length - 1 || visibleEntries[index + 1].kind !== entry.kind || filterKey(visibleEntries[index + 1].tag) !== filterKey(entry.tag)} onCreate={addEntry} traceSaved={savedTraces.has(entry.id)} onNavigate={navigate} isNew={entry.id === newEntryId} isOpen={entry.id === openEntryId} focusEntryId={focusEntryId} focusMoveEntryId={focusMoveEntryId}
-              isGroupStart={index > 0 && visibleEntries[index - 1].kind !== entry.kind}
-              canMoveUp={index > 0 && sameGroup(visibleEntries[index - 1], entry)}
-              canMoveDown={index < visibleEntries.length - 1 && sameGroup(visibleEntries[index + 1], entry)}
-              dragState={drag.view?.sourceId === entry.id ? 'source' : drag.view?.targetId === entry.id ? `drop-${drag.view.placement}` : null}
-              drag={drag.handlers} onMoveOffset={moveByOffset} onOpenChange={changeOpen} onChange={changeEntry} onRemove={removeEntry} onLinkedChange={changeLinked}
-            />)}
-          </div>
-        </section>
-      </div>}</>;
+      {here && <DayEditor day={day} entries={visibleEntries} tags={tags} layout={actionLayout} className={slideClass}
+        hiddenCount={hiddenByTag} onShowAll={() => setHiddenTags(new Set())} savedTraces={savedTraces} newEntryId={newEntryId} openEntryId={openEntryId}
+        focusEntryId={focusEntryId} focusMoveEntryId={focusMoveEntryId} entriesRef={entriesRef} drag={drag} announcement={moveAnnouncement}
+        onTitle={title => update(current => ({ ...current, title }))} onCreate={addEntry} onNavigate={navigate} onChange={changeEntry}
+        onRemove={removeEntry} onLinkedChange={changeLinked} onMoveOffset={moveByOffset} onOpenChange={changeOpen} />}</>;
   };
   const bookPage = (page: BookPage) => page.page === 'entries' ? entriesPage(page.date)
     : page.page === 'board' ? <BulletinBoard key={`${boardPeriod}:${page.date}`} date={page.date} period={boardPeriod} />
@@ -813,7 +896,7 @@ function App() {
       onOpen={reminder => { dismissReminder(reminder); showFromCalendar(reminder.date, reminder.id); }} onDismiss={dismissReminder} />
     {help && <ShortcutHelp onClose={() => setHelp(false)} />}
     <div className="app-notices"><UpdateNotice onOpen={() => openSettings('updates')} /><MailImportToast onReview={() => openSettings('mail')} /></div>
-    {settingsOpen && <SettingsDialog key={settingsTab} bookView={bookView} onBookView={setBookView} initialTab={settingsTab} beforeSync={async () => { if (!await save()) throw new Error("Lokale Änderungen konnten nicht gespeichert werden."); await flushHistoryWindows(); }} onDriveBusy={value => { driveWorking.current = value; setDriveBusy(value); }} settings={settings} mailStatus={mailStatus} onImport={importFromCalendar} onClose={() => { if (!driveWorking.current) setSettingsOpen(false); }} onChange={next => { setSettings(next); saveSettings(next); }} />}
+    {settingsOpen && <SettingsDialog key={settingsTab} bookView={bookView} onBookView={setBookView} initialTab={settingsTab} initialWidgetId={settingsWidgetId} beforeSync={async () => { if (!await save()) throw new Error("Lokale Änderungen konnten nicht gespeichert werden."); await flushHistoryWindows(); }} onDriveBusy={value => { driveWorking.current = value; setDriveBusy(value); void emit('editor:paused', value); }} settings={settings} mailStatus={mailStatus} onImport={importFromCalendar} onClose={() => { if (!driveWorking.current) setSettingsOpen(false); }} onChange={next => { setSettings(next); saveSettings(next); }} />}
   </div>;
 }
 
@@ -821,5 +904,6 @@ function App() {
 const windowLabel = getCurrentWindow().label;
 if (windowLabel === 'reminder') document.documentElement.classList.add('is-popup');
 // A window of Nebula's desk pulled out of the journal draws its own frame on a transparent window.
+if (isDesktopWidgetLabel(windowLabel)) document.documentElement.classList.add('is-desktop-widget');
 if (windowLabel.startsWith('panel-')) document.documentElement.classList.add('is-panel-window');
-createRoot(document.getElementById('root')!).render(<><WindowActivity /><ThemeSync /><UndoShortcuts /><ContextMenuHost />{windowLabel.startsWith('board-') ? <FloatingNote /> : windowLabel.startsWith('panel-') && detachable.includes(windowLabel.slice(6) as DetachedKind) ? <DetachedPanel kind={windowLabel.slice(6) as DetachedKind} /> : windowLabel === 'calendar' ? <CalendarWindow /> : windowLabel === 'mini' ? <MiniCalendar /> : windowLabel === 'reminder' ? <ReminderPopup /> : <App />}{(windowLabel === 'calendar' || windowLabel.startsWith('panel-')) && <MailImportToast />}</>);
+createRoot(document.getElementById('root')!).render(<><WindowActivity /><ThemeSync /><UndoShortcuts /><ContextMenuHost />{isDesktopWidgetLabel(windowLabel) ? <DesktopWidgetWindow /> : windowLabel.startsWith('board-') ? <FloatingNote /> : windowLabel.startsWith('panel-') && detachable.includes(windowLabel.slice(6) as DetachedKind) ? <DetachedPanel kind={windowLabel.slice(6) as DetachedKind} /> : windowLabel === 'calendar' ? <CalendarWindow /> : windowLabel === 'mini' ? <MiniCalendar /> : windowLabel === 'reminder' ? <ReminderPopup /> : <App />}{(windowLabel === 'calendar' || windowLabel.startsWith('panel-')) && <MailImportToast />}</>);

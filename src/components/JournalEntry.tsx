@@ -60,7 +60,8 @@ export const JournalEntry = memo(function JournalEntry({ layout, entry, day, tag
   const [pop, setPop] = useState<{ key: number; status: TaskStatus | 'planned' } | null>(null);
   const [leaving, setLeaving] = useState(false);
   const [planning, setPlanning] = useState(false);
-  useDismissLayer({element:()=>rootRef.current?.querySelector<HTMLElement>(planning?'.planner':'.entry-dock')??null,anchor:()=>triggerRef.current,ignore:()=>!!document.querySelector('.shortcut-backdrop'),onDismiss:()=>onOpenChange(entry.id,false)},isOpen&&(planning||layout!=='swipe'));
+  const actionPanel = () => rootRef.current?.querySelector<HTMLElement>('.entry-dock-shell') ?? document.querySelector<HTMLElement>(`.widget-floating-popup [data-entry-actions="${entry.id}"]`);
+  useDismissLayer({element:()=>actionPanel()?.querySelector<HTMLElement>(planning?'.planner':'.entry-dock')??null,anchor:()=>triggerRef.current,ignore:()=>!!document.querySelector('.shortcut-backdrop'),onDismiss:()=>onOpenChange(entry.id,false)},isOpen&&(planning||layout!=='swipe'));
   const [planDate, setPlanDate] = useState<string | null>(null);
   const [plannerView, setPlannerView] = useState<PlannerView>('date');
   const [planCount, setPlanCount] = useState(1);
@@ -93,7 +94,7 @@ export const JournalEntry = memo(function JournalEntry({ layout, entry, day, tag
     // Keep the saved caret until the tag or icon popup closes; restoring it now steals its search focus.
     if (tagging || choosingIcon) return;
     if (restorePriorityFocus.current) {
-      const button = rootRef.current?.querySelector<HTMLButtonElement>('.dock-priority');
+      const button = actionPanel()?.querySelector<HTMLButtonElement>('.dock-priority');
       button?.focus({ preventScroll: true });
       button?.scrollIntoView({ block: 'nearest' });
       restorePriorityFocus.current = false;
@@ -123,7 +124,7 @@ export const JournalEntry = memo(function JournalEntry({ layout, entry, day, tag
     if (!isOpen) return;
     const outside = (event: globalThis.PointerEvent) => {
       const target = event.target as Element | null;
-      if (target && !rootRef.current?.contains(target) && !target.closest('.format-menu, .shortcut-backdrop, .popover')) onOpenChange(entry.id, false);
+      if (target && !rootRef.current?.contains(target) && !actionPanel()?.contains(target) && !target.closest('.format-menu, .shortcut-backdrop, .popover')) onOpenChange(entry.id, false);
     };
     const escape = (event: globalThis.KeyboardEvent) => {
       if (event.key !== 'Escape' || event.defaultPrevented) return;
@@ -345,6 +346,7 @@ export const JournalEntry = memo(function JournalEntry({ layout, entry, day, tag
     // Focus leaving to nowhere right after a click inside this row (e.g. a re-rendered calendar day) is not "clicking outside".
     onBlur={event => {
       if (restorePriorityFocus.current || event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+      if (actionPanel()?.contains(event.relatedTarget as Node | null)) return;
       // A popover opened from the row (the planner's reminder choice) lives in the body, but still belongs to it.
       if ((event.relatedTarget as Element | null)?.closest?.('.popover')) return;
       if (!event.relatedTarget && performance.now() - lastPointerDown.current < 600) return;

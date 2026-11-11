@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom';
 import { PopupHead } from './PopupChrome';
 import { usePopupLook } from '../popupLook';
 import { useDismissLayer } from './useDismissLayer';
+import { popupViewport } from './WidgetPopupSurface';
 
 /**
  * A small floating panel at an element (tag picker, tag filter, colour picker): below it when there is room, else above,
@@ -27,18 +28,21 @@ export function Popover({ anchor, onClose, className = '', label, children, alig
       if (!anchor?.isConnected || !panel) return;
       const rect = anchor.getBoundingClientRect(), margin = 8, gap = 6;
       const width = panel.offsetWidth, height = panel.offsetHeight;
-      const below = rect.bottom + gap + height <= innerHeight - margin || rect.top - gap - height < margin;
-      const top = Math.min(below ? rect.bottom + gap : rect.top - gap - height, innerHeight - margin - height);
+      const bounds = popupViewport(), right = bounds.left + bounds.width, bottom = bounds.top + bounds.height;
+      const below = rect.bottom + gap + height <= bottom - margin || rect.top - gap - height < bounds.top + margin;
+      const top = Math.min(below ? rect.bottom + gap : rect.top - gap - height, bottom - margin - height);
       const wanted = align === 'end' ? rect.right - width : rect.left;
-      const left = Math.max(margin, Math.min(innerWidth - margin - width, wanted));
-      setPlace(current => current && current.left === left && current.top === top && current.above === !below ? current : { left, top: Math.max(margin, top), above: !below });
+      const left = Math.max(bounds.left + margin, Math.min(right - margin - width, wanted));
+      const fittedTop = Math.max(bounds.top + margin, top);
+      setPlace(current => current && current.left === left && current.top === fittedTop && current.above === !below ? current : { left, top: fittedTop, above: !below });
     };
     position();
     const observer = new ResizeObserver(position);
     if (ref.current) observer.observe(ref.current);
     window.addEventListener('resize', position);
     window.addEventListener('scroll', position, true);
-    return () => { observer.disconnect(); window.removeEventListener('resize', position); window.removeEventListener('scroll', position, true); };
+    window.addEventListener('widget:popup-geometry', position);
+    return () => { observer.disconnect(); window.removeEventListener('resize', position); window.removeEventListener('scroll', position, true); window.removeEventListener('widget:popup-geometry', position); };
   }, [anchor, align]);
   useLayoutEffect(() => {
     const previous = document.activeElement as HTMLElement | null;

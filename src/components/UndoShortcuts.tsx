@@ -3,10 +3,12 @@ import { emit, listen } from '@tauri-apps/api/event';
 import { getAllWindows, getCurrentWindow } from '@tauri-apps/api/window';
 import { flushBoardData } from '../boardCards';
 import { flushPeriodData } from '../periodStore';
+import { flushEditors } from '../editorFlush';
 
 /** Drain every window's pending writes before replaying the database transaction. */
-export async function flushHistoryWindows() {
-  const pending = new Set((await getAllWindows()).map(w => w.label));
+export async function flushHistoryWindows(labels?: ReadonlySet<string>) {
+  const pending = new Set((await getAllWindows()).map(w => w.label).filter(label => !labels || labels.has(label)));
+  if (!pending.size) return;
   const id = crypto.randomUUID();
   let finish!: () => void, fail!: (error: Error) => void;
   const done = new Promise<void>((resolve, reject) => { finish = resolve; fail = reject; });
@@ -25,7 +27,7 @@ export function UndoShortcuts() {
   useEffect(() => {
     const flush = listen<{ id: string }>('history:flush', async e => {
       let error: string | undefined;
-      try { await flushBoardData(); await flushPeriodData(); } catch (reason) { error = String(reason); }
+      try { await flushEditors(); await flushBoardData(); await flushPeriodData(); } catch (reason) { error = String(reason); }
       await emit('history:flushed', { id: e.payload.id, window: getCurrentWindow().label, error });
     });
     const key = (e: KeyboardEvent) => {

@@ -6,6 +6,7 @@ import { formatMonthName, formatWeekdayLong } from '../calendar';
 import { CompactMonth, useCalendarData, useNow } from './calendarShared';
 import { Icon } from './Icon';
 import { useDismissLayer } from './useDismissLayer';
+import { inDesktopWidget, WidgetFloatingPanel } from './WidgetPopupSurface';
 
 /** The existing compact calendar, used as a date picker without a native Windows popup. `children` replace the button's
  *  own label (weekday, date, icon), e.g. the book's page title. */
@@ -40,7 +41,7 @@ function PickerPanel({ date, rootRef, onPick, onClose }: {
     window.addEventListener('keydown', escape);
     return () => { cancelAnimationFrame(frame); window.removeEventListener('keydown', escape); };
   }, []);
-  return <div ref={panelRef} className="mini-picker-panel" role="dialog" aria-label={t("Mini-Kalender")} id="journal-mini-calendar"
+  const content = <div ref={panelRef} className="mini-picker-panel" role="dialog" aria-label={t("Mini-Kalender")} id="journal-mini-calendar"
     onKeyDown={event => {
       if (event.key === 'Escape' || (event.ctrlKey && event.code === 'KeyG')) { event.preventDefault(); onClose(true); }
       if (event.key === 'Tab') {
@@ -59,4 +60,5 @@ function PickerPanel({ date, rootRef, onPick, onClose }: {
     <CompactMonth month={month} days={days} today={today} selected={date} onMonth={setMonth} onPick={onPick} />
     <div className="mini-picker-foot"><button type="button" onClick={() => onPick(today)}>{t("Heute")}</button><span className="page-hint">{t("← → Tage · Bild ↑ ↓ Monat")}</span></div>
   </div>;
+  return inDesktopWidget() ? <WidgetFloatingPanel anchor={() => rootRef.current?.querySelector('button') ?? null}>{content}</WidgetFloatingPanel> : content;
 }

@@ -108,6 +108,7 @@ export const journal = {
   },
   load: fetchDay,
   invalidate() { cache.clear(); settled.clear(); cachedTextBytes.clear(); totalCachedTextBytes = 0; },
+  invalidateDates(dates: readonly string[]) { for (const date of dates) forgetDay(date); },
   cached: (date: string): Day | undefined => settled.get(date),
   async moveCalendarEntry(id: string, from: string, to: string, time: string | null, end: string | null): Promise<string[]> {
     const touched = await invoke<string[]>('move_calendar_entry', { id, from, to, time, end });

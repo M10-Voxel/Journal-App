@@ -18,12 +18,14 @@ import { ScaleSettings } from './ScaleSettings';
 import { ActivitySettings } from './ActivitySettings';
 import { StorageSettings } from './StorageSettings';
 import { UpdateSettings } from './UpdateSettings';
+import { DesktopWidgetSettings } from './DesktopWidgetSettings';
 import '../settings.css';
 
-const tabs = ['appearance', 'colors', 'tags', 'activities', 'scales', 'storage', 'drive', 'mail', 'updates'] as const;
+const tabs = ['appearance', 'colors', 'tags', 'activities', 'scales', 'widgets', 'storage', 'drive', 'mail', 'updates'] as const;
 export type SettingsTab = typeof tabs[number];
 const tabInfo = (): Record<SettingsTab, { icon: IconName; label: string }> => ({
   appearance: { icon: 'layout', label: t("Darstellung") }, colors: { icon: 'pencil', label: t('Farben') }, tags: { icon: 'tag', label: t('Tags') },
+  widgets: { icon: 'offline', label: 'Desktop-Widgets' },
   activities: { icon: 'check', label: t('Aktivitäten') }, scales: { icon: 'week', label: t('Tageswerte') }, storage: { icon: 'save', label: t('Speicherort') }, drive: { icon: 'transfer', label: 'Google Drive' }, mail: { icon: 'mail', label: t("E-Mail-Konten") }, updates: { icon: 'repeat', label: t('Updates') },
 });
 
@@ -104,7 +106,7 @@ function Preview({ layout }: { layout: ActionLayout }) {
   </svg>;
 }
 
-export function SettingsDialog({ settings, onChange, onClose, onImport, mailStatus, beforeSync, onDriveBusy, initialTab = 'appearance', bookView = 'double', onBookView }: { bookView?: BookView; onBookView?: (view: BookView) => void; beforeSync: () => Promise<void>; onDriveBusy: (busy: boolean) => void; initialTab?: SettingsTab; settings: Settings; onChange: (settings: Settings) => void; onClose: () => void; onImport: (entries: CalendarImport[]) => Promise<void>; mailStatus: { count: number; error: string } }) {
+export function SettingsDialog({ settings, onChange, onClose, onImport, mailStatus, beforeSync, onDriveBusy, initialTab = 'appearance', initialWidgetId, bookView = 'double', onBookView }: { bookView?: BookView; onBookView?: (view: BookView) => void; beforeSync: () => Promise<void>; onDriveBusy: (busy: boolean) => void; initialTab?: SettingsTab; initialWidgetId?: string | null; settings: Settings; onChange: (settings: Settings) => void; onClose: () => void; onImport: (entries: CalendarImport[]) => Promise<void>; mailStatus: { count: number; error: string } }) {
   useLanguage();
   const [driveBusy, setDriveBusy] = useState(false);
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -204,6 +206,7 @@ export function SettingsDialog({ settings, onChange, onClose, onImport, mailStat
     appearance, colors: <ColorSettings settings={settings} onChange={onChange} />, tags: <TagSettings />, activities: <ActivitySettings />, scales: <ScaleSettings />,
     storage: <StorageSettings beforeChange={beforeSync} onBusy={value => { setDriveBusy(value); onDriveBusy(value); }} />,
     updates: <UpdateSettings beforeChange={beforeSync} onBusy={value => { setDriveBusy(value); onDriveBusy(value); }} />,
+    widgets: <DesktopWidgetSettings initialWidgetId={initialWidgetId} />,
     drive: <DriveSettings beforeSync={beforeSync} onBusy={value => { setDriveBusy(value); onDriveBusy(value); }} />,
     mail: <MailSettings onImport={onImport} importError={mailStatus.error} />,
   };

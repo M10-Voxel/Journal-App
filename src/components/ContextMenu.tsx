@@ -6,6 +6,7 @@ import { usePopupLook } from '../popupLook';
 import type { PopupLook } from '../popupLook';
 import { Icon } from './Icon';
 import { useDismissLayer } from './useDismissLayer';
+import { inDesktopWidget, popupViewport } from './WidgetPopupSurface';
 import './contextMenu.css';
 import type { IconName } from './Icon';
 
@@ -89,7 +90,7 @@ export function ContextMenuHost() {
     if (!open) return;
     const scroll = (event: Event) => { if (!(event.target as Element).closest?.('.ctx-menu')) closeContextMenu(); };
     window.addEventListener('blur', closeContextMenu);
-    window.addEventListener('resize', closeContextMenu);
+    if (!inDesktopWidget()) window.addEventListener('resize', closeContextMenu);
     document.addEventListener('scroll', scroll, true);
     return () => {
       window.removeEventListener('blur', closeContextMenu);
@@ -126,14 +127,27 @@ function MenuPanel({ look, spec, x, y, depth, byKey, onBack, side, onHold }: {
   const [place, setPlace] = useState<{ left: number; top: number } | null>(null);
   const [sub, setSub] = useState<{ id: string; x: number; y: number; side: number; byKey: boolean } | null>(null);
   const hover = useRef(0);
+  const widgetOrigin = useRef(document.querySelector('.desktop-widget')?.getBoundingClientRect());
   const marks = letters(spec.items);
   useLayoutEffect(() => {
+    const position = () => {
     const panel = ref.current; if (!panel) return;
     const width = panel.offsetWidth, height = panel.offsetHeight, margin = 6;
-    let left = side !== undefined ? side - 2 : x, top = y;
-    if (left + width > innerWidth - margin) left = side !== undefined ? x - width + 2 : x - width;
-    if (top + height > innerHeight - margin) top = side !== undefined ? innerHeight - margin - height : y - height;
-    setPlace({ left: Math.max(margin, Math.min(innerWidth - margin - width, left)), top: Math.max(margin, top) });
+    const bounds = popupViewport(), right = bounds.left + bounds.width, bottom = bounds.top + bounds.height;
+    // Native canvas resizing changes viewport coordinates, while the click stays on the same screen point.
+    const widget = document.querySelector('.desktop-widget')?.getBoundingClientRect();
+    const dx = depth === 0 && inDesktopWidget() ? (widget?.left ?? 0) - (widgetOrigin.current?.left ?? 0) : 0;
+    const dy = depth === 0 && inDesktopWidget() ? (widget?.top ?? 0) - (widgetOrigin.current?.top ?? 0) : 0;
+    const px = x + dx, py = y + dy;
+    let left = side !== undefined ? side - 2 : px, top = py;
+    if (left + width > right - margin) left = side !== undefined ? px - width + 2 : px - width;
+    if (top + height > bottom - margin) top = side !== undefined ? bottom - margin - height : py - height;
+    const next = { left: Math.max(bounds.left + margin, Math.min(right - margin - width, left)), top: Math.max(bounds.top + margin, top) };
+    setPlace(old => old?.left === next.left && old?.top === next.top ? old : next);
+    };
+    position();
+    window.addEventListener('widget:popup-geometry', position);
+    return () => window.removeEventListener('widget:popup-geometry', position);
   }, [x, y, side]);
   useEffect(() => {
     // From the keyboard the first row takes the focus; by the pointer the menu itself (arrows still move).

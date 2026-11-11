@@ -1,20 +1,22 @@
 import { t, useLanguage } from '../i18n';
 import { useEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import type { CalendarDay, CalendarImport } from '../journal';
 import type { CalendarPreview } from '../ical';
 import { Icon } from './Icon';
 import { useDismissLayer } from './useDismissLayer';
+import { inDesktopWidget, WidgetFloatingPanel } from './WidgetPopupSurface';
 
 export function CalendarTransfer({ onExport, onImport }: { onExport: () => Promise<CalendarDay[]>; onImport: (entries: CalendarImport[]) => Promise<void> }) {
   useLanguage();
   const [open, setOpen] = useState(false), [busy, setBusy] = useState(false), [message, setMessage] = useState(''), [error, setError] = useState('');
   const [preview, setPreview] = useState<CalendarPreview | null>(null);
-  const ref = useRef<HTMLDivElement>(null), trigger = useRef<HTMLButtonElement>(null);
-  useDismissLayer({element:()=>ref.current,ignore:()=>busy,onDismiss:()=>{setOpen(false);setPreview(null);}},open);
+  const ref = useRef<HTMLDivElement>(null), panelRef = useRef<HTMLDivElement>(null), trigger = useRef<HTMLButtonElement>(null);
+  useDismissLayer({element:()=>panelRef.current,anchor:()=>trigger.current,ignore:()=>busy,onDismiss:()=>{setOpen(false);setPreview(null);}},open);
   useEffect(() => {
     if (!open) return;
-    ref.current?.querySelector<HTMLElement>('.cal-transfer-panel button')?.focus();
+    panelRef.current?.querySelector<HTMLElement>('button')?.focus({preventScroll:true});
   }, [open, busy]);
   async function run(action: () => Promise<void>) {
     if (busy) return;
@@ -22,9 +24,10 @@ export function CalendarTransfer({ onExport, onImport }: { onExport: () => Promi
     try { await action(); } catch (reason) { setError(String(reason instanceof Error ? reason.message : reason)); }
     finally { setBusy(false); }
   }
+  const floating = (panel:ReactNode) => inDesktopWidget() ? <WidgetFloatingPanel anchor={()=>trigger.current}>{panel}</WidgetFloatingPanel> : panel;
   return <div className="cal-transfer" ref={ref} onKeyDown={event => { event.stopPropagation(); if (event.key === 'Escape' && !busy) { event.preventDefault(); setOpen(false); setPreview(null); trigger.current?.focus(); } }}>
     <button ref={trigger} type="button" className="cal-icon-button" aria-label={t("Kalender importieren oder exportieren")} title={t("Kalenderdatei (.ics)")} aria-expanded={open} aria-controls="calendar-transfer" onClick={() => { if (!busy) { setOpen(value => !value); setPreview(null); setError(''); setMessage(''); } }}><Icon name="transfer" /></button>
-    {open && <div className="cal-transfer-panel" id="calendar-transfer" role="dialog" aria-label={t("Kalenderdatei")}>
+    {open && floating(<div ref={panelRef} className="cal-transfer-panel" id="calendar-transfer" role="dialog" aria-label={t("Kalenderdatei")}>
       <div className="cal-transfer-title"><strong>{t("Kalenderdatei")}</strong><span>.ics</span></div>
       {!preview ? <>
         <p>{t("Ereignisse und Aufgaben austauschen – auch Einträge, die nur im Kalender stehen.")}</p>
@@ -47,6 +50,6 @@ export function CalendarTransfer({ onExport, onImport }: { onExport: () => Promi
       {busy && <p role="status">{t("Wird verarbeitet …")}</p>}
       {message && <p role="status">{message}</p>}
       {error && <p className="cal-transfer-error" role="alert">{error}</p>}
-    </div>}
+    </div>)}
   </div>;
 }

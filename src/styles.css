@@ -498,6 +498,7 @@ h2 { margin: 0; font-size: 12px; font-weight: 600; }
 .actions-inline .entry-dock-shell.is-open { grid-template-rows: 1fr; visibility: visible; opacity: 1; transition: grid-template-rows 300ms var(--ease), opacity 220ms ease 60ms, visibility 0s; }
 .actions-inline .entry-dock-shell:focus { outline: none; }
 .actions-inline .entry-dock-shell > * { min-height: 0; overflow: hidden; }
+.actions-inline .entry-dock-shell:not(.is-open) > .entry-dock { padding-bottom: 0; }
 .actions-inline .entry-dock { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 14px; padding: 0 0 8px 40px; font: 12px/22px var(--write); font-variant-ligatures: none; }
 .actions-inline .entry-dock::before, .actions-inline .entry-dock-shell > .planner::after { content: ''; position: absolute; left: 14px; top: -6px; width: 14px; height: 17px; border-left: 1px solid var(--hover); border-bottom: 1px solid var(--hover); border-bottom-left-radius: 6px; }
 .actions-inline .dock-group { display: inline-flex; align-items: center; }

@@ -7,6 +7,7 @@ mod storage;
 mod mail;
 mod ui_language;
 mod vault;
+mod desktop_widgets;
 
 use std::sync::{atomic::{AtomicBool, Ordering}, Mutex};
 use tauri::{menu::{Menu, MenuItem}, tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
@@ -18,13 +19,17 @@ pub const BROWSER_ARGS: &str = "--disable-features=msWebOOUI,msPdfOOUI,msSmartSc
 /// The arguments for windows made here; JOURNAL_BROWSER_ARGS adds to them (only for testing, together with the same
 /// addition in the main window's configuration).
 pub fn browser_args() -> String { std::env::var("JOURNAL_BROWSER_ARGS").map_or_else(|_| BROWSER_ARGS.to_string(), |extra| format!("{BROWSER_ARGS} {extra}")) }
-static QUITTING: AtomicBool = AtomicBool::new(false);
+/// Debug-only isolated native smoke tests never select or open the user's vault or WebView profile.
+pub fn widget_smoke_root() -> Option<std::path::PathBuf> {
+    #[cfg(debug_assertions)] { std::env::var_os("JOURNAL_WIDGET_SMOKE_ROOT").map(std::path::PathBuf::from) }
+    #[cfg(not(debug_assertions))] { None }
+}
 static STARTUP_UPDATE_CHECKED: AtomicBool = AtomicBool::new(false);
 
 /// Keep the once-per-process check across frontend reloads (for example after a Drive sync).
 #[tauri::command]
 fn startup_update_check(window: tauri::WebviewWindow) -> bool {
-    window.label() == "main" && !STARTUP_UPDATE_CHECKED.swap(true, Ordering::Relaxed)
+    widget_smoke_root().is_none() && window.label() == "main" && !STARTUP_UPDATE_CHECKED.swap(true, Ordering::Relaxed)
 }
 
 #[tauri::command]
@@ -48,7 +53,7 @@ fn show_main(app: &tauri::AppHandle) {
 }
 /// Ending the app: the journal window saves what is pending first and then calls `quit_app`. Asked a second time, it ends at once.
 pub fn request_quit(app: &tauri::AppHandle) {
-    if QUITTING.swap(true, Ordering::SeqCst) || app.get_webview_window("main").is_none() { app.exit(0); return; }
+    if app.get_webview_window("main").is_none() { app.exit(0); return; }
     let _ = app.emit_to("main", "journal:quit", ());
 }
 
@@ -236,6 +241,7 @@ async fn show_day(app: tauri::AppHandle, date: String, entry: Option<String>) ->
     let main = app.get_webview_window("main").ok_or("Das Journal-Fenster ist geschlossen")?;
     app.emit_to("main", "journal:navigate", serde_json::json!({ "date": date, "entry": entry })).map_err(|e| e.to_string())?;
     let _ = main.unminimize();
+    let _ = main.show();
     main.set_focus().map_err(|e| e.to_string())
 }
 
@@ -244,9 +250,16 @@ fn main() {
         if let Some(root) = std::env::args_os().nth(2) { if mail::ml::worker(std::path::Path::new(&root)).is_err() { std::process::exit(1); } }
         return;
     }
+    let mut context=tauri::generate_context!();
+    if let Some(root)=widget_smoke_root(){
+        assert!(root.is_absolute() && root.join("widget-smoke-fixture").is_file(),"Native widget tests require an explicitly marked isolated directory");
+        context.config_mut().identifier=format!("de.journal.widget-smoke-{}",std::process::id());
+        for window in &mut context.config_mut().app.windows {window.data_directory=Some(root.join("webview"));window.additional_browser_args=Some(browser_args());}
+    }
     tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
         .on_page_load(|webview, _| {
+            if widget_smoke_root().is_some(){eprintln!("Native smoke page load: {}",webview.label());}
             // Disable only WebView2's built-in menus, including those inside sandboxed mail frames.
             // DOM contextmenu events still reach the app's own menus and editors.
             #[cfg(windows)]
@@ -258,11 +271,13 @@ fn main() {
             }) { eprintln!("Could not configure webview context menus: {error}"); }
         })
         // Started again, Journal brings back the running one instead of opening the database twice.
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show_main(app)))
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| { if !args.iter().any(|arg|arg=="--background"){show_main(app);} }))
         .manage(reminders::popup::Popup::default())
         .manage(mail::ml::MlState::default())
         .setup(|app| {
-            let Some(vault) = vault::Vault::load_or_choose(app.path().app_local_data_dir()?).map_err(std::io::Error::other)? else {
+            let local=widget_smoke_root().unwrap_or(app.path().app_local_data_dir()?);
+            app.manage(desktop_widgets::DesktopWidgets::new(local.clone()));
+            let Some(vault) = vault::Vault::load_or_choose(local).map_err(std::io::Error::other)? else {
                 app.handle().exit(0);
                 return Ok(());
             };
@@ -278,15 +293,20 @@ fn main() {
             // opens it again (click) or ends it (menu).
             let open = MenuItem::with_id(app, "open", ui_language::text("Journal öffnen", "Open Journal"), true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", ui_language::text("Beenden", "Quit"), true, None::<&str>)?;
-            let mut tray = TrayIconBuilder::with_id("journal").tooltip("Journal").menu(&Menu::with_items(app, &[&open, &quit])?).show_menu_on_left_click(false)
-                .on_menu_event(|app, event| match event.id.as_ref() { "open" => show_main(app), "quit" => request_quit(app), _ => {} })
+            let widget = MenuItem::with_id(app, "widget", ui_language::text("Widgets ein-/ausblenden", "Show/hide widgets"), true, None::<&str>)?;
+            let widgets = MenuItem::with_id(app, "widgets", ui_language::text("Desktop-Widgets…", "Desktop widgets…"), true, None::<&str>)?;
+            let mut tray = TrayIconBuilder::with_id("journal").tooltip("Journal").menu(&Menu::with_items(app, &[&open, &widget, &widgets, &quit])?).show_menu_on_left_click(false)
+                .on_menu_event(|app, event| match event.id.as_ref() { "open" => show_main(app), "widget" => {let _=app.emit_to("main","desktop-widgets:toggle",());}, "widgets"=>{show_main(app);let _=app.emit_to("main","journal:settings",serde_json::json!({"tab":"widgets"}));}, "quit" => request_quit(app), _ => {} })
                 .on_tray_icon_event(|tray, event| if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event { show_main(tray.app_handle()); });
             if let Some(icon) = app.default_window_icon() { tray = tray.icon(icon.clone()); }
             tray.build(app)?;
+            desktop_widgets::start(app.handle().clone());
+            if !std::env::args().any(|arg|arg=="--background"){show_main(app.handle());}
             Ok(())
         })
         // The calendars only show the journal; without its window they have nothing to open, so they close with it.
         .on_window_event(|window, event| {
+            desktop_widgets::window_event(window,event);
             #[cfg(windows)]
             if let tauri::WindowEvent::Focused(active) = event {
                 if let Some(webview) = window.app_handle().get_webview_window(window.label()) {
@@ -302,6 +322,6 @@ fn main() {
             }
             if window.label() == "main" && matches!(event, tauri::WindowEvent::Destroyed) { window.app_handle().exit(0); }
         })
-        .invoke_handler(tauri::generate_handler![startup_update_check, vault::vault_status, vault::vault_choose, vault::vault_save_preferences, vault::vault_activate, move_calendar_entry, panel_detach, history::history_step,board::board_list, board::board_patch, board::board_patch_many, board::board_image_save, board::board_image_load, board::board_link_preview, board::board_open_link, board::board_detach, board::board_remove, board::board_folders, board::board_folder_save, board::board_folder_remove,drive::drive_help, drive::drive_validate, drive::drive_restore, drive::drive_status, drive::drive_connect, drive::drive_cancel, drive::drive_disconnect, drive::drive_read, drive::drive_write, drive::drive_snapshot, drive::drive_apply,load_period_data, save_period_data, ui_language::set_ui_language, load_day, load_range, load_activity_minutes, save_day, load_linked, change_linked, edit_linked, load_series, extend_series, load_tags, save_tags, search_entries, snooze_reminder, quit_app, popup_reminders, fit_popup, reminder_action, background_hint, open_window, show_day, export_calendar, import_calendar, read_calendar_file, write_calendar_file, mail::mail_drive_snapshot, mail::mail_drive_validate, mail::mail_drive_apply, mail::mail_accounts, mail::mail_save, mail::mail_cancel, mail::mail_sync, mail::mail_remove, mail::mail_pending, mail::mail_stage, mail::mail_candidates, mail::mail_resolve, mail::mail_enabled, mail::mail_auto_import, mail::mail_notices, mail::mail_help, mail::ml::mail_ml_status, mail::ml::mail_ml_enabled, mail::ml::mail_ml_install, mail::ml::mail_ml_analyze])
-        .run(tauri::generate_context!()).expect("Journal konnte nicht gestartet werden");
+        .invoke_handler(tauri::generate_handler![desktop_widgets::desktop_widget_create, desktop_widgets::desktop_widget_remove, desktop_widgets::surface::desktop_widget_surface, desktop_widgets::smoke::widget_smoke_cdp, desktop_widgets::desktop_widget_ready, desktop_widgets::desktop_widget_state, desktop_widgets::desktop_widget_restore, desktop_widgets::desktop_widget_update, desktop_widgets::desktop_widget_open_settings, startup_update_check, vault::vault_status, vault::vault_choose, vault::vault_save_preferences, vault::vault_activate, move_calendar_entry, panel_detach, history::history_step,board::board_list, board::board_patch, board::board_patch_many, board::board_image_save, board::board_image_load, board::board_link_preview, board::board_open_link, board::board_detach, board::board_remove, board::board_folders, board::board_folder_save, board::board_folder_remove,drive::drive_help, drive::drive_validate, drive::drive_restore, drive::drive_status, drive::drive_connect, drive::drive_cancel, drive::drive_disconnect, drive::drive_read, drive::drive_write, drive::drive_snapshot, drive::drive_apply,load_period_data, save_period_data, ui_language::set_ui_language, load_day, load_range, load_activity_minutes, save_day, load_linked, change_linked, edit_linked, load_series, extend_series, load_tags, save_tags, search_entries, snooze_reminder, quit_app, popup_reminders, fit_popup, reminder_action, background_hint, open_window, show_day, export_calendar, import_calendar, read_calendar_file, write_calendar_file, mail::mail_drive_snapshot, mail::mail_drive_validate, mail::mail_drive_apply, mail::mail_accounts, mail::mail_save, mail::mail_cancel, mail::mail_sync, mail::mail_remove, mail::mail_pending, mail::mail_stage, mail::mail_candidates, mail::mail_resolve, mail::mail_enabled, mail::mail_auto_import, mail::mail_notices, mail::mail_help, mail::ml::mail_ml_status, mail::ml::mail_ml_enabled, mail::ml::mail_ml_install, mail::ml::mail_ml_analyze])
+        .run(context).expect("Journal konnte nicht gestartet werden");
 }

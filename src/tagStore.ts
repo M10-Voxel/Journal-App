@@ -64,13 +64,18 @@ export const manageTags = Object.assign(() => openManager?.(), {
   register(open: () => void) { openManager = open; return () => { if (openManager === open) openManager = null; }; },
 });
 
-/** Which tags a view hides: the journal and the calendar each keep their own choice (on this device). */
-export type TagScope = 'journal' | 'calendar';
+/** Each journal, calendar and widget keeps its own filter on this device. */
+export type TagScope = 'journal' | 'calendar' | `widget-${string}`;
 const hiddenKey = 'journal.hiddenTags';
 function readHidden(scope: TagScope): Set<string> {
   try {
     const stored = JSON.parse(localStorage.getItem(hiddenKey) ?? '{}') as Partial<Record<TagScope, unknown>>;
-    const list = stored[scope];
+    let list = stored[scope];
+    if (list === undefined && scope === 'widget-entries' && Array.isArray(stored.journal)) {
+      list = stored.journal;
+      // Copy the former shared choice once; later changes in the journal stay independent.
+      try { localStorage.setItem(hiddenKey, JSON.stringify({ ...stored, [scope]: list })); } catch { /* keep the copied choice in memory */ }
+    }
     return new Set(Array.isArray(list) ? list.filter((item): item is string => typeof item === 'string') : []);
   } catch { return new Set(); }
 }

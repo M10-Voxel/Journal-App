@@ -9,6 +9,8 @@ interface DismissLayer {
 }
 const layers: DismissLayer[] = [];
 let releaseGesture: (() => void) | undefined;
+/** A native click outside the shaped desktop surface has no DOM pointer event. */
+export function dismissLayers() { for (const layer of [...layers].reverse()) if (!layer.ignore?.()) layer.onDismiss(); }
 
 /** The pointer's eventual click must stay consumed even after its popup has unmounted. */
 function consumeGesture(down: PointerEvent) {

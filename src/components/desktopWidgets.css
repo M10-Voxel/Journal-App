@@ -1,0 +1,81 @@
+/* A native desktop surface. The viewport is fixed; only its editor scrolls. */
+html.is-desktop-widget, .is-desktop-widget body, .is-desktop-widget #root { width: 100%; height: 100%; min-width: 0; margin: 0; overflow: hidden; background: transparent; }
+.desktop-widget { position: relative; display: flex; flex-direction: column; width: 100%; height: 100%; min-width: 0; box-sizing: border-box; border: 1px solid var(--edge); border-radius: 12px; background: var(--surface); color: var(--text); overflow: hidden; box-shadow: none; }
+.desktop-widget .desktop-widget-head { display: flex; flex: none; align-items: center; min-height: 36px; padding: 0 0 0 12px; gap: 6px; background: var(--inset); border-bottom: 1px solid var(--divider); cursor: grab; user-select: none; touch-action: none; }
+.desktop-widget[data-locked] .desktop-widget-head { cursor: default; }
+.desktop-widget-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 12px var(--sans); }
+.widget-plain-name { display: flex; align-items: center; gap: 8px; }
+.widget-plain-name > .icon { width: 15px; height: 15px; color: var(--accent); }
+.widget-nebula-prompt { display: none; }
+.desktop-widget-tools { align-self: stretch; display: flex; flex: none; }
+.desktop-widget-tools > button { display: grid; place-items: center; width: 32px; padding: 0; border: 0; border-left: 1px solid transparent; border-radius: 0; background: transparent; color: var(--muted); cursor: pointer; }
+.desktop-widget-tools > button:hover, .desktop-widget-tools > button[aria-pressed='true'] { background: var(--hover); color: var(--accent); }
+.desktop-widget-tools > .widget-close { font: 20px/1 var(--sans); }
+.desktop-widget-tools > .widget-close:hover { background: var(--error); color: var(--on-error); }
+.desktop-widget .desktop-widget-nav { display: flex; flex: none; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 8px 12px; border-bottom: 1px solid var(--divider); }
+.desktop-widget-nav .nav-cluster { flex: none; }
+.desktop-widget-nav .mini-calendar-picker { flex: 1; min-width: 100px; }
+.desktop-widget .widget-date { display: block; width: 100%; padding: 4px 2px; border: 0; background: transparent; color: var(--muted); font: 11px var(--sans); text-align: right; cursor: pointer; }
+.desktop-widget .widget-date:hover { color: var(--strong); }
+.desktop-widget .desktop-widget-body { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 20px 20px 24px; scrollbar-gutter: stable; }
+.desktop-widget .editor { min-width: 0; }
+/* Hidden floating menus must not extend the widget's scroll area. */
+.desktop-widget :is(.actions-orbit, .actions-sheet, .actions-swipe) .entry-dock-shell:not(.is-open) { width: 0; height: 0; overflow: clip; }
+.desktop-widget .section-heading { flex-wrap: wrap; gap: 10px; }
+.desktop-widget .section-title { min-width: 0; }
+.desktop-widget .section-heading .kind-picker { flex-wrap: wrap; }
+.desktop-widget .title-input { min-width: 0; }
+.desktop-widget .empty { padding: 28px 4px; }
+.desktop-widget .desktop-widget-status { display: flex; flex: none; justify-content: space-between; align-items: center; gap: 10px; min-height: 24px; padding: 0 12px; border-top: 1px solid var(--divider); color: var(--muted); font: 10px var(--sans); }
+.desktop-widget .widget-message { flex: none; padding: 8px 12px; margin: 0; border-bottom: 1px solid var(--divider); background: var(--inset); color: var(--muted); font: 12px var(--sans); overflow-wrap: anywhere; }
+.desktop-widget .widget-message.is-error { color: var(--error); max-height: 50%; overflow: auto; }
+.widget-message p { margin: 0 0 6px; }
+.widget-recovery { display: flex; flex-wrap: wrap; gap: 8px; }
+.widget-recovery > button { padding: 5px 8px; border: 1px solid var(--edge); border-radius: var(--popup-radius,4px); background: var(--surface); color: var(--text); font: inherit; cursor: pointer; }
+.widget-draft { display: block; width: 100%; height: 100px; box-sizing: border-box; margin-top: 8px; background: var(--surface); color: var(--text); border: 1px solid var(--edge); font: 11px var(--mono); resize: vertical; }
+.widget-grip { position: absolute; z-index: 50; touch-action: none; }
+.widget-grip.is-n, .widget-grip.is-s { left: 8px; right: 8px; height: 5px; cursor: ns-resize; }
+.widget-grip.is-n { top: 0; } .widget-grip.is-s { bottom: 0; }
+.widget-grip.is-e, .widget-grip.is-w { top: 8px; bottom: 8px; width: 5px; cursor: ew-resize; }
+.widget-grip.is-e { right: 0; } .widget-grip.is-w { left: 0; }
+.widget-grip:is(.is-ne,.is-nw,.is-se,.is-sw) { width: 9px; height: 9px; }
+.widget-grip.is-ne { right: 0; top: 0; cursor: nesw-resize; } .widget-grip.is-sw { left: 0; bottom: 0; cursor: nesw-resize; }
+.widget-grip.is-nw { left: 0; top: 0; cursor: nwse-resize; } .widget-grip.is-se { right: 0; bottom: 0; cursor: nwse-resize; }
+:root[data-theme='journal'] .desktop-widget { border-color: var(--divider); border-radius: 4px; }
+:root[data-theme='journal'] .desktop-widget-body { background: var(--surface); }
+:root[data-theme='nebula'] .desktop-widget { border: 1px solid var(--nb-line); border-radius: 0; box-shadow: none; }
+:root[data-theme='nebula'] .desktop-widget-head { min-height: 30px; padding-left: 10px; background: var(--nb-paper); color: var(--nb-ink); border-bottom-color: var(--nb-line); }
+:root[data-theme='nebula'] .widget-nebula-prompt { display: block; overflow: hidden; text-overflow: ellipsis; font: 11px var(--mono); }
+:root[data-theme='nebula'] .widget-nebula-prompt b { color: var(--nb-violet); }
+:root[data-theme='nebula'] .widget-plain-name { display: none; }
+:root[data-theme='nebula'] .desktop-widget-tools > button { color: var(--nb-ink); border-left-color: var(--nb-ink); }
+:root[data-theme='nebula'] .desktop-widget-tools > button:hover, :root[data-theme='nebula'] .desktop-widget-tools > button[aria-pressed='true'] { background: var(--nb-ink); color: var(--nb-paper); }
+:root[data-theme='nebula'] .desktop-widget-body { padding: 22px 22px 24px 32px; }
+:root[data-theme='nebula'] .desktop-widget .title-input { font-size: clamp(26px,5cqw,36px); }
+:root[data-pixel] .desktop-widget { border-radius: 0; }
+/* Widget layout follows its visible rectangle even while the native popup canvas grows. */
+.desktop-widget { container: desktop-widget / inline-size; }
+.widget-popup-canvas .desktop-widget { position: fixed; left: var(--widget-left); top: var(--widget-top); width: var(--widget-width); height: var(--widget-height); }
+.widget-floating-popup { position: fixed; z-index: 1000; box-sizing: border-box; max-width: calc(100vw - 16px); }
+.widget-floating-popup.is-panel { width: max-content; max-height: calc(100vh - 16px); }
+.widget-floating-popup.is-panel > .entry-dock-shell { position: relative; inset: auto; width: max-content; max-width: 100%; max-height: inherit; }
+.widget-floating-popup.is-panel > .entry-dock-shell > .planner, .widget-floating-popup > .mini-picker-panel { position: relative; inset: auto; max-width: 100%; }
+.widget-floating-popup.is-panel > .entry-dock-shell > .planner::before { display: none; }
+.widget-floating-popup.is-panel :is(.entry-dock, .planner, .mini-picker-panel) { max-height: calc(100vh - 24px); overflow-y: auto; }
+.is-desktop-widget:not(.widget-popups-ready) :is(.widget-floating-popup, .popover, .ctx-menu, .cal-composer) { visibility: hidden !important; pointer-events: none !important; }
+.is-desktop-widget:not(.widget-popups-ready) .widget-floating-popup * { visibility: hidden !important; }
+.desktop-widget-calendar { flex: 1; display: flex; flex-direction: column; min-height: 0; min-width: 0; overflow: hidden; }
+.desktop-widget.is-calendar .cal { flex: 1; height: 100%; min-height: 0; min-width: 0; background: var(--surface); }
+.desktop-widget.is-calendar .cal-viewbar { height: auto; min-height: 40px; }
+.desktop-widget.is-calendar .cal-views { align-items: center; }
+.desktop-widget.is-calendar .cal-toolbar { flex: none; }
+.widget-floating-popup > .cal-transfer-panel { position: relative; inset: auto; max-width: 100%; max-height: calc(100vh - 24px); overflow-y: auto; }
+.is-desktop-widget .cal-composer { overflow-y: auto; box-sizing: border-box; }
+@container desktop-widget (max-width: 420px) {
+  .desktop-widget .desktop-widget-nav { gap: 6px; padding: 6px 9px; }
+  .desktop-widget .widget-date { font-size: 10px; }
+  .desktop-widget .desktop-widget-body { padding: 16px 12px 22px; }
+  .desktop-widget .section-heading { align-items: flex-start; }
+  .desktop-widget .section-heading .kind-picker { width: 100%; }
+  .desktop-widget .desktop-widget-status { font-size: 9px; }
+}

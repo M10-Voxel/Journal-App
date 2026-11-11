@@ -1,5 +1,7 @@
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { currentMonitor, getCurrentWindow } from '@tauri-apps/api/window';
+import { widgetScreenWidth } from './widgetDisplay';
+import { isDesktopWidgetLabel } from './widgetIdentity';
 
 /** How large the interface is drawn: chosen, or by the screen (`auto`). */
 export type UiScale = 'auto' | `${number}`;
@@ -21,6 +23,7 @@ let applied = 0;
 let wanted: { scale: UiScale; pixel: boolean } = { scale: 'auto', pixel: false };
 /** The screen's width in Windows' scaling (logical pixels). */
 export async function screenWidth(): Promise<number> {
+  if (isDesktopWidgetLabel(getCurrentWindow().label) && widgetScreenWidth() !== null) return widgetScreenWidth()!;
   try {
     const monitor = await currentMonitor();
     if (monitor) return monitor.size.width / monitor.scaleFactor;
@@ -43,5 +46,6 @@ export function followScreen(): () => void {
   let timer = 0;
   const again = () => { window.clearTimeout(timer); timer = window.setTimeout(() => { if (wanted.scale === 'auto') void applyScale(wanted.scale, wanted.pixel); }, 300); };
   const stops = [getCurrentWindow().onScaleChanged(again), getCurrentWindow().onMoved(again)].map(promise => promise.catch(() => () => {}));
-  return () => { window.clearTimeout(timer); for (const stop of stops) void stop.then(unlisten => unlisten()); };
+  window.addEventListener('widget:monitor', again);
+  return () => { window.clearTimeout(timer); window.removeEventListener('widget:monitor', again); for (const stop of stops) void stop.then(unlisten => unlisten()); };
 }

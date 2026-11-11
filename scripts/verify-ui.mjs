@@ -95,7 +95,14 @@ const bootstrap = `
   const mail = { accounts:[], pending:[], candidates:[], notices:[], delivered:new Set(), analyzed:[], model:{installed:false,enabled:false,installing:false,downloaded:0,total:0,error:''} };
   window.__uiTest.mail = mail;
   const mailChanged = () => { void window.__TAURI_INTERNALS__.invoke('plugin:event|emit', { event:'mail:changed', payload:null }); };
+  const widgetRegistry = {supported:true,autostart:false,error:null,types:[{kind:'daily-note',available:true},{kind:'calendar',available:true}],widgets:[{id:label.startsWith('widget-')?label.slice(7):'entries',kind:label.startsWith('widget-calendar')?'calendar':'daily-note',name:'',enabled:label.startsWith('widget-'),locked:false,placement:null,error:null}]};
+  window.__uiTest.widgets = widgetRegistry;
+  const widgetChanged = () => { void window.__uiTest.emit('desktop-widget:state', structuredClone(widgetRegistry));return structuredClone(widgetRegistry); };
   mockIPC((command, payload) => {
+    if (command === 'desktop_widget_state') return structuredClone(widgetRegistry);
+    if (command === 'desktop_widget_create') {if(!['daily-note','calendar'].includes(payload.kind))throw Error('Widget type unavailable');const original=widgetRegistry.widgets.find(widget=>widget.id===payload.source);widgetRegistry.widgets.push({id:crypto.randomUUID(),kind:payload.kind,name:original?.name?original.name+' · Kopie':'',enabled:true,locked:false,placement:null,error:null});return widgetChanged();}
+    if (command === 'desktop_widget_update') {if(payload.update.autostart!==undefined)widgetRegistry.autostart=payload.update.autostart;const widget=widgetRegistry.widgets.find(widget=>widget.id===(payload.id??label.slice(7)));if(widget){for(const key of ['enabled','locked','name'])if(payload.update[key]!==undefined)widget[key]=payload.update[key];if(payload.update.reset)widget.placement=null;}return widgetChanged();}
+    if (command === 'desktop_widget_remove') {widgetRegistry.widgets=widgetRegistry.widgets.filter(widget=>widget.id!==payload.id);return widgetChanged();}
     if (command === 'vault_status') return {path:'C:/Test/Journal-A',legacy:true,preferences:null,error:null};
     if (command === 'vault_choose') { invoked.push([command,payload]);return window.__uiTest.vaultChoice ?? null; }
     if (command === 'vault_save_preferences' || command === 'vault_activate') { invoked.push([command,payload]);return null; }
@@ -411,6 +418,40 @@ const bootstrap = `
       return { ...loadDay(value.date), touched:[...touched].sort() };
     }
   }, { shouldMockEvents: true });
+  // The widget actions checks need read-only snapshots from a resident main window.
+  // Keep this relay inside the browser fixture; it never opens a native window or database.
+  if (label.startsWith('widget-')) {
+    let sequence = 0;
+    const handler = window.__TAURI_INTERNALS__.transformCallback(event => {
+      const request = event.payload;
+      const response = request.kind === 'open' || request.kind === 'flush'
+        ? {id:request.id,snapshot:{day:loadDay(request.date),epoch:'widget-ui',sequence:++sequence,savedTraces:[],unsaved:false}}
+        : {id:request.id,error:'This read-only widget fixture only supports opening and flushing.'};
+      void window.__uiTest.emit('editor:result', response);
+    });
+    await window.__TAURI_INTERNALS__.invoke('plugin:event|listen', {event:'editor:request',handler});
+    const calendarHandler = window.__TAURI_INTERNALS__.transformCallback(event => {
+      const request = event.payload;
+      void (async () => {
+        try {
+          let exported;
+          if (request.kind === 'create') {
+            const day = loadDay(request.date);
+            day.entries.push({id:crypto.randomUUID(),done:false,cancelled:false,...request.entry});
+            await window.__TAURI_INTERNALS__.invoke('save_day',{day});
+          } else if (request.kind === 'edit' || request.kind === 'remove') {
+            const day = loadDay(request.date);
+            day.entries = request.kind === 'remove' ? day.entries.filter(entry=>entry.id!==request.entryId) : day.entries.map(entry=>entry.id===request.entryId?{...entry,...request.change}:entry);
+            await window.__TAURI_INTERNALS__.invoke('save_day',{day});
+          } else if (request.kind === 'move') await window.__TAURI_INTERNALS__.invoke('move_calendar_entry',{id:request.entry.id,from:request.from,to:request.to,time:request.time,end:request.end});
+          else if (request.kind === 'export') exported=await window.__TAURI_INTERNALS__.invoke('export_calendar',{});
+          else if (request.kind === 'import') await window.__TAURI_INTERNALS__.invoke('import_calendar',{entries:request.entries});
+          await window.__uiTest.emit('calendar:request-result',{id:request.id,days:exported});
+        } catch(reason) {await window.__uiTest.emit('calendar:request-result',{id:request.id,error:String(reason)});}
+      })();
+    });
+    await window.__TAURI_INTERNALS__.invoke('plugin:event|listen',{event:'calendar:request',handler:calendarHandler});
+  }
   await import(${JSON.stringify(entryScript)});
 `;
 // Like the Tauri build: inline styles and scripts carry a nonce, which makes 'unsafe-inline' ineffective.
@@ -2929,7 +2970,155 @@ try {
   await until("document.querySelectorAll('.entry').length === 5");
   await pause(250);
   await evaluate('document.fonts.ready.then(() => true)');
-  if (process.env.JOURNAL_UI_SCOPE === 'nebula-tickets') {
+  if (process.env.JOURNAL_UI_SCOPE === 'calendar-widget') {
+    await command('Emulation.setFocusEmulationEnabled',{enabled:true});
+    await command('Emulation.setDeviceMetricsOverride',{width:980,height:720,deviceScaleFactor:1,mobile:false});
+    await evaluate("localStorage.setItem('journal.calendar',JSON.stringify({view:'month',kinds:{event:true,task:true,note:false}}));localStorage.removeItem('journal.calendar.widget-calendar')");
+    await command('Page.navigate',{url:`http://127.0.0.1:${server.address().port}/?window=widget-calendar`});
+    await until("!!document.querySelector('.desktop-widget.is-calendar .cal') && document.querySelectorAll('.cal-month-day').length===42");
+    await evaluate('document.fonts.ready.then(()=>true)');
+    for(const [index,view,count] of [[0,'year',12],[1,'month',42],[2,'week',7],[3,'workweek',5],[4,'day',1]]){
+      await evaluate(`document.querySelectorAll('.cal-views [role=tab]')[${index}].click()`);
+      await until(`document.querySelector('.cal').dataset.view==='${view}'`);
+      const selector=view==='year'?'.cal-year-month':view==='month'?'.cal-month-day':'.cal-time-column';
+      await until(`document.querySelectorAll('${selector}').length===${count}`);
+      assert(await evaluate("(()=>{const c=document.querySelector('.cal').getBoundingClientRect(),w=document.querySelector('.desktop-widget').getBoundingClientRect();return c.bottom<=w.bottom+1 && c.width<=w.width;})()"),'Calendar fits the visible widget');
+      await pause(300);await screenshot(`calendar-widget-${view}.png`);
+    }
+    await evaluate("document.querySelectorAll('.cal-views [role=tab]')[1].click()");
+    await until("document.querySelectorAll('.cal-month-day').length===42");
+    await evaluate("(()=>{const cell=document.querySelector('.cal-month-day[data-date=\"'+window.__uiTest.shift(2)+'\"]'),r=cell.getBoundingClientRect();cell.dispatchEvent(new MouseEvent('contextmenu',{button:2,bubbles:true,cancelable:true,clientX:r.left+5,clientY:r.top+5}));})()");
+    await until("!!document.querySelector('.cal-composer.is-placed') && document.documentElement.classList.contains('widget-popups-ready')");
+    await evaluate("document.querySelector('.cal-composer-text').focus()");await command('Input.insertText',{text:'Widget-Kalendereintrag'});await key('Enter');
+    await until("!document.querySelector('.cal-composer') && window.__uiTest.day(window.__uiTest.shift(2)).entries.some(entry=>entry.text==='Widget-Kalendereintrag')");
+    const made=await evaluate("window.__uiTest.day(window.__uiTest.shift(2)).entries.find(entry=>entry.text==='Widget-Kalendereintrag').id");
+    await until(`!!document.querySelector('[data-calendar-entry="${made}"]')`);
+    await evaluate(`document.querySelector('[data-calendar-entry="${made}"]').dispatchEvent(new MouseEvent('contextmenu',{button:2,bubbles:true,cancelable:true}))`);
+    await until("!!document.querySelector('.cal-composer.is-editing') && document.documentElement.classList.contains('widget-popups-ready')");
+    await evaluate("document.querySelector('.cal-composer-text').focus();document.querySelector('.cal-composer-text').select()");await command('Input.insertText',{text:'Widget-Kalendereintrag geändert'});await key('Enter');
+    await until("!document.querySelector('.cal-composer') && window.__uiTest.day(window.__uiTest.shift(2)).entries.some(entry=>entry.text==='Widget-Kalendereintrag geändert')");
+    await evaluate("document.querySelector('.cal-transfer > button').click()");
+    await until("!!document.querySelector('body > .widget-floating-popup .cal-transfer-panel')");
+    await evaluate("document.querySelectorAll('.cal-transfer-panel button')[1].click()");
+    await until("window.__uiTest.icsOutput?.includes('BEGIN:VCALENDAR')");
+    assert((await evaluate('window.__uiTest.icsOutput')).includes('Widget-Kalendereintrag'),'Export uses the shared calendar data');
+    await evaluate("window.__uiTest.icsInput='BEGIN:VCALENDAR\\r\\nVERSION:2.0\\r\\nBEGIN:VEVENT\\r\\nUID:widget-import-test\\r\\nDTSTART;VALUE=DATE:'+window.__uiTest.shift(2).replaceAll('-','')+'\\r\\nSUMMARY:Aus Widget importiert\\r\\nEND:VEVENT\\r\\nEND:VCALENDAR\\r\\n';document.querySelectorAll('.cal-transfer-panel button')[0].click()");
+    await until("!!document.querySelector('.cal-transfer-confirm')");
+    await evaluate("document.querySelector('.cal-transfer-confirm').click()");
+    await until("window.__uiTest.day(window.__uiTest.shift(2)).entries.some(entry=>entry.text==='Aus Widget importiert')");
+    await evaluate("document.querySelector('.cal-transfer-panel button').focus()");await key('Escape');
+    await until("!document.querySelector('.cal-transfer-panel')");
+    await evaluate(`document.querySelector('[data-calendar-entry="${made}"]').dispatchEvent(new MouseEvent('contextmenu',{button:2,bubbles:true,cancelable:true}))`);
+    await until("!!document.querySelector('.cal-composer.is-editing')");
+    await evaluate("document.querySelector('.cal-composer-remove').click()");
+    await until(`!document.querySelector('.cal-composer') && !window.__uiTest.day(window.__uiTest.shift(2)).entries.some(entry=>entry.id==='${made}')`);
+    await evaluate("document.querySelectorAll('.cal-views [role=tab]')[2].click();document.querySelector('.cal-filter-note').click();document.querySelector('.cal-nav .nav-step:last-child').click()");
+    await until("JSON.parse(localStorage.getItem('journal.calendar.widget-calendar')).view==='week' && JSON.parse(localStorage.getItem('journal.calendar.widget-calendar')).followToday===false");
+    const saved=await evaluate("JSON.parse(localStorage.getItem('journal.calendar.widget-calendar'))");
+    await command('Page.reload');await until("document.querySelector('.cal')?.dataset.view==='week'");
+    assert.equal(await evaluate("document.querySelector('.cal-filter-note').getAttribute('aria-pressed')"),'true');
+    assert.equal(await evaluate("JSON.parse(localStorage.getItem('journal.calendar.widget-calendar')).date"),saved.date,'Chosen date survives widget restart');
+    assert.equal(await evaluate("JSON.parse(localStorage.getItem('journal.calendar')).view"),'month','Widget preferences do not replace app preferences');
+    await command('Page.navigate',{url:`http://127.0.0.1:${server.address().port}/?window=widget-calendar-other`});
+    await until("document.querySelector('.cal')?.dataset.view==='month'");
+    assert.equal(await evaluate("document.querySelector('.cal-filter-note').getAttribute('aria-pressed')"),'false','Another calendar widget has independent filters');
+    for(const [theme,popupStyle,pixel] of [['classic','a',false],['classic','b',false],['journal','a',false],['journal','b',false],['nebula','a',false],['nebula','b',false],['classic','a',true],['journal','a',true]]){
+      await evaluate(`localStorage.setItem('journal.settings',JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'),theme:${JSON.stringify(theme)},popupStyle:${JSON.stringify(popupStyle)},pixel:${pixel}}))`);
+      await command('Page.reload');await until("!!document.querySelector('.desktop-widget.is-calendar .cal')");
+      await evaluate('document.fonts.ready.then(()=>true)');await pause(300);
+      assert(await evaluate("document.documentElement.scrollWidth<=innerWidth && document.documentElement.scrollHeight<=innerHeight"),`${theme}/${popupStyle}/${pixel}: widget viewport fits`);
+      await screenshot(`calendar-widget-${theme}-${popupStyle}${pixel?'-pixel':''}.png`);
+    }
+    assert.deepEqual(errors,[]);console.log('Calendar widget passed: all five views, create/edit/delete, ICS import/export, restored date/view/filters, independent instances and all themes.');
+  } else if (process.env.JOURNAL_UI_SCOPE === 'widget-manager') {
+    await command('Emulation.setFocusEmulationEnabled',{enabled:true});
+    await evaluate("window.__uiTest.emit('journal:settings',{tab:'widgets'})");
+    await until("document.querySelectorAll('[data-widget-instance]').length===1");
+    await evaluate("document.querySelector('.widgets-add').click()");
+    await until("document.querySelectorAll('[data-widget-type]').length===2");
+    assert.equal(await evaluate("document.querySelector('[data-widget-type=calendar]').disabled"),false,'Calendar can be added from the catalog');
+    await evaluate("document.querySelector('[data-widget-type=\"daily-note\"]').click()");
+    await until("document.querySelectorAll('[data-widget-instance]').length===2 && document.querySelector('.desktop-widget-settings').getAttribute('aria-busy')==='false'");
+    const added=await evaluate("window.__uiTest.widgets.widgets.find(widget=>widget.id!=='entries').id");
+    assert.deepEqual(await evaluate("window.__uiTest.widgets.widgets.map(widget=>widget.enabled)"),[false,true],'Adding a widget does not enable another');
+    await evaluate(`document.querySelector('#widget-name-${added}').focus()`);
+    await command('Input.insertText',{text:'Arbeit'});
+    await evaluate(`document.querySelector('[data-widget-instance="${added}"] .widgets-name button').click()`);
+    await until("window.__uiTest.widgets.widgets.some(widget=>widget.name==='Arbeit') && document.querySelector('.desktop-widget-settings').getAttribute('aria-busy')==='false'");
+    await evaluate(`document.querySelector('[data-widget-instance="${added}"] .widgets-instance-actions [aria-pressed]').click()`);
+    await until("document.querySelector('.desktop-widget-settings').getAttribute('aria-busy')==='false'");
+    assert.deepEqual(await evaluate("window.__uiTest.widgets.widgets.map(widget=>widget.locked)"),[false,true],'Position locks are independent');
+    await evaluate(`document.querySelector('[data-widget-instance="${added}"] .widgets-instance-actions button:has([data-icon="copy"])').click()`);
+    await until("document.querySelectorAll('[data-widget-instance]').length===3 && document.querySelector('.desktop-widget-settings').getAttribute('aria-busy')==='false'");
+    assert.match(await evaluate("window.__uiTest.widgets.widgets.at(-1).name"),/Arbeit.*Kopie/);
+    await evaluate("document.querySelector('.widgets-details .widgets-instance-actions .is-danger').click()");
+    await evaluate("document.querySelector('.widgets-remove .is-danger').click()");
+    await until("document.querySelectorAll('[data-widget-instance]').length===2 && document.querySelector('.desktop-widget-settings').getAttribute('aria-busy')==='false'");
+    assert.equal(await evaluate("window.__uiTest.day().entries.length"),5,'Removing a widget preserves journal content');
+    await evaluate("document.querySelector('.widgets-list-head > div button:first-child').click()");
+    await until("window.__uiTest.widgets.widgets.every(widget=>widget.enabled) && document.querySelector('.desktop-widget-settings').getAttribute('aria-busy')==='false'");
+    await evaluate("document.querySelector('.widgets-list-head > div button:last-child').click()");
+    await until("window.__uiTest.widgets.widgets.every(widget=>!widget.enabled) && document.querySelector('.desktop-widget-settings').getAttribute('aria-busy')==='false'");
+    await evaluate("document.querySelector('.widgets-global .switch').click()");
+    await until("window.__uiTest.widgets.autostart===true && document.querySelector('.desktop-widget-settings').getAttribute('aria-busy')==='false'");
+    await pause(350);await screenshot('widgets-manager-actions.png');
+    await evaluate("document.querySelector('.widgets-add').click()");
+    await pause(350);await screenshot('widgets-manager-catalog.png');
+    for(const [theme,popupStyle,pixel] of [['classic','a',false],['classic','b',false],['journal','a',false],['journal','b',false],['nebula','a',false],['nebula','b',false],['classic','a',true],['journal','a',true]]){
+      await evaluate(`localStorage.setItem('journal.settings',JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'),theme:${JSON.stringify(theme)},popupStyle:${JSON.stringify(popupStyle)},pixel:${pixel}}))`);
+      await command('Page.reload');await until("document.querySelectorAll('.entry').length===5");
+      await evaluate("window.__uiTest.emit('journal:settings',{tab:'widgets',widget:'entries'})");
+      await until("document.querySelectorAll('[data-widget-instance]').length===1 && !!document.querySelector('.widgets-details')");
+      await evaluate('document.fonts.ready.then(()=>true)');
+      assert(await evaluate("(()=>{const p=document.querySelector('.settings-panel');return p.scrollWidth-p.clientWidth<2;})()"),`${theme}/${popupStyle}/${pixel}: manager fits the settings panel`);
+      await pause(350);
+      await screenshot(`widgets-manager-${theme}-${popupStyle}${pixel?'-pixel':''}.png`);
+    }
+    assert.deepEqual(errors,[]);console.log('Widget manager passed: add, independent visibility/locks, rename, duplicate, remove without deleting notes, bulk visibility, autostart and eight theme variants.');
+  } else if (process.env.JOURNAL_UI_SCOPE === 'widget-actions') {
+    await command('Emulation.setFocusEmulationEnabled',{enabled:true});
+    await command('Emulation.setDeviceMetricsOverride',{width:600,height:700,deviceScaleFactor:1,mobile:false});
+    const row='[data-entry-id="10000000-0000-4000-8000-000000000001"]';
+    const dock='[data-entry-actions="10000000-0000-4000-8000-000000000001"]', symbol=`${row} .entry-symbol`;
+    const measure=`(()=>{const row=document.querySelector('${row}'),dock=document.querySelector('[data-entry-actions="10000000-0000-4000-8000-000000000001"]'),style=getComputedStyle(dock);return {height:row.getBoundingClientRect().height,position:style.position,dockHeight:dock.getBoundingClientRect().height,hidden:style.visibility==='hidden',inert:dock.inert,open:dock.classList.contains('is-open')};})()`;
+    const scrollSpace="(()=>{const body=document.querySelector('.desktop-widget-body'),style=getComputedStyle(body),editor=body.querySelector('.editor');const expected=Math.max(body.clientHeight,editor.offsetHeight+parseFloat(style.paddingTop)+parseFloat(style.paddingBottom));return {extra:body.scrollHeight-expected,horizontal:body.scrollWidth-body.clientWidth};})()";
+    for(const [theme,popupStyle,pixel] of [['classic','a',false],['classic','b',false],['classic','a',true],['classic','b',true],['journal','a',false],['journal','b',false],['nebula','a',false],['nebula','b',false]]){
+      await evaluate(`localStorage.setItem('journal.settings',JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'),theme:${JSON.stringify(theme)},popupStyle:${JSON.stringify(popupStyle)},pixel:${pixel}}))`);
+      await command('Page.navigate',{url:`http://127.0.0.1:${server.address().port}/?window=widget-entries`});
+      await until("!!document.querySelector('.desktop-widget') && document.querySelectorAll('.entry').length===5");
+      await evaluate('document.fonts.ready.then(()=>true)');
+      await until(`getComputedStyle(document.querySelector('${dock}')).visibility==='hidden'`);
+      const initial=await evaluate(measure);
+      assert(initial.hidden&&initial.inert&&!initial.open,`${theme}/${popupStyle}/${pixel}: closed actions are hidden and inactive`);
+      assert(initial.position==='absolute'||initial.dockHeight<1,`${theme}/${popupStyle}/${pixel}: closed actions do not reserve space`);
+      assert((await evaluate(scrollSpace)).extra<2&& (await evaluate(scrollSpace)).horizontal<2,`${theme}/${popupStyle}/${pixel}: hidden menus do not create an empty scroll area`);
+      await evaluate(`document.querySelector('${symbol}').click()`);
+      await until(`document.querySelector('${dock}').classList.contains('is-open') && getComputedStyle(document.querySelector('${dock}')).visibility==='visible'`);
+      assert.equal((await evaluate(measure)).inert,false,'Open actions can be used');
+      assert((await evaluate(scrollSpace)).horizontal<2,'Opening a floating menu does not create horizontal scrolling');
+      assert.equal(await evaluate("document.querySelector('.desktop-widget-body').scrollLeft"),0,'Opening a menu does not move the entries sideways');
+      if(theme!=='classic'||popupStyle!=='b') assert(await evaluate("!!document.querySelector('body > .widget-floating-popup')"),'The menu is outside the scrolling widget');
+      await screenshot(`widget-popup-open-${theme}-${popupStyle}${pixel?'-pixel':''}.png`);
+      await evaluate(`document.querySelector('${symbol}').click()`);
+      await until(`getComputedStyle(document.querySelector('${dock}')).visibility==='hidden'`);
+      await until(`Math.abs(document.querySelector('${row}').getBoundingClientRect().height-${initial.height})<1`);
+      assert((await evaluate(scrollSpace)).extra<2&& (await evaluate(scrollSpace)).horizontal<2,`${theme}/${popupStyle}/${pixel}: closing removes the popup's scroll area`);
+      assert.equal((await evaluate(measure)).inert,true,'The symbol closes and disables the actions');
+      await evaluate(`document.querySelector('${symbol}').click()`);
+      await until(`document.querySelector('${dock}').classList.contains('is-open')`);
+      await key('Escape');
+      await until(`getComputedStyle(document.querySelector('${dock}')).visibility==='hidden'`);
+      await evaluate(`document.querySelector('${symbol}').click()`);
+      await until(`document.querySelector('${dock}').classList.contains('is-open')`);
+      const outside=await pointAt('.title-input');
+      await command('Input.dispatchMouseEvent',{type:'mousePressed',...outside,button:'left',buttons:1,clickCount:1});
+      await command('Input.dispatchMouseEvent',{type:'mouseReleased',...outside,button:'left',buttons:0,clickCount:1});
+      await until(`getComputedStyle(document.querySelector('${dock}')).visibility==='hidden'`);
+      await until(`Math.abs(document.querySelector('${row}').getBoundingClientRect().height-${initial.height})<1`);
+      await screenshot(`widget-actions-${theme}-${popupStyle}${pixel?'-pixel':''}.png`);
+    }
+    assert.deepEqual(errors,[]);console.log('Widget actions passed: hidden on load, symbol toggle, Escape, outside click and no reserved space in all themes/popup styles, including Pixel.');
+  } else if (process.env.JOURNAL_UI_SCOPE === 'nebula-tickets') {
     await command('Emulation.setFocusEmulationEnabled',{enabled:true});
     await command('Emulation.setDeviceMetricsOverride',{width:1800,height:1000,deviceScaleFactor:1,mobile:false});
     await evaluate("localStorage.setItem('journal.settings',JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'),theme:'nebula'}))");

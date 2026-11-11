@@ -23,6 +23,9 @@ import type { CalendarImport } from '../journal';
 import { useWheelSwipe } from './useWheelSwipe';
 import { TagFilter } from './TagFilter';
 import { useHiddenTags, useTags } from '../tagStore';
+import type { TagScope } from '../tagStore';
+import { calendarInitialDate, calendarPreferencesKey, loadCalendarPreferences } from '../calendarPreferences';
+import type { CalendarLocation } from '../calendarPreferences';
 import { filterTagDays, isShown, tagOf } from '../tags';
 import { requestCalendarCreate, requestCalendarMove } from '../calendarRequests';
 
@@ -31,15 +34,6 @@ import { requestCalendarCreate, requestCalendarMove } from '../calendarRequests'
 // (Apple's "ganztägig"), the kinds to show as toggles like TaskNotes' filters. It follows the day the journal shows.
 // Keys (with the focus in the calendar): ← → step, H today, J / M / W / A / T (or 1–5) switch the view.
 // Swiping sideways (or Shift + wheel) steps as well.
-type Kinds = Record<EntryKind, boolean>;
-const storageKey = 'journal.calendar';
-function loadPrefs(): { view: CalendarView; kinds: Kinds } {
-  const fallback = { view: 'month' as CalendarView, kinds: { event: true, task: true, note: false } };
-  try {
-    const stored = JSON.parse(localStorage.getItem(storageKey) ?? '{}') as Partial<typeof fallback>;
-    return { view: calendarViews().some(item => item.view === stored.view) ? stored.view! : fallback.view, kinds: { ...fallback.kinds, ...stored.kinds } };
-  } catch { return fallback; }
-}
 const kindPlurals = (): Record<EntryKind, string> => ({ event: t("Ereignisse"), task: t("Aufgaben"), note: t("Notizen") });
 const weekdayNames = () => ([t("Mo"), t("Di"), t("Mi"), t("Do"), t("Fr"), t("Sa"), t("So")]);
 const weekendClass = (date: string, index?: number) => {
@@ -56,7 +50,7 @@ export function CalendarWindow() {
 // Memoized: in the sidebar it must not re-render while the journal is being typed in (`onOpen` is stable).
 /** An entry being edited (right click): its day and the element the card is placed at. */
 type Editing = { entry: Entry; date: string; element: HTMLElement };
-export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, onEdit, onMove, onRemove, onExport, onImport, embedded = false, autoFocus = false, fixedView, withoutDay = false, showDate, onDateChange }: {
+export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, onEdit, onMove, onRemove, onExport, onImport, embedded = false, autoFocus = false, fixedView, withoutDay = false, showDate, onDateChange, preferencesKey = calendarPreferencesKey, tagScope = 'calendar', rememberDate = false, onStateChange }: {
   onExport?: () => Promise<CalendarDay[]>; onImport?: (entries: CalendarImport[]) => Promise<void>;
   journalDate: string | null; onOpen: (date: string, entry?: string) => void; embedded?: boolean; autoFocus?: boolean;
   /** Always this view, without the view tabs (Nebula's day beside the overview); the stored view stays the other calendars'. */
@@ -67,17 +61,19 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
   showDate?: string;
   /** Hears the day the calendar shows. */
   onDateChange?: (date: string) => void;
+  preferencesKey?: string; tagScope?: TagScope; rememberDate?: boolean; onStateChange?: (location: CalendarLocation) => void;
   onCreate?: (date: string, entry: NewEntry) => Promise<void>; onEdit?: (date: string, id: string, change: EntryEdit, scope?: ScopeOption) => Promise<void>; onRemove?: (date: string, id: string, others: { id: string; date: string }[]) => Promise<void>;
   onMove?: (entry: Entry, from: string, to: string, time: string | null, end: string | null) => Promise<void>;
 }) {
   useLanguage();
-  const [prefs, setPrefs] = useState(loadPrefs);
+  const [prefs, setPrefs] = useState(() => loadCalendarPreferences(preferencesKey));
   const { kinds } = prefs;
   const views = calendarViews().filter(item => !withoutDay || item.view !== 'day');
   const view = fixedView ?? (withoutDay && prefs.view === 'day' ? 'week' : prefs.view);
   const now = useNow();
   const today = localDate(now);
-  const [date, setDate] = useState(journalDate ?? today);
+  const [date, setDate] = useState(journalDate ?? (rememberDate ? calendarInitialDate(prefs, today) : today));
+  const [followToday, setFollowToday] = useState(rememberDate && (prefs.followToday || !prefs.date));
   const [slide, setSlide] = useState<'next' | 'prev' | null>(null);
   const [editing, setEditing] = useState<Editing | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -95,7 +91,7 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
   const { days, error } = useCalendarData(shiftDate(range.from, -366), range.to);
   const title = viewTitle(view, date);
   const tags = useTags();
-  const [hiddenTags, setHiddenTags] = useHiddenTags('calendar');
+  const [hiddenTags, setHiddenTags] = useHiddenTags(tagScope);
   const visibleDays = useMemo(() => filterTagDays(days, hiddenTags), [days, hiddenTags, tags]);
   const entriesOn = (value: string) => orderForCalendar((visibleDays.get(value)?.entries ?? []).filter(entry => kinds[entry.kind]));
   const displayDays=useMemo(()=>calendarDaysWithSpans(visibleDays,range.from,range.to),[visibleDays,range.from,range.to]);
@@ -105,14 +101,26 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
 
   useEffect(() => { try {
     // A calendar with a fixed view keeps the stored view (another calendar's) and stores only the kinds shown.
-    const stored = fixedView ? { ...loadPrefs(), kinds: prefs.kinds } : prefs;
-    localStorage.setItem(storageKey, JSON.stringify(stored));
-  } catch { /* keep it for this session */ } }, [prefs]);
+    const stored = {view: fixedView ? loadCalendarPreferences(preferencesKey).view : prefs.view, kinds: prefs.kinds, ...rememberDate ? {date, followToday} : {}};
+    localStorage.setItem(preferencesKey, JSON.stringify(stored));
+  } catch { /* keep it for this session */ } }, [prefs, preferencesKey, rememberDate, date, followToday]);
+  useEffect(() => {
+    if (rememberDate && followToday) setDate(today);
+  }, [rememberDate, followToday, today]);
+  useEffect(() => {
+    if (!rememberDate) return;
+    const changed = (event: StorageEvent) => {
+      if (event.key !== preferencesKey) return;
+      const next = loadCalendarPreferences(preferencesKey);setPrefs(next);setDate(calendarInitialDate(next, today));setFollowToday(next.followToday || !next.date);
+    };
+    window.addEventListener('storage', changed);return () => window.removeEventListener('storage', changed);
+  }, [preferencesKey, rememberDate, today]);
   useEffect(() => { if (autoFocus) rootRef.current?.focus(); }, []);
   // Whenever the journal shows another day, the calendar goes there; browsing the calendar leaves the journal alone.
   useEffect(() => { if (journalDate && !showDate) go(journalDate); }, [journalDate]);
   useEffect(() => { if (showDate) go(showDate); }, [showDate]);
   useEffect(() => { onDateChange?.(date); }, [date]);
+  useEffect(() => { onStateChange?.({date, view}); }, [date, view, onStateChange]);
   // Another page or view leaves the entry being edited behind.
   const pageKey = view === 'year' ? date.slice(0, 4) : view === 'month' ? date.slice(0, 7) : viewDates(view, date)[0];
   useEffect(() => setEditing(null), [view, pageKey]);
@@ -126,12 +134,12 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
 
   const setView = (next: CalendarView) => { if (!fixedView) setPrefs(current => ({ ...current, view: next })); };
   // Going somewhere directly shows it in place; stepping slides the next page in from that side.
-  const go = (value: string) => { setSlide(null); setDate(value); };
+  const go = (value: string) => { setSlide(null); setDate(value); setFollowToday(rememberDate && value === today); };
   useViewHistory({ date, view }, value => { go(value.date); setView(value.view); });
   const show = (next: CalendarView, value: string) => { go(value); setView(withoutDay && next === 'day' ? 'week' : next); };
   // A day clicked in any view opens its note in the journal; the calendar goes there too.
   const openDay = (value: string) => { go(value); onOpen(value); };
-  const step = (amount: 1 | -1) => { setSlide(amount > 0 ? 'next' : 'prev'); setDate(shiftView(view, date, amount)); };
+  const step = (amount: 1 | -1) => { setFollowToday(false); setSlide(amount > 0 ? 'next' : 'prev'); setDate(shiftView(view, date, amount)); };
   useWheelSwipe(step, { root:rootRef, ignore:'.cal-viewbar, .cal-toolbar, .cal-composer' });
   function onKeyDown(event: KeyboardEvent) {
     if ((event.target as Element).closest('input, .cal-composer')) return;
