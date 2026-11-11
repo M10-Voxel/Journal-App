@@ -11,7 +11,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: windows-build-${{ github.workflow }}-${{ github.ref }}
+  # Keep Windows releases serialized. The generation suffix also lets us move
+  # past a GitHub-side orphaned concurrency lock whose run cannot be cancelled.
+  group: windows-build-v2-${{ github.workflow }}-${{ github.ref }}
   # Serialize update publication; a newer push must not interrupt asset uploads.
   cancel-in-progress: ${{ github.ref != 'refs/heads/Windows' }}
 
