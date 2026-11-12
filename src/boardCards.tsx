@@ -5,6 +5,7 @@ import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { EntryText } from './components/EntryText';
 import { Icon } from './components/Icon';
+import { InkCanvas } from './components/InkCanvas';
 import { t } from './i18n';
 import type { Entry } from './journal';
 import { connectPatches, disconnectPatches, removalIds } from './notebook';
@@ -64,7 +65,7 @@ export function patchCard(id: string, changes: Partial<Card>) {
   // A new card remembers when it was made; a change of title or text when it was last edited (notebook sorting).
   const now = Date.now(), isNew = !cardStore.value.some(c => c.id === id);
   if (isNew && changes.createdAt == null) changes = { ...changes, createdAt: now, updatedAt: now };
-  else if ('title' in changes || 'text' in changes) changes = { ...changes, updatedAt: now };
+  else if ('title' in changes || 'text' in changes || 'ink' in changes) changes = { ...changes, updatedAt: now };
   set(cardStore, old => old.some(c => c.id === id) ? old.map(c => c.id === id ? { ...c, ...changes } : c) : [...old, { ...changes, id } as Card]);
   const pending = enqueue([id, 'folders'], () => invoke('board_patch', { id, patch: changes, source }));
   void pending.catch(e => fail(cardStore, e)); return pending;
@@ -74,7 +75,7 @@ export function patchCards(patches: Patches) {
   const ids = Object.keys(patches);
   if (!ids.length) return Promise.resolve();
   const known = new Set(cardStore.value.map(card => card.id)), now = Date.now();
-  patches = Object.fromEntries(Object.entries(patches).map(([id, patch]) => [id, !known.has(id) ? { createdAt: now, updatedAt: now, ...patch } : 'title' in patch || 'text' in patch ? { ...patch, updatedAt: now } : patch]));
+  patches = Object.fromEntries(Object.entries(patches).map(([id, patch]) => [id, !known.has(id) ? { createdAt: now, updatedAt: now, ...patch } : 'title' in patch || 'text' in patch || 'ink' in patch ? { ...patch, updatedAt: now } : patch]));
   set(cardStore, old => [...old.map(card => patches[card.id] ? { ...card, ...patches[card.id] } : card), ...ids.filter(id => !known.has(id)).map(id => ({ ...patches[id], id } as Card))]);
   const pending = enqueue([...ids, 'folders'], () => invoke('board_patch_many', { patches, source }));
   void pending.catch(e => fail(cardStore, e)); return pending;
@@ -121,9 +122,10 @@ export function usePixelTheme() {
   useEffect(() => { const observer = new MutationObserver(() => setPixel(document.documentElement.dataset.pixel !== undefined)); observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-pixel'] }); return () => observer.disconnect(); }, []);
   return pixel;
 }
-/** A note's text in the journal's rich editor (Markdown with blocks). */
+/** A note's text in the journal's rich editor (Markdown with blocks), or its handwriting when it is in drawing mode. */
 export function Note({ card, patch, label }: { card: Card; patch: (id: string, value: Partial<Card>) => unknown; label?: string }) {
   const focus = useRef<string | null>(null);
+  if (card.mode === 'ink') return <InkCanvas card={card} patch={patch} label={label ?? card.title} />;
   const entry: Entry = { id: card.id, kind: 'note', text: card.text, done: false, cancelled: false, priority: false };
   return <EntryText rich entry={entry} label={label ?? card.title} strike={null} focusEntryId={focus} onChange={text => patch(card.id, { text })} />;
 }

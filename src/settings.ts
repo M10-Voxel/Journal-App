@@ -31,9 +31,9 @@ export const swipeAvailable = () => /android/i.test(navigator.userAgent) || (win
 /**
  * `previousColorTheme`: the palette chosen before switching to the journal style, restored when leaving it.
  */
-export interface Settings extends ColorSettings { actionLayout: ActionLayout; theme: Theme; pixel: boolean; popupStyle: PopupStyle; language: Language; uiScale: UiScale; bookPaging: BookPaging; previousColorTheme?: ColorTheme }
+export interface Settings extends ColorSettings { actionLayout: ActionLayout; theme: Theme; pixel: boolean; popupStyle: PopupStyle; language: Language; uiScale: UiScale; bookPaging: BookPaging; inkPressure: boolean; previousColorTheme?: ColorTheme }
 const key = 'journal.settings';
-export const defaultSettings: Settings = { actionLayout: 'orbit', theme: 'classic', pixel: false, popupStyle: 'a', language: 'de', uiScale: 'auto', bookPaging: 'page', ...defaultColorSettings };
+export const defaultSettings: Settings = { actionLayout: 'orbit', theme: 'classic', pixel: false, popupStyle: 'a', language: 'de', uiScale: 'auto', bookPaging: 'page', inkPressure: true, ...defaultColorSettings };
 
 export function loadSettings(): Settings {
   try {
@@ -41,7 +41,7 @@ export function loadSettings(): Settings {
     // The pixel style used to be a theme of its own; it is the normal design with the pixel look now.
     return { actionLayout: stored.actionLayout === 'inline' || (stored.actionLayout === 'swipe' && swipeAvailable()) ? stored.actionLayout : defaultSettings.actionLayout, popupStyle: stored.popupStyle === 'b' ? 'b' : 'a', theme: isTheme(stored.theme) ? stored.theme : 'classic',
       pixel: stored.pixel === true || stored.theme === 'pixel', language: stored.language === 'en' ? 'en' : 'de', uiScale: isUiScale(stored.uiScale) ? stored.uiScale : 'auto', ...normalizeColorSettings(stored),
-      bookPaging: stored.bookPaging === 'spread' ? 'spread' : 'page',
+      bookPaging: stored.bookPaging === 'spread' ? 'spread' : 'page', inkPressure: stored.inkPressure !== false,
       ...colorThemeIds.includes(stored.previousColorTheme as ColorTheme) ? { previousColorTheme: stored.previousColorTheme } : {} };
   } catch { return defaultSettings; }
 }

@@ -68,3 +68,16 @@ test('missing sources, legacy cards and cyclic copy links are harmless', () => {
   const cycle = [note('a', { copyOf: 'b', copySync: true }), note('b', { copyOf: 'a', copySync: true })];
   assert.deepEqual(syncPatches(cycle, patch), { a: patch.a, b: patch.a });
 });
+
+test('handwriting and the text/drawing mode travel through enabled copies like text', () => {
+  const ink = { v: 1, strokes: [{ size: 3, pressure: true, points: 'AAAAAAAA' }] };
+  const patches = syncPatches(cards, { b: { mode: 'ink', ink } });
+  assert.deepEqual(Object.keys(patches).sort(), ['a', 'b', 'c']);
+  assert(Object.values(patches).every(patch => patch.mode === 'ink' && patch.ink === ink));
+});
+
+test('the background of a drawing travels through enabled copies', () => {
+  const patches = syncPatches(cards, { b: { inkPaper: { kind: 'lines', step: 24 } } });
+  assert.deepEqual(Object.keys(patches).sort(), ['a', 'b', 'c']);
+  assert(Object.values(patches).every(patch => patch.inkPaper?.kind === 'lines'));
+});

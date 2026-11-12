@@ -129,3 +129,12 @@ test('"Existing" offers every note once: copies, legacy duplicates and stale cop
   assert.deepEqual(libraryNotes(cards.filter(c => c.id !== 'orig'), '2026-11-09').map(c => c.id).filter(id => id.startsWith('copy')), ['copy1']);
   assert.deepEqual(libraryNotes(cards, '2026-11-09', 'heft').map(c => c.id), ['book']);
 });
+
+test('copies of a note keep its drawing and mode', async () => {
+  const { copyCards } = await import('../src/boardPlacement.ts');
+  const ink = { v: 1, strokes: [{ size: 3, pressure: false, tool: 'marker', color: '#ffe14d', points: 'AAAAAAAA' }] }, inkPaper = { kind: 'grid', step: 16 };
+  const [copy] = copyCards([{ id: 's', kind: 'note', title: 'Skizze', text: '', dates: [], order: 1, mode: 'ink', ink, inkPaper }], ['s'], () => 'n');
+  assert.equal(copy.card.mode, 'ink'); assert.deepEqual(copy.card.ink, ink); assert.deepEqual(copy.card.inkPaper, inkPaper);
+  const [plain] = copyCards([{ id: 't', kind: 'note', title: 'Text', text: 'x', dates: [], order: 1 }], ['t'], () => 'm');
+  assert.equal('inkPaper' in plain.card, false);
+});

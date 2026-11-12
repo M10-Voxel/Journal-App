@@ -2,6 +2,7 @@
 // between cards. A thread joins two cards symmetrically (each names the other in `links`): an image or a link tied to a
 // note is an attachment of that note, two notes tied together are pages of each other, images and links tied to each
 // other form a bundle (a bundle tied to a note by one thread hangs on that note as a whole).
+import type { Ink, InkPaper } from './ink.ts';
 
 export type Paper = 'yellow' | 'blue' | 'green' | 'pink';
 export type CardKind = 'note' | 'image' | 'link';
@@ -38,6 +39,12 @@ export type Card = {
   onDay?: boolean;
   /** When the card was made and when its title or text last changed (ms; set by patchCard, missing on old cards). */
   createdAt?: number; updatedAt?: number;
+  /** A note is either text (default) or a drawing; switching hides the other without deleting it. */
+  mode?: 'text' | 'ink';
+  /** The handwriting of a note (see ink.ts): strokes in note-local world pixels. */
+  ink?: Ink;
+  /** The background of a drawing (lines, grid or dots and their spacing); missing or null: blank. */
+  inkPaper?: InkPaper | null;
 };
 export type Folder = { id: string; name: string; parent: string | null; order: number };
 export type Patches = Record<string, Partial<Card>>;

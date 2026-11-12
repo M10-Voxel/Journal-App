@@ -5,6 +5,7 @@ use rusqlite::OptionalExtension;
 use std::{io::Read, sync::Mutex, time::Duration};
 use tauri::{Emitter, Manager};
 type Result<T> = std::result::Result<T, String>;
+const MAX_CARD_BYTES:usize=2_000_000;
 
 #[tauri::command]
 pub fn board_list(store:tauri::State<'_,Mutex<Store>>) -> Result<Vec<Value>> {
@@ -39,7 +40,8 @@ fn write_card(db:&Store,id:&str,patch:&Value)->Result<Value>{
         let mut value:Value=previous.map(|s|serde_json::from_str(&s)).transpose().map_err(|e|e.to_string())?.unwrap_or(json!({"id":id}));
         for (key,v) in patch.as_object().ok_or("Ungültige Karte")? { if key!="id" {value[key]=v.clone();} }
         if !matches!(value["kind"].as_str(),Some("note"|"image"|"link")) || !value["dates"].is_array() {return Err("Ungültige Karte".into())}
-        let text=value.to_string();if text.len()>200_000 {return Err("Diese Notiz ist zu groß".into())}
+        // Handwriting makes cards larger than text: about 6 bytes a point, so 2 MB hold a few hundred thousand points.
+        let text=value.to_string();if text.len()>MAX_CARD_BYTES {return Err("Diese Notiz ist zu groß".into())}
         db.conn.execute("INSERT INTO settings(key,value) VALUES(?1,?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value",[key,text]).map_err(|e|e.to_string())?;
         Ok(value)
 }
@@ -278,6 +280,19 @@ mod tests {
         assert_eq!(card["text"],"Neuer Inhalt");assert_eq!(card["dates"].as_array().unwrap().len(),2);
         assert!(save_card(&db,&id,&json!({"kind":"invalid"})).is_err());
         assert_eq!(save_card(&db,&id,&json!({})).unwrap()["kind"],"note");
+        drop(db);std::fs::remove_file(path).unwrap();
+    }
+    #[test] fn large_handwritten_notes_are_saved_up_to_the_card_limit(){
+        let path=std::env::temp_dir().join(format!("journal-ink-{}.sqlite",uuid::Uuid::new_v4()));
+        let id=uuid::Uuid::new_v4().to_string();
+        let db=Store::open(&path).unwrap();
+        let points="A".repeat(600_000);
+        let card=save_card(&db,&id,&json!({"kind":"note","title":"Skizze","text":"","dates":[],"order":1,"mode":"ink","ink":{"v":1,"strokes":[{"size":3,"pressure":true,"points":points}]}})).unwrap();
+        assert!(card.to_string().len()>200_000);
+        drop(db);let db=Store::open(&path).unwrap();
+        let stored=card_list(&db).unwrap().into_iter().find(|c|c["id"]==id.as_str()).unwrap();
+        assert_eq!(stored["mode"],"ink");assert_eq!(stored["ink"]["strokes"][0]["points"].as_str().unwrap().len(),600_000);
+        assert!(save_card(&db,&id,&json!({"text":"x".repeat(MAX_CARD_BYTES)})).is_err());
         drop(db);std::fs::remove_file(path).unwrap();
     }
     #[test] fn folders_move_their_contents_up_when_removed_and_notes_keep_links_and_folder(){

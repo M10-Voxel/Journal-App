@@ -1,7 +1,7 @@
 import type { Card, Patches } from './notebook';
 import { cardGroups, copyLayout, isOnBoard, layoutBoard } from './boardPlacement.ts';
 
-const shared = ['title', 'text', 'paper', 'tag', 'url', 'pixel', 'groupName'] as const;
+const shared = ['title', 'text', 'mode', 'ink', 'inkPaper', 'paper', 'tag', 'url', 'pixel', 'groupName'] as const;
 const geometry = ['boardX', 'x', 'y', 'w', 'h'] as const;
 const positions = ['boardX', 'x', 'y'] as const;
 const changedBoard = (card: Card, patch: Partial<Card>) => Object.entries(patch.boards ?? {}).find(([key, value]) => value && positions.some(field => field in value && value[field] !== card.boards?.[key]?.[field]))?.[0];

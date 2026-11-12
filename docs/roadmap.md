@@ -29,6 +29,8 @@ Reihenfolge-Empfehlung: zuerst kleine/unabhängige, dann Datenmodell-Änderungen
 - [ ] **Aufgaben-Eingabefeld bei Woche/Monat/Quartal/Jahr** – `PeriodNotes.tsx`, `periodData.ts`/`periodStore.ts` (`PeriodData.notes` ist nur Text); Struktur entscheiden (Entries-Modell wiederverwenden?).
 - [ ] **Feature-Toggles** – Einträge (spezifische an/aus), Daten, Pinnwand (spezifische an/aus), Notiz: Flags in `settings.ts`, `pagesOf`/`normalizePage`/`nextPage`/`turnPage`/`pageNumber`/`spreadOf` in `src/book.ts` filtern, UI in `SettingsDialog.tsx`, `tests/book.test.mjs`. Offene Frage: was heißt „spezifische“?
 - [x] **Tag-Kategorien umsortieren** – `tagStore.ts` `saveTags` speichert geordnete Liste, `tags.ts` `setTagOrder`/`tagRank`; Hoch/Runter bzw. Drag in `TagSettings.tsx`, Muster `moveActivity` (`periodData.ts:7`).
+- [x] **Handschrift-Modus für Zettel** (erledigt: Text oder Zeichnung je Zettel, Füller mit Druck (abschaltbar), Teil-Radierer, „Skizze“-Knopf, keine Größenobergrenze; siehe `docs/bulletin-board.md`) – `src/ink.ts`, `src/components/InkCanvas.tsx`, `perfect-freehand`, Kartenlimit in `board.rs` 2 MB.
+- [x] **Mehr Werkzeuge für den Handschrift-Modus** (erledigt: Bleistift mit Körnung, transparenter Textmarker unter der Tinte, Farbe je Stiftart, Auswahl als Rechteck oder schneidendes Lasso zum Verschieben/Skalieren/Umfärben/Stärke ändern/Löschen, Hintergrund Linien/Raster/Punkte je Zettel, kompakte Leiste mit Icon-Dropdowns; siehe `docs/bulletin-board.md`) – `src/ink.ts`, `src/inkPrefs.ts`, `src/components/InkToolbar.tsx`, `src/components/InkCanvas.tsx`; Felder `tool`/`color` am Strich und `inkPaper` an der Karte ohne Migration.
 
 ## Offene Fragen
 - **Pinnwand für Zeiträume** (Woche…Jahr) – gewünscht? Blockiert „Suche: Monats-/Jahres-Pinnwand“.

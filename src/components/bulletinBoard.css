@@ -440,3 +440,131 @@
 :root[data-pixel] .board-actions button { font-size: 15px; }
 :root[data-pixel] .board-tools button { border-radius: 0; }
 @media (prefers-reduced-motion: reduce) { .board-copy-sync > i::after, .board-tools, .board-group-actions { transition: none; } }
+
+/* Handwriting (InkCanvas.tsx): a note as a drawing surface. The ink is `--ink` (the paper's ink colour, a fountain-pen
+   blue in the journal, violet in Nebula); the strip above the drawing shows like the card tools, on pointing or focus. */
+.note-mode svg { width: 13px; height: 13px; }
+.board-note.is-ink { display: flex; flex-direction: column; min-height: 0; overflow: hidden; cursor: default; }
+.board-card.is-note.has-height .board-note.is-ink, .floating-note .board-note.is-ink { overflow: hidden; }
+.ink-note { --ink: var(--paper-ink, var(--text)); --ink-rule: color-mix(in srgb, var(--ink) 16%, transparent); display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; container-type: inline-size; }
+.ink-toolbar { flex: none; display: flex; align-items: center; gap: 2px; height: 24px; margin: -2px 0 4px; opacity: 0; transition: opacity 140ms ease; }
+:is(.board-card, .floating-note):is(:hover, :focus-within) .ink-toolbar, .notebook-text .ink-toolbar, .ink-toolbar:focus-within { opacity: 1; }
+.ink-toolbar button { display: grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: color-mix(in srgb, currentColor 62%, transparent); cursor: pointer; }
+.ink-toolbar button:is(:hover, :focus-visible) { background: color-mix(in srgb, var(--paper-ink, var(--text)) 12%, transparent); color: inherit; outline: 0; }
+.ink-toolbar button[aria-pressed='true'], .ink-toolbar button[aria-expanded='true'] { background: color-mix(in srgb, var(--paper-ink, var(--text)) 18%, transparent); color: inherit; }
+.ink-toolbar button:disabled { opacity: .35; cursor: default; background: transparent; }
+.ink-toolbar svg { width: 13px; height: 13px; }
+/* A tool with its dropdown: the icon takes the tool, the small arrow opens the kinds. */
+.ink-split { display: flex; align-items: center; }
+.ink-toolbar .ink-caret { width: 12px; border-radius: 4px; }
+.ink-toolbar .ink-caret svg { width: 9px; height: 9px; }
+.ink-divider { flex: none; width: 1px; height: 14px; margin: 0 4px; background: color-mix(in srgb, var(--paper-ink, var(--text)) 18%, transparent); }
+.ink-wide { display: flex; align-items: center; gap: 2px; }
+.ink-toolbar .ink-more { display: none; }
+/* The colour: a dot in the pen's colour; the design's ink shows as a ring. */
+.ink-color i { display: block; width: 11px; height: 11px; border-radius: 50%; background: var(--swatch, var(--ink)); box-shadow: 0 0 0 1px color-mix(in srgb, var(--paper-ink, var(--text)) 30%, transparent); }
+.ink-color.is-ink i { background: radial-gradient(circle, var(--ink) 0 45%, transparent 47%); box-shadow: 0 0 0 1.5px var(--ink); }
+.ink-width i { display: block; width: var(--dot); height: var(--dot); border-radius: 50%; background: currentColor; }
+/* Narrow notes: the width and the background move into the more menu. */
+@container (max-width: 219px) {
+  .ink-toolbar .ink-wide { display: none; }
+  .ink-toolbar .ink-more { display: grid; }
+}
+/* The dropdowns and popovers (in the popup look of the design). */
+.ink-menu [role='menu'] { display: flex; flex-direction: column; gap: 2px; min-width: 140px; }
+.ink-menu-item { display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 10px 0 8px; border: 0; border-radius: 6px; background: transparent; color: var(--text); font: 13px var(--sans); text-align: left; cursor: pointer; }
+.ink-menu-item:is(:hover, :focus-visible) { background: var(--hover); outline: 0; }
+.ink-menu-item[aria-checked='true'] { color: var(--strong); font-weight: 600; box-shadow: inset 2px 0 0 var(--accent); }
+.ink-menu-item svg { width: 15px; height: 15px; flex: none; }
+.ink-color-popover { width: 236px; padding: 8px; }
+.ink-palette { display: flex; flex-direction: column; gap: 8px; }
+.ink-swatches { display: flex; flex-wrap: wrap; gap: 6px; }
+.ink-swatches.is-recent { padding-top: 8px; border-top: 1px solid var(--edge); }
+.popover .ink-swatch, .ink-swatch { width: 22px; height: 22px; padding: 0; border: 0; border-radius: 50%; background: var(--swatch); box-shadow: inset 0 0 0 1px #0003; cursor: pointer; }
+.ink-swatch.is-ink { background: radial-gradient(circle, var(--text) 0 38%, transparent 40%); box-shadow: inset 0 0 0 2px var(--text); }
+.ink-swatch[aria-checked='true'] { box-shadow: inset 0 0 0 1px #0003, 0 0 0 2px var(--surface), 0 0 0 3.5px var(--accent); }
+.ink-swatch.is-ink[aria-checked='true'] { box-shadow: inset 0 0 0 2px var(--text), 0 0 0 2px var(--surface), 0 0 0 3.5px var(--accent); }
+.ink-swatch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.popover .ink-own-color, .ink-own-color { align-self: flex-start; height: 26px; padding: 0 10px; border: 0; border-radius: 6px; background: var(--hover); color: var(--text); font: 12px var(--sans); cursor: pointer; }
+.ink-size-popover, .ink-paper-popover { padding: 8px; }
+.ink-sizes { display: flex; align-items: center; gap: 4px; }
+.ink-sizes button, .ink-paper-kind, .ink-paper-step button { display: grid; place-items: center; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--text); cursor: pointer; }
+.ink-sizes button:is(:hover, :focus-visible), .ink-paper-kind:is(:hover, :focus-visible), .ink-paper-step button:is(:hover, :focus-visible) { background: var(--hover); outline: 0; }
+.ink-sizes button[aria-pressed='true'], .ink-paper-kind[aria-checked='true'] { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--strong); }
+.ink-size i { display: block; width: var(--dot); height: var(--dot); border-radius: 50%; background: currentColor; }
+.ink-range { width: 96px; height: 14px; margin: 0 2px 0 6px; accent-color: var(--accent); cursor: pointer; }
+.ink-sizes output, .ink-paper-step output { min-width: 34px; color: var(--muted); font: 11px var(--mono); text-align: right; }
+.ink-paper-kinds { display: flex; gap: 4px; }
+.ink-paper-kind svg { width: 16px; height: 16px; }
+.ink-paper-step { display: flex; align-items: center; gap: 4px; margin-top: 8px; color: var(--muted); font: 12px var(--sans); }
+.ink-paper-step > span { flex: 1; }
+.ink-paper-step output { text-align: center; color: var(--text); }
+.ink-paper-step button { font: 600 15px var(--sans); }
+.ink-paper-step button:disabled { opacity: .35; cursor: default; }
+.ink-canvas { position: relative; flex: 1 1 auto; min-height: var(--ink-min, 140px); overflow: hidden; color: var(--ink); touch-action: none; user-select: none; -webkit-user-select: none; outline: 0; cursor: crosshair; border-radius: 2px; }
+.board-card.is-note.has-height .ink-canvas, .floating-note .ink-canvas { min-height: 0; }
+.ink-canvas.is-eraser { cursor: none; }
+/* Above the notes' `.board-note * { color: inherit }`. */
+:is(.board-card, .floating-note, .notebook) .board-note .ink-canvas { color: var(--ink); }
+.ink-canvas:focus-visible { box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--ink) 35%, transparent); }
+.ink-strokes { position: absolute; inset: 0; width: 100%; height: 100%; overflow: hidden; pointer-events: none; }
+.ink-strokes path { stroke: none; }
+.ink-strokes path.is-pencil { opacity: .85; }
+/* The highlighter: transparent, multiplied into the paper (screened on dark paper), under the ink. */
+.ink-markers path { opacity: .38; mix-blend-mode: multiply; }
+.ink-paper-pattern path { fill: none; stroke: var(--ink-rule); stroke-width: 1; }
+.ink-paper-pattern rect { fill: var(--ink-rule); }
+/* The selection: a soft accent glow under the chosen strokes, a dashed frame with four grips, the marquee and lasso. */
+.ink-glow path { fill: none; stroke: var(--accent); stroke-width: 4; stroke-linejoin: round; opacity: .35; }
+.ink-frame rect { fill: none; stroke: color-mix(in srgb, var(--accent) 80%, transparent); stroke-width: 1; stroke-dasharray: 4 3; }
+.ink-frame .ink-grip { fill: var(--surface, #fff); stroke: var(--accent); stroke-dasharray: none; }
+.ink-marquee { fill: color-mix(in srgb, var(--accent) 8%, transparent); stroke: var(--accent); stroke-width: 1; stroke-dasharray: 4 3; }
+.ink-canvas.is-select { cursor: default; }
+/* The bar over a selection lies on the paper: a lighter sheet of it, in its ink. */
+.ink-selection-bar { position: absolute; z-index: 2; display: flex; align-items: center; gap: 2px; padding: 2px; border-radius: 13px; background: color-mix(in srgb, var(--paper, var(--surface)) 78%, #fff); color: var(--paper-ink, var(--text));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--paper-ink, var(--text)) 22%, transparent), 0 6px 16px -8px #0008; cursor: default; }
+.ink-selection-bar button { display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: inherit; font: 600 14px/1 var(--sans); cursor: pointer; }
+.ink-selection-bar button:is(:hover, :focus-visible) { background: color-mix(in srgb, var(--paper-ink, var(--text)) 12%, transparent); outline: 0; }
+.ink-selection-bar .ink-delete:hover { color: var(--danger, #c9302c); }
+.ink-selection-bar svg { width: 14px; height: 14px; }
+.ink-cursor { position: absolute; top: 0; left: 0; width: var(--size, 18px); height: var(--size, 18px); margin: calc(var(--size, 18px) / -2) 0 0 calc(var(--size, 18px) / -2); border-radius: 50%;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 75%, transparent), inset 0 0 0 1px #fff9; pointer-events: none; }
+.ink-cursor[hidden] { display: none; }
+.notebook-mode { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; }
+.notebook-mode:hover, .notebook-mode[aria-pressed='true'] { background: color-mix(in srgb, var(--text) 10%, transparent); color: var(--text); }
+.notebook-mode svg { width: 15px; height: 15px; }
+/* Journal: fountain-pen blue, a squarer strip in ink. */
+:root[data-theme='journal'] .ink-note { --ink: #1f3d8f; }
+:root[data-theme='journal'] .ink-toolbar button { border-radius: 2px; }
+:root[data-theme='journal'] .ink-toolbar button[aria-pressed='true'] { background: transparent; box-shadow: inset 0 -1.5px 0 var(--ink); }
+:root[data-theme='journal'] .ink-toolbar button[aria-expanded='true'] { background: transparent; box-shadow: inset 0 -1.5px 0 var(--ink); }
+:root[data-theme='journal'] .ink-divider { background: color-mix(in srgb, var(--ink) 30%, transparent); }
+/* Journal: ruled in blue like an exercise book, a pencil-dashed frame. */
+:root[data-theme='journal'] .ink-note { --ink-rule: #5b7fc770; }
+:root[data-theme='journal'] .ink-frame rect:not(.ink-grip), :root[data-theme='journal'] .ink-marquee { stroke: #555c; stroke-dasharray: 3 2 1 2; }
+:root[data-theme='journal'] .ink-frame .ink-grip { fill: var(--book-paper, #fff); stroke: #555; }
+:root[data-theme='journal'] .ink-glow path { stroke: var(--ink); opacity: .22; }
+:root[data-theme='journal'] .ink-selection-bar { border-radius: 3px; }
+:root[data-theme='journal'] .ink-selection-bar button { border-radius: 2px; }
+/* Nebula: violet ink with a slight glow, square mono parts. */
+:root[data-theme='nebula'] .ink-note { --ink: #5a189a; }
+:root[data-theme='nebula'] .ink-strokes { filter: drop-shadow(1px 1px 0 #7b2cbf40); }
+:root[data-theme='nebula'] .ink-toolbar { font: 700 10px var(--mono); }
+:root[data-theme='nebula'] .ink-toolbar button { border-radius: 0; }
+:root[data-theme='nebula'] .ink-toolbar button[aria-pressed='true'] { background: var(--nb-violet, #7b2cbf); color: #fff; }
+:root[data-theme='nebula'] .ink-toolbar button[aria-expanded='true'] { background: var(--nb-violet, #7b2cbf); color: #fff; }
+:root[data-theme='nebula'] :is(.ink-size i, .ink-width i) { border-radius: 0; }
+:root[data-theme='nebula'] .ink-frame rect:not(.ink-grip), :root[data-theme='nebula'] .ink-marquee { stroke: var(--nb-violet, #7b2cbf); stroke-dasharray: 5 3; }
+:root[data-theme='nebula'] .ink-frame .ink-grip { stroke: var(--nb-violet, #7b2cbf); }
+:root[data-theme='nebula'] .ink-glow path { stroke: var(--nb-violet, #7b2cbf); }
+:root[data-theme='nebula'] .ink-selection-bar { border-radius: 0; box-shadow: 0 0 0 1px #000, 3px 3px 0 var(--nb-violet, #7b2cbf); font-family: var(--mono); }
+:root[data-theme='nebula'] .ink-selection-bar button { border-radius: 0; }
+/* Pixel: crisp strokes, square parts. */
+:root[data-pixel] .ink-strokes { shape-rendering: crispEdges; }
+:root[data-pixel] :is(.ink-toolbar button, .ink-size i, .ink-width i, .ink-color i, .ink-swatch, .ink-selection-bar, .ink-selection-bar button, .ink-menu-item, .ink-sizes button, .ink-paper-kind, .ink-paper-step button, .ink-own-color, .notebook-mode) { border-radius: 0; }
+:root[data-pixel] .ink-color.is-ink i { background: linear-gradient(var(--ink), var(--ink)) center / 40% 40% no-repeat; }
+:root[data-pixel] .ink-swatch.is-ink { background: linear-gradient(var(--text), var(--text)) center / 40% 40% no-repeat; }
+:root[data-pixel] .ink-frame rect:not(.ink-grip), :root[data-pixel] .ink-marquee { stroke-width: 2; stroke-dasharray: 2 2; shape-rendering: crispEdges; }
+:root[data-pixel] .ink-selection-bar { box-shadow: 0 0 0 1px color-mix(in srgb, var(--paper-ink, var(--text)) 40%, transparent), 3px 3px 0 #0006; }
+:root[data-pixel] .ink-toolbar button[aria-pressed='true'] { box-shadow: 2px 2px 0 #0006; }
+@media (prefers-reduced-motion: reduce) { .ink-toolbar { transition: none; } }

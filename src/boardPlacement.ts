@@ -86,12 +86,12 @@ export function copyLayout(cards: Card[], ids: readonly string[], width: number)
   const resolved = layoutBoard(sourceCards.map(card => ({ ...(source ? cardOnBoard(card, source) : card), dates: ['copy-source'] })), 'copy-source', width);
   return Object.fromEntries(resolved.filter(({ card }) => wanted.has(card.id)).map(({ card, x, y, z }) => [card.id, { boardX: x, y, z, w: cardWidth(card), h: card.h }]));
 }
-export function copyCards(cards: Card[], ids: readonly string[], newId: () => string): { from: string; card: Pick<Card, 'id' | 'kind' | 'title' | 'text' | 'url' | 'paper' | 'w' | 'h' | 'pixel' | 'size' | 'tag' | 'links' | 'groupName' | 'pageLinks'> }[] {
+export function copyCards(cards: Card[], ids: readonly string[], newId: () => string): { from: string; card: Pick<Card, 'id' | 'kind' | 'title' | 'text' | 'mode' | 'ink' | 'inkPaper' | 'url' | 'paper' | 'w' | 'h' | 'pixel' | 'size' | 'tag' | 'links' | 'groupName' | 'pageLinks'> }[] {
   const chosen = ids.map(id => cards.find(card => card.id === id)).filter((card): card is Card => !!card && copyableCard(card));
   const made = new Map(chosen.map(card => [card.id, newId()]));
   const directions=pageDirections(cards);
   return chosen.map(card => ({ from: card.id, card: {
-    id: made.get(card.id)!, kind: card.kind, title: card.title, text: card.text, url: card.url, paper: card.paper, w: card.w, h: card.h, pixel: card.pixel, size: card.size, tag: card.tag, groupName: card.groupName,
+    id: made.get(card.id)!, kind: card.kind, title: card.title, text: card.text, ...(card.mode ? { mode: card.mode } : {}), ...(card.ink ? { ink: card.ink } : {}), ...(card.inkPaper ? { inkPaper: card.inkPaper } : {}), url: card.url, paper: card.paper, w: card.w, h: card.h, pixel: card.pixel, size: card.size, tag: card.tag, groupName: card.groupName,
     links: (card.links ?? []).filter(other => made.has(other)).map(other => made.get(other)!),
     pageLinks: directions.filter(([from,to])=>from===card.id&&made.has(to)).map(([,to])=>made.get(to)!),
   } }));

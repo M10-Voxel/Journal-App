@@ -7,6 +7,7 @@ import type { TagScope } from '../tagStore';
 import { invoke } from '@tauri-apps/api/core';
 import { t, useLanguage } from '../i18n';
 import { formatDate, formatShortDate, localDate } from '../dates';
+import { NoteModeButton } from './InkCanvas';
 import { BoardImage, Lightbox, Note, connectCards, disconnectCards, hostOf, httpsLink, linkPreview, nextOrder, patchCards, removeCard, removeCards, storeImage, useCards, useFolders } from '../boardCards';
 import { BoardScopePicker } from './BoardScopePicker';
 import type { Card, Folder } from '../boardCards';
@@ -358,7 +359,7 @@ export function Notebook({ onClose, onOpenDay, tagScope = 'journal', widget }: {
               onDragStart={e => { e.dataTransfer.setData(noteType, chosen.includes(note.id) && chosen.length > 1 ? chosen.join(',') : note.id); e.dataTransfer.effectAllowed = 'move'; }}
               onPointerEnter={() => { hoverNote.current = note.id; }} onPointerLeave={() => { hoverNote.current = null; }} onClick={e => clickNote(e, note.id)} onContextMenu={noteMenu(note)}>
               <strong>{noteTitle(note)}</strong>
-              <small>{note.text.replace(/[#*_`>|[\]-]+/g, ' ').trim().slice(0, 70) || t('leer')}</small>
+              <small>{note.mode === 'ink' ? t('Handschrift') : note.text.replace(/[#*_`>|[\]-]+/g, ' ').trim().slice(0, 70) || t('leer')}</small>
               <span className="notebook-note-meta">{tagOf(tags, note.tag) && <span title={tagOf(tags, note.tag)!.name} style={{ '--tag': tagOf(tags, note.tag)!.color } as CSSProperties}><i className="tag-dot" />{tagOf(tags, note.tag)!.name}</span>}{path && <span>{path}</span>}{(note.links ?? []).length > 0 && <span title={t('Verbunden')}><Icon name="jump" />{(note.links ?? []).length}</span>}{note.dates.length > 0 && <span title={t('Auf dem Tag')}><Icon name="calendar" /></span>}</span>
             </button>{(bookPages.get(note.id)??[note]).slice(1).map((child,at)=><button type="button" key={child.id} className={`notebook-subpage${page?.id===child.id?' is-current':''}`} data-subpage-id={child.id} onClick={()=>select(child.id)} onContextMenu={noteMenu(child)}><Icon name="right"/><small>{at+2}</small><span>{noteTitle(child)}</span></button>)}</div>;
           })}
@@ -370,6 +371,7 @@ export function Notebook({ onClose, onOpenDay, tagScope = 'journal', widget }: {
         <header className="notebook-page-head">
           <input ref={titleRef} className="notebook-title" aria-label={t('Titel')} placeholder={t('Titel')} value={page.title} onChange={e => void patch(page.id, { title: e.target.value })} />
           {!compact && <div className="notebook-page-tools">
+            <NoteModeButton card={page} patch={patch} className="notebook-mode" />
             <BoardScopePicker cards={cards} id={page.id} date={page.created ?? page.dates[0] ?? today} />
             <FolderPick value={page.folder && known.has(page.folder) ? page.folder : null} tree={tree} onPick={folder => moveNote(page.id, folder)} />
             <button type="button" className="notebook-delete" title={t('Zettel endgültig löschen')} aria-label={t('Zettel endgültig löschen')} onClick={() => void run(() => deleteNote(page))}><Icon name="trash" /></button>
@@ -381,7 +383,7 @@ export function Notebook({ onClose, onOpenDay, tagScope = 'journal', widget }: {
           <label id="notebook-on-day">{t('Auf dem Tag zeigen')}</label>
           {onDay ? <button type="button" className="notebook-day-link" onClick={() => openDay(page)} title={t('Tag mit dieser Notiz öffnen')}>{page.dates.length > 1 ? t('auf {0} Tagen', page.dates.length) : formatDate(page.dates[0])}</button> : <small>{formatDate(created)}</small>}
         </div>}
-        <div className="notebook-text board-note"><Note card={page} patch={patch} label={noteTitle(page)} /></div>
+        <div className={`notebook-text board-note${page.mode === 'ink' ? ' is-ink' : ''}`}><Note card={page} patch={patch} label={noteTitle(page)} /></div>
         {(!compact || attachments.length > 0 || link !== null) && <section className="notebook-attachments" aria-label={t('Anhänge')}>
           {!compact && <div className="notebook-attachments-head">
             <h3>{t('Anhänge')}{attachments.length > 0 && <small>{attachments.length}</small>}</h3>

@@ -8,7 +8,7 @@ Diese technische Übersicht ergänzt die [Einrichtung und Bedienung von Google D
 | --- | --- |
 | `tables.days`, `entries`, `tags`, `series` | Tagesdaten, Einträge und Kalender, Beschreibungen, Status, Tags, Planungsverknüpfungen und Wiederholungen |
 | `settings.period-data` | Aktivitäten, Checklisten, Bewertungen, erfasste Zeit, eigene Tageswerte samt Definitionen, Farben und Wertebereichen sowie Tages-/Zeitraum-Notizen |
-| `settings.board:card:*`, `board:folder:*` | Pinnwand-/Notizkarten, Ordner, Inhalt, Anhänge/Verbindungen, Tagesbezug, Monats-/Jahrespinnwände mit eigenen Positionen und Größen, Farben und Linkvorschauen |
+| `settings.board:card:*`, `board:folder:*` | Pinnwand-/Notizkarten, Ordner, Inhalt, Anhänge/Verbindungen, Tagesbezug, Monats-/Jahrespinnwände mit eigenen Positionen und Größen, Farben, Linkvorschauen und Handschrift (`mode`, `ink` mit den optionalen Strichfeldern `tool`/`color`, Hintergrund `inkPaper`) |
 | `images` | Referenzierte AVIF-Dateien, im Paket als Base64 |
 | `preferences` | Allgemeine Darstellungseinstellungen aus `journal.settings`, einschließlich Design, Farben, Sprache und UI-Größe |
 | `mailAccounts` | Kontometadaten und Abrufeinstellungen ohne Passwörter, Client-Secrets oder Anmeldetokens |
@@ -22,6 +22,7 @@ Diese technische Übersicht ergänzt die [Einrichtung und Bedienung von Google D
 - Lokale Mailabruf-Zwischenstände, Modellgewichte und technische Caches.
 - Rückgängig-Historie und lokaler Sicherungsstand vor einem Abgleich.
 - Vault-Pfad, Fenstergeometrie und Nebula-Layout, lokale Auswahl-/Filterzustände sowie laufende Timer.
+- Handschrift-Werkzeuge (`journal.ink`: Werkzeug, Stiftfarben, Stärken, zuletzt benutzte Farben) und eine offene Auswahl in einer Zeichnung.
 
 Bereits gespeicherte Aktivitätsminuten sind Inhalt und werden synchronisiert; der Zustand einer gerade laufenden Stoppuhr ist gerätelokal. Allgemeine Darstellungseinstellungen werden bewusst übertragen, obwohl sie außerhalb eines Syncs lokal im WebView gespeichert sind.
 

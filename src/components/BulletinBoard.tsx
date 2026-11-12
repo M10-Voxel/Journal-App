@@ -6,6 +6,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { Icon } from './Icon';
 import { Popover } from './Popover';
 import { BoardScopePicker } from './BoardScopePicker';
+import { NoteModeButton, inkKey } from './InkCanvas';
 import { contextMenu } from './ContextMenu';
 import type { MenuEntry, MenuItem, MenuSpec } from './ContextMenu';
 import { useLanguage } from '../i18n';
@@ -31,7 +32,8 @@ import './bulletinBoard.css';
 const papers: Paper[] = ['yellow', 'blue', 'green', 'pink'];
 const defaultWidth = (kind: Card['kind']) => kind === 'note' ? 232 : kind === 'image' ? 236 : 260;
 const widthOf = cardWidth;
-const sizes = { minWidth: 160, maxWidth: 640, minHeight: 120, maxHeight: 900 };
+// Only a lower bound: a note (and a drawing on it) can grow as large as wanted.
+const sizes = { minWidth: 160, minHeight: 120 };
 /** A slight tilt of its own per card, like pinned paper. */
 const tiltOf = (id: string) => (((parseInt(id.replace(/-/g, '').slice(0, 6), 16) || 0) % 7) - 3) * .6;
 type Point = { x: number; y: number };
@@ -244,6 +246,8 @@ export function BulletinBoard({ date, period = 'day', tagScope = 'journal', tool
     await patch(id, { kind, title: kind === 'note' ? tr('Neue Notiz', 'New note') : '', text: '', dates: period === 'day' ? [date] : [], created: date, order: nextOrder(cards), z: topZ + 1, paper: papers[visible.length % papers.length], ...freeSpot(kind), ...extra });
     return id;
   }
+  /** A new note that starts as a drawing. */
+  const sketch = (): Partial<Card> => ({ mode: 'ink', title: tr('Skizze', 'Sketch'), h: 260, w: 300 });
   async function addLink() {
     const url = httpsLink(link ?? '');
     const id = await add('link', { title: url.hostname, url: url.href }); setLink(null);
@@ -315,7 +319,8 @@ export function BulletinBoard({ date, period = 'day', tagScope = 'journal', tool
   const target = linking?.over ?? picked?.id ?? null;
   // Dragging a card by its paper (not by its text, buttons or image); it comes to the top and stays where it is let go.
   function grab(event: ReactPointerEvent<HTMLElement>, card: Card, x: number, y: number, groupIds?: string[]) {
-    if (event.button !== 0 || (event.target as Element).closest('input, textarea, button, a, [contenteditable="true"], .cm-editor, .entry-text, .board-image')) return;
+    // The drawing area belongs to the pen and the mouse; a finger on it still moves the card.
+    if (event.button !== 0 || (event.target as Element).closest('input, textarea, button, a, [contenteditable="true"], .cm-editor, .entry-text, .board-image') || (event.pointerType !== 'touch' && (event.target as Element).closest('.ink-canvas'))) return;
     event.preventDefault();
     if (groupIds) { event.stopPropagation(); event.currentTarget.focus({ preventScroll: true }); }
     const element = event.currentTarget, viewport = viewportRef.current!;
@@ -398,8 +403,8 @@ export function BulletinBoard({ date, period = 'day', tagScope = 'journal', tool
     const start = { px: event.clientX, py: event.clientY, w: article.offsetWidth, h: article.offsetHeight };
     let last: { w: number; h?: number } = { w: start.w, h: card.kind === 'note' ? start.h : undefined };
     const move = (e: PointerEvent) => {
-      const w = Math.round(Math.max(sizes.minWidth, Math.min(sizes.maxWidth, start.w + (e.clientX - start.px) / scale)));
-      last = { w, h: card.kind === 'note' ? Math.round(Math.max(sizes.minHeight, Math.min(sizes.maxHeight, start.h + (e.clientY - start.py) / scale))) : undefined };
+      const w = Math.round(Math.max(sizes.minWidth, start.w + (e.clientX - start.px) / scale));
+      last = { w, h: card.kind === 'note' ? Math.round(Math.max(sizes.minHeight, start.h + (e.clientY - start.py) / scale)) : undefined };
       setSizing({ id: card.id, ...last });
     };
     const end = () => {
@@ -410,8 +415,8 @@ export function BulletinBoard({ date, period = 'day', tagScope = 'journal', tool
     element.addEventListener('pointermove', move); element.addEventListener('pointerup', end); element.addEventListener('pointercancel', end);
   }
   function grow(card: Card, x: number, dw: number, dh: number) {
-    const w = Math.max(sizes.minWidth, Math.min(sizes.maxWidth, widthOf(card) + dw));
-    const h = card.kind === 'note' && dh ? Math.max(sizes.minHeight, Math.min(sizes.maxHeight, (card.h ?? heights[card.id] ?? 200) + dh)) : card.h;
+    const w = Math.max(sizes.minWidth, widthOf(card) + dw);
+    const h = card.kind === 'note' && dh ? Math.max(sizes.minHeight, (card.h ?? heights[card.id] ?? 200) + dh) : card.h;
     void patch(card.id, { w, ...h ? { h } : {}, boardX: x });
   }
   // Arrow keys move the focused card (Shift: further).
@@ -433,6 +438,7 @@ export function BulletinBoard({ date, period = 'day', tagScope = 'journal', tool
     const kindItems: MenuEntry[] = card.kind === 'note' ? [
       { id: 'notebook', command: 'notes --open', label: tr('Im Notizblock öffnen', 'Open in the notebook'), icon: 'note', run: () => window.dispatchEvent(new CustomEvent('journal:show-note', { detail: card.id })) },
       { id: 'float', command: 'detach', label: tr('Als schwebende Notiz öffnen', 'Open floating note'), icon: 'pin', run: () => void run(() => invoke('board_detach', { id: card.id })) },
+      { id: 'mode', command: card.mode === 'ink' ? 'mode text' : 'mode ink', label: card.mode === 'ink' ? tr('Als Text schreiben', 'Write as text') : tr('Handschriftlich schreiben', 'Write by hand'), icon: 'pencil', run: () => void patch(card.id, { mode: card.mode === 'ink' ? 'text' : 'ink' }) },
       { id: 'paper', command: 'color', label: tr('Papierfarbe', 'Paper colour'), icon: 'pipette', items: paperNames.map(([paper, name]) => ({ id: `paper-${paper}`, command: paper, label: name, swatch: `paper-${paper}`, checked: (card.paper ?? 'yellow') === paper, run: () => void patch(card.id, { paper }) })) },
     ] : card.kind === 'image' ? [
       { id: 'open', command: 'open', label: tr('Vergrößern', 'Enlarge'), icon: 'search', run: () => setOpen(card) },
@@ -459,6 +465,7 @@ export function BulletinBoard({ date, period = 'day', tagScope = 'journal', tool
     const here = byPointer ? { boardX: Math.round(((event.clientX - box.left) * ratio - pan.x) / scale), y: Math.round(((event.clientY - box.top) * ratio - pan.y) / scale) } : {};
     return { title: tr('Pinnwand', 'Pinboard'), command: 'board', items: [
       { id: 'note', command: 'touch', positive: true, label: byPointer ? tr('Neuer Zettel hier', 'New note here') : tr('Neuer Zettel', 'New note'), icon: 'pencil', disabled: busy, run: () => void run(() => add('note', here)) },
+      { id: 'sketch', command: 'sketch', positive: true, label: byPointer ? tr('Neue Skizze hier', 'New sketch here') : tr('Neue Skizze', 'New sketch'), icon: 'pencil', disabled: busy, run: () => void run(() => add('note', { ...here, ...sketch() })) },
       { id: 'image', command: 'upload', positive: true, label: tr('Bild hochladen …', 'Upload image …'), icon: 'layout', disabled: busy, run: () => upload.current?.click() },
       { id: 'link', command: 'link', positive: true, label: tr('Link anpinnen …', 'Pin a link …'), icon: 'jump', disabled: busy, run: () => setLink('') },
       { id: 'existing', command: 'ls', label: tr('Vorhandene Zettel …', 'Existing notes …'), icon: 'search', run: () => setPicker(true) },
@@ -510,6 +517,7 @@ export function BulletinBoard({ date, period = 'day', tagScope = 'journal', tool
       <div><h3>{boardTitle}</h3><p className="page-hint">{tr('Zettel, Bilder und Links – frei anpinnen und verschieben.', 'Notes, images and links – pin and move them freely.')}</p></div>
       <div className="board-actions" role="toolbar" aria-label={tr('Hinzufügen', 'Add')}>
         <button type="button" className="is-create" disabled={busy} onClick={() => void run(() => add('note'))} title={tr('Neuer Zettel', 'New note')}><Icon name="pencil" /><span>{tr('Zettel', 'Note')}</span></button>
+        <button type="button" className="is-create" disabled={busy} onClick={() => void run(() => add('note', sketch()))} title={tr('Neuer Zettel zum handschriftlichen Schreiben', 'New note for handwriting')}><Icon name="pencil" /><span>{tr('Skizze', 'Sketch')}</span></button>
         <button type="button" className="is-create" disabled={busy} onClick={() => upload.current?.click()} title={tr('Bild hochladen (wird als AVIF komprimiert)', 'Upload image (compressed to AVIF)')}><Icon name="layout" /><span>{tr('Bild', 'Image')}</span></button>
         <button type="button" className="is-create" disabled={busy} aria-expanded={link !== null} onClick={() => setLink(link === null ? '' : null)} title={tr('Link anpinnen', 'Pin a link')}><Icon name="jump" /><span>{tr('Link', 'Link')}</span></button>
         <button type="button" disabled={busy} aria-expanded={picker} onClick={() => setPicker(!picker)} title={tr('Zettel von anderen Tagen', 'Notes from other days')}><Icon name="search" /><span>{tr('Vorhandene', 'Existing')}</span></button>
@@ -570,6 +578,7 @@ export function BulletinBoard({ date, period = 'day', tagScope = 'journal', tool
         onKeyDown={e => {
           if (e.target !== e.currentTarget) return;
           if (pickKey(e, card)) return;
+          if (card.kind === 'note' && card.mode === 'ink' && inkKey(e)) return;
           if (e.altKey && e.shiftKey) {
             const sizesBy: Record<string, [number, number]> = { ArrowLeft: [-24, 0], ArrowRight: [24, 0], ArrowUp: [0, -24], ArrowDown: [0, 24] };
             if (sizesBy[e.key]) { e.preventDefault(); grow(card, x, ...sizesBy[e.key]); }
@@ -588,6 +597,7 @@ export function BulletinBoard({ date, period = 'day', tagScope = 'journal', tool
           <div className="board-tools">
             {card.kind === 'note' && (() => { const tag = tagOf(allTags, card.tag); return <button type="button" className={`board-tag${tag ? ' is-set' : ''}`} style={tag ? { '--tag': tag.color } as CSSProperties : undefined} aria-label={tag ? tr('Tag {0} ändern', 'Change tag {0}').replace('{0}', tag.name) : tr('Tag zuweisen', 'Assign a tag')}
               title={tag ? tag.name : tr('Tag zuweisen', 'Assign a tag')} aria-haspopup="dialog" aria-expanded={tagging?.id === card.id} onClick={e => setTagging({ id: card.id, anchor: e.currentTarget })}><span className={`tag-dot${tag ? '' : ' is-empty'}`} /></button>; })()}
+            {card.kind === 'note' && <NoteModeButton card={card} patch={patch} />}
             {card.kind === 'note' && <button type="button" className="board-paper" aria-label={tr('Papierfarbe', 'Paper colour')} title={tr('Papierfarbe', 'Paper colour')} onClick={() => void patch(card.id, { paper: papers[(papers.indexOf(card.paper ?? 'yellow') + 1) % papers.length] })}><i /></button>}
             {card.kind === 'image' && pixelTheme && <button type="button" className="board-pixel-switch" aria-pressed={!!card.pixel} title={card.pixel ? tr('Normal zeigen', 'Show normal') : tr('Verpixelt zeigen', 'Show pixelated')} onClick={() => void patch(card.id, { pixel: !card.pixel })}><Icon name="month" /></button>}
             {card.kind === 'note' && <button type="button" className="board-detach" title={tr('Als schwebende Notiz öffnen', 'Open floating note')} aria-label={tr('Als schwebende Notiz öffnen', 'Open floating note')} onClick={() => void run(() => invoke('board_detach', { id: card.id }))}><Icon name="pin" /></button>}
@@ -595,7 +605,7 @@ export function BulletinBoard({ date, period = 'day', tagScope = 'journal', tool
             <button type="button" className="board-remove" title={tr('Karte und Notiz löschen', 'Delete card and note')} aria-label={tr('Löschen', 'Delete')} onClick={() => takeDown(card)}><Icon name="trash" /></button>
           </div>
         </header>
-        {card.kind === 'note' ? <div className="board-note"><Note card={card} patch={patch} /></div>
+        {card.kind === 'note' ? <div className={`board-note${card.mode === 'ink' ? ' is-ink' : ''}`}><Note card={card} patch={patch} /></div>
           : card.kind === 'image' ? <><BoardImage card={card} onOpen={() => setOpen(card)} /><div className="board-caption"><small>AVIF · {Math.round((card.size ?? 0) / 1024)} KB</small></div></>
           : <button type="button" className="board-link" onClick={() => void run(() => invoke('board_open_link', { url: card.url }))}>
             {card.image && <img src={card.image} alt="" loading="lazy" onError={e => { e.currentTarget.style.display = 'none'; }} />}
@@ -655,15 +665,16 @@ export function FloatingNote() {
   const id = source.slice('board-'.length), card = cards.find(c => c.id === id);
   const action = (fn: () => Promise<unknown>) => void fn().catch(e => setWindowError(String(e)));
   // The whole paper moves the window, except where one types or presses (a strip at the pin, the margins, the header).
-  const drag = (e: ReactPointerEvent<HTMLElement>) => { if (e.button === 0 && !(e.target as HTMLElement).closest('button, input, textarea, [contenteditable="true"], .cm-editor, .entry-text')) { e.preventDefault(); action(() => getCurrentWindow().startDragging()); } };
+  const drag = (e: ReactPointerEvent<HTMLElement>) => { if (e.button === 0 && !(e.target as HTMLElement).closest('button, input, textarea, [contenteditable="true"], .cm-editor, .entry-text, .ink-canvas, .ink-toolbar')) { e.preventDefault(); action(() => getCurrentWindow().startDragging()); } };
   return <main className={`floating-note paper-${card?.paper ?? 'yellow'}`} onKeyDown={e => e.stopPropagation()} onPointerDown={drag}>
     <div className="floating-note-handle" data-tauri-drag-region title={en ? 'Drag to move' : 'Ziehen zum Verschieben'}><span className="board-pin" aria-hidden="true" /></div>
     <header>
       <input aria-label={en ? 'Note title' : 'Notiztitel'} value={card?.title ?? ''} onChange={e => void patch(id, { title: e.target.value })} disabled={!card} />
+      {card && <NoteModeButton card={card} patch={patch} />}
       <button type="button" aria-pressed={pinned} title={en ? 'Always on top' : 'Immer im Vordergrund'} onClick={() => action(async () => { await getCurrentWindow().setAlwaysOnTop(!pinned); setPinned(!pinned); })}><Icon name="pin" /></button>
       <button type="button" aria-label={en ? 'Close' : 'Schließen'} onClick={() => action(async () => { await waitForCard(id); await getCurrentWindow().close(); })}><Icon name="done" /></button>
     </header>
-    {card && <div className="board-note"><Note card={card} patch={patch} /></div>}
+    {card && <div className={`board-note${card.mode === 'ink' ? ' is-ink' : ''}`}><Note card={card} patch={patch} /></div>}
     {(error || windowError) && <p role="status">{error || windowError}</p>}
   </main>;
 }

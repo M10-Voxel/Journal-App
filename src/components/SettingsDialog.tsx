@@ -183,6 +183,12 @@ export function SettingsDialog({ settings, onChange, onClose, onImport, mailStat
         </div>
       </SettingRow>
     </section>
+    <section className="settings-section">
+      <h3>{t('Handschrift')}</h3>
+      <SettingRow id="settings-ink-pressure" label={t('Druckempfindlichkeit')} note={t('Füller-Strich, der mit dem Stiftdruck breiter wird; aus: gleichmäßige Breite')}>
+        <button type="button" role="switch" className="switch" aria-checked={settings.inkPressure} aria-labelledby="settings-ink-pressure" data-ink-pressure onClick={() => onChange({ ...settings, inkPressure: !settings.inkPressure })}><span /></button>
+      </SettingRow>
+    </section>
     {/* How an entry's actions open follows the popup look above; only touch screens choose swiping here. */}
     {swipeAvailable() && <section className="settings-section">
       <h3 id="settings-layout">{t("Aktionen am Eintrag")}</h3>

@@ -4682,6 +4682,230 @@ try {
     assert.equal(await evaluate('sessionStorage.boardCards'),detachedCardsBefore,'Undocking changes the view, not the stored cards.');
     console.log('Detached pinboard follows the journal day/month/year context.');
     assert.deepEqual(errors,[]);
+  } else if (process.env.JOURNAL_UI_SCOPE === 'board-ink') {
+    // Handwriting on a note: a sketch note, mouse and pen strokes (with pressure), the partial eraser, resizing past the
+    // former limit without moving the ink, the pressure setting, and the drawing in every design.
+    await evaluate("sessionStorage.setItem('boardCards','[]');localStorage.removeItem('journal.ink');location.reload()");
+    await until("Boolean(document.querySelector('.bulletin-board .board-actions'))");
+    const stored = "JSON.parse(sessionStorage.boardCards).find(c=>c.mode==='ink')";
+    await evaluate("[...document.querySelectorAll('.board-actions button')].find(b=>b.title.includes('handschriftlichen')).click()");
+    await until("Boolean(document.querySelector('.board-card .ink-canvas'))");
+    await until(`${stored}?.w===300 && ${stored}?.h===260`);
+    await evaluate("document.querySelector('.board-viewport').scrollIntoView({block:'center'})"); await pause(200);
+    const area = () => evaluate("(() => {const r=document.querySelector('.ink-canvas').getBoundingClientRect();return {x:r.left,y:r.top,w:r.width,h:r.height};})()");
+    const draw = async (from, to, { pen = false, forces = [.5], steps = 24 } = {}) => {
+      const at = i => ({ x: from.x + (to.x - from.x) * i / steps, y: from.y + (to.y - from.y) * i / steps, ...(pen ? { pointerType: 'pen', force: forces[i % forces.length] } : {}) });
+      await command('Input.dispatchMouseEvent', { type: 'mouseMoved', ...at(0), buttons: 0 });
+      await command('Input.dispatchMouseEvent', { type: 'mousePressed', ...at(0), button: 'left', buttons: 1, clickCount: 1 });
+      for (let i = 1; i <= steps; i++) await command('Input.dispatchMouseEvent', { type: 'mouseMoved', ...at(i), button: 'left', buttons: 1 });
+      await command('Input.dispatchMouseEvent', { type: 'mouseReleased', ...at(steps), button: 'left', buttons: 0, clickCount: 1 });
+    };
+    let box = await area();
+    const card = await evaluate(`(({boardX,y})=>({boardX,y}))(${stored})`);
+    await draw({ x: box.x + 20, y: box.y + 40 }, { x: box.x + 220, y: box.y + 40 });
+    await until(`${stored}.ink.strokes.length===1`);
+    assert.deepEqual(await evaluate(`(({boardX,y})=>({boardX,y}))(${stored})`), card, 'Drawing on the note does not drag it.');
+    assert.equal(await evaluate("document.querySelector('.board-card.is-moving')"), null);
+    assert.deepEqual(await evaluate(`(({size,pressure,mouse})=>({size,pressure,mouse}))(${stored}.ink.strokes[0])`), { size: 3, pressure: true, mouse: true });
+    await until("document.querySelectorAll('.ink-strokes path[data-index]').length===1 && document.querySelector('.ink-strokes path[data-index]').getAttribute('d').length>20");
+    // A pen with changing pressure: its own stroke, with the pressure it was drawn with.
+    await draw({ x: box.x + 20, y: box.y + 100 }, { x: box.x + 220, y: box.y + 120 }, { pen: true, forces: [.2, .5, .9] });
+    await until(`${stored}.ink.strokes.length===2`);
+    const penStroke = await evaluate(`${stored}.ink.strokes[1]`);
+    assert.equal(penStroke.mouse, undefined); assert.equal(penStroke.pressure, true);
+    // The partial eraser (E on the focused drawing) cuts the first stroke in two; the pen stroke stays as it was.
+    await evaluate("document.querySelector('.ink-canvas').focus()"); await key('e', 'KeyE');
+    await until("document.querySelector('.ink-tool.is-eraser').getAttribute('aria-pressed')==='true' && JSON.parse(localStorage['journal.ink']).tool==='eraser'");
+    await draw({ x: box.x + 120, y: box.y + 20 }, { x: box.x + 120, y: box.y + 60 }, { steps: 8 });
+    await until(`${stored}.ink.strokes.length===3`);
+    assert.deepEqual(await evaluate(`${stored}.ink.strokes.find(s=>!s.mouse)`), penStroke, 'Untouched strokes stay the same.');
+    await key('p', 'KeyP'); await key(']', 'BracketRight');
+    await until("JSON.parse(localStorage['journal.ink']).tool==='pen' && JSON.parse(localStorage['journal.ink']).pen.size===3.75");
+    // Larger than the former 640 px, and the ink keeps its place on the note.
+    const inkBox = () => evaluate("(() => {const c=document.querySelector('.ink-canvas').getBoundingClientRect(),p=document.querySelector('.ink-strokes path[data-index]').getBoundingClientRect();return [Math.round(p.left-c.left),Math.round(p.top-c.top),Math.round(p.width),Math.round(p.height)];})()");
+    const before = await inkBox();
+    const corner = await evaluate("(() => {const r=document.querySelector('.board-card .board-resize').getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};})()");
+    await command('Input.dispatchMouseEvent', { type: 'mouseMoved', ...corner, buttons: 0 });
+    await command('Input.dispatchMouseEvent', { type: 'mousePressed', ...corner, button: 'left', buttons: 1, clickCount: 1 });
+    await command('Input.dispatchMouseEvent', { type: 'mouseMoved', x: corner.x + 520, y: corner.y + 200, button: 'left', buttons: 1 });
+    await command('Input.dispatchMouseEvent', { type: 'mouseReleased', x: corner.x + 520, y: corner.y + 200, button: 'left', buttons: 0, clickCount: 1 });
+    await until(`${stored}.w>640 && ${stored}.h>400`);
+    assert.deepEqual(await inkBox(), before, 'Resizing the note leaves the ink where it was.');
+    box = await area();
+    const grown = await evaluate("(() => {const c=document.querySelector('.ink-canvas');return {w:c.offsetWidth,h:c.offsetHeight};})()");
+    assert(grown.w > 600 && grown.h > 330, `The drawing area grows with the note (${JSON.stringify(grown)}).`);
+    // Pressure off: new strokes are drawn with an even width; the old ones keep their look.
+    await evaluate("localStorage.setItem('journal.settings',JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'),inkPressure:false}))");
+    await draw({ x: box.x + 300, y: box.y + 200 }, { x: box.x + 560, y: box.y + 200 }, { pen: true, forces: [.1, 1] });
+    await until(`${stored}.ink.strokes.length===4`);
+    assert.equal(await evaluate(`${stored}.ink.strokes[3].pressure`), false);
+    assert.equal(await evaluate(`${stored}.ink.strokes[3].size`), 3.75);
+    const even = await evaluate("(() => {const p=[...document.querySelectorAll('.ink-strokes path[data-index]')].at(-1).getBoundingClientRect();return Math.round(p.height);})()");
+    assert(even <= 6, `An even stroke stays as thin as its size (${even}px).`);
+    assert.equal(await evaluate(`${stored}.ink.strokes[1].pressure`), true);
+    // Text and drawing: switching hides the other without deleting it.
+    await evaluate("document.querySelector('.board-card .note-mode').click()");
+    await until(`${stored}===undefined && Boolean(document.querySelector('.board-card .cm-content'))`);
+    assert.equal(await evaluate("JSON.parse(sessionStorage.boardCards)[0].ink.strokes.length"), 4);
+    await evaluate("document.querySelector('.board-card .note-mode').click()");
+    await until("Boolean(document.querySelector('.board-card .ink-canvas'))");
+    await evaluate("localStorage.setItem('journal.settings',JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'),inkPressure:true}))");
+    // More tools: pencil, highlighter, colours, the selection (rectangle and lasso) and the note's background.
+    await evaluate("document.querySelector('.ink-canvas').scrollIntoView({block:'center'})"); await pause(150);
+    box = await area();
+    const zoom = await evaluate("(() => {const c=document.querySelector('.ink-canvas');return c.getBoundingClientRect().width/c.offsetWidth;})()");
+    const screen = (x, y) => ({ x: box.x + x * zoom, y: box.y + y * zoom });
+    const prefsNow = () => evaluate("JSON.parse(localStorage['journal.ink'])");
+    const strokes = () => evaluate(`${stored}.ink.strokes`);
+    const pointsOf = encoded => { const bytes = Buffer.from(encoded, 'base64'), out = []; let x = 0, y = 0; for (let i = 0; i + 6 <= bytes.length; i += 6) { x += bytes.readInt16LE(i); y += bytes.readInt16LE(i + 2); out.push([x / 4, y / 4]); } return out; };
+    const dragPath = async (points, modifiers = 0) => {
+      await command('Input.dispatchMouseEvent', { type: 'mouseMoved', ...points[0], buttons: 0 });
+      await command('Input.dispatchMouseEvent', { type: 'mousePressed', ...points[0], button: 'left', buttons: 1, clickCount: 1, modifiers });
+      for (const point of points.slice(1)) await command('Input.dispatchMouseEvent', { type: 'mouseMoved', ...point, button: 'left', buttons: 1, modifiers });
+      await command('Input.dispatchMouseEvent', { type: 'mouseReleased', ...points.at(-1), button: 'left', buttons: 0, clickCount: 1, modifiers });
+    };
+    const steps = (from, to, n = 12) => Array.from({ length: n + 1 }, (_, i) => ({ x: from.x + (to.x - from.x) * i / n, y: from.y + (to.y - from.y) * i / n }));
+    let count = (await strokes()).length;
+    // The pen dropdown by keyboard: ArrowDown opens it on the fountain pen, ArrowDown and Enter take the pencil.
+    await evaluate("document.querySelector('.ink-toolbar .ink-split .ink-caret').focus()");
+    await key('ArrowDown', 'ArrowDown');
+    await until("document.querySelector('.ink-menu [role=menu]') && document.activeElement?.getAttribute('aria-checked')==='true' && document.activeElement.classList.contains('is-pen')");
+    await key('ArrowDown', 'ArrowDown');
+    await until("document.activeElement?.classList.contains('is-pencil')");
+    await key('Enter');
+    await until("!document.querySelector('.ink-menu') && JSON.parse(localStorage['journal.ink']).tool==='pencil' && document.querySelector('.ink-tool.is-pens').classList.contains('is-pencil')");
+    await draw(screen(300, 100), screen(500, 100));
+    await until(`${stored}.ink.strokes.length===${++count}`);
+    assert.equal((await strokes()).at(-1).tool, 'pencil');
+    assert.match(await evaluate("document.querySelector('.ink-inks path.is-pencil').getAttribute('filter')"), /^url\(#ink-pencil-/, 'The pencil is drawn through its grain filter.');
+    assert(await evaluate("Boolean(document.querySelector(document.querySelector('.ink-inks path.is-pencil').getAttribute('filter').slice(4,-1)+' feTurbulence'))"));
+    // The highlighter (M) in pink from its own suggestions: transparent and under the ink.
+    await evaluate("document.querySelector('.ink-canvas').focus()"); await key('m', 'KeyM');
+    await until("JSON.parse(localStorage['journal.ink']).tool==='marker'");
+    await evaluate("document.querySelector('.ink-toolbar .ink-color').click()");
+    await until("Boolean(document.querySelector('.ink-color-popover .ink-swatch'))");
+    const swatches = await evaluate("[...document.querySelectorAll('.ink-color-popover .ink-swatch:not(.is-ink)')].map(b=>getComputedStyle(b).backgroundColor)");
+    assert(swatches.length === 5 && swatches.every(color => color !== 'rgba(0, 0, 0, 0)' && color !== 'transparent'), `Every colour swatch shows its colour (${swatches.join(', ')}).`);
+    await screenshot('board-ink-colors.png');
+    await evaluate(`[...document.querySelectorAll('.ink-color-popover .ink-swatch')].find(b=>b.getAttribute('aria-label')===${JSON.stringify('Pink')}).click()`);
+    await until("!document.querySelector('.ink-color-popover') && JSON.parse(localStorage['journal.ink']).marker.color==='#ff7ac8'");
+    await draw(screen(280, 110), screen(520, 90));
+    await until(`${stored}.ink.strokes.length===${++count}`);
+    assert.deepEqual((({ tool, color, pressure }) => ({ tool, color, pressure }))((await strokes()).at(-1)), { tool: 'marker', color: '#ff7ac8', pressure: false });
+    const marker = await evaluate("(() => {const p=document.querySelector('.ink-markers path[data-index]'),s=getComputedStyle(p);return {opacity:s.opacity,blend:s.mixBlendMode,fill:p.getAttribute('fill'),under:!!(document.querySelector('.ink-markers').compareDocumentPosition(document.querySelector('.ink-inks')) & Node.DOCUMENT_POSITION_FOLLOWING)};})()");
+    assert.deepEqual(marker, { opacity: '0.38', blend: 'multiply', fill: '#ff7ac8', under: true }, 'The highlighter is transparent and lies under the ink.');
+    // P again: the fountain pen, in blue.
+    await evaluate("document.querySelector('.ink-canvas').focus()"); await key('p', 'KeyP');
+    await until("JSON.parse(localStorage['journal.ink']).tool==='pen'");
+    await evaluate("document.querySelector('.ink-toolbar .ink-color').click()");
+    await until("Boolean(document.querySelector('.ink-color-popover .ink-swatch'))");
+    await evaluate(`[...document.querySelectorAll('.ink-color-popover .ink-swatch')].find(b=>b.getAttribute('aria-label')===${JSON.stringify('Blau')}).click()`);
+    await until("JSON.parse(localStorage['journal.ink']).pen.color==='#2457c5'");
+    await draw(screen(40, 280), screen(200, 280));
+    await until(`${stored}.ink.strokes.length===${++count}`);
+    const blue = count - 1;
+    assert.equal((await strokes())[blue].color, '#2457c5');
+    // The selection by rectangle (S): it catches the blue stroke only.
+    await evaluate("document.querySelector('.ink-canvas').focus()"); await key('s', 'KeyS');
+    await until("JSON.parse(localStorage['journal.ink']).tool==='select' && JSON.parse(localStorage['journal.ink']).select==='rect'");
+    await dragPath(steps(screen(25, 262), screen(215, 298)));
+    await until("document.querySelector('.ink-canvas').dataset.selected==='1' && Boolean(document.querySelector('.ink-frame')) && Boolean(document.querySelector('.ink-selection-bar'))");
+    assert.equal(await evaluate(`document.querySelector('.ink-inks path[data-index="${blue}"]').classList.contains('is-selected')`), true);
+    await screenshot('board-ink-selection.png');
+    // Moving: the points move, the others stay.
+    let was = await strokes();
+    await dragPath(steps(screen(120, 280), screen(150, 300)));
+    await until(`${stored}.ink.strokes[${blue}].points!==${JSON.stringify(was[blue].points)}`);
+    let now = await strokes();
+    const [moveX, moveY] = [pointsOf(now[blue].points)[0][0] - pointsOf(was[blue].points)[0][0], pointsOf(now[blue].points)[0][1] - pointsOf(was[blue].points)[0][1]];
+    assert(Math.abs(moveX - 30) < 1.5 && Math.abs(moveY - 20) < 1.5, `The selection moves by the drag (${moveX}, ${moveY}).`);
+    assert.deepEqual(now.filter((_, i) => i !== blue), was.filter((_, i) => i !== blue), 'Moving leaves the other strokes.');
+    // Scaling at a corner: larger, the width along.
+    const grip = await evaluate("(() => {const r=document.querySelector('.ink-grip.is-se').getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};})()");
+    was = now;
+    await dragPath(steps(grip, { x: grip.x + 60 * zoom, y: grip.y + 20 * zoom }));
+    await until(`${stored}.ink.strokes[${blue}].size>${was[blue].size}`);
+    now = await strokes();
+    const width = list => { const xs = pointsOf(list[blue].points).map(p => p[0]); return Math.max(...xs) - Math.min(...xs); };
+    assert(width(now) > width(was) * 1.1, `Scaling makes the selection larger (${width(was)} → ${width(now)}).`);
+    // Recolouring from the bar, then thicker; each its own saved change.
+    await evaluate("document.querySelector('.ink-selection-bar .ink-color').click()");
+    await until("Boolean(document.querySelector('.ink-color-popover .ink-swatch'))");
+    await evaluate(`[...document.querySelectorAll('.ink-color-popover .ink-swatch')].find(b=>b.getAttribute('aria-label')===${JSON.stringify('Rot')}).click()`);
+    await until(`${stored}.ink.strokes[${blue}].color==='#c9302c'`);
+    const size = await evaluate(`${stored}.ink.strokes[${blue}].size`);
+    await evaluate("document.querySelector('.ink-selection-bar .ink-thicker').click()");
+    await until(`Math.abs(${stored}.ink.strokes[${blue}].size-${size * 1.25})<.02`);
+    assert.equal(await evaluate("document.querySelector('.ink-canvas').dataset.selected"), '1', 'The selection stays now each change.');
+    // Deleting it.
+    await evaluate("document.querySelector('.ink-selection-bar .ink-delete').click()");
+    await until(`${stored}.ink.strokes.length===${--count} && !document.querySelector('.ink-frame')`);
+    // The lasso (S again) through the middle of the pencil stroke: shown cut, saved only with the move.
+    await evaluate("document.querySelector('.ink-canvas').focus()"); await key('s', 'KeyS');
+    await until("JSON.parse(localStorage['journal.ink']).select==='lasso' && document.querySelector('.ink-tool.is-select').classList.contains('is-lasso')");
+    const pencilBefore = (await strokes()).filter(s => s.tool === 'pencil');
+    await dragPath([...steps(screen(370, 60), screen(430, 60), 4), ...steps(screen(430, 60), screen(430, 135), 4), ...steps(screen(430, 135), screen(370, 135), 4), ...steps(screen(370, 135), screen(370, 62), 4)]);
+    await until("Number(document.querySelector('.ink-canvas').dataset.selected)>=1");
+    assert.equal(await evaluate(`${stored}.ink.strokes.length`), count, 'A lasso alone does not change the drawing.');
+    assert.equal(pencilBefore.length, 1);
+    await dragPath(steps(screen(400, 100), screen(400, 150)));
+    await until(`${stored}.ink.strokes.filter(s=>s.tool==='pencil').length===3`);
+    const pieces = (await strokes()).filter(s => s.tool === 'pencil').map(s => pointsOf(s.points)), xs = pieces.map(p => p.map(q => q[0]));
+    const middle = pieces.find(p => p.every(([x]) => x >= 369 && x <= 431));
+    assert(middle && middle.every(([, y]) => Math.abs(y - 150) < 2), 'Only the part inside the lasso moved.');
+    assert(pieces.filter(p => p !== middle).every(p => p.every(([, y]) => Math.abs(y - 100) < 1)), 'The parts outside stay.');
+    assert(xs.some(x => Math.abs(Math.max(...x) - 370) < 1.5) && xs.some(x => Math.abs(Math.min(...x) - 430) < 1.5), 'The stroke is cut at the lasso line.');
+    const markersAfter = (await strokes()).filter(s => s.tool === 'marker').length;
+    assert(markersAfter >= 2, 'The highlighter under the lasso is cut as well.');
+    count = (await strokes()).length;
+    await key('Escape');
+    await until("document.querySelector('.ink-canvas').dataset.selected==='0'");
+    // The selection kind by keyboard in its dropdown.
+    await evaluate("document.querySelectorAll('.ink-toolbar .ink-split .ink-caret')[1].focus()");
+    await key('ArrowDown', 'ArrowDown');
+    await until("document.activeElement?.classList.contains('is-lasso')");
+    await key('ArrowUp', 'ArrowUp'); await key('Enter');
+    await until("JSON.parse(localStorage['journal.ink']).select==='rect' && !document.querySelector('.ink-menu')");
+    // The background: lines, then a grid, the spacing up and down; saved on the card.
+    await evaluate("document.querySelector('.ink-paper-button').click()");
+    await until("Boolean(document.querySelector('.ink-paper-popover .ink-paper-kind.is-lines'))");
+    await evaluate("document.querySelector('.ink-paper-popover .ink-paper-kind.is-lines').click()");
+    await until(`${stored}.inkPaper?.kind==='lines' && ${stored}.inkPaper.step===24 && Boolean(document.querySelector('.ink-paper.is-lines'))`);
+    await evaluate("document.querySelector('.ink-paper-popover .ink-paper-kind.is-grid').click()");
+    await until(`${stored}.inkPaper?.kind==='grid' && Boolean(document.querySelector('.ink-paper.is-grid'))`);
+    await evaluate("document.querySelector('.ink-paper-popover .ink-step-up').click()");
+    await until(`${stored}.inkPaper.step===32 && document.querySelector('.ink-paper').dataset.step==='32'`);
+    await evaluate("document.querySelector('.ink-paper-popover .ink-step-down').click()");
+    await evaluate("document.querySelector('.ink-paper-popover .ink-step-down').click()");
+    await until(`${stored}.inkPaper.step===20`);
+    assert.equal(await evaluate("document.querySelector('.ink-paper-pattern').getAttribute('width')"), '20');
+    assert.equal(await evaluate(`${stored}.ink.strokes.length`), count, 'The background leaves the strokes.');
+    await key('Escape');
+    await until("!document.querySelector('.ink-paper-popover')");
+    await evaluate("document.querySelector('.ink-canvas').focus()"); await key('p', 'KeyP');
+    for (const [name, design] of [['classic', { theme: 'classic', pixel: false }], ['journal', { theme: 'journal', pixel: false }], ['nebula', { theme: 'nebula', pixel: false }], ['pixel', { theme: 'classic', pixel: true }]]) {
+      await evaluate(`localStorage.setItem('journal.settings',JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'),...${JSON.stringify(design)}}));location.reload()`);
+      // The journal keeps the board on a page of its own.
+      if (name === 'journal') { await until("Boolean(document.querySelector('.book-cut-tab[data-page=board]'))"); await evaluate("document.querySelector('.book-cut-tab[data-page=board]').click()"); }
+      await until(`Boolean(document.querySelector('.ink-canvas')) && document.querySelectorAll('.ink-strokes path[data-index]').length===${count}`);
+      await evaluate("document.querySelector('.ink-canvas').scrollIntoView({block:'center'})"); await pause(150);
+      const hoverPoint = await evaluate("(() => {const r=document.querySelector('.ink-canvas').getBoundingClientRect();return {x:r.left+Math.min(r.width/2,200),y:r.top+Math.min(r.height/2,150)};})()");
+      await command('Input.dispatchMouseEvent', { type: 'mouseMoved', ...hoverPoint, buttons: 0 }); await pause(250);
+      const look = await evaluate("(() => {const c=document.querySelector('.ink-canvas'),t=document.querySelector('.ink-toolbar');return {ink:getComputedStyle(c).color,toolbar:getComputedStyle(t).opacity,crisp:getComputedStyle(document.querySelector('.ink-strokes')).shapeRendering};})()");
+      assert.equal(look.toolbar, '1', `The ink strip shows on pointing (${name}).`);
+      if (name === 'journal') assert.equal(look.ink, 'rgb(31, 61, 143)', 'Fountain-pen blue in the journal.');
+      if (name === 'nebula') assert.equal(look.ink, 'rgb(90, 24, 154)', 'Violet ink in Nebula.');
+      if (name === 'pixel') assert.equal(look.crisp, 'crispedges', 'Crisp strokes in the pixel look.');
+      const grain = await evaluate("(() => {const f=document.querySelector(document.querySelector('.ink-inks path.is-pencil').getAttribute('filter').slice(4,-1));return {steps:!!f.querySelector('feComponentTransfer'),grid:!!document.querySelector('.ink-paper.is-grid')};})()");
+      assert.deepEqual(grain, { steps: name === 'pixel', grid: true }, `The pencil's grain and the grid in ${name}.`);
+      await screenshot(`board-ink-${name}.png`);
+      // Ctrl+A on the drawing selects everything: the frame and the bar in this design.
+      await evaluate("document.querySelector('.ink-canvas').focus()"); await key('a', 'KeyA', 2);
+      await until(`document.querySelector('.ink-canvas').dataset.selected==='${count}' && Boolean(document.querySelector('.ink-selection-bar'))`);
+      await pause(100); await screenshot(`board-ink-${name}-selection.png`);
+      await key('Escape'); await until("document.querySelector('.ink-canvas').dataset.selected==='0'");
+    }
+    assert.deepEqual(errors, []); console.log('Handwriting passed: sketch note, mouse and pen strokes, partial eraser, keys, unbounded resizing, pressure setting, mode switch, pencil, highlighter, colours, rectangle and lasso selection, background and four designs.');
   } else if (process.env.JOURNAL_UI_SCOPE === 'board') {
     await until("Boolean(document.querySelector('.bulletin-board'))");
     await evaluate("document.querySelector('.board-actions button').click()");
@@ -4743,7 +4967,7 @@ try {
     await command('Input.dispatchMouseEvent',{type:'mouseMoved',x:corner.x+80,y:corner.y+40,button:'left',buttons:1});
     await command('Input.dispatchMouseEvent',{type:'mouseReleased',x:corner.x+80,y:corner.y+40,button:'left',buttons:0,clickCount:1});
     await until(`(() => {const card=JSON.parse(sessionStorage.boardCards).find(c=>c.id===${JSON.stringify(corner.id)});return Math.abs(card.w-${corner.width}-80)<3 && card.h>100;})()`);
-    await evaluate("document.querySelectorAll('.board-actions button')[2].click()");
+    await evaluate("document.querySelectorAll('.board-actions button')[3].click()");
     await evaluate("document.querySelector('.board-link-form input').focus()");
     await command('Input.insertText',{text:'https://example.com/'});
     await evaluate("document.querySelector('.board-link-form').requestSubmit()");
@@ -4821,7 +5045,7 @@ try {
     assert(await evaluate(`!JSON.parse(sessionStorage.boardCards).some(c=>c.id===${JSON.stringify(noteId)})`),'Deleting a pinboard card deletes its notebook data too.');
     // Seed a separate notebook-only source to exercise the Existing picker after permanent deletion.
     await evaluate("sessionStorage.boardCards=JSON.stringify([...JSON.parse(sessionStorage.boardCards),{...window.__deletedNoteFixture,dates:[],notebook:true}]);window.__uiTest.emit('board:reset',null)");
-    await evaluate("document.querySelectorAll('.board-actions button')[3].click()");
+    await evaluate("document.querySelectorAll('.board-actions button')[4].click()");
     await evaluate("document.querySelector('.board-library .board-library-pick').click()");
     await until("document.querySelectorAll('.board-card').length===3");
     const repinnedId = await evaluate(`JSON.parse(sessionStorage.boardCards).find(c=>c.copyOf===${JSON.stringify(noteId)}).id`);
@@ -4839,7 +5063,7 @@ try {
     await evaluate("sessionStorage.setItem('boardCards',JSON.stringify([{id:'11000000-0000-4000-8000-000000000001',kind:'note',title:'Source A',text:'A',dates:['2020-01-01'],order:0,boardX:40,y:60,w:300,h:240,links:['11000000-0000-4000-8000-000000000002']},{id:'11000000-0000-4000-8000-000000000002',kind:'note',title:'Source B',text:'B',dates:['2020-01-01'],order:1,boardX:390,y:190,w:200,h:310,links:['11000000-0000-4000-8000-000000000001']}]))");
     await command('Page.navigate',{url:`http://127.0.0.1:${server.address().port}/`});
     await until("Boolean(document.querySelector('.board-actions'))");
-    await evaluate("document.querySelectorAll('.board-actions button')[3].click()");
+    await evaluate("document.querySelectorAll('.board-actions button')[4].click()");
     await until("Boolean(document.querySelector('.board-library-copy'))");
     assert.equal(await evaluate("document.querySelector('.board-library-copy').querySelectorAll('button').length"),1,'Only the larger group action sits beside the note.');
     await evaluate("document.querySelector('.board-library-copy button').click()");
@@ -4904,7 +5128,7 @@ try {
     await until("JSON.parse(sessionStorage.boardCards).filter(c=>c.title==='Independent copy title').length===1");
     await command('Page.reload');
     await until("Boolean(document.querySelector('.board-group-frame .board-copy-sync[aria-checked=false]'))");
-    await evaluate("document.querySelectorAll('.board-actions button')[3].click()");
+    await evaluate("document.querySelectorAll('.board-actions button')[4].click()");
     await until("Boolean(document.querySelector('.board-library-copy'))");
     await evaluate("document.querySelector('.board-library-pick').click()");
     await until("Boolean(document.querySelector('.board-card > .board-copy-sync[aria-checked=false]'))");
