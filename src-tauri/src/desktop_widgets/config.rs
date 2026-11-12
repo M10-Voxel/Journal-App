@@ -21,9 +21,13 @@ pub struct WidgetConfig {
     #[serde(default)] pub enabled:bool,
     #[serde(default)] pub locked:bool,
     #[serde(default)] pub placement:Option<Placement>,
+    /// Stacking among the widgets: a higher layer lies in front (chosen in the settings).
+    #[serde(default)] pub layer:u32,
+    /// Its place per arrangement of monitors (geometry::layout_key): docked and undocked each keep their own.
+    #[serde(default)] pub layouts:std::collections::BTreeMap<String,Placement>,
 }
 impl WidgetConfig {
-    pub fn daily(id:String)->Self{Self{id,kind:WidgetKind::DailyNote,name:String::new(),enabled:true,locked:false,placement:None}}
+    pub fn daily(id:String)->Self{Self{id,kind:WidgetKind::DailyNote,name:String::new(),enabled:true,locked:false,placement:None,layer:0,layouts:Default::default()}}
 }
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub struct Config { pub version:u32, #[serde(default)] pub autostart:bool, pub widgets:Vec<WidgetConfig> }
@@ -46,7 +50,7 @@ impl Config {
             struct Legacy {enabled:bool,locked:bool,autostart:bool,placement:Option<Placement>}
             if !value.is_object()||!["enabled","locked","autostart","placement"].iter().any(|key|value.get(key).is_some()){return Err("Unbekanntes Format der Widget-Einstellungen.".into());}
             let old:Legacy=serde_json::from_value(value).map_err(|e|e.to_string())?;
-            (Self{version:VERSION,autostart:old.autostart,widgets:vec![WidgetConfig{id:LEGACY_ID.into(),kind:WidgetKind::DailyNote,name:String::new(),enabled:old.enabled,locked:old.locked,placement:old.placement}]},true)
+            (Self{version:VERSION,autostart:old.autostart,widgets:vec![WidgetConfig{id:LEGACY_ID.into(),kind:WidgetKind::DailyNote,name:String::new(),enabled:old.enabled,locked:old.locked,placement:old.placement,layer:0,layouts:Default::default()}]},true)
         };
         config.validate()?;Ok((config,legacy))
     }

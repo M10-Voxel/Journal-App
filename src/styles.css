@@ -186,7 +186,7 @@ h2 { margin: 0; font-size: 12px; font-weight: 600; }
 .entry-grip:hover { background: var(--surface); }
 .entry-grip:active { cursor: grabbing; }
 .entry-edit, .entry-symbol { transition: opacity var(--fast) ease, background-color var(--fast) ease; }
-.entry-dragging .entry-edit, .entry-dragging .entry-symbol { opacity: .4; }
+/* The held entry (useEntryDrag) stays fully visible: it follows the pointer above the others. */
 .entry-dragging > .entry-grip { opacity: 1; color: var(--accent); cursor: grabbing; }
 .entry.drop-before::before, .entry.drop-after::after { content: ''; position: absolute; left: 0; right: 0; height: 2px; border-radius: 1px; background: var(--accent); pointer-events: none; }
 .entry.drop-before::before { top: -2px; }
@@ -815,3 +815,15 @@ html.is-popup, html.is-popup body, html.is-popup #root { background: transparent
 /* Cards that arrive while the window is not in front (reminders come in a popup that never takes the focus, mail and
    update notes in a window behind others) still play: their entrance starts invisible and would stay there. */
 :root[data-window-idle] :is(.reminder, .reminder *, .mail-import-toast, .mail-import-toast *, .app-notices, .app-notices *) { animation-play-state: running !important; }
+
+/* Sorting by dragging (sortable.ts): the held row follows the pointer and lies above, the others slide aside. */
+[data-sorting], [data-sorting] * { cursor: grabbing !important; user-select: none !important; -webkit-user-select: none !important; }
+[data-sort-state='source'] { position: relative; z-index: 30; transition: none !important; background-color: var(--surface); box-shadow: 0 12px 30px -10px #000000b3, 0 0 0 1px var(--edge); border-radius: 8px; }
+.entry[data-sort-state='source'] { background-color: color-mix(in srgb, var(--surface) 94%, transparent); }
+[data-sort-state='sibling'] { transition: transform 180ms cubic-bezier(.2, .8, .2, 1); }
+.sort-handle { display: grid; place-items: center; flex: none; width: 22px; height: 28px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--placeholder); cursor: grab; touch-action: none; }
+.sort-handle .icon { width: 14px; height: 14px; }
+.sort-handle:is(:hover, :focus-visible) { background: var(--hover); color: var(--text); outline: 0; }
+:root[data-theme='nebula'] :is(.sort-handle, [data-sort-state='source']), :root[data-pixel] :is(.sort-handle, [data-sort-state='source']) { border-radius: 0; }
+:root[data-theme='journal'] [data-sort-state='source'] { background-color: var(--book-paper, var(--surface)); }
+@media (prefers-reduced-motion: reduce) { [data-sort-state='sibling'] { transition: none; } }

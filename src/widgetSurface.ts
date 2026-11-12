@@ -100,8 +100,16 @@ export function connectWidgetSurface() {
         for (const panel of panels) if (!watched.has(panel)) { watched.add(panel); resize.observe(panel); }
         const rects = panels.map(panel => {
           const r = panel.getBoundingClientRect(), orbit = panel.classList.contains('is-orbit');
-          const mx = orbit ? 66 : 12, my = orbit ? 76 : 12;
-          return { left: r.left - mx, top: r.top - my, width: r.width + mx * 2, height: r.height + my * 2 };
+          // While a popup still plays its opening animation (scaled), its box on screen is smaller than where it ends
+          // up; a fixed popup's layout box (offset*, untransformed) is its final place, so both together are measured.
+          let left = r.left, top = r.top, right = r.right, bottom = r.bottom;
+          if (getComputedStyle(panel).position === 'fixed') {
+            left = Math.min(left, panel.offsetLeft); top = Math.min(top, panel.offsetTop);
+            right = Math.max(right, panel.offsetLeft + panel.offsetWidth); bottom = Math.max(bottom, panel.offsetTop + panel.offsetHeight);
+          }
+          // Room around it for its tooltips and shadow (and the orbit's satellites).
+          const mx = orbit ? 66 : 56, my = orbit ? 76 : 40;
+          return { left: left - mx, top: top - my, width: right - left + mx * 2, height: bottom - top + my * 2 };
         });
         const widget = pending ? Object.fromEntries(Object.entries(pending.rect).map(([key, value]) => [key, value * pending!.scale / devicePixelRatio])) as unknown as PopupRect : null;
         const request = { active: !!panels.length, viewport: viewport(), rects, widget, finish: pending?.finish ?? false };
@@ -137,11 +145,15 @@ export function connectWidgetSurface() {
   const dismiss = listen('widget:popups-dismiss', () => dismissLayers());
   const changed = listen('widget:surface-changed', () => { pending = null; revision++; lastKey = ''; schedule(); });
   for (const event of ['resize', 'widget:surface-request']) window.addEventListener(event, schedule);
+  // An opening animation or transition changes a popup's box without a resize or mutation: measure again when it ends.
+  const settled = (event: Event) => { if (event.target instanceof Element && event.target.closest(selectors)) schedule(); };
+  for (const event of ['animationend', 'transitionend', 'animationcancel', 'transitioncancel']) document.addEventListener(event, settled, true);
   window.addEventListener('scroll', schedule, true);
   schedule();
   return () => {
     stopped = true; cancelAnimationFrame(scheduled); observer.disconnect(); resize.disconnect();
     for (const event of ['resize', 'widget:surface-request']) window.removeEventListener(event, schedule);
+    for (const event of ['animationend', 'transitionend', 'animationcancel', 'transitioncancel']) document.removeEventListener(event, settled, true);
     window.removeEventListener('scroll', schedule, true);
     void dismiss.then(stop => stop()); void changed.then(stop => stop());
   };

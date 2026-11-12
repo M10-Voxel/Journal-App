@@ -3,11 +3,12 @@ import type { CSSProperties } from 'react';
 import { useLanguage } from '../i18n';
 import { changePeriodData, ensureActivityTags, usePeriodData } from '../periodStore';
 import type { ActivityDefinition } from '../periodData';
-import { moveActivity } from '../periodData';
 import { saveTags } from '../tagStore';
 import { maxTagName, tagSwatches } from '../tags';
 import { ColorButton } from './ColorPicker';
 import { Icon } from './Icon';
+import { SortHandle, useSortRows } from './SortHandle';
+import { moveTo } from '../sortable';
 import { ActivityPalette } from './ActivityPalette';
 import { activityRange, maxRangeMinutes } from '../activityColors';
 
@@ -34,14 +35,16 @@ export function ActivitySettings() {
     if (!name || !item.calendarTagId) return;
     void saveTags(tags => tags.some(tag => tag.id !== item.calendarTagId && tag.name.toLowerCase() === name.toLowerCase()) ? tags : tags.map(tag => tag.id === item.calendarTagId ? { ...tag, name } : tag)).then(() => setTagError(''), reason => setTagError(String(reason)));
   };
+  // The list is sorted by dragging a row (or ↑ ↓ on its grip).
+  const reorder = (from: number, to: number) => changePeriodData(current => ({ ...current, definitions: moveTo(current.definitions, from, to) }));
+  const drag = useSortRows(reorder);
   return <div className="activity-settings">
     <h3>{tr('Aktivitäten', 'Activities')}</h3>
     <p className="settings-hint">{tr('Lege deine tägliche Checkliste fest. Farbe, Zeiterfassung und Notizfeld gelten für alle Tage. Jede Aktivität hat ein eigenes Tag: Kalender-Einträge mit diesem Tag zählen als ihre Zeit. Deaktivierte Aktivitäten bleiben in vergangenen Auswertungen erhalten.', 'Set up your daily checklist. Color, time tracking and notes apply to every day. Each activity has its own tag: calendar entries with that tag count as its time. Inactive activities remain in past analytics.')}</p>
     {(error || tagError) && <p className="error" role="alert">{error || tagError}</p>}
     {!data ? <p>{tr('Wird geladen …','Loading …')}</p> : <>
-      <div className="activity-settings-list">{data.definitions.map((item,index) => <div className={`activity-settings-row${item.active ? '' : ' is-inactive'}`} style={{ '--activity-color': item.color } as CSSProperties} key={item.id}>
-        <div className="activity-settings-name"><ColorButton value={item.color} label={item.name} swatches={tagSwatches} onChange={color => edit(item.id, { color })} /><input aria-label={tr('Name der Aktivität','Activity name')} maxLength={80} value={item.name} onChange={e => edit(item.id, { name: e.target.value })} onBlur={() => renameTag(item)} /></div>
-        <div className="activity-settings-order"><button type="button" disabled={index === 0} aria-label={`${item.name}: ${tr('nach oben','move up')}`} onClick={() => changePeriodData(current => ({ ...current,definitions:moveActivity(current.definitions,item.id,current.definitions[index-1].id) }))}><Icon name="up" /></button><button type="button" disabled={index === data.definitions.length-1} aria-label={`${item.name}: ${tr('nach unten','move down')}`} onClick={() => changePeriodData(current => ({ ...current,definitions:moveActivity(current.definitions,item.id,current.definitions[index+1].id) }))}><Icon name="down" /></button></div>
+      <div className="activity-settings-list">{data.definitions.map((item,index) => <div className={`activity-settings-row${item.active ? '' : ' is-inactive'}`} style={{ '--activity-color': item.color } as CSSProperties} key={item.id} data-sort-item={item.id} onPointerDown={drag}>
+        <div className="activity-settings-name"><SortHandle name={item.name} index={index} count={data.definitions.length} onMove={reorder} /><ColorButton value={item.color} label={item.name} swatches={tagSwatches} onChange={color => edit(item.id, { color })} /><input aria-label={tr('Name der Aktivität','Activity name')} maxLength={80} value={item.name} onChange={e => edit(item.id, { name: e.target.value })} onBlur={() => renameTag(item)} /></div>
         <ActivityPalette color={item.color} trackTime={item.trackTime} range={activityRange(item)} preview />
         {item.trackTime && <div className="activity-range" role="group" aria-label={tr('Zeitspanne der Farbstufen','Time span of the shades')}>
           <label>{tr('Hellste Stufe ab','Lightest shade from')}<input type="number" inputMode="numeric" min={0} max={maxRangeMinutes - 6} step={5} value={activityRange(item).min} onChange={e => edit(item.id, rangeChange(item, 'minMinutes', e.target.value))} /><span>min</span></label>

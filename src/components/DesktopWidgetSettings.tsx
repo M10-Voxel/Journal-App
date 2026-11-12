@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import type { CSSProperties } from 'react';
+import { SortHandle, useSortRows } from './SortHandle';
+import { moveTo } from '../sortable';
 import { useLanguage } from '../i18n';
-import { createDesktopWidget, removeDesktopWidget, updateDesktopWidget, useDesktopWidgetState, widgetDisplayName, widgetTypeInfo } from '../desktopWidgets';
+import { createDesktopWidget, removeDesktopWidget, setDesktopWidgetLayers, widgetsByLayer, updateDesktopWidget, useDesktopWidgetState, widgetDisplayName, widgetTypeInfo } from '../desktopWidgets';
 import type { DesktopWidgetInstance, DesktopWidgetKind, DesktopWidgetState, DesktopWidgetUpdate } from '../desktopWidgets';
 import { flushHistoryWindows } from './UndoShortcuts';
 import { Icon } from './Icon';
@@ -21,6 +23,28 @@ function WidgetName({ widget, disabled, onSave }: {widget: DesktopWidgetInstance
     <div><input id={`widget-name-${widget.id}`} value={value} maxLength={80} placeholder={en ? 'Use the widget type name' : 'Name des Widget-Typs verwenden'} disabled={disabled} onChange={event => setValue(event.target.value)} onKeyDown={event => {if (event.key === 'Escape') {event.preventDefault();event.stopPropagation();setValue(widget.name);}}} />
       <button type="submit" disabled={disabled || value.trim() === widget.name} aria-label={en ? 'Save name' : 'Namen speichern'} title={en ? 'Save name' : 'Namen speichern'}><Icon name="check" /></button></div>
   </form>;
+}
+
+/**
+ * Which widget lies over which: the widgets from front (top) to back, sorted by dragging a row or ↑ ↓ on its grip.
+ * Only where widgets overlap on the desktop does it show.
+ */
+function WidgetLayers({ state, disabled, onOrder }: {state: DesktopWidgetState; disabled: boolean; onOrder(ids: string[]): Promise<void>}) {
+  const en = useLanguage() === 'en';
+  const layers = widgetsByLayer(state.widgets);
+  const move = (from: number, to: number) => onOrder(moveTo(layers, from, to).map(widget => widget.id));
+  const drag = useSortRows(move);
+  if (layers.length < 2) return null;
+  return <section className="widgets-layers" aria-labelledby="widget-layers-title">
+    <div className="setting-label"><span id="widget-layers-title">{en ? 'Layers' : 'Ebenen'}</span><small>{en ? 'Where widgets overlap, the upper one in this list lies in front. Drag to change.' : 'Wo sich Widgets überlappen, liegt das obere in dieser Liste vorne. Zum Ändern ziehen.'}</small></div>
+    <ol className="widgets-layer-list" aria-disabled={disabled || undefined}>
+      {layers.map((widget, index) => { const info = widgetTypeInfo(widget.kind, en), name = widgetDisplayName(widget, state.widgets, en); return <li key={widget.id} className={`widgets-layer${widget.enabled ? '' : ' is-hidden'}`} data-sort-item={widget.id} data-widget-layer={widget.id} onPointerDown={disabled ? undefined : drag}>
+        <SortHandle name={name} index={index} count={layers.length} onMove={move} />
+        <Icon name={info.icon} /><span className="widgets-layer-name">{name}</span>
+        <small>{index === 0 ? en ? 'front' : 'vorne' : index === layers.length - 1 ? en ? 'back' : 'hinten' : ''}{!widget.enabled && <em>{en ? 'hidden' : 'ausgeblendet'}</em>}</small>
+      </li>; })}
+    </ol>
+  </section>;
 }
 
 /** A slider of the transparent look, with its value in px. */
@@ -160,6 +184,7 @@ export function DesktopWidgetSettings({ initialWidgetId }: {initialWidgetId?: st
           </article>;
         })}
       </div>
+      <WidgetLayers state={state} disabled={disabled} onOrder={ids => run(() => setDesktopWidgetLayers(ids))} />
       <div className="widgets-global"><div className="setting-row"><div className="setting-label"><span id="widget-autostart">{en ? 'Start with Windows' : 'Mit Windows starten'}</span><small>{en ? 'Restores all visible widgets. Journal starts in the background.' : 'Stellt alle eingeblendeten Widgets wieder her. Journal startet im Hintergrund.'}</small></div><div className="setting-control"><button type="button" role="switch" className="switch" aria-labelledby="widget-autostart" aria-checked={state.autostart} disabled={disabled} onClick={() => void run(() => updateDesktopWidget({autostart: !state.autostart}, null))}><span /></button></div></div></div>
       <p className="settings-hint widgets-footnote">{en ? 'Move widgets by the free part of their headers and resize them at the edges. A right click on the header locks, hides or opens these settings. Use the tray menu to manage widgets while Journal is hidden.' : 'Verschiebe Widgets über den freien Teil ihrer Kopfzeile und ändere die Größe an den Rändern. Ein Rechtsklick auf die Kopfzeile sperrt, blendet aus oder öffnet diese Einstellungen. Über das Menü im Infobereich erreichst du die Verwaltung auch bei ausgeblendetem Journal.'}</p>
     </>}

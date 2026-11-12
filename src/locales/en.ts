@@ -1090,6 +1090,10 @@ const english: Record<string, string> = {
   "Voriger Zettel": "Previous note",
   "Nächster Zettel": "Next note",
   "Zettel wählen": "Choose note",
-  "Noch kein Zettel.": "No note yet."
+  "Noch kein Zettel.": "No note yet.",
+  "Das Widget konnte nicht angezeigt werden.": "The widget could not be shown.",
+  "Neu laden": "Reload",
+  "{0} verschieben (ziehen oder ↑ ↓)": "Move {0} (drag or ↑ ↓)",
+  "Ziehen zum Verschieben · ↑ ↓": "Drag to move · ↑ ↓"
 };
 export default english;

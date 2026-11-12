@@ -198,3 +198,8 @@ html.is-desktop-widget, .is-desktop-widget body, .is-desktop-widget #root { widt
   .desktop-widget .section-heading { align-items: flex-start; }
   .desktop-widget .section-heading .kind-picker { width: 100%; }
 }
+/* A widget whose content failed (WidgetErrorBoundary): what happened and a way to load again. */
+.desktop-widget-failed { justify-content: center; gap: 8px; padding: 20px; text-align: center; }
+.desktop-widget-failed p { margin: 0; color: var(--text); font: 13px var(--sans); }
+.desktop-widget-failed .widget-failed-reason { color: var(--muted); font: 11px var(--mono); overflow-wrap: anywhere; }
+.desktop-widget-failed button { align-self: center; padding: 6px 14px; border: 1px solid var(--edge); border-radius: 8px; background: var(--inset); color: var(--text); font: 12px var(--sans); cursor: pointer; }

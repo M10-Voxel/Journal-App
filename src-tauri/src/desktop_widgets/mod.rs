@@ -63,7 +63,7 @@ impl DesktopWidgets {
     fn save(&self,mut next:Config,reset_id:Option<&str>)->Result<(),String>{
         let mut config=self.config.lock().map_err(|e|e.to_string())?;
         // A position save may have completed while the menu was preparing a rename or visibility change.
-        for widget in &mut next.widgets{if reset_id!=Some(widget.id.as_str()){if let Ok(current)=config.get(&widget.id){widget.placement=current.placement.clone();}}}
+        for widget in &mut next.widgets{if reset_id!=Some(widget.id.as_str()){if let Ok(current)=config.get(&widget.id){widget.placement=current.placement.clone();widget.layouts=current.layouts.clone();}}}
         self.persist(&next)?;*config=next;Ok(())
     }
     fn state(&self)->Result<WidgetState,String>{
@@ -80,18 +80,34 @@ fn authorize(window:&tauri::WebviewWindow,id:Option<&str>)->Result<(),String>{
 fn screens(window:&tauri::WebviewWindow)->Result<(Vec<Screen>,usize),String>{
     let monitors=window.available_monitors().map_err(|e|e.to_string())?;
     let primary=window.primary_monitor().map_err(|e|e.to_string())?.and_then(|p|monitors.iter().position(|m|m.position()==p.position())).unwrap_or(0);
-    Ok((monitors.iter().map(|m|{let w=m.work_area();Screen{name:m.name().cloned().unwrap_or_else(||format!("{},{}",m.position().x,m.position().y)),x:w.position.x,y:w.position.y,width:w.size.width,height:w.size.height,scale:m.scale_factor()}}).collect(),primary))
+    Ok((monitors.iter().map(|m|{let w=m.work_area();Screen{name:m.name().cloned().unwrap_or_else(||format!("{},{}",m.position().x,m.position().y)),id:format!("{},{},{},{}",m.position().x,m.position().y,m.size().width,m.size().height),x:w.position.x,y:w.position.y,width:w.size.width,height:w.size.height,scale:m.scale_factor()}}).collect(),primary))
 }
-fn place(window:&tauri::WebviewWindow,placement:Option<&Placement>)->Result<(),String>{
+/// Puts a widget where it belongs on the monitors now attached (geometry::resolve); `reset` forgets its places.
+fn place(window:&tauri::WebviewWindow,reset:bool)->Result<(),String>{
     let (screens,primary)=screens(window)?;
     let state=window.state::<DesktopWidgets>();
     let (widget,_)=state.from_window(window)?;
-    let size=widget.kind.default_size();
-    let offset=widget_id(window.label()).and_then(|id|state.config.lock().ok()?.widgets.iter().position(|w|w.id==id)).unwrap_or(0) as f64*28.0;
-    let default=screens.get(primary).map(|s|Placement{monitor:s.name.clone(),x:40.0+offset,y:40.0+offset,width:size.0,height:size.1});
-    let bounds=geometry::fit_with_minimum(placement.or(default.as_ref()),&screens,primary,widget.kind.minimum_size()).ok_or("Kein Bildschirm verfügbar.")?;
+    let index=state.config.lock().map_err(|e|e.to_string())?.widgets.iter().position(|w|w.id==widget.id).unwrap_or(0);
+    let none=std::collections::BTreeMap::new();
+    let (home,layouts)=if reset{(None,&none)}else{(widget.placement.as_ref(),&widget.layouts)};
+    let bounds=geometry::resolve(home,layouts,&screens,primary,widget.kind.minimum_size(),widget.kind.default_size(),index).ok_or("Kein Bildschirm verfügbar.")?;
     if surface::relocate(window,&bounds,&screens)?{return Ok(());}
     window.set_position(tauri::PhysicalPosition::new(bounds.x,bounds.y)).map_err(|e|e.to_string())?;window.set_size(tauri::LogicalSize::new(bounds.width,bounds.height)).map_err(|e|e.to_string())?;Ok(())
+}
+/// The open widgets in their chosen stacking (back to front): checked by the maintenance loop, set after opening, after
+/// focusing (which must not bring one widget to the front) and when the order is changed in the settings.
+fn restack(app:&tauri::AppHandle){
+    #[cfg(windows)]{
+        let state=app.state::<DesktopWidgets>();
+        let mut widgets=state.config.lock().map(|c|c.widgets.clone()).unwrap_or_default();
+        widgets.sort_by_key(|w|w.layer);
+        let order:Vec<isize>=widgets.iter().filter(|w|w.enabled)
+            .filter(|w|state.runtimes.lock().ok().and_then(|r|r.get(&w.id).map(|r|r.content_ready.load(Ordering::Relaxed))).unwrap_or(false))
+            .filter_map(|w|app.get_webview_window(&window_label(&w.id))).filter_map(|w|w.hwnd().ok().map(|h|h.0 as isize)).collect();
+        if order.len()<2{return;}
+        let _=app.run_on_main_thread(move||host::restack(&order));
+    }
+    #[cfg(not(windows))]{let _=app;}
 }
 fn remember(app:&tauri::AppHandle,id:&str)->Result<(),String>{
     let Some(window)=app.get_webview_window(&window_label(id))else{return Ok(());};
@@ -102,9 +118,20 @@ fn remember(app:&tauri::AppHandle,id:&str)->Result<(),String>{
     let size=match &original{Some(s)=>s.size,None=>window.inner_size().map_err(|e|e.to_string())?};
     if size.width==0||size.height==0{return Ok(());}
     let (screens,_)=screens(&window)?;let Some(monitor)=geometry::screen_for(pos.x,pos.y,size.width,size.height,&screens)else{return Ok(());};
+    // A widget mostly off every monitor (Windows just moved the monitors, the widget is about to be put back) is not a
+    // place to remember.
+    let overlap=((pos.x as i64+size.width as i64).min(monitor.x as i64+monitor.width as i64)-i64::from(pos.x.max(monitor.x))).max(0)
+        *((pos.y as i64+size.height as i64).min(monitor.y as i64+monitor.height as i64)-i64::from(pos.y.max(monitor.y))).max(0);
+    if overlap*2<size.width as i64*size.height as i64{return Ok(());}
     let mut config=state.config.lock().map_err(|e|e.to_string())?;
     let Some(widget)=config.widgets.iter_mut().find(|w|w.id==id)else{return Ok(());};
-    widget.placement=Some(Placement{monitor:monitor.name.clone(),x:(pos.x-monitor.x) as f64/monitor.scale,y:(pos.y-monitor.y) as f64/monitor.scale,width:size.width as f64/monitor.scale,height:size.height as f64/monitor.scale});
+    let placement=Placement{monitor:monitor.name.clone(),screen:monitor.id.clone(),x:(pos.x-monitor.x) as f64/monitor.scale,y:(pos.y-monitor.y) as f64/monitor.scale,width:size.width as f64/monitor.scale,height:size.height as f64/monitor.scale};
+    // This arrangement remembers the place; the home place only changes while its monitor is attached, so a widget
+    // moved aside by a missing monitor goes back once the monitor returns.
+    if !geometry::displaced(widget.placement.as_ref(),&screens){widget.placement=Some(placement.clone());}
+    widget.layouts.insert(geometry::layout_key(&screens),placement);
+    // A handful of arrangements is plenty (a laptop alone, at home, at work …).
+    while widget.layouts.len()>8{let Some(oldest)=widget.layouts.keys().find(|key|**key!=geometry::layout_key(&screens)).cloned()else{break};widget.layouts.remove(&oldest);}
     state.persist(&config)
 }
 #[cfg(windows)] fn autostart(enabled:bool)->Result<(),String>{
@@ -133,7 +160,7 @@ async fn open(app:tauri::AppHandle,id:String)->Result<(),String>{
                 .resizable(false).drag_and_drop(false).additional_browser_args(&crate::browser_args());
             let builder=if let Some(root)=crate::widget_smoke_root(){builder.data_directory(root.join("webview"))}else{builder};
             let window=builder.build().map_err(|e|e.to_string())?;
-            let result=place(&window,config.placement.as_ref());if result.is_err(){let _=window.destroy();}result
+            let result=place(&window,false);if result.is_err(){let _=window.destroy();}result
         })();runtime.opening.store(false,Ordering::SeqCst);result
     }
 }
@@ -152,7 +179,7 @@ async fn open_report(app:tauri::AppHandle,id:String){
         if let Err(error)=rx.recv_timeout(Duration::from_secs(5)).map_err(|e|e.to_string()).and_then(|r|r){*runtime.error.lock().map_err(|e|e.to_string())?=Some(error.clone());let _=state.broadcast(&app);let _=window.destroy();return Err(error);}
     }
     runtime.content_ready.store(true,Ordering::SeqCst);*runtime.error.lock().map_err(|e|e.to_string())?=None;
-    window.show().map_err(|e|e.to_string())?;state.broadcast(&app)?;Ok(())
+    window.show().map_err(|e|e.to_string())?;restack(&app);state.broadcast(&app)?;Ok(())
 }
 #[tauri::command] pub async fn desktop_widget_restore(app:tauri::AppHandle,window:tauri::WebviewWindow)->Result<(),String>{
     if window.label()!="main"{return Err("Nur das Journal startet den Widget-Dienst.".into());}
@@ -166,6 +193,8 @@ async fn open_report(app:tauri::AppHandle,id:String){
     if let Some(source)=source.as_deref(){remember(&app,source)?;}
     let mut config=state.config.lock().map_err(|e|e.to_string())?.clone();
     let id=uuid::Uuid::new_v4().to_string();let mut widget=WidgetConfig::daily(id.clone());widget.kind=kind;
+    // A new widget lies in front of the others.
+    widget.layer=config.widgets.iter().map(|w|w.layer+1).max().unwrap_or(0);
     if let Some(source)=source.as_deref(){
         let original=config.get(&source)?;if original.kind!=kind{return Err("Der Widget-Typ passt nicht zur Vorlage.".into());}
         widget.name=if original.name.is_empty(){String::new()}else{format!("{} · {}",original.name.chars().take(65).collect::<String>(),crate::ui_language::text("Kopie","Copy"))};
@@ -187,7 +216,7 @@ async fn open_report(app:tauri::AppHandle,id:String){
         if let Some(enabled)=update.enabled{if enabled&&!widget.kind.available(){return Err("Dieser Widget-Typ ist noch nicht verfügbar.".into());}widget.enabled=enabled;}
         if let Some(locked)=update.locked{widget.locked=locked;}
         if let Some(name)=update.name{widget.name=config::normalized_name(&name)?;}
-        if update.reset{widget.placement=None;}
+        if update.reset{widget.placement=None;widget.layouts.clear();}
     }
     if let Some(enabled)=update.autostart{autostart(enabled)?;next.autostart=enabled;}
     if let Err(error)=state.save(next.clone(),if update.reset{id.as_deref()}else{None}){if update.autostart.is_some(){let _=autostart(old_autostart);}return Err(error);}
@@ -195,13 +224,24 @@ async fn open_report(app:tauri::AppHandle,id:String){
         let config=next.get(&id)?;
         if let Some(window)=app.get_webview_window(&window_label(&id)){
             if !config.enabled{window.destroy().map_err(|e|e.to_string())?;}else{
-                if update.reset{let _=window.emit("widget:popups-dismiss",());place(&window,None)?;}
+                if update.reset{let _=window.emit("widget:popups-dismiss",());place(&window,true)?;}
                 let title=if config.name.is_empty(){config.kind.title()}else{&config.name};let _=window.set_title(&format!("Journal · {title}"));
             }
         }
         if config.enabled{open_report(app.clone(),id).await;}
     }
     state.broadcast(&app)
+}
+/// The stacking chosen in the settings: `ids` from front to back, every widget once.
+#[tauri::command] pub async fn desktop_widget_layers(app:tauri::AppHandle,window:tauri::WebviewWindow,ids:Vec<String>)->Result<WidgetState,String>{
+    authorize(&window,None)?;let state=app.state::<DesktopWidgets>();let _updating=state.begin()?;
+    let mut config=state.config.lock().map_err(|e|e.to_string())?.clone();
+    let mut known:Vec<String>=config.widgets.iter().map(|w|w.id.clone()).collect();known.sort_unstable();
+    let mut given=ids.clone();given.sort_unstable();given.dedup();
+    if known!=given{return Err("Die Widgets haben sich inzwischen geändert. Bitte erneut versuchen.".into());}
+    let count=ids.len() as u32;
+    for widget in &mut config.widgets{if let Some(at)=ids.iter().position(|id|*id==widget.id){widget.layer=count-1-at as u32;}}
+    state.save(config,None)?;restack(&app);state.broadcast(&app)
 }
 #[tauri::command] pub async fn desktop_widget_remove(app:tauri::AppHandle,window:tauri::WebviewWindow,id:String)->Result<WidgetState,String>{
     authorize(&window,None)?;let state=app.state::<DesktopWidgets>();let _updating=state.begin()?;
@@ -221,7 +261,8 @@ pub fn window_event(window:&tauri::Window,event:&tauri::WindowEvent){
         tauri::WindowEvent::CloseRequested{api,..}=>{api.prevent_close();let _=window.emit("desktop-widget:close",());},
         tauri::WindowEvent::Moved(_)|tauri::WindowEvent::Resized(_)=>{runtime.changed.fetch_add(1,Ordering::Relaxed);},
         tauri::WindowEvent::Focused(false)=>surface::dismiss_if_external(window),
-        tauri::WindowEvent::Focused(true)=>{#[cfg(windows)]if let Ok(hwnd)=window.hwnd(){let raw=hwnd.0 as isize;let _=window.run_on_main_thread(move||host::raise(raw));}},
+        // Focusing a widget keeps it in its layer (it used to come to the front of the others).
+        tauri::WindowEvent::Focused(true)=>restack(window.app_handle()),
         tauri::WindowEvent::Destroyed=>{runtime.content_ready.store(false,Ordering::Relaxed);if let Ok(mut surface)=runtime.surface.lock(){*surface=None;}},_=>{},
     }
 }
@@ -242,7 +283,7 @@ pub fn start(app:tauri::AppHandle){
                     if entry.0!=current{*entry=(current,Instant::now());}else if current!=0&&entry.1.elapsed()>Duration::from_millis(750){let _=remember(&app,&widget.id);let _=runtime.changed.compare_exchange(current,0,Ordering::Relaxed,Ordering::Relaxed);entry.0=0;}
                     if let Ok((screens,_primary))=screens(&window){
                         let key=screens.iter().map(|s|format!("{}:{}:{}:{}:{}:{}",s.name,s.x,s.y,s.width,s.height,s.scale)).collect::<Vec<_>>().join(";");
-                        if !geometry_key.is_empty()&&key!=geometry_key{let _=window.emit("widget:popups-dismiss",());if let Ok(config)=state.instance(&widget.id){let _=place(&window,config.placement.as_ref());}}
+                        if !geometry_key.is_empty()&&key!=geometry_key{let _=window.emit("widget:popups-dismiss",());let _=place(&window,false);}
                         next_key=Some(key);
                     }
                 }else if !runtime.opening.load(Ordering::Relaxed)&&runtime.last_attempt.lock().map(|t|t.elapsed()>Duration::from_secs(2)).unwrap_or(false){
@@ -250,6 +291,7 @@ pub fn start(app:tauri::AppHandle){
                 }
             }
             if let Some(key)=next_key{geometry_key=key;}
+            restack(&app);
         }
     });
 }
@@ -261,7 +303,7 @@ pub fn start(app:tauri::AppHandle){
         let state=DesktopWidgets::new(dir.clone());
         let mut initial=Config::default();initial.widgets.push(WidgetConfig::daily("one".into()));state.save(initial,None).unwrap();
         let mut menu=state.config.lock().unwrap().clone();menu.widgets[0].name="Arbeit".into();
-        let placement=Placement{monitor:"left".into(),x:100.0,y:40.0,width:700.0,height:500.0};
+        let placement=Placement{monitor:"left".into(),screen:"-2560,0,2560,1440".into(),x:100.0,y:40.0,width:700.0,height:500.0};
         state.config.lock().unwrap().widgets[0].placement=Some(placement.clone());
         state.save(menu,None).unwrap();
         let restored=DesktopWidgets::new(dir);let widget=restored.instance("one").unwrap();

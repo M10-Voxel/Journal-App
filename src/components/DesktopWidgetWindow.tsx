@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react';
+import { Component, useEffect, useState } from 'react';
+import type { ErrorInfo, ReactNode } from 'react';
+import { t } from '../i18n';
 import { copyWidgetPreferences } from '../calendarPreferences';
 import { copyWidgetChrome, useWidgetChrome } from '../widgetChrome';
 import { setGlassLook } from '../settings';
@@ -22,6 +24,24 @@ function WidgetLook({ id }: { id: string }) {
   return null;
 }
 
+/**
+ * A failing widget content must not leave an empty window on the desktop: it shows what happened and can load again.
+ * (Saved data is not touched; the widget reloads its window.)
+ */
+class WidgetErrorBoundary extends Component<{ children: ReactNode }, { error: string | null }> {
+  state = { error: null as string | null };
+  static getDerivedStateFromError(error: unknown) { return { error: String(error instanceof Error ? error.message : error) }; }
+  componentDidCatch(error: unknown, info: ErrorInfo) { console.error('Widget content failed', error, info.componentStack); }
+  render() {
+    if (this.state.error === null) return this.props.children;
+    return <section className="desktop-widget desktop-widget-failed" role="alert">
+      <p><strong>{t('Das Widget konnte nicht angezeigt werden.')}</strong></p>
+      <p className="widget-failed-reason">{this.state.error}</p>
+      <button type="button" onClick={() => location.reload()}>{t('Neu laden')}</button>
+    </section>;
+  }
+}
+
 /** Register future content renderers here; the frame, placement and lifecycle are shared. */
 export function DesktopWidgetWindow() {
   const [prepared, setPrepared] = useState(false);
@@ -33,7 +53,7 @@ export function DesktopWidgetWindow() {
   const {state, error} = useDesktopWidgetState();
   const widget = state?.widgets.find(item => item.id === currentWidgetId());
   if (!prepared || !state || !widget) return error ? <p role="alert">{error}</p> : null;
-  return <><WidgetLook id={widget.id} />{content(widget, state)}</>;
+  return <><WidgetLook id={widget.id} /><WidgetErrorBoundary key={widget.kind}>{content(widget, state)}</WidgetErrorBoundary></>;
 }
 
 function content(widget: DesktopWidgetInstance, state: DesktopWidgetState) {

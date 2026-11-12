@@ -1,14 +1,21 @@
 import { t, useLanguage } from '../i18n';
 import { useEffect, useRef, useState } from 'react';
-import type { CSSProperties } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { maxTagName, nextTagColor, tagSwatches } from '../tags';
 import type { Tag } from '../tags';
 import { saveTags, useTags } from '../tagStore';
 import { ColorButton } from './ColorPicker';
 import { Icon } from './Icon';
 import { EntryIcon, IconPicker } from './EntryIcon';
-import { groupTags, moveKind, moveWithinKind, orderedTags, resetKindOrder, tagKindLabel, tagKinds, useTagKindOrder } from '../tagKinds';
+import { groupTags, moveKindTo, moveWithinKindTo, orderedTags, resetKindOrder, tagKindLabel, tagKinds, useTagKindOrder } from '../tagKinds';
+import { SortHandle, useSortRows } from './SortHandle';
 import { useActivityTagIds } from '../tagGroups';
+
+/** The tags of one kind, sorted by dragging among themselves. */
+function TagRows({ group, onMove, children }: { group: Tag[]; onMove: (id: string, to: number) => Promise<boolean>; children: (tag: Tag, place: number, drag: ReturnType<typeof useSortRows>) => ReactNode }) {
+  const drag = useSortRows((from, to) => onMove(group[from].id, to));
+  return <>{group.map((tag, place) => children(tag, place, drag))}</>;
+}
 
 /** A name edited in place: saved on Enter or when leaving the field, Escape takes the change back. */
 function NameField({ tag, onRename }: { tag: Tag; onRename: (name: string) => Promise<boolean> }) {
@@ -73,12 +80,10 @@ export function TagSettings() {
       if (pending.current !== undefined || Object.keys(latest.current.colors).length) void store(current => current);
     };
   }, []);
-  // Tags move only among those of their kind (own, checklist, mail); the stored list keeps the kinds together.
-  const move = (index: number, step: -1 | 1) => {
-    const id = shown[index].id;
-    void store(current => moveWithinKind(current, id, step, activityIds))
-      .then(() => requestAnimationFrame(() => listRef.current?.querySelector<HTMLElement>(`[data-tag-id="${id}"] ${step < 0 ? '.tag-up' : '.tag-down'}`)?.focus()));
-  };
+  // Tags are dragged (or moved with ↑ ↓ on their grip) only among those of their kind (own, checklist, mail); the stored
+  // list keeps the kinds together. The kinds themselves are dragged by their heading.
+  const moveTag = (id: string, to: number) => store(current => moveWithinKindTo(current, id, to, activityIds));
+  const dragKind = useSortRows((from, to) => { moveKindTo(groups[from].kind, to); });
   const newColor = color ?? nextTagColor(tags);
   async function add() {
     const value = name.trim();
@@ -91,14 +96,11 @@ export function TagSettings() {
     <h3 id="settings-tags-title">{t('Tags')}</h3>
     <p className="settings-hint">{t('Tags wie Arbeit, Privat oder Uni gruppieren Einträge im Journal und färben sie im Kalender. Zuweisen mit ')}<kbd>Alt</kbd> <kbd>G</kbd>{t(' am Eintrag oder im Kalender-Popup; ein- und ausblenden über das Tag-Symbol in der Leiste. Mit einem Icon zeigt ein Tag an den Einträgen das Icon statt seines Namens.')}</p>
     <div ref={listRef} className="tag-list" role="list" aria-labelledby="settings-tags-title">
-      {groups.map(group => <div key={group.kind} className={`tag-group is-${group.kind}`} role="group" aria-label={tagKindLabel(group.kind)}>
-      <h4 className="tag-group-label">{tagKindLabel(group.kind)}
-        {/* The kinds sit in this order in every list; the numbers 1–9 follow it. */}
-        <span className="tag-group-move">
-          <button type="button" className="cal-icon-button" aria-label={t('{0} nach oben', tagKindLabel(group.kind))} data-tip={t('Nach oben')} disabled={kindOrder.indexOf(group.kind) === 0} onClick={() => moveKind(group.kind, -1)}><Icon name="up" /></button>
-          <button type="button" className="cal-icon-button" aria-label={t('{0} nach unten', tagKindLabel(group.kind))} data-tip={t('Nach unten')} disabled={kindOrder.indexOf(group.kind) === kindOrder.length - 1} onClick={() => moveKind(group.kind, 1)}><Icon name="down" /></button>
-        </span></h4>
-      {group.tags.map((tag, place) => { const index = shown.indexOf(tag); return <div key={tag.id} className="tag-row" role="listitem" style={{ '--tag': tag.color } as CSSProperties} data-tag-row={tag.name} data-tag-id={tag.id}>
+      {groups.map((group, groupIndex) => <div key={group.kind} className={`tag-group is-${group.kind}`} role="group" aria-label={tagKindLabel(group.kind)} data-sort-item={group.kind}>
+      {/* The kinds sit in this order in every list; the numbers 1–9 follow it. Drag a kind by its heading. */}
+      <h4 className="tag-group-label" onPointerDown={dragKind}><SortHandle name={tagKindLabel(group.kind)} index={groupIndex} count={groups.length} onMove={(_, to) => { moveKindTo(group.kind, to); }} />{tagKindLabel(group.kind)}</h4>
+      <TagRows group={group.tags} onMove={moveTag}>{(tag, place, drag) => { const index = shown.indexOf(tag); return <div key={tag.id} className="tag-row" role="listitem" style={{ '--tag': tag.color } as CSSProperties} data-tag-row={tag.name} data-tag-id={tag.id} data-sort-item={tag.id} onPointerDown={drag}>
+        <SortHandle name={tag.name} index={place} count={group.tags.length} onMove={(_, to) => moveTag(tag.id, to)} />
         <ColorButton value={tag.color} label={tag.name} swatches={tagSwatches} onChange={value => recolor(tag.id, value)} />
         <button type="button" className={`cal-icon-button tag-icon-button${tag.icon ? ' has-icon' : ''}`} aria-label={tag.icon ? t('Icon von {0} ändern', tag.name) : t('Icon für {0} wählen', tag.name)}
           data-tip={tag.icon ? t('Icon ändern · an Einträgen statt des Namens') : t('Icon wählen · an Einträgen statt des Namens')} aria-haspopup="dialog" aria-expanded={choosingIcon?.id === tag.id}
@@ -106,12 +108,10 @@ export function TagSettings() {
         <NameField tag={tag} onRename={value => store(current => current.map(other => other.id === tag.id ? { ...other, name: value } : other))} />
         <span className={`tag-row-sample${tag.icon ? ' has-icon' : ''}`} aria-hidden="true">{tag.icon ? <EntryIcon name={tag.icon} /> : <><i />{tag.name}</>}</span>
         <kbd className="tag-row-key" title={t('Taste in Auswahl und Filter')}>{index < 9 ? index + 1 : ''}</kbd>
-        <button type="button" className="cal-icon-button tag-up" aria-label={t('{0} nach oben', tag.name)} data-tip={t('Nach oben')} disabled={place === 0} onClick={() => move(index, -1)}><Icon name="up" /></button>
-        <button type="button" className="cal-icon-button tag-down" aria-label={t('{0} nach unten', tag.name)} data-tip={t('Nach unten')} disabled={place === group.tags.length - 1} onClick={() => move(index, 1)}><Icon name="down" /></button>
         {removing === tag.id
           ? <button type="button" className="tag-remove is-asking" data-autofocus onBlur={() => setRemoving(null)} onClick={() => { setRemoving(null); void store(current => current.filter(other => other.id !== tag.id)); }}>{t('Löschen?')}</button>
           : <button type="button" className="cal-icon-button tag-remove" aria-label={t('{0} löschen', tag.name)} data-tip={t('Löschen · Einträge behalten, ohne Tag')} onClick={event => { const row = event.currentTarget.closest('.tag-row'); setRemoving(tag.id); requestAnimationFrame(() => row?.querySelector<HTMLButtonElement>('.tag-remove')?.focus()); }}><Icon name="trash" /></button>}
-      </div>; })}
+      </div>; }}</TagRows>
       </div>)}
       {!tags.length && <p className="tag-empty">{t('Noch keine Tags.')}</p>}
       {kindOrder.some((kind, index) => kind !== tagKinds[index]) && <button type="button" className="tag-kind-reset" onClick={resetKindOrder}>{t('Reihenfolge der Kategorien zurücksetzen')}</button>}

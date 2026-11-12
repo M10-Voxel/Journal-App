@@ -102,6 +102,7 @@ const bootstrap = `
     if (command === 'desktop_widget_state') return structuredClone(widgetRegistry);
     if (command === 'desktop_widget_create') {if(!['daily-note','calendar','board','day-values','activities','notebook'].includes(payload.kind))throw Error('Widget type unavailable');const original=widgetRegistry.widgets.find(widget=>widget.id===payload.source);widgetRegistry.widgets.push({id:crypto.randomUUID(),kind:payload.kind,name:original?.name?original.name+' · Kopie':'',enabled:true,locked:false,placement:null,error:null});return widgetChanged();}
     if (command === 'desktop_widget_update') {if(payload.update.autostart!==undefined)widgetRegistry.autostart=payload.update.autostart;const widget=widgetRegistry.widgets.find(widget=>widget.id===(payload.id??label.slice(7)));if(widget){for(const key of ['enabled','locked','name'])if(payload.update[key]!==undefined)widget[key]=payload.update[key];if(payload.update.reset)widget.placement=null;}return widgetChanged();}
+    if (command === 'desktop_widget_layers') {const ids=payload.ids;if(ids.length!==widgetRegistry.widgets.length||!widgetRegistry.widgets.every(widget=>ids.includes(widget.id)))throw Error('Die Widgets haben sich inzwischen geändert.');for(const widget of widgetRegistry.widgets)widget.layer=ids.length-1-ids.indexOf(widget.id);return widgetChanged();}
     if (command === 'desktop_widget_remove') {widgetRegistry.widgets=widgetRegistry.widgets.filter(widget=>widget.id!==payload.id);return widgetChanged();}
     if (command === 'vault_status') return {path:'C:/Test/Journal-A',legacy:true,preferences:null,error:null};
     if (command === 'vault_choose') { invoked.push([command,payload]);return window.__uiTest.vaultChoice ?? null; }
@@ -325,8 +326,13 @@ const bootstrap = `
     if (command === 'plugin:window|is_maximized') return Boolean(window.__uiTest.maximized);
     if (command === 'plugin:window|toggle_maximize') { window.__uiTest.maximized = !window.__uiTest.maximized; invoked.push([command, payload]); return null; }
     // The desktop wallpaper behind a transparent widget (WidgetBackdrop): a stand-in picture.
-    if (command === 'desktop_wallpaper_info') return { path:'C:\\Wallpaper.svg', style:localStorage.getItem('test.wallStyle') ?? '10', tile:false, modified:Number(localStorage.getItem('test.wallModified') ?? 1) };
-    if (command === 'desktop_wallpaper') return new TextEncoder().encode(localStorage.getItem('test.wallpaper') ?? '<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900"><rect width="1600" height="900" fill="#203a43"/><circle cx="380" cy="260" r="260" fill="#3a8fd6"/><circle cx="1180" cy="620" r="300" fill="#c2304f"/><path d="M0 700 L1600 300" stroke="#ffd166" stroke-width="60"/></svg>').buffer;
+    // The desktop wallpapers behind a transparent widget (WidgetBackdrop), per monitor: test.monitors lists them as
+    // {x,y,width,height,svg} (physical pixels); without it one monitor the size of the page shows test.wallpaper.
+    const wallMonitors = () => JSON.parse(localStorage.getItem('test.monitors') ?? 'null') ?? [{ x:0, y:0, width:Math.round(innerWidth*devicePixelRatio), height:Math.round(innerHeight*devicePixelRatio), svg:localStorage.getItem('test.wallpaper') ?? '<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900"><rect width="1600" height="900" fill="#203a43"/><circle cx="380" cy="260" r="260" fill="#3a8fd6"/><circle cx="1180" cy="620" r="300" fill="#c2304f"/><path d="M0 700 L1600 300" stroke="#ffd166" stroke-width="60"/></svg>' }];
+    // The native popup surface: remember what the widget asked for (its popups' rectangles), no geometry of its own.
+    if (command === 'desktop_widget_surface') { window.__uiTest.surface = payload; return null; }
+    if (command === 'desktop_wallpaper_info') return { position:localStorage.getItem('test.wallPosition') ?? 'fill', monitors:wallMonitors().map(({svg,...monitor})=>({...monitor, modified:Number(localStorage.getItem('test.wallModified') ?? 1)})) };
+    if (command === 'desktop_wallpaper') { const monitor = wallMonitors()[payload.monitor]; if (!monitor) throw new Error('Kein Hintergrundbild für diesen Bildschirm.'); return new TextEncoder().encode(monitor.svg).buffer; }
     if (command === 'open_window' || command === 'show_day' || command === 'show_note' || command === 'desktop_widget_open_settings' || command === 'panel_detach' || command.startsWith('plugin:window|')) { invoked.push([command, payload]); return null; }
     if (command === 'load_linked') {
       const where = id => { for (const [day, value] of days) { const found = value.entries.find(entry => entry.id === id); if (found) return [day, found]; } };
@@ -3000,6 +3006,9 @@ try {
     await until("document.querySelectorAll('.cal-month-day').length===42");
     await evaluate("(()=>{const cell=document.querySelector('.cal-month-day[data-date=\"'+window.__uiTest.shift(2)+'\"]'),r=cell.getBoundingClientRect();cell.dispatchEvent(new MouseEvent('contextmenu',{button:2,bubbles:true,cancelable:true,clientX:r.left+5,clientY:r.top+5}));})()");
     await until("!!document.querySelector('.cal-composer.is-placed') && document.documentElement.classList.contains('widget-popups-ready')");
+    // The popup's region covers the composer's final box (not the scaled one of its opening animation) with room around.
+    await pause(500);
+    assert(await evaluate("(()=>{const c=document.querySelector('.cal-composer'),r={left:c.offsetLeft,top:c.offsetTop,right:c.offsetLeft+c.offsetWidth,bottom:c.offsetTop+c.offsetHeight};return (window.__uiTest.surface?.rects??[]).some(x=>x.left<=r.left-40&&x.top<=r.top-30&&x.left+x.width>=r.right+40&&x.top+x.height>=r.bottom+30);})()"),'The popup region covers the whole composer and its tooltips');
     await evaluate("document.querySelector('.cal-composer-text').focus()");await command('Input.insertText',{text:'Widget-Kalendereintrag'});await key('Enter');
     await until("!document.querySelector('.cal-composer') && window.__uiTest.day(window.__uiTest.shift(2)).entries.some(entry=>entry.text==='Widget-Kalendereintrag')");
     const made=await evaluate("window.__uiTest.day(window.__uiTest.shift(2)).entries.find(entry=>entry.text==='Widget-Kalendereintrag').id");
@@ -3202,6 +3211,28 @@ try {
     await evaluate("document.querySelector('.desktop-widget .title-input').focus()");await pause(100);
     assert.deepEqual(await evaluate("(()=>{const w=getComputedStyle(document.querySelector('.desktop-widget')),i=getComputedStyle(document.activeElement);return [w.boxShadow,i.outlineStyle,i.boxShadow];})()"),['none','none','none'],'No outline on focus');
     await evaluate("document.activeElement.blur()");
+    // No glow around the type, light or dark; pointing at the widget changes nothing about it.
+    assert.equal(await evaluate("[...document.querySelectorAll('.desktop-widget, .desktop-widget *')].filter(e=>getComputedStyle(e).textShadow!=='none').length"),0,'No glow around the type');
+    const look = "(()=>{const w=document.querySelector('.desktop-widget'),c=getComputedStyle(w);return JSON.stringify([c.backgroundColor,c.boxShadow,...[...w.querySelectorAll('.desktop-widget-head *')].map(e=>{const s=getComputedStyle(e);return s.color+s.backgroundColor+s.opacity;})]);})()";
+    await command('Input.dispatchMouseEvent',{type:'mouseMoved',x:-20,y:-20});await pause(150);
+    assert(!await evaluate("document.querySelector('.desktop-widget').matches(':hover')"),'Pointer away from the widget');
+    const resting = await evaluate(look);
+    const middle = await evaluate("(()=>{const r=document.querySelector('.desktop-widget-body').getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};})()");
+    await command('Input.dispatchMouseEvent',{type:'mouseMoved',x:middle.x,y:middle.y});await pause(250);
+    assert(await evaluate("document.querySelector('.desktop-widget').matches(':hover')"),'Pointer on the widget');
+    assert.equal(await evaluate(look),resting,'Pointing at the widget changes nothing');
+    await command('Input.dispatchMouseEvent',{type:'mouseMoved',x:599,y:599});
+    // Without background blur there is no frosted layer at all.
+    assert(!await evaluate("!!document.querySelector('.desktop-widget-backdrop')"),'Blur 0: fully clear');
+    // Several monitors with pictures of their own: the widget (on the left one) takes the left one's, even when Windows
+    // lists the right one first.
+    await evaluate(`localStorage.setItem('test.monitors',JSON.stringify([{x:innerWidth,y:0,width:innerWidth,height:innerHeight,svg:'<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" fill="#ff0000"/></svg>'},{x:0,y:0,width:innerWidth,height:innerHeight,svg:'<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" fill="#00ff00"/></svg>'}]))`);
+    await chrome({glass:true,glassBlur:12});await evaluate("window.dispatchEvent(new Event('widget:popup-geometry'))");
+    await until("document.querySelector('.desktop-widget-backdrop')?.dataset.monitor==='1' && /blob:/.test(document.querySelector('.desktop-widget-backdrop > i')?.style.backgroundImage ?? '')");
+    assert.equal(await evaluate("(async()=>{const url=document.querySelector('.desktop-widget-backdrop > i').style.backgroundImage.slice(5,-2);const image=new Image();image.src=url;await image.decode();const canvas=document.createElement('canvas');canvas.width=canvas.height=10;const context=canvas.getContext('2d');context.drawImage(image,0,0);return Array.from(context.getImageData(5,5,1,1).data.slice(0,3)).join(',');})()"),'0,255,0','The picture of the monitor the widget lies on');
+    await evaluate("localStorage.removeItem('test.monitors')");
+    await chrome({glass:true,glassBlur:0});
+    await until("!document.querySelector('.desktop-widget-backdrop')");
     // Sliders: blur of the popups and rounding of every curve.
     await chrome({glass:true,glassBlur:4,glassRadius:0});
     await until("getComputedStyle(document.documentElement).getPropertyValue('--glass-radius').trim()==='0px'");
@@ -3242,6 +3273,93 @@ try {
     }
     await pause(200);await screenshot('widgets-manager-glass.png');
     assert.deepEqual(errors,[]);console.log('Widget glass passed: per widget, own palette and base independent of the app design, header without fills or layers, no outline on focus, blur and rounding sliders, glass popups, light/dark type, settings.');
+  } else if (process.env.JOURNAL_UI_SCOPE === 'sorting') {
+    // Sorting by dragging (sortable.ts): the held row follows the pointer, the others slide aside; on letting go it takes
+    // its place. Entries keep their arrows (and stay within their kind); the settings lists only drag (or ↑ ↓ on the grip).
+    await command('Emulation.setFocusEmulationEnabled',{enabled:true});
+    const centre = selector => evaluate(`(()=>{const r=document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};})()`);
+    const press = async (selector, dy, check) => {
+      await evaluate(`document.querySelector(${JSON.stringify(selector)}).scrollIntoView({block:'center'})`);await pause(80);
+      const from = await centre(selector);
+      await command('Input.dispatchMouseEvent',{type:'mouseMoved',x:from.x,y:from.y});
+      await command('Input.dispatchMouseEvent',{type:'mousePressed',x:from.x,y:from.y,button:'left',buttons:1,clickCount:1});
+      for (let step=1; step<=6; step++) { await command('Input.dispatchMouseEvent',{type:'mouseMoved',x:from.x+2,y:from.y+dy*step/6,button:'left',buttons:1}); await pause(30); }
+      await pause(120);
+      if (check) await check();
+      await command('Input.dispatchMouseEvent',{type:'mouseReleased',x:from.x+2,y:from.y+dy,button:'left',buttons:0,clickCount:1});
+      await until("!document.querySelector('[data-sort-state]') && !('sorting' in document.documentElement.dataset)");
+    };
+    const following = "(()=>{const s=document.querySelector('[data-sort-state=source]');return !!s && /translateY\\(/.test(s.style.transform) && [...document.querySelectorAll('[data-sort-state=sibling]')].some(e=>/translateY\\(/.test(e.style.transform));})()";
+    // Entries: the two open tasks of the default day.
+    await until("document.querySelectorAll('.entry').length>=5");
+    const tasks = await evaluate("[...document.querySelectorAll('.entry[data-entry-kind=task]:not([data-priority])')].map(e=>e.dataset.entryId)");
+    assert(tasks.length >= 2, 'Two ordinary tasks to sort');
+    const order = "[...document.querySelectorAll('.entry[data-entry-kind=task]:not([data-priority])')].map(e=>e.dataset.entryId)";
+    const height = await evaluate(`document.querySelector('[data-entry-id="${tasks[0]}"]').getBoundingClientRect().height`);
+    await press(`[data-entry-id="${tasks[0]}"] .entry-grip`, height * 1.3, async () => {
+      assert(await evaluate(following), 'The held entry follows the pointer, the next one slides aside');
+      await screenshot('sorting-entry-held.png');
+    });
+    await until(`JSON.stringify(${order}.slice(0,2))===${JSON.stringify(JSON.stringify([tasks[1], tasks[0]]))}`);
+    assert(!await evaluate("[...document.querySelectorAll('.entry')].some(e=>e.style.transform)"), 'No transform left after the drop');
+    // Escape puts it back.
+    await press(`[data-entry-id="${tasks[0]}"] .entry-grip`, -height * 1.3, async () => { await key('Escape'); });
+    await until(`JSON.stringify(${order}.slice(0,2))===${JSON.stringify(JSON.stringify([tasks[1], tasks[0]]))}`);
+    // Tags: drag a tag below the next; drag a kind by its heading; ↑ ↓ on a grip. No arrow buttons any more.
+    await evaluate("window.__uiTest.emit('journal:settings',{tab:'tags'})");
+    await until("!!document.querySelector('.tag-row.is-new .tag-name')");
+    for (const [index, name] of ['Arbeit','Privat','Uni'].entries()) {
+      await evaluate("document.querySelector('.tag-row.is-new .tag-name').focus()");await command('Input.insertText',{text:name});await key('Enter');
+      await until(`document.querySelectorAll('.tag-group.is-own .tag-row').length===${index + 1}`);
+    }
+    assert(!await evaluate("!!document.querySelector('.tag-settings :is(.tag-up, .tag-down, .tag-group-move)')"), 'No arrow buttons in the tag settings');
+    const tagOrder = "[...document.querySelectorAll('.tag-group.is-own .tag-row')].map(r=>r.dataset.tagId)";
+    const tagsBefore = await evaluate(tagOrder);
+    const tagHeight = await evaluate("document.querySelector('.tag-group.is-own .tag-row').getBoundingClientRect().height");
+    await press('.tag-group.is-own .tag-row .sort-handle', tagHeight * 1.4, async () => { assert(await evaluate(following), 'The held tag follows the pointer'); await screenshot('sorting-tag-held.png'); });
+    await until(`JSON.stringify(${tagOrder}.slice(0,2))===${JSON.stringify(JSON.stringify([tagsBefore[1], tagsBefore[0]]))}`);
+    await evaluate(`document.querySelector('[data-tag-id="${tagsBefore[0]}"] .sort-handle').focus()`);await key('ArrowUp');
+    await until(`${tagOrder}[0]===${JSON.stringify(tagsBefore[0])} && document.activeElement?.closest('[data-tag-id]')?.dataset.tagId===${JSON.stringify(tagsBefore[0])}`);
+    if (await evaluate("document.querySelectorAll('.tag-group').length") >= 2) {
+      const kinds = "[...document.querySelectorAll('.tag-group')].map(g=>g.dataset.sortItem)";
+      const kindsBefore = await evaluate(kinds);
+      const groupHeight = await evaluate("document.querySelector('.tag-group').getBoundingClientRect().height");
+      await press('.tag-group .tag-group-label', groupHeight + 20);
+      await until(`${kinds}[0]===${JSON.stringify(kindsBefore[1])}`);
+      assert.equal(await evaluate("JSON.parse(localStorage.getItem('journal.tagKindOrder'))[0]"), kindsBefore[1], 'The kinds keep their dragged order');
+    }
+    // Activities and day values.
+    await evaluate("window.__uiTest.emit('journal:settings',{tab:'activities'})");
+    await until("document.querySelectorAll('.activity-settings > .activity-settings-list > .activity-settings-row').length>=2");
+    assert(!await evaluate("!!document.querySelector('.activity-settings-order')"), 'No arrow buttons for activities');
+    const activities = "[...document.querySelectorAll('.activity-settings > .activity-settings-list > .activity-settings-row')].map(r=>r.dataset.sortItem)";
+    const activitiesBefore = await evaluate(activities);
+    // Far enough that the held row's middle passes the next row's middle.
+    const pastNext = await evaluate("(()=>{const [a,b]=document.querySelectorAll('.activity-settings > .activity-settings-list > .activity-settings-row');const ra=a.getBoundingClientRect(),rb=b.getBoundingClientRect(),h=a.querySelector('.sort-handle').getBoundingClientRect();return (rb.top+rb.height/2)-(ra.top+ra.height/2)+12;})()");
+    await press('.activity-settings-row .sort-handle', pastNext + 60);
+    await until(`window.__uiTest.periodData?.definitions?.[0]?.id===${JSON.stringify(activitiesBefore[1])} && ${activities}[0]===${JSON.stringify(activitiesBefore[1])}`);
+    await screenshot('sorting-activities.png');
+    await evaluate("localStorage.setItem('test.scales',JSON.stringify([{id:'stress',name:'Stress',min:0,max:10,color:'#e46a6a',active:true},{id:'sleep',name:'Schlaf',min:0,max:20,color:'#6a8ae4',active:true}]))");
+    await command('Page.reload');await until("document.querySelectorAll('.entry').length>=5");
+    await evaluate("window.__uiTest.emit('journal:settings',{tab:'scales'})");
+    await until("document.querySelectorAll('.scale-settings-row[data-sort-item]').length===2");
+    await press('.scale-settings-row[data-sort-item] .sort-handle', await evaluate("(()=>{const [a,b]=document.querySelectorAll('.scale-settings-row[data-sort-item]');const ra=a.getBoundingClientRect(),rb=b.getBoundingClientRect();return (rb.top+rb.height/2)-(ra.top+ra.height/2)+60;})()"));
+    await until("window.__uiTest.periodData?.scales?.[0]?.id==='sleep' && document.querySelector('.scale-settings-row[data-sort-item]').dataset.sortItem==='sleep'");
+    assert.equal(await evaluate("document.querySelector('.scale-settings-row').dataset.scaleId"),'rating','The daily rating stays first');
+    // Widget layers: front at the top; dragging sends the order to the app.
+    await evaluate("window.__uiTest.emit('journal:settings',{tab:'widgets'})");
+    await until("document.querySelectorAll('[data-widget-instance]').length===1");
+    await evaluate("document.querySelector('.widgets-add').click()");await until("document.querySelectorAll('[data-widget-type]').length>1");
+    await evaluate("document.querySelector('[data-widget-type=calendar]').click()");
+    await until("document.querySelectorAll('.widgets-layer').length===2 && document.querySelector('.desktop-widget-settings').getAttribute('aria-busy')==='false'");
+    const layers = "[...document.querySelectorAll('.widgets-layer')].map(r=>r.dataset.widgetLayer)";
+    const layersBefore = await evaluate(layers);
+    await press('.widgets-layer .sort-handle', await evaluate("(()=>{const [a,b]=document.querySelectorAll('.widgets-layer');const ra=a.getBoundingClientRect(),rb=b.getBoundingClientRect();return (rb.top+rb.height/2)-(ra.top+ra.height/2)+60;})()"));
+    await until(`window.__uiTest.invoked.some(call=>call[0]==='desktop_widget_layers') || ${layers}[0]===${JSON.stringify(layersBefore[1])}`);
+    await until(`${layers}[0]===${JSON.stringify(layersBefore[1])}`);
+    assert.deepEqual(await evaluate("window.__uiTest.widgets.widgets.sort((a,b)=>b.layer-a.layer).map(w=>w.id)"), [layersBefore[1], layersBefore[0]], 'The new stacking reached the app');
+    await pause(200);await screenshot('sorting-widget-layers.png');
+    assert.deepEqual(errors,[]);console.log('Sorting passed: entries follow the pointer (arrows kept, Escape), tags, tag kinds, activities, day values and widget layers by dragging and ↑ ↓.');
   } else if (process.env.JOURNAL_UI_SCOPE === 'widget-manager') {
     await command('Emulation.setFocusEmulationEnabled',{enabled:true});
     await evaluate("window.__uiTest.emit('journal:settings',{tab:'widgets'})");

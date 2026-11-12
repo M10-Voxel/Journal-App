@@ -543,3 +543,7 @@ button.cal-time-day:hover { background: color-mix(in srgb, var(--strong) 3.137%,
 .cal-year-span.is-span-start { border-top-left-radius: 99px; border-bottom-left-radius: 99px; }
 .cal-year-span.is-span-end { border-top-right-radius: 99px; border-bottom-right-radius: 99px; }
 :root[data-pixel] .cal-year-span, :root[data-theme='nebula'] .cal-year-span { border-radius: 0 !important; }
+/* The first kind sits at the composer's left edge, which clips what leaves it (it scrolls in a desktop widget):
+   its tooltip opens to the right instead of centred below it. */
+.cal-composer-kinds > [data-tip]:first-child::after { left: 0; transform: translate(0, -3px) scale(.95); transform-origin: left top; }
+.cal-composer-kinds > [data-tip]:first-child:is(:hover, :focus-visible)::after { transform: translate(0, 0); }

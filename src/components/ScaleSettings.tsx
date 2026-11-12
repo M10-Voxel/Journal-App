@@ -3,10 +3,12 @@ import type { CSSProperties } from 'react';
 import { t, useLanguage } from '../i18n';
 import { changePeriodData, usePeriodData } from '../periodStore';
 import type { RatingScale, ScaleDefinition } from '../periodData';
-import { defaultRatingColor, defaultScaleRange, maxScaleSpan, moveScale, ratingScale } from '../periodData';
+import { defaultRatingColor, defaultScaleRange, maxScaleSpan, ratingScale } from '../periodData';
 import { tagSwatches } from '../tags';
 import { ColorButton } from './ColorPicker';
 import { Icon } from './Icon';
+import { SortHandle, useSortRows } from './SortHandle';
+import { moveTo } from '../sortable';
 
 /**
  * Day values ("Tageswerte") in the settings: first the daily rating (its colour and span), then the user's own values
@@ -22,6 +24,9 @@ export function ScaleSettings() {
   const editRating = (changes: Partial<RatingScale>) => changePeriodData(current => ({ ...current, rating: { ...ratingScale(current), ...changes } }));
   const scales = data?.scales ?? [];
   const rating = ratingScale(data);
+  // The own values are sorted by dragging a row (or ↑ ↓ on its grip); the daily rating stays first.
+  const reorder = (from: number, to: number) => changePeriodData(current => ({ ...current, scales: moveTo(current.scales ?? [], from, to) }));
+  const drag = useSortRows(reorder);
   return <div className="activity-settings scale-settings">
     <h3>{t('Tageswerte')}</h3>
     <p className="settings-hint">{t('Werte, die du jeden Tag mit der Maus einträgst – etwa Stress oder Schlaf. Jeder Wert hat eine Farbe und eine Spanne aus ganzen Zahlen. Die Zeiträume zeigen alle Werte zusammen mit der Tagesbewertung in einem Verlauf.')}</p>
@@ -32,12 +37,8 @@ export function ScaleSettings() {
           <div className="activity-settings-name"><ColorButton value={data.rating ? rating.color : defaultRatingColor} label={t('Tagesbewertung')} swatches={tagSwatches} onChange={color => editRating({ color })} /><strong>{t('Tagesbewertung')}</strong></div>
           <RangeFields label={t('Tagesbewertung')} min={rating.min} max={rating.max} isDefault={rating.min === defaultScaleRange.min && rating.max === defaultScaleRange.max} onChange={range => editRating(range)} />
         </div>
-        {scales.map((item, index) => <div className={`activity-settings-row scale-settings-row${item.active ? '' : ' is-inactive'}`} data-scale-id={item.id} style={{ '--activity-color': item.color } as CSSProperties} key={item.id}>
-          <div className="activity-settings-name"><ColorButton value={item.color} label={item.name} swatches={tagSwatches} onChange={color => edit(item.id, { color })} /><input aria-label={t('Name des Tageswerts')} maxLength={80} value={item.name} onChange={e => edit(item.id, { name: e.target.value })} /></div>
-          <div className="activity-settings-order">
-            <button type="button" disabled={index === 0} aria-label={t('{0}: nach oben', item.name)} onClick={() => changePeriodData(current => { const list = current.scales ?? []; return { ...current, scales: moveScale(list, item.id, list[index - 1].id) }; })}><Icon name="up" /></button>
-            <button type="button" disabled={index === scales.length - 1} aria-label={t('{0}: nach unten', item.name)} onClick={() => changePeriodData(current => { const list = current.scales ?? []; return { ...current, scales: moveScale(list, item.id, list[index + 1].id) }; })}><Icon name="down" /></button>
-          </div>
+        {scales.map((item, index) => <div className={`activity-settings-row scale-settings-row${item.active ? '' : ' is-inactive'}`} data-scale-id={item.id} style={{ '--activity-color': item.color } as CSSProperties} key={item.id} data-sort-item={item.id} onPointerDown={drag}>
+          <div className="activity-settings-name"><SortHandle name={item.name} index={index} count={scales.length} onMove={reorder} /><ColorButton value={item.color} label={item.name} swatches={tagSwatches} onChange={color => edit(item.id, { color })} /><input aria-label={t('Name des Tageswerts')} maxLength={80} value={item.name} onChange={e => edit(item.id, { name: e.target.value })} /></div>
           <RangeFields label={item.name} min={item.min} max={item.max} isDefault={item.min === defaultScaleRange.min && item.max === defaultScaleRange.max} onChange={range => edit(item.id, range)} />
           <div className="activity-options">
             <label><span className="activity-checkbox"><input type="checkbox" checked={item.active} onChange={e => edit(item.id, { active: e.target.checked })} /><Icon name="check" className="activity-check-mark" /></span>{t('Aktiv')}</label>

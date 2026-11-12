@@ -74,7 +74,7 @@
 .entry.has-tag.tag-first::after { top: 9px; border-top-left-radius: 2px; border-top-right-radius: 2px; }
 .entry.has-tag.tag-last::after { bottom: 9px; border-bottom-left-radius: 2px; border-bottom-right-radius: 2px; }
 .entry ~ .entry.entry-tag-start:not(.entry-group-start) { margin-top: 10px; }
-.entry.entry-dragging::after { opacity: .3; }
+
 .entry-tag { flex: none; display: flex; align-items: center; gap: 6px; max-width: 150px; height: 22px; margin-top: 7px; padding: 0 9px 0 8px; border: 0; border-radius: 999px;
   background: color-mix(in srgb, var(--tag) 13%, transparent); color: color-mix(in srgb, var(--tag) 62%, var(--strong)); font: 11px var(--sans); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   animation: chip-in 360ms var(--spring) backwards; transition: background-color var(--fast) ease; }
@@ -273,3 +273,7 @@ body:has(.shortcut-backdrop) .tag-picker { z-index:90; }
 :root[data-pixel] .cal-frame, :root[data-theme='nebula'] .cal-frame { border-radius: 0; border-width: 2px; }
 :root[data-theme='nebula'] .cal-frame { border-color: var(--nb-violet-light, #b388ff); background: color-mix(in srgb, var(--nb-violet, #7b2cbf) 14%, transparent); }
 :root[data-theme='journal'] .cal-frame { border-color: color-mix(in srgb, var(--error) 70%, transparent); background: color-mix(in srgb, var(--error) 6%, transparent); }
+/* In the settings the kind's heading carries its grip on the same line (drag the heading to move the kind). */
+.tag-settings .tag-group > .tag-group-label { display: flex; align-items: center; justify-content: flex-start; gap: 2px; cursor: grab; }
+.tag-settings .tag-group-label .sort-handle { width: 18px; height: 20px; margin-left: -4px; }
+.tag-settings .tag-row .sort-handle { margin-right: -4px; }

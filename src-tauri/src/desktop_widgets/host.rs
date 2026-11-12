@@ -122,7 +122,23 @@ mod windows {
         SetWindowPos(hwnd,after,0,0,0,0,0x0001|0x0002|0x0010|0x0200);
         PLACING.store(false,Ordering::Relaxed);
     }}
-    pub fn raise(hwnd:isize){place(hwnd,true);}
+    /// Puts the widgets into the given order (back to front) above the desktop icons. Only acts when the order on
+    /// screen differs, so it can be called often.
+    pub fn restack(order:&[isize]) { unsafe {
+        let desktop=desktop_host();if desktop==0{return;}
+        let shell=GetShellWindow();
+        // The widgets lie directly above the icon host, the lowest first.
+        let mut band=Vec::new();let mut current=GetWindow(desktop,3);
+        while current!=0 {
+            let mut pid=0;GetWindowThreadProcessId(current,&mut pid);
+            if pid!=std::process::id()||GetWindowLongPtrW(current,-8)!=shell{break;}
+            band.push(current);current=GetWindow(current,3);
+        }
+        let present:Vec<isize>=band.iter().copied().filter(|hwnd|order.contains(hwnd)).collect();
+        let wanted:Vec<isize>=order.iter().copied().filter(|hwnd|present.contains(hwnd)).collect();
+        if present==wanted{return;}
+        for &hwnd in order { if IsWindow(hwnd)!=0 { place(hwnd,true); } }
+    }}
     /// Called on the GUI thread; no input hooks, injection, or foreground activation.
     pub fn maintain(hwnd:isize) { unsafe {
         if IsWindow(hwnd)==0 {return;}
@@ -137,4 +153,4 @@ mod windows {
     }}
 }
 #[cfg(windows)]
-pub use windows::{configure,maintain,region,raise};
+pub use windows::{configure,maintain,region,restack};

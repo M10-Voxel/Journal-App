@@ -370,6 +370,8 @@ export function Notebook({ onClose, onOpenDay, tagScope = 'journal', widget }: {
       {page ? <article className={`notebook-page paper-${page.paper ?? 'yellow'}${pages.length > 1 ? ' has-pages' : ''}`} aria-label={t('Zettel: {0}', noteTitle(page))} data-page-id={page.id} key={page.id} onContextMenu={noteMenu(page)}>
         <header className="notebook-page-head">
           <input ref={titleRef} className="notebook-title" aria-label={t('Titel')} placeholder={t('Titel')} value={page.title} onChange={e => void patch(page.id, { title: e.target.value })} />
+          {/* The widget keeps only the switch between writing and handwriting beside the title. */}
+          {compact && <NoteModeButton card={page} patch={patch} className="notebook-mode" />}
           {!compact && <div className="notebook-page-tools">
             <NoteModeButton card={page} patch={patch} className="notebook-mode" />
             <BoardScopePicker cards={cards} id={page.id} date={page.created ?? page.dates[0] ?? today} />

@@ -41,6 +41,15 @@ export function moveKind(kind: TagKind, step: -1 | 1): boolean {
   changeOrder(next);
   return true;
 }
+/** Moves a kind to another place among the kinds (dragged in the settings); returns whether it moved. */
+export function moveKindTo(kind: TagKind, to: number): boolean {
+  const next = [...order], at = next.indexOf(kind);
+  if (at < 0 || to < 0 || to >= next.length || at === to) return false;
+  next.splice(at, 1); next.splice(to, 0, kind);
+  try { globalThis.localStorage?.setItem(orderKey, JSON.stringify(next)); } catch { /* kept for this session */ }
+  changeOrder(next);
+  return true;
+}
 export const resetKindOrder = () => { try { globalThis.localStorage?.removeItem(orderKey); } catch { /* ignore */ } changeOrder(tagKinds); };
 export function useTagKindOrder(): readonly TagKind[] {
   return useSyncExternalStore(listener => { orderListeners.add(listener); return () => { orderListeners.delete(listener); }; }, kindOrder, kindOrder);
@@ -55,6 +64,15 @@ export function groupTags(tags: readonly Tag[], activityIds: ReadonlySet<string>
 }
 /** The whole list in display order (own, checklist, mail): numbers 1–9 in pickers and filters follow it. */
 export const orderedTags = (tags: readonly Tag[], activityIds: ReadonlySet<string>) => groupTags(tags, activityIds).flatMap(group => group.tags);
+/** Moving a tag to another place among the tags of its kind (dragged); the stored list keeps the kinds together. */
+export function moveWithinKindTo(tags: readonly Tag[], id: string, to: number, activityIds: ReadonlySet<string>): Tag[] {
+  const groups = groupTags(tags, activityIds);
+  const group = groups.find(item => item.tags.some(tag => tag.id === id));
+  if (!group || to < 0 || to >= group.tags.length) return groups.flatMap(item => item.tags);
+  const list = [...group.tags], at = list.findIndex(tag => tag.id === id);
+  list.splice(at, 1); list.splice(to, 0, group.tags[at]);
+  return groups.flatMap(item => item === group ? list : item.tags);
+}
 /** Moving a tag one place up or down among the tags of its kind; the stored list keeps the kinds together. */
 export function moveWithinKind(tags: readonly Tag[], id: string, step: -1 | 1, activityIds: ReadonlySet<string>): Tag[] {
   const groups = groupTags(tags, activityIds);

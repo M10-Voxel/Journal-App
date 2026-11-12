@@ -6,12 +6,16 @@ import { widgetIdFromLabel } from './widgetIdentity';
 import type { IconName } from './components/Icon';
 
 export type DesktopWidgetKind = 'daily-note' | 'calendar' | 'board' | 'day-values' | 'activities' | 'notebook';
-export interface DesktopWidgetInstance { id: string; kind: DesktopWidgetKind; name: string; enabled: boolean; locked: boolean; placement: {monitor: string; x: number; y: number; width: number; height: number} | null; error: string | null }
+export interface DesktopWidgetInstance { id: string; kind: DesktopWidgetKind; name: string; enabled: boolean; locked: boolean; /** Higher lies in front. */ layer: number; placement: {monitor: string; x: number; y: number; width: number; height: number} | null; error: string | null }
 export interface DesktopWidgetState { supported: boolean; autostart: boolean; widgets: DesktopWidgetInstance[]; types: {kind: DesktopWidgetKind; available: boolean}[]; error: string | null }
 export interface DesktopWidgetUpdate { enabled?: boolean; locked?: boolean; name?: string; autostart?: boolean; reset?: boolean }
 export const currentWidgetId = () => widgetIdFromLabel(getCurrentWindow().label);
 export const updateDesktopWidget = (update: DesktopWidgetUpdate, id: string | null = currentWidgetId()) => invoke<DesktopWidgetState>('desktop_widget_update', { id, update });
 export const createDesktopWidget = (kind: DesktopWidgetKind, source: string | null = null) => invoke<DesktopWidgetState>('desktop_widget_create', { kind, source });
+/** The widgets' stacking, `ids` from front to back. */
+export const setDesktopWidgetLayers = (ids: string[]) => invoke<DesktopWidgetState>('desktop_widget_layers', { ids });
+/** The widgets from front to back (equal layers: the later one in front). */
+export const widgetsByLayer = (widgets: DesktopWidgetInstance[]) => widgets.map((widget, index) => ({ widget, index })).sort((a, b) => (b.widget.layer ?? 0) - (a.widget.layer ?? 0) || b.index - a.index).map(item => item.widget);
 export const removeDesktopWidget = (id: string) => invoke<DesktopWidgetState>('desktop_widget_remove', { id });
 export const widgetTypeInfo = (kind: DesktopWidgetKind, en: boolean): {label: string; description: string; icon: IconName} => kind === 'calendar'
   ? {label: en ? 'Calendar' : 'Kalender', description: en ? 'The complete calendar with its different views.' : 'Das vollständige Kalenderfenster mit seinen verschiedenen Ansichten.', icon: 'calendar'}
