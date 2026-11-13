@@ -2,6 +2,7 @@ import { useEffect, useId, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { colorGroups, colorThemes, contrastRatio, isHexColor, resolvePalette } from '../colors';
 import type { ColorToken } from '../colors';
+import { paletteFixed } from '../settings';
 import type { Settings } from '../settings';
 import { t, useLanguage } from '../i18n';
 import { Icon } from './Icon';
@@ -47,7 +48,7 @@ export function ColorSettings({ settings, onChange }: { settings: Settings; onCh
     else next[token] = value;
     onChange({ ...settings, customColors: { ...settings.customColors, [settings.colorTheme]: next } });
   };
-  if (settings.theme === 'nebula') return <div className="color-settings is-fixed">
+  if (paletteFixed(settings)) return <div className="color-settings is-fixed">
     <h3 id="settings-colors-title">{t('Basis-Farbtheme')}</h3>
     <p className="settings-hint color-fixed-hint" role="note">{t('Nebula hat feste Farben: Schwarz, Papiergrau und Violett. Deine Farbwahl bleibt gespeichert und gilt wieder in Normal und Journal.')}</p>
     <span className="nebula-fixed-swatches" aria-hidden="true"><i /><i /><i /><i /></span>

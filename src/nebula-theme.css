@@ -4,7 +4,8 @@
    without touching the stored ones, which come back in the other designs. No pixel look here (settings.ts). */
 
 /* ── Palette and type ─────────────────────────────────────────────────────────────────────────────────────────── */
-:root[data-theme='nebula'] {
+/* The desk's own measures and colours, whatever the look; the Nebula look takes them to every layout. */
+:root[data-look='nebula'], :root[data-layout='desk'] {
   --nb-black: #050505;
   --nb-paper: #cfcfcf;
   --nb-ink: #111111;
@@ -19,7 +20,9 @@
   --nb-rail-w: var(--nb-poster-w);
   --nb-poster-w: 300px;
   --nb-gap: 22px;
-
+}
+/* The Nebula look: its fixed palette and type. */
+:root[data-look='nebula'] {
   color-scheme: dark !important;
   --background: #050505 !important; --surface: #0c0c0e !important; --inset: #141417 !important; --hover: #1d1d23 !important; --selected: #2a1d3c !important; --focus: #2c2c33 !important;
   --border: #0a0a0b !important; --divider: #2a2a2e !important; --edge: #ffffff2b !important; --line: #ffffff1f !important; --scrollbar: #4a4a52 !important;
@@ -43,11 +46,11 @@
   --popup-radius: 0px;
   --popup-shadow: 0 0 0 1px var(--nb-line), 4px 4px 0 var(--nb-offset);
 }
-:root[data-theme='nebula'] .font-warmup { font-family: 'Space Mono'; }
-:root[data-theme='nebula'] body { background: var(--nb-black); }
+:root[data-look='nebula'] .font-warmup { font-family: 'Space Mono'; }
+:root[data-look='nebula'] body { background: var(--nb-black); }
 
 /* Grey paper: the rail, the poster and the settings sheets carry ink on paper. */
-:root[data-theme='nebula'] :is(.nebula-paper, .shortcuts) {
+:root[data-layout='desk'] :is(.nebula-paper, .shortcuts) {
   --background: #c4c4c4; --surface: #cfcfcf; --inset: #c2c2c2; --hover: #bcbcbc; --selected: #b9a5d8; --focus: #b5b5b5;
   --border: #c0c0c0; --divider: #9e9e9e; --edge: #1111113a; --line: #11111126; --scrollbar: #8c8c8c;
   --text: #111111; --strong: #000000; --muted: #3e3e44; --placeholder: #5c5c63; --disabled: #85858b;
@@ -55,18 +58,18 @@
   color: var(--text);
 }
 /* Popups opened from paper stay black sheets. */
-:root[data-theme='nebula'] :is(.nebula-paper, .shortcuts) :is(.popover, .planner, .format-menu, .mini-picker-panel, .tag-filter-list, .color-picker-panel) {
+:root[data-layout='desk'] :is(.nebula-paper, .shortcuts) :is(.popover, .planner, .format-menu, .mini-picker-panel, .tag-filter-list, .color-picker-panel) {
   --background: #050505; --surface: #0c0c0e; --inset: #141417; --hover: #1d1d23; --selected: #2a1d3c; --focus: #2c2c33;
   --border: #0a0a0b; --divider: #2a2a2e; --edge: #ffffff2b; --line: #ffffff1f;
   --text: #dadada; --strong: #ffffff; --muted: #9b9ba3; --placeholder: #72727a; --disabled: #55555c; --accent: #a66cf0; --on-accent: #050505;
 }
 
 /* Brutal corners: square everywhere a radius would soften it. */
-:root[data-theme='nebula'] :is(button, input, textarea, select, kbd, .popover, .planner, .format-menu, .cal-composer, .mini-picker-panel, .cal-transfer-panel, .reminder, .mail-import-toast, .shortcuts,
+:root[data-look='nebula'] :is(button, input, textarea, select, kbd, .popover, .planner, .format-menu, .cal-composer, .mini-picker-panel, .cal-transfer-panel, .reminder, .mail-import-toast, .shortcuts,
   .segmented, .segmented button, .switch, .switch > span, .entry-tag, .cal-item, .board-card, .board-surface, .theme-options > button, .settings-option, .color-theme-options > button, .tag-filter-list, .repeat-suggest, .entry-dock-shell, .error) { border-radius: 0 !important; }
-:root[data-theme='nebula'] :is(*, *::before, *::after):not(.tag-dot, .cal-dots i, .preview-dot, .preview-satellite, .preview-orbit, .unsaved-dot, .color-changed, .clock-face, .clock-knob, .clock-pivot, .entry-dock-shell *, .popup-sample *) { border-radius: 0 !important; }
-:root[data-theme='nebula'], :root[data-theme='nebula'] * { scrollbar-color: var(--scrollbar) transparent; scrollbar-width: thin; }
-:root[data-theme='nebula'] ::selection { background: var(--selection); }
+:root[data-look='nebula'] :is(*, *::before, *::after):not(.tag-dot, .cal-dots i, .preview-dot, .preview-satellite, .preview-orbit, .unsaved-dot, .color-changed, .clock-face, .clock-knob, .clock-pivot, .entry-dock-shell *, .popup-sample *) { border-radius: 0 !important; }
+:root[data-look='nebula'], :root[data-look='nebula'] * { scrollbar-color: var(--scrollbar) transparent; scrollbar-width: thin; }
+:root[data-look='nebula'] ::selection { background: var(--selection); }
 
 /* ── Window bar ───────────────────────────────────────────────────────────────────────────────────────────────── */
 .nebula-window-bar { position: relative; z-index: 30; flex: none; display: flex; align-items: stretch; height: 32px; border-bottom: 1px solid #ffffff24; background: var(--nb-black); color: #bdbdbd; user-select: none; }
@@ -231,8 +234,8 @@
 .nebula-calendar-close:hover { background: var(--nb-ink); color: var(--nb-paper); }
 .nebula-calendar-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .nebula-calendar-body > .cal { flex: 1; min-height: 0; }
-:root[data-theme='nebula'] .cal { background: var(--surface); }
-:root[data-theme='nebula'] .cal-title { font-family: var(--display); font-weight: 400; font-size: 1.35em; letter-spacing: 0; }
+:root[data-look='nebula'] .cal { background: var(--surface); }
+:root[data-look='nebula'] .cal-title { font-family: var(--display); font-weight: 400; font-size: 1.35em; letter-spacing: 0; }
 
 /* ── Decoration: orbits, waves, glitch pixels ─────────────────────────────────────────────────────────────────── */
 .nebula-backdrop { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
@@ -257,13 +260,13 @@
 .nebula-cross.is-c { top: 54%; left: 1.2%; }
 
 /* ── Settings and shortcuts: grey panels with violet bars; black popups with a white edge ──────────────────── */
-:root[data-theme='nebula'] .shortcut-backdrop { background: #050505b8; backdrop-filter: none; }
-:root[data-theme='nebula'] .shortcuts { background: var(--nb-paper); border-top: 14px solid var(--nb-violet); box-shadow: 0 0 0 1px #000, 10px 10px 0 var(--nb-violet-dark); }
-:root[data-theme='nebula'] .settings-head strong { font: italic 400 24px var(--display); letter-spacing: 0; }
-:root[data-theme='nebula'] .settings-tabs [role='tab'][aria-selected='true'] { background: var(--nb-ink); color: var(--nb-paper); }
-:root[data-theme='nebula'] .shortcuts kbd { border: 1px solid var(--nb-ink); background: transparent; color: var(--nb-ink); box-shadow: none; }
-:root[data-theme='nebula'] .switch:disabled { opacity: .45; cursor: not-allowed; }
-:root[data-theme='nebula'] :is(.popover, .planner, .format-menu, .cal-composer, .mini-picker-panel, .cal-transfer-panel, .reminder, .mail-import-toast) { background: var(--surface); }
+:root[data-look='nebula'] .shortcut-backdrop { background: #050505b8; backdrop-filter: none; }
+:root[data-look='nebula'] .shortcuts { background: var(--nb-paper); border-top: 14px solid var(--nb-violet); box-shadow: 0 0 0 1px #000, 10px 10px 0 var(--nb-violet-dark); }
+:root[data-look='nebula'] .settings-head strong { font: italic 400 24px var(--display); letter-spacing: 0; }
+:root[data-look='nebula'] .settings-tabs [role='tab'][aria-selected='true'] { background: var(--nb-ink); color: var(--nb-paper); }
+:root[data-look='nebula'] .shortcuts kbd { border: 1px solid var(--nb-ink); background: transparent; color: var(--nb-ink); box-shadow: none; }
+:root[data-look='nebula'] .switch:disabled { opacity: .45; cursor: not-allowed; }
+:root[data-look='nebula'] :is(.popover, .planner, .format-menu, .cal-composer, .mini-picker-panel, .cal-transfer-panel, .reminder, .mail-import-toast) { background: var(--surface); }
 
 /* The settings card for Nebula, in every design. */
 .theme-sample.is-nebula { padding: 0 6px; background: #050505; box-shadow: inset 0 3px 0 #7b2cbf; }
@@ -277,18 +280,18 @@
 .nebula-fixed-swatches i:nth-of-type(3) { background: #7b2cbf; }
 .nebula-fixed-swatches i:nth-of-type(4) { background: linear-gradient(115deg, #d5b8ff, #a6f2dc 45%, #ffd0b0 80%); }
 
-/* ── Other windows (calendar, mini calendar, reminders) take the palette and type through data-theme ─────────── */
-:root[data-theme='nebula'] body > #root > .cal { background: var(--nb-black); }
-:root[data-theme='nebula'] .reminder { box-shadow: 0 0 0 1px var(--nb-line), 3px 3px 0 var(--nb-offset); }
+/* ── Other windows (calendar, mini calendar, reminders) take the palette and type through data-look ─────────── */
+:root[data-look='nebula'] body > #root > .cal { background: var(--nb-black); }
+:root[data-look='nebula'] .reminder { box-shadow: 0 0 0 1px var(--nb-line), 3px 3px 0 var(--nb-offset); }
 
 /* ── Narrower windows ─────────────────────────────────────────────────────────────────────────────────────────── */
 /* A little narrower: the overview column too. */
 @container journal (max-width: 1120px) {
-  :root[data-theme='nebula'] { --nb-poster-w: 260px; }
+  :root[data-look='nebula'] { --nb-poster-w: 260px; }
 }
 /* One column: poster and calendar side by side on top, the windows below. */
 @container journal (max-width: 900px) {
-  :root[data-theme='nebula'] { --nb-gap: 14px; }
+  :root[data-look='nebula'] { --nb-gap: 14px; }
   .nebula-desk { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'side' 'center'; padding-top: 12px; }
   .nebula-side { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
   .nebula-terminal-body { padding: 16px 16px 18px 30px; }
@@ -347,44 +350,44 @@
 /* Tickets carry their tag. */
 
 /* ── The pinboard: a grid on black, square cards without tilt, pins as violet squares ─────────────────────────── */
-:root[data-theme='nebula'] .board-actions { gap: 0; padding: 0; border-radius: 0; background: transparent; box-shadow: none; }
-:root[data-theme='nebula'] .board-actions button { position: relative; height: 26px; margin-left: -1px; padding: 0 10px 0 8px; border: 1px solid var(--edge); border-radius: 0; color: var(--text); font: 11px var(--mono); text-transform: lowercase; }
-:root[data-theme='nebula'] .board-actions button .icon { color: var(--nb-violet-light); }
-:root[data-theme='nebula'] .board-actions button:is(:hover, :focus-visible):not(:disabled), :root[data-theme='nebula'] .board-actions button[aria-expanded='true'] { z-index: 1; border-color: var(--accent); background: var(--event-background); box-shadow: none; color: var(--strong); }
-:root[data-theme='nebula'] .board-actions button:active:not(:disabled) { transform: translate(1px, 1px); }
-:root[data-theme='nebula'] .board-head p { font: 11px var(--mono); }
-:root[data-theme='nebula'] :is(.board-link-form, .board-library) { box-shadow: 0 0 0 1px var(--nb-line), 3px 3px 0 var(--nb-offset); }
-:root[data-theme='nebula'] :is(.board-link-form input, .board-library > input) { font: 12px var(--mono); }
-:root[data-theme='nebula'] .board-link-form button:first-of-type { background: var(--nb-violet); color: #fff; }
-:root[data-theme='nebula'] .board-card { --tilt: 0deg !important; --pin: var(--nb-violet); padding-top: 18px; border: 1px solid #000; background: var(--paper); box-shadow: 4px 4px 0 #ffffff1f; }
-:root[data-theme='nebula'] .board-card:hover { box-shadow: 3px 3px 0 var(--nb-offset); }
-:root[data-theme='nebula'] .board-card:focus-visible { box-shadow: 0 0 0 2px var(--nb-violet-light), 3px 3px 0 var(--nb-offset); }
-:root[data-theme='nebula'] .board-card.is-moving { transform: translate(-2px, -2px); box-shadow: 4px 4px 0 var(--nb-offset); }
+:root[data-look='nebula'] .board-actions { gap: 0; padding: 0; border-radius: 0; background: transparent; box-shadow: none; }
+:root[data-look='nebula'] .board-actions button { position: relative; height: 26px; margin-left: -1px; padding: 0 10px 0 8px; border: 1px solid var(--edge); border-radius: 0; color: var(--text); font: 11px var(--mono); text-transform: lowercase; }
+:root[data-look='nebula'] .board-actions button .icon { color: var(--nb-violet-light); }
+:root[data-look='nebula'] .board-actions button:is(:hover, :focus-visible):not(:disabled), :root[data-look='nebula'] .board-actions button[aria-expanded='true'] { z-index: 1; border-color: var(--accent); background: var(--event-background); box-shadow: none; color: var(--strong); }
+:root[data-look='nebula'] .board-actions button:active:not(:disabled) { transform: translate(1px, 1px); }
+:root[data-look='nebula'] .board-head p { font: 11px var(--mono); }
+:root[data-look='nebula'] :is(.board-link-form, .board-library) { box-shadow: 0 0 0 1px var(--nb-line), 3px 3px 0 var(--nb-offset); }
+:root[data-look='nebula'] :is(.board-link-form input, .board-library > input) { font: 12px var(--mono); }
+:root[data-look='nebula'] .board-link-form button:first-of-type { background: var(--nb-violet); color: #fff; }
+:root[data-look='nebula'] .board-card { --tilt: 0deg !important; --pin: var(--nb-violet); padding-top: 18px; border: 1px solid #000; background: var(--paper); box-shadow: 4px 4px 0 #ffffff1f; }
+:root[data-look='nebula'] .board-card:hover { box-shadow: 3px 3px 0 var(--nb-offset); }
+:root[data-look='nebula'] .board-card:focus-visible { box-shadow: 0 0 0 2px var(--nb-violet-light), 3px 3px 0 var(--nb-offset); }
+:root[data-look='nebula'] .board-card.is-moving { transform: translate(-2px, -2px); box-shadow: 4px 4px 0 var(--nb-offset); }
 /* A black strip on top of each card, its pin a violet square in it. */
-:root[data-theme='nebula'] .board-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 7px; background: var(--nb-ink); pointer-events: none; }
-:root[data-theme='nebula'] .board-pin { top: -4px; width: 11px; height: 11px; margin-left: -5.5px; background: var(--pin); box-shadow: 0 0 0 1px #000; }
-:root[data-theme='nebula'] .board-card header input { font: 700 12px var(--mono); text-transform: uppercase; letter-spacing: .04em; }
-:root[data-theme='nebula'] .board-paper i { background: conic-gradient(#cfcfcf 0 25%, #d5b8ff 0 50%, #a6f2dc 0 75%, #ffd0b0 0); }
-:root[data-theme='nebula'] .paper-yellow { --paper: #cfcfcf; --paper-ink: #111111; --pin: #7b2cbf; }
-:root[data-theme='nebula'] .paper-blue { --paper: #d5b8ff; --paper-ink: #1a0b2e; --pin: #111111; }
-:root[data-theme='nebula'] .paper-green { --paper: #a6f2dc; --paper-ink: #0d2a22; --pin: #7b2cbf; }
-:root[data-theme='nebula'] .paper-pink { --paper: #ffd0b0; --paper-ink: #2e160a; --pin: #7b2cbf; }
-:root[data-theme='nebula'] .board-note :is(.entry-edit, .cm-content) { font: 13px/24px var(--write); }
+:root[data-look='nebula'] .board-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 7px; background: var(--nb-ink); pointer-events: none; }
+:root[data-look='nebula'] .board-pin { top: -4px; width: 11px; height: 11px; margin-left: -5.5px; background: var(--pin); box-shadow: 0 0 0 1px #000; }
+:root[data-look='nebula'] .board-card header input { font: 700 12px var(--mono); text-transform: uppercase; letter-spacing: .04em; }
+:root[data-look='nebula'] .board-paper i { background: conic-gradient(#cfcfcf 0 25%, #d5b8ff 0 50%, #a6f2dc 0 75%, #ffd0b0 0); }
+:root[data-look='nebula'] .paper-yellow { --paper: #cfcfcf; --paper-ink: #111111; --pin: #7b2cbf; }
+:root[data-look='nebula'] .paper-blue { --paper: #d5b8ff; --paper-ink: #1a0b2e; --pin: #111111; }
+:root[data-look='nebula'] .paper-green { --paper: #a6f2dc; --paper-ink: #0d2a22; --pin: #7b2cbf; }
+:root[data-look='nebula'] .paper-pink { --paper: #ffd0b0; --paper-ink: #2e160a; --pin: #7b2cbf; }
+:root[data-look='nebula'] .board-note :is(.entry-edit, .cm-content) { font: 13px/24px var(--write); }
 /* Images in a black frame with a white edge; links as grey index cards with a violet rule. */
-:root[data-theme='nebula'] .board-card.is-image { --paper: #050505; --paper-ink: #e8e8e8; --pin: #7b2cbf; border-color: var(--nb-line); padding: 18px 8px 8px; }
-:root[data-theme='nebula'] .board-card.is-image::before { background: var(--nb-violet); }
-:root[data-theme='nebula'] .board-image { box-shadow: 0 0 0 1px #ffffff3a; }
-:root[data-theme='nebula'] .board-caption { color: #b8b8b8; font: 10px var(--mono); }
-:root[data-theme='nebula'] .board-card.is-link { --paper: #cfcfcf; --paper-ink: #111111; --pin: #7b2cbf; background: linear-gradient(var(--nb-violet), var(--nb-violet)) 0 38px / 100% 2px no-repeat, var(--paper); }
-:root[data-theme='nebula'] .board-link strong { color: var(--nb-violet); font: italic 400 19px/1.1 var(--display); }
-:root[data-theme='nebula'] .board-link span { font: 11.5px/1.5 var(--mono); }
-:root[data-theme='nebula'] .board-link img { box-shadow: 0 0 0 1px #111; }
-:root[data-theme='nebula'] .board-library > button { border: 1px solid #000; font: 11.5px var(--mono); box-shadow: 3px 3px 0 #ffffff1f; }
-:root[data-theme='nebula'] .board-lightbox { background: #050505e6; backdrop-filter: none; }
-:root[data-theme='nebula'] .board-lightbox figure { background: #050505; box-shadow: 0 0 0 1px var(--nb-line), 5px 5px 0 var(--nb-offset); }
-:root[data-theme='nebula'] .board-lightbox figcaption { color: #e8e8e8; font: 12px var(--mono); }
-:root[data-theme='nebula'] .board-lightbox figcaption button { background: #ffffff14; color: #e8e8e8; }
-:root[data-theme='nebula'] .floating-note { border-top: 7px solid var(--nb-ink); }
+:root[data-look='nebula'] .board-card.is-image { --paper: #050505; --paper-ink: #e8e8e8; --pin: #7b2cbf; border-color: var(--nb-line); padding: 18px 8px 8px; }
+:root[data-look='nebula'] .board-card.is-image::before { background: var(--nb-violet); }
+:root[data-look='nebula'] .board-image { box-shadow: 0 0 0 1px #ffffff3a; }
+:root[data-look='nebula'] .board-caption { color: #b8b8b8; font: 10px var(--mono); }
+:root[data-look='nebula'] .board-card.is-link { --paper: #cfcfcf; --paper-ink: #111111; --pin: #7b2cbf; background: linear-gradient(var(--nb-violet), var(--nb-violet)) 0 38px / 100% 2px no-repeat, var(--paper); }
+:root[data-look='nebula'] .board-link strong { color: var(--nb-violet); font: italic 400 19px/1.1 var(--display); }
+:root[data-look='nebula'] .board-link span { font: 11.5px/1.5 var(--mono); }
+:root[data-look='nebula'] .board-link img { box-shadow: 0 0 0 1px #111; }
+:root[data-look='nebula'] .board-library > button { border: 1px solid #000; font: 11.5px var(--mono); box-shadow: 3px 3px 0 #ffffff1f; }
+:root[data-look='nebula'] .board-lightbox { background: #050505e6; backdrop-filter: none; }
+:root[data-look='nebula'] .board-lightbox figure { background: #050505; box-shadow: 0 0 0 1px var(--nb-line), 5px 5px 0 var(--nb-offset); }
+:root[data-look='nebula'] .board-lightbox figcaption { color: #e8e8e8; font: 12px var(--mono); }
+:root[data-look='nebula'] .board-lightbox figcaption button { background: #ffffff14; color: #e8e8e8; }
+:root[data-look='nebula'] .floating-note { border-top: 7px solid var(--nb-ink); }
 /* The data terminal narrower, the board wider; tickets stretch over the row and show more of their text. */
 @container nebula-center (min-width: 900px) { .nebula-pair { grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); } }
 
@@ -445,18 +448,18 @@
 /* Adjacent default windows share a seam; the calendar casts no shadow into the notebook. */
 .nebula-stage.is-calendar-open.is-notebook-open .nebula-calendar:not(.is-floating) { box-shadow: none; }
 /* Scrollbars in the tickets' holographic foil, as narrow as before. */
-:root[data-theme='nebula'], :root[data-theme='nebula'] * { scrollbar-color: auto; scrollbar-width: auto; }
-:root[data-theme='nebula'] ::-webkit-scrollbar { width: 8px; height: 8px; }
-:root[data-theme='nebula'] ::-webkit-scrollbar-track { background: transparent; }
-:root[data-theme='nebula'] ::-webkit-scrollbar-thumb { border: 1px solid #000; background: var(--holo); background-size: 100% 300px; }
-:root[data-theme='nebula'] ::-webkit-scrollbar-thumb:hover { filter: brightness(1.1); }
-:root[data-theme='nebula'] ::-webkit-scrollbar-button, :root[data-theme='nebula'] ::-webkit-scrollbar-corner { display: none; background: transparent; }
+:root[data-look='nebula'], :root[data-look='nebula'] * { scrollbar-color: auto; scrollbar-width: auto; }
+:root[data-look='nebula'] ::-webkit-scrollbar { width: 8px; height: 8px; }
+:root[data-look='nebula'] ::-webkit-scrollbar-track { background: transparent; }
+:root[data-look='nebula'] ::-webkit-scrollbar-thumb { border: 1px solid #000; background: var(--holo); background-size: 100% 300px; }
+:root[data-look='nebula'] ::-webkit-scrollbar-thumb:hover { filter: brightness(1.1); }
+:root[data-look='nebula'] ::-webkit-scrollbar-button, :root[data-look='nebula'] ::-webkit-scrollbar-corner { display: none; background: transparent; }
 /* The windows still cover what lies behind them as far as the old, wider shadow reached: a second, invisible layer in
    the desk's colour under the thin offset. */
-:root[data-theme='nebula'] :is(.nebula-panel, .nebula-terminal, .nebula-calendar, .nebula-notebook, .nebula-poster, .nebula-cal-panel) { box-shadow: 4px 4px 0 var(--nb-offset), 9px 9px 0 var(--background); }
+:root[data-layout='desk'] :is(.nebula-panel, .nebula-terminal, .nebula-calendar, .nebula-notebook, .nebula-poster, .nebula-cal-panel) { box-shadow: 4px 4px 0 var(--nb-offset), 9px 9px 0 var(--background); }
 /* The poster is paper (its --background light): its outer ring is the desk's black, so it looks as wide as the calendar below. */
-:root[data-theme='nebula'] .nebula-poster { box-shadow: 4px 4px 0 var(--nb-offset), 9px 9px 0 var(--nb-black); }
-:root[data-theme='nebula'] .nebula-panel.is-held { box-shadow: 6px 7px 0 var(--nb-offset), 12px 14px 0 var(--background), 0 28px 60px #000000d9; }
+:root[data-layout='desk'] .nebula-poster { box-shadow: 4px 4px 0 var(--nb-offset), 9px 9px 0 var(--nb-black); }
+:root[data-layout='desk'] .nebula-panel.is-held { box-shadow: 6px 7px 0 var(--nb-offset), 12px 14px 0 var(--background), 0 28px 60px #000000d9; }
 /* A blinking cursor only where one can type (the search): the toggles' "_" stays still. */
 .search-cursor { margin-right: -.6ch; color: var(--nb-violet-light, #b388ff); }
 .nebula-poster input.nebula-poster-title { display: block; width: 100%; min-width: 0; padding: 0; border: 0; background: transparent; color: inherit; }

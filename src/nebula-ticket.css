@@ -29,8 +29,8 @@
 .nebula-ticket.foil-appointment .nebula-ticket-mark { color: #aad9cd; }
 .nebula-ticket.foil-event { --foil: var(--holo-sky); --ground: var(--holo-sky-ground); }
 /* Nebula squares every corner; the printed ticket keeps its round ones and its round punched dot. */
-:root[data-theme='nebula'] .nebula-ticket { border-radius: 16px !important; }
-:root[data-theme='nebula'] .nebula-ticket-bar i { border-radius: 50% !important; }
+:root[data-layout='desk'] .nebula-ticket { border-radius: 16px !important; }
+:root[data-layout='desk'] .nebula-ticket-bar i { border-radius: 50% !important; }
 .nebula-ticket:hover { transform: translateY(-4px) rotate(-.6deg); filter: saturate(1.15) brightness(1.03); }
 .nebula-ticket:focus-visible { outline: none; transform: translateY(-4px); filter: saturate(1.2); }
 .nebula-ticket:focus-visible .nebula-ticket-band { box-shadow: inset 0 2px 0 #141414, inset 0 -2px 0 #141414; }
@@ -62,20 +62,20 @@
 @media (prefers-reduced-motion: reduce) { .nebula-ticket { transition: none; } .nebula-ticket:hover { transform: none; } }
 
 /* Scrollbars in the foil: the desk's own (the whole page) in orange, every small one in mint. */
-:root[data-theme='nebula'] ::-webkit-scrollbar-thumb { border: 1px solid #000; background: var(--holo-mint) 0 0 / 260px 190px, var(--holo-mint-ground); }
-:root[data-theme='nebula'] .nebula-desk::-webkit-scrollbar { width: 14px; }
-:root[data-theme='nebula'] .nebula-desk::-webkit-scrollbar-track { background: #050505; box-shadow: inset 1px 0 0 #ffffff1f; }
-:root[data-theme='nebula'] .nebula-desk::-webkit-scrollbar-thumb { border: 2px solid #050505; background: var(--holo-orange) 0 0 / 520px 380px, var(--holo-orange-ground); }
+:root[data-look='nebula'] ::-webkit-scrollbar-thumb { border: 1px solid #000; background: var(--holo-mint) 0 0 / 260px 190px, var(--holo-mint-ground); }
+:root[data-layout='desk'] .nebula-desk::-webkit-scrollbar { width: 14px; }
+:root[data-layout='desk'] .nebula-desk::-webkit-scrollbar-track { background: #050505; box-shadow: inset 1px 0 0 #ffffff1f; }
+:root[data-layout='desk'] .nebula-desk::-webkit-scrollbar-thumb { border: 2px solid #050505; background: var(--holo-orange) 0 0 / 520px 380px, var(--holo-orange-ground); }
 
 /* The foil says what a button does (behind frosted film, see nebula-holo.css): lilac neutral (pressed toggles, chosen
    days), green positive (create, confirm, done), orange negative (delete, cancel). In the entry sheet the positive and
    negative ones show their foil when pointed at, pressed or chosen. */
-:root[data-theme='nebula'] .sheet-window .sheet-done:is(:hover, :focus-visible, :active, [aria-pressed='true']):not(:disabled) { background: var(--holo-positive) !important; color: #111 !important; }
-:root[data-theme='nebula'] .sheet-window :is(.sheet-remove, .sheet-cancelled):is(:hover, :focus-visible, :active, [aria-pressed='true']):not(:disabled) { background: var(--holo-danger) !important; color: #111 !important; }
-:root[data-theme='nebula'][data-popups='b'] .cal-composer .chrome-actions .chrome-remove:is(:hover, :focus-visible) { background: var(--holo-danger) !important; color: #111 !important; }
+:root[data-look='nebula'] .sheet-window .sheet-done:is(:hover, :focus-visible, :active, [aria-pressed='true']):not(:disabled) { background: var(--holo-positive) !important; color: #111 !important; }
+:root[data-look='nebula'] .sheet-window :is(.sheet-remove, .sheet-cancelled):is(:hover, :focus-visible, :active, [aria-pressed='true']):not(:disabled) { background: var(--holo-danger) !important; color: #111 !important; }
+:root[data-look='nebula'][data-popups='b'] .cal-composer .chrome-actions .chrome-remove:is(:hover, :focus-visible) { background: var(--holo-danger) !important; color: #111 !important; }
 /* The same three meanings on every other Holo-Papier button: chosen tabs, options and toggles in lilac; confirming and
    creating in green; cancelling and removing in orange when pointed at. */
-:root[data-theme='nebula'][data-popups='b'] :is(.chrome-tabs.is-nebula-b button[aria-selected='true'], :is(.tag-option, .folder-pick-option)[aria-selected='true'], :is(.tag-option, .folder-pick-option).is-current,
+:root[data-look='nebula'][data-popups='b'] :is(.chrome-tabs.is-nebula-b button[aria-selected='true'], :is(.tag-option, .folder-pick-option)[aria-selected='true'], :is(.tag-option, .folder-pick-option).is-current,
   :is(.repeat-chip, .planner-reminder, .planner-repeat, .board-thread-primary)[aria-pressed='true'], .planner-time.is-active) { background: var(--holo) !important; color: #111 !important; }
-:root[data-theme='nebula'][data-popups='b'] :is(.planner-confirm:not(:disabled), .tag-option.is-create:is(:hover, :focus-visible, [aria-selected='true'])) { background: var(--holo-positive) !important; color: #111 !important; }
-:root[data-theme='nebula'][data-popups='b'] :is(.chrome-actions .chrome-cancel, .board-thread-cut):is(:hover, :focus-visible) { background: var(--holo-danger) !important; color: #111 !important; }
+:root[data-look='nebula'][data-popups='b'] :is(.planner-confirm:not(:disabled), .tag-option.is-create:is(:hover, :focus-visible, [aria-selected='true'])) { background: var(--holo-positive) !important; color: #111 !important; }
+:root[data-look='nebula'][data-popups='b'] :is(.chrome-actions .chrome-cancel, .board-thread-cut):is(:hover, :focus-visible) { background: var(--holo-danger) !important; color: #111 !important; }

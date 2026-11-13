@@ -81,39 +81,39 @@
 .reminder-choice-units button[aria-checked='true'] { background: var(--selected); color: var(--strong); }
 
 /* ── Normal design, second popup look: rounder ───────────────────────────────────────────────────────────────── */
-:root[data-theme='classic'][data-popups='b'] :is(.icon-option, .reminder-choice-option, .icon-picker-browse, .icon-picker-browse button) { border-radius: 999px; }
-:root[data-theme='classic'][data-popups='b'] :is(.reminder-choice-number, .reminder-choice-units) { border-radius: 999px; }
-:root[data-theme='classic'][data-popups='b'] .reminder-choice-units button { border-radius: 999px; }
+:root[data-look='classic'][data-popups='b'] :is(.icon-option, .reminder-choice-option, .icon-picker-browse, .icon-picker-browse button) { border-radius: 999px; }
+:root[data-look='classic'][data-popups='b'] :is(.reminder-choice-number, .reminder-choice-units) { border-radius: 999px; }
+:root[data-look='classic'][data-popups='b'] .reminder-choice-units button { border-radius: 999px; }
 
 /* ── Journal: ink on paper. Thinner lines, square corners, the pickers like index cards. ──────────────────────── */
-:root[data-theme='journal'] .entry-icon { stroke-width: 1.7; }
-:root[data-theme='journal'] .cal-item-icon { color: color-mix(in srgb, var(--tag, var(--accent)) 85%, var(--text)); }
-:root[data-theme='journal'] :is(.icon-option, .reminder-choice-option, .reminder-choice-units button) { border-radius: 3px; }
-:root[data-theme='journal'] :is(.reminder-choice-number, .reminder-choice-units) { border-radius: 3px; background: transparent; box-shadow: inset 0 -1px 0 var(--divider); }
-:root[data-theme='journal'] .reminder-choice-number input { font-family: var(--write); font-size: 13px; }
-:root[data-theme='journal'] .icon-option[aria-selected='true'] { background: var(--paper-shade); transform: none; }
-:root[data-theme='journal'] .icon-option.is-current { box-shadow: inset 0 -2px 0 currentColor; }
-:root[data-theme='journal'] .reminder-choice-option { font-family: var(--sans); }
-:root[data-theme='journal'] .icon-picker-browse { padding: 0; border-radius: 0; background: transparent; box-shadow: none; }
-:root[data-theme='journal'] .icon-picker-browse button { height: 24px; padding: 0 6px; border-radius: 0; font: italic 13px var(--write); }
-:root[data-theme='journal'] .icon-picker-browse button[aria-pressed='true'] { background: transparent; color: var(--strong); box-shadow: inset 0 -1.5px 0 var(--accent); }
+:root[data-look='journal'] .entry-icon { stroke-width: 1.7; }
+:root[data-look='journal'] .cal-item-icon { color: color-mix(in srgb, var(--tag, var(--accent)) 85%, var(--text)); }
+:root[data-look='journal'] :is(.icon-option, .reminder-choice-option, .reminder-choice-units button) { border-radius: 3px; }
+:root[data-look='journal'] :is(.reminder-choice-number, .reminder-choice-units) { border-radius: 3px; background: transparent; box-shadow: inset 0 -1px 0 var(--divider); }
+:root[data-look='journal'] .reminder-choice-number input { font-family: var(--write); font-size: 13px; }
+:root[data-look='journal'] .icon-option[aria-selected='true'] { background: var(--paper-shade); transform: none; }
+:root[data-look='journal'] .icon-option.is-current { box-shadow: inset 0 -2px 0 currentColor; }
+:root[data-look='journal'] .reminder-choice-option { font-family: var(--sans); }
+:root[data-look='journal'] .icon-picker-browse { padding: 0; border-radius: 0; background: transparent; box-shadow: none; }
+:root[data-look='journal'] .icon-picker-browse button { height: 24px; padding: 0 6px; border-radius: 0; font: italic 13px var(--write); }
+:root[data-look='journal'] .icon-picker-browse button[aria-pressed='true'] { background: transparent; color: var(--strong); box-shadow: inset 0 -1.5px 0 var(--accent); }
 
 /* ── Nebula: a terminal. Thin bright lines that glow, no rounding, mono type. ───────────────────────────────── */
-:root[data-theme='nebula'] .entry-icon { stroke-width: 1.6; }
-:root[data-theme='nebula'] .cal-item-icon { filter: drop-shadow(0 0 3px color-mix(in srgb, var(--tag, var(--accent)) 55%, transparent)); }
-:root[data-theme='nebula'] :is(.icon-option, .reminder-choice-option, .reminder-choice-number, .reminder-choice-units, .reminder-choice-units button) { border-radius: 0; }
-:root[data-theme='nebula'] :is(.reminder-choice-option, .reminder-choice-amount, .reminder-choice-units button, .icon-picker-empty) { font-family: var(--mono); }
-:root[data-theme='nebula'] .icon-option[aria-selected='true'] { transform: none; background: color-mix(in srgb, var(--tag, var(--accent)) 16%, transparent); box-shadow: inset 0 0 0 1px currentColor; }
-:root[data-theme='nebula'] :is(.icon-picker-browse, .icon-picker-browse button) { border-radius: 0; }
-:root[data-theme='nebula'] .icon-picker-browse { padding: 0; gap: 0; background: transparent; }
-:root[data-theme='nebula'] .icon-picker-browse button { height: 26px; font: 11px var(--mono); text-transform: lowercase; }
-:root[data-theme='nebula'] .icon-picker-browse button[aria-pressed='true'] { background: var(--nb-violet); color: #fff; }
-:root[data-theme='nebula'][data-popups='b'] .icon-picker-browse { box-shadow: inset 0 0 0 1px #111; }
-:root[data-theme='nebula'][data-popups='b'] .icon-picker-browse button { color: #111; }
-:root[data-theme='nebula'][data-popups='b'] .icon-picker-browse button[aria-pressed='true'] { background: var(--holo); color: #111; box-shadow: inset 0 0 0 1px #111; }
-:root[data-theme='nebula'] .reminder-choice-option[aria-checked='true']::before { content: '>'; margin-right: -4px; color: var(--accent); font: 12px var(--mono); }
-:root[data-theme='nebula'][data-popups='b'] :is(.reminder-choice-number, .reminder-choice-units) { background: #ececec; box-shadow: inset 0 0 0 1px #111; }
-:root[data-theme='nebula'][data-popups='b'] :is(.reminder-choice-number input, .reminder-choice-units button[aria-checked='true']) { color: #111; }
+:root[data-look='nebula'] .entry-icon { stroke-width: 1.6; }
+:root[data-look='nebula'] .cal-item-icon { filter: drop-shadow(0 0 3px color-mix(in srgb, var(--tag, var(--accent)) 55%, transparent)); }
+:root[data-look='nebula'] :is(.icon-option, .reminder-choice-option, .reminder-choice-number, .reminder-choice-units, .reminder-choice-units button) { border-radius: 0; }
+:root[data-look='nebula'] :is(.reminder-choice-option, .reminder-choice-amount, .reminder-choice-units button, .icon-picker-empty) { font-family: var(--mono); }
+:root[data-look='nebula'] .icon-option[aria-selected='true'] { transform: none; background: color-mix(in srgb, var(--tag, var(--accent)) 16%, transparent); box-shadow: inset 0 0 0 1px currentColor; }
+:root[data-look='nebula'] :is(.icon-picker-browse, .icon-picker-browse button) { border-radius: 0; }
+:root[data-look='nebula'] .icon-picker-browse { padding: 0; gap: 0; background: transparent; }
+:root[data-look='nebula'] .icon-picker-browse button { height: 26px; font: 11px var(--mono); text-transform: lowercase; }
+:root[data-look='nebula'] .icon-picker-browse button[aria-pressed='true'] { background: var(--nb-violet); color: #fff; }
+:root[data-look='nebula'][data-popups='b'] .icon-picker-browse { box-shadow: inset 0 0 0 1px #111; }
+:root[data-look='nebula'][data-popups='b'] .icon-picker-browse button { color: #111; }
+:root[data-look='nebula'][data-popups='b'] .icon-picker-browse button[aria-pressed='true'] { background: var(--holo); color: #111; box-shadow: inset 0 0 0 1px #111; }
+:root[data-look='nebula'] .reminder-choice-option[aria-checked='true']::before { content: '>'; margin-right: -4px; color: var(--accent); font: 12px var(--mono); }
+:root[data-look='nebula'][data-popups='b'] :is(.reminder-choice-number, .reminder-choice-units) { background: #ececec; box-shadow: inset 0 0 0 1px #111; }
+:root[data-look='nebula'][data-popups='b'] :is(.reminder-choice-number input, .reminder-choice-units button[aria-checked='true']) { color: #111; }
 
 /* ── Pixel: square steps, no smoothing, the lines a little stronger so they keep their shape small. ─────────── */
 :root[data-pixel] .entry-icon { stroke-width: 2.4; stroke-linecap: square; stroke-linejoin: miter; shape-rendering: crispEdges; }
@@ -129,30 +129,30 @@
    prompt for the chosen one, the units as square keys (violet when chosen); in the Holo-Papier look a pointed or
    chosen row gets the lilac foil (all neutral choices). Pixel: square keys a size up. */
 .reminder-choice-suffix { flex: none; white-space: nowrap; }
-:root[data-theme='journal'] .reminder-choice-option { font: italic 13.5px var(--write); }
-:root[data-theme='journal'] .reminder-choice-option[aria-checked='true'] { font-weight: 600; }
-:root[data-theme='journal'] .reminder-choice-option:is(:hover, :focus-visible) { background: var(--paper-shade); }
-:root[data-theme='journal'] .reminder-choice-units { gap: 0; padding: 0; }
-:root[data-theme='journal'] .reminder-choice-units button { font: italic 12.5px var(--write); }
-:root[data-theme='journal'] .reminder-choice-units button[aria-checked='true'] { background: transparent; box-shadow: inset 0 -1.5px 0 var(--accent); }
-:root[data-theme='journal'] .reminder-choice-amount { font: italic 12.5px var(--write); }
-:root[data-theme='nebula'] .reminder-choice-option { font-size: 11.5px; text-transform: lowercase; }
-:root[data-theme='nebula'] .reminder-choice-option:is(:hover, :focus-visible) { background: var(--event-background); box-shadow: inset 2px 0 0 var(--nb-violet-light); }
-:root[data-theme='nebula'] .reminder-choice-units { gap: 0; padding: 0; background: transparent; box-shadow: none; }
-:root[data-theme='nebula'] .reminder-choice-units button { height: 26px; margin-left: -1px; padding: 0 6px; box-shadow: inset 0 0 0 1px var(--edge); text-transform: lowercase; }
-:root[data-theme='nebula'] .reminder-choice-units button[aria-checked='true'] { position: relative; background: var(--nb-violet); color: #fff; box-shadow: inset 0 0 0 1px var(--nb-violet-light); }
-:root[data-theme='nebula'] .reminder-choice-number { height: 26px; }
-:root[data-theme='nebula'][data-popups='b'] .reminder-choice-option { color: #111; }
-:root[data-theme='nebula'][data-popups='b'] .reminder-choice-option > .icon { color: #333; }
-:root[data-theme='nebula'][data-popups='b'] .reminder-choice-option:is(:hover, :focus-visible) { background: var(--holo); color: #111; box-shadow: inset 0 0 0 1px #111; }
-:root[data-theme='nebula'][data-popups='b'] .reminder-choice-option[aria-checked='true']::before { color: #111; }
-:root[data-theme='nebula'][data-popups='b'] :is(.reminder-choice-check, .reminder-choice-option[aria-checked='true'] > .icon:first-child) { color: #111; }
-:root[data-theme='nebula'][data-popups='b'] .reminder-choice-amount { color: #333; }
-:root[data-theme='nebula'][data-popups='b'] .reminder-choice-units { background: transparent; box-shadow: none; }
-:root[data-theme='nebula'][data-popups='b'] .reminder-choice-units button { color: #111; box-shadow: inset 0 0 0 1px #111; }
-:root[data-theme='nebula'][data-popups='b'] .reminder-choice-units button[aria-checked='true'] { background: var(--holo); color: #111; box-shadow: inset 0 0 0 1px #111; }
-:root[data-theme='nebula'][data-popups='b'] .reminder-choice-steps button { color: #333; }
-:root[data-theme='nebula'][data-popups='b'] .reminder-choice-own { border-top-color: #111; }
+:root[data-look='journal'] .reminder-choice-option { font: italic 13.5px var(--write); }
+:root[data-look='journal'] .reminder-choice-option[aria-checked='true'] { font-weight: 600; }
+:root[data-look='journal'] .reminder-choice-option:is(:hover, :focus-visible) { background: var(--paper-shade); }
+:root[data-look='journal'] .reminder-choice-units { gap: 0; padding: 0; }
+:root[data-look='journal'] .reminder-choice-units button { font: italic 12.5px var(--write); }
+:root[data-look='journal'] .reminder-choice-units button[aria-checked='true'] { background: transparent; box-shadow: inset 0 -1.5px 0 var(--accent); }
+:root[data-look='journal'] .reminder-choice-amount { font: italic 12.5px var(--write); }
+:root[data-look='nebula'] .reminder-choice-option { font-size: 11.5px; text-transform: lowercase; }
+:root[data-look='nebula'] .reminder-choice-option:is(:hover, :focus-visible) { background: var(--event-background); box-shadow: inset 2px 0 0 var(--nb-violet-light); }
+:root[data-look='nebula'] .reminder-choice-units { gap: 0; padding: 0; background: transparent; box-shadow: none; }
+:root[data-look='nebula'] .reminder-choice-units button { height: 26px; margin-left: -1px; padding: 0 6px; box-shadow: inset 0 0 0 1px var(--edge); text-transform: lowercase; }
+:root[data-look='nebula'] .reminder-choice-units button[aria-checked='true'] { position: relative; background: var(--nb-violet); color: #fff; box-shadow: inset 0 0 0 1px var(--nb-violet-light); }
+:root[data-look='nebula'] .reminder-choice-number { height: 26px; }
+:root[data-look='nebula'][data-popups='b'] .reminder-choice-option { color: #111; }
+:root[data-look='nebula'][data-popups='b'] .reminder-choice-option > .icon { color: #333; }
+:root[data-look='nebula'][data-popups='b'] .reminder-choice-option:is(:hover, :focus-visible) { background: var(--holo); color: #111; box-shadow: inset 0 0 0 1px #111; }
+:root[data-look='nebula'][data-popups='b'] .reminder-choice-option[aria-checked='true']::before { color: #111; }
+:root[data-look='nebula'][data-popups='b'] :is(.reminder-choice-check, .reminder-choice-option[aria-checked='true'] > .icon:first-child) { color: #111; }
+:root[data-look='nebula'][data-popups='b'] .reminder-choice-amount { color: #333; }
+:root[data-look='nebula'][data-popups='b'] .reminder-choice-units { background: transparent; box-shadow: none; }
+:root[data-look='nebula'][data-popups='b'] .reminder-choice-units button { color: #111; box-shadow: inset 0 0 0 1px #111; }
+:root[data-look='nebula'][data-popups='b'] .reminder-choice-units button[aria-checked='true'] { background: var(--holo); color: #111; box-shadow: inset 0 0 0 1px #111; }
+:root[data-look='nebula'][data-popups='b'] .reminder-choice-steps button { color: #333; }
+:root[data-look='nebula'][data-popups='b'] .reminder-choice-own { border-top-color: #111; }
 :root[data-pixel] .reminder-choice-units button[aria-checked='true'] { box-shadow: inset 0 0 0 2px currentColor; }
 
 /* ── In the journal: a tag's icon in place of its name (an entry's own icon shows in the calendar only) ─────── */
@@ -173,7 +173,7 @@
 .tag-row-sample.has-icon .entry-icon { width: 14px; height: 14px; }
 
 /* Journal: drawn in ink, the tag's colour mixed with it; the tag a stamp. */
-:root[data-theme='journal'] :is(.entry-tag.has-icon, .tag-row-sample.has-icon) { color: color-mix(in srgb, var(--tag) 85%, var(--text)); }
+:root[data-look='journal'] :is(.entry-tag.has-icon, .tag-row-sample.has-icon) { color: color-mix(in srgb, var(--tag) 85%, var(--text)); }
 /* Nebula: a glyph that glows. */
-:root[data-theme='nebula'] :is(.entry-tag.has-icon, .tag-row-sample.has-icon) .entry-icon { filter: drop-shadow(0 0 3px color-mix(in srgb, var(--tag) 60%, transparent)); }
-:root[data-theme='nebula'] .tag-icon { filter: drop-shadow(0 0 2px color-mix(in srgb, var(--tag, var(--accent)) 50%, transparent)); }
+:root[data-look='nebula'] :is(.entry-tag.has-icon, .tag-row-sample.has-icon) .entry-icon { filter: drop-shadow(0 0 3px color-mix(in srgb, var(--tag) 60%, transparent)); }
+:root[data-look='nebula'] .tag-icon { filter: drop-shadow(0 0 2px color-mix(in srgb, var(--tag, var(--accent)) 50%, transparent)); }

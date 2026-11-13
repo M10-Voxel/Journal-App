@@ -40,22 +40,22 @@
 .cal-details-actions .cal-details-escape { padding-inline:4px; }
 
 /* Each design uses its own forms and typography around the same mail content. */
-:root[data-theme='classic'][data-popups='b'] .mail-content-head { background:color-mix(in srgb,var(--strong) 3%,transparent); border-color:color-mix(in srgb,var(--strong) 12%,transparent); border-radius:12px; }
-:root[data-theme='journal'] .cal-details-head strong { font-family:var(--display,var(--serif,var(--sans))); font-style:italic; font-weight:600; }
-:root[data-theme='journal'] .mail-content-head { border-radius:2px; border-color:color-mix(in srgb,var(--text) 18%,transparent); background:color-mix(in srgb,var(--surface) 65%,var(--background)); }
-:root[data-theme='journal'] .cal-details-kind { border-radius:50%; background:transparent; box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--tag,var(--accent)) 40%,transparent); }
-:root[data-theme='journal'] .cal-details-meta > span { border-radius:2px; background:transparent; }
-:root[data-theme='journal'] .cal-details-actions > button { border-radius:2px; }
-:root[data-theme='journal'][data-popups='b'] .mail-content-head { border-style:dashed; background:color-mix(in srgb,var(--priority) 6%,transparent); }
-:root[data-theme='nebula'] :is(.mail-content-head,.cal-details-kind,.cal-details-meta > span,.mail-content-head button.mail-content-remote,.cal-details-actions > button,.mail-content iframe,.mail-content-text) { border-radius:0; }
-:root[data-theme='nebula'][data-popups='a'] :is(.cal-details-head strong,.mail-content-head .mail-content-subject,.mail-content-sender,.mail-content-label,.mail-content-head button.mail-content-remote,.cal-details-actions > button) { font-family:var(--mono); }
-:root[data-theme='nebula'][data-popups='a'] .mail-content-head { background:#080808; border-color:var(--nb-line); }
-:root[data-theme='nebula'][data-popups='a'] .cal-details-kind { background:transparent; box-shadow:inset 0 0 0 1px var(--tag,var(--accent)); }
-:root[data-theme='nebula'][data-popups='a'] .mail-content-label { text-transform:uppercase; letter-spacing:.08em; }
-:root[data-theme='nebula'][data-popups='b'] .mail-content-head { border-color:#11111145; background:#ffffff38; box-shadow:inset 0 1px 0 #ffffff90; }
-:root[data-theme='nebula'][data-popups='b'] .mail-content-head button.mail-content-remote { background:#dedede; color:#333; box-shadow:inset 1px 1px 0 #fff,inset -1px -1px 0 #999,0 0 0 1px #11111135; }
-:root[data-theme='nebula'][data-popups='b'] .mail-content-head button.mail-content-remote.is-on { background:var(--holo-mint); color:#111; }
-:root[data-theme='nebula'][data-popups='b'] .cal-details-actions > button:last-child { background:var(--holo-mint); color:#111; }
+:root[data-look='classic'][data-popups='b'] .mail-content-head { background:color-mix(in srgb,var(--strong) 3%,transparent); border-color:color-mix(in srgb,var(--strong) 12%,transparent); border-radius:12px; }
+:root[data-look='journal'] .cal-details-head strong { font-family:var(--display,var(--serif,var(--sans))); font-style:italic; font-weight:600; }
+:root[data-look='journal'] .mail-content-head { border-radius:2px; border-color:color-mix(in srgb,var(--text) 18%,transparent); background:color-mix(in srgb,var(--surface) 65%,var(--background)); }
+:root[data-look='journal'] .cal-details-kind { border-radius:50%; background:transparent; box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--tag,var(--accent)) 40%,transparent); }
+:root[data-look='journal'] .cal-details-meta > span { border-radius:2px; background:transparent; }
+:root[data-look='journal'] .cal-details-actions > button { border-radius:2px; }
+:root[data-look='journal'][data-popups='b'] .mail-content-head { border-style:dashed; background:color-mix(in srgb,var(--priority) 6%,transparent); }
+:root[data-look='nebula'] :is(.mail-content-head,.cal-details-kind,.cal-details-meta > span,.mail-content-head button.mail-content-remote,.cal-details-actions > button,.mail-content iframe,.mail-content-text) { border-radius:0; }
+:root[data-look='nebula'][data-popups='a'] :is(.cal-details-head strong,.mail-content-head .mail-content-subject,.mail-content-sender,.mail-content-label,.mail-content-head button.mail-content-remote,.cal-details-actions > button) { font-family:var(--mono); }
+:root[data-look='nebula'][data-popups='a'] .mail-content-head { background:#080808; border-color:var(--nb-line); }
+:root[data-look='nebula'][data-popups='a'] .cal-details-kind { background:transparent; box-shadow:inset 0 0 0 1px var(--tag,var(--accent)); }
+:root[data-look='nebula'][data-popups='a'] .mail-content-label { text-transform:uppercase; letter-spacing:.08em; }
+:root[data-look='nebula'][data-popups='b'] .mail-content-head { border-color:#11111145; background:#ffffff38; box-shadow:inset 0 1px 0 #ffffff90; }
+:root[data-look='nebula'][data-popups='b'] .mail-content-head button.mail-content-remote { background:#dedede; color:#333; box-shadow:inset 1px 1px 0 #fff,inset -1px -1px 0 #999,0 0 0 1px #11111135; }
+:root[data-look='nebula'][data-popups='b'] .mail-content-head button.mail-content-remote.is-on { background:var(--holo-mint); color:#111; }
+:root[data-look='nebula'][data-popups='b'] .cal-details-actions > button:last-child { background:var(--holo-mint); color:#111; }
 :root[data-pixel] :is(.mail-content-head,.cal-details-kind,.cal-details-meta > span,.mail-content-head button.mail-content-remote,.cal-details-actions > button,.mail-content iframe,.mail-content-text) { border-radius:0; }
 :root[data-pixel] .cal-details-head strong { font-size:16px; font-style:normal; }
 :root[data-pixel] .cal-details-meta { font-size:13px; }

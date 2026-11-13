@@ -134,7 +134,7 @@
 .cal-year-span { z-index: 1; min-width: 0; min-height: 0; margin-block: var(--span-inset, 1px); border: 1px solid var(--span-color, var(--event)); background: none !important; pointer-events: none; }
 .cal-year-span.is-span-start { border-top-left-radius: var(--calendar-span-radius, 4px); border-bottom-left-radius: var(--calendar-span-radius, 4px); }
 .cal-year-span.is-span-end { border-top-right-radius: var(--calendar-span-radius, 4px); border-bottom-right-radius: var(--calendar-span-radius, 4px); }
-:root[data-pixel] .cal, :root[data-theme='nebula'] .cal { --calendar-span-radius: 0px; }
+:root[data-pixel] .cal, :root[data-look='nebula'] .cal { --calendar-span-radius: 0px; }
 @container cal (max-width: 600px) { .cal-month-week { --month-entry-top: 25px; --month-entry-step: 18px; } }
 .cal-month-kw { align-self: start; padding-top: 9px !important; font: 9.5px var(--mono); color: var(--placeholder) !important; text-align: center; }
 .cal-month-kw:hover { color: var(--accent) !important; }
@@ -529,7 +529,7 @@ button.cal-time-day:hover { background: color-mix(in srgb, var(--strong) 3.137%,
 .mail-content-text { max-height: 45vh; margin: 0; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
 @container (max-width: 420px) { .mail-content-head { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'subject' 'sender' 'remote'; } .mail-content-remote { justify-self: start; } }
 :root[data-pixel] :is(.mail-content-remote, .mail-content-notes, .mail-content iframe) { border-radius: 0; }
-:root[data-theme='nebula'] :is(.mail-content-remote, .mail-content-notes, .mail-content iframe) { border-radius: 0; }
+:root[data-look='nebula'] :is(.mail-content-remote, .mail-content-notes, .mail-content iframe) { border-radius: 0; }
 .cal-item { cursor:grab; } .cal-item:active { cursor:grabbing; }
 
 /* A drag keeps the entry's exact appearance; only its destination wears an outline. */
@@ -542,7 +542,7 @@ button.cal-time-day:hover { background: color-mix(in srgb, var(--strong) 3.137%,
 .cal-year-span { align-self: center; height: calc(9px + var(--span-inset, 1px) * 2); margin-block: 0; transform: translateY(11px); border-radius: 0; }
 .cal-year-span.is-span-start { border-top-left-radius: 99px; border-bottom-left-radius: 99px; }
 .cal-year-span.is-span-end { border-top-right-radius: 99px; border-bottom-right-radius: 99px; }
-:root[data-pixel] .cal-year-span, :root[data-theme='nebula'] .cal-year-span { border-radius: 0 !important; }
+:root[data-pixel] .cal-year-span, :root[data-look='nebula'] .cal-year-span { border-radius: 0 !important; }
 /* The first kind sits at the composer's left edge, which clips what leaves it (it scrolls in a desktop widget):
    its tooltip opens to the right instead of centred below it. */
 .cal-composer-kinds > [data-tip]:first-child::after { left: 0; transform: translate(0, -3px) scale(.95); transform-origin: left top; }

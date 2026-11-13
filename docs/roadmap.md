@@ -32,6 +32,11 @@ Reihenfolge-Empfehlung: zuerst kleine/unabhängige, dann Datenmodell-Änderungen
 - [x] **Handschrift-Modus für Zettel** (erledigt: Text oder Zeichnung je Zettel, Füller mit Druck (abschaltbar), Teil-Radierer, „Skizze“-Knopf, keine Größenobergrenze; siehe `docs/bulletin-board.md`) – `src/ink.ts`, `src/components/InkCanvas.tsx`, `perfect-freehand`, Kartenlimit in `board.rs` 2 MB.
 - [x] **Mehr Werkzeuge für den Handschrift-Modus** (erledigt: Bleistift mit Körnung, transparenter Textmarker unter der Tinte, Farbe je Stiftart, Auswahl als Rechteck oder schneidendes Lasso zum Verschieben/Skalieren/Umfärben/Stärke ändern/Löschen, Hintergrund Linien/Raster/Punkte je Zettel, kompakte Leiste mit Icon-Dropdowns; siehe `docs/bulletin-board.md`) – `src/ink.ts`, `src/inkPrefs.ts`, `src/components/InkToolbar.tsx`, `src/components/InkCanvas.tsx`; Felder `tool`/`color` am Strich und `inkPaper` an der Karte ohne Migration.
 
+## Design: Aufbau und Optik frei kombinieren
+Ziel: weitere Aufbauten, Optiken und Popup-Varianten sollen sich leicht ergänzen lassen. Beschreibung der Achsen und Anleitung: `docs/design-axes.md`.
+- [x] **Stufe 1: Achsen trennen** – `data-layout` und `data-look` statt `data-theme`, `src/designs.ts`, Einstellungen „Aufbau“ und „Optik“, alle CSS-Regeln einsortiert, Bereich `combos` in `scripts/verify-ui.mjs`.
+- [ ] **Stufe 2: die sechs Mischungen gestalten** – Liste im Abschnitt „Stufe 2“ von `docs/design-axes.md` (Aufbau-Komponenten lesen Optik-Variablen, Palette je Kombination, Suche trennen, Popups/Pixel/Widgets je Mischung, Vorschaubilder, Tests).
+
 ## Offene Fragen
 - **Pinnwand für Zeiträume** (Woche…Jahr) – gewünscht? Blockiert „Suche: Monats-/Jahres-Pinnwand“.
 - **Ordner für Notizen** – vorerst nur Zettel-Tags (User-Entscheidung); Ordner-Tags ggf. später.

@@ -256,7 +256,7 @@ export function BulletinBoard({ date, period = 'day', tagScope = 'journal', tool
   }
 
   // Threads: where a card's pin is (the top middle of the card, turned with it).
-  const nebula = document.documentElement.dataset.theme === 'nebula';
+  const nebula = document.documentElement.dataset.look === 'nebula';
   const pinOf = (id: string): Point | null => {
     const at = placed.find(p => p.card.id === id); if (!at) return null;
     const w = sizing?.id === id ? sizing.w : widthOf(at.card), h = heights[id] ?? 200, tilt = nebula || at.card.kind === 'note' ? 0 : tiltOf(id) * Math.PI / 180;

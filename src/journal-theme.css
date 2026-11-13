@@ -3,10 +3,14 @@
    the controls stay as in the other styles; the book (JournalBook) and the calendar drawer exist only here. */
 
 
-:root[data-theme='journal'] {
+:root[data-look='journal'] {
   --write: 'Source Serif 4', Georgia, 'Times New Roman', serif;
   --serif: 'Source Serif 4', Georgia, serif;
   --display: 'Fraunces', 'Source Serif 4', Georgia, serif;
+}
+/* What the book needs whatever the look: the cover, the paper, the spine (from the palette) – and the journal look
+   uses the same paper and ink on any layout. */
+:root[data-look='journal'], :root[data-layout='book'] {
   /* The cover (and the background around the book) is the palette's `cover` colour, adjustable under Farben. */
   --leather: var(--cover, #6a4129);
   --leather-dark: color-mix(in srgb, var(--leather) 64%, #000);
@@ -18,72 +22,72 @@
   --book-paper: var(--surface);
   --soft-shadow: 0 0 0 1px var(--edge), 0 12px 26px -10px color-mix(in srgb, #3b2a1a 45%, transparent), 0 2px 5px color-mix(in srgb, #3b2a1a 16%, transparent);
 }
-:root[data-theme='journal'] .font-warmup { font-family: 'Source Serif 4'; }
+:root[data-look='journal'] .font-warmup { font-family: 'Source Serif 4'; }
 
 /* ── Book head: title bar and toolbar on paper, with a leather edge ─────────────────────────────────────────────── */
-:root[data-theme='journal'] .app.is-book .topbar { background: var(--surface); border-bottom: 3px solid var(--leather); box-shadow: 0 1px 0 var(--leather-dark); }
+:root[data-layout='book'] .app.is-book .topbar { background: var(--surface); border-bottom: 3px solid var(--leather); box-shadow: 0 1px 0 var(--leather-dark); }
 /* One bar: turning and the date sit in the title bar (the views are the book's register tabs). */
-:root[data-theme='journal'] .journal-tab[aria-current='page'] { color: var(--strong); font-family: var(--display); font-weight: 600; }
-:root[data-theme='journal'] .toolbar .date-picker-button { font-family: var(--serif); font-size: 13px; }
-:root[data-theme='journal'] .statusbar { background: var(--surface); border-top: 2px solid var(--leather); }
+:root[data-look='journal'] .journal-tab[aria-current='page'] { color: var(--strong); font-family: var(--display); font-weight: 600; }
+:root[data-look='journal'] .toolbar .date-picker-button { font-family: var(--serif); font-size: 13px; }
+:root[data-look='journal'] .statusbar { background: var(--surface); border-top: 2px solid var(--leather); }
 
 /* Headings in Fraunces, text in Source Serif; controls stay in IBM Plex Sans. */
-:root[data-theme='journal'] h1 { font-family: var(--display); font-weight: 600; letter-spacing: -.01em; color: var(--strong); font-variation-settings: 'SOFT' 50, 'WONK' 0; }
-:root[data-theme='journal'] .eyebrow { font: italic 13px var(--display); color: var(--muted); letter-spacing: .01em; }
-:root[data-theme='journal'] .today-label { font-style: normal; }
-:root[data-theme='journal'] :is(.section-title h2, .checklist-section-heading h3, .board-head h3, .period-section h3) { font-family: var(--display); font-weight: 600; letter-spacing: 0; color: var(--strong); }
-:root[data-theme='journal'] .section-title h2 { font-size: 17px; }
-:root[data-theme='journal'] .section-heading { border-bottom: 1px solid var(--divider); }
-:root[data-theme='journal'] .title-input { font-family: var(--display); font-weight: 500; font-style: italic; font-size: 22px; }
-:root[data-theme='journal'] :is(.cm-editor, .entry-text, .cal-composer-text, .cal-composer-description, .reminder-text) { font-size: 15px; }
-:root[data-theme='journal'] .entry-tag { border-radius: 3px; background: transparent; box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--tag, var(--muted)) 75%, transparent); color: color-mix(in srgb, var(--tag, var(--muted)) 80%, var(--text));
+:root[data-look='journal'] h1 { font-family: var(--display); font-weight: 600; letter-spacing: -.01em; color: var(--strong); font-variation-settings: 'SOFT' 50, 'WONK' 0; }
+:root[data-look='journal'] .eyebrow { font: italic 13px var(--display); color: var(--muted); letter-spacing: .01em; }
+:root[data-look='journal'] .today-label { font-style: normal; }
+:root[data-look='journal'] :is(.section-title h2, .checklist-section-heading h3, .board-head h3, .period-section h3) { font-family: var(--display); font-weight: 600; letter-spacing: 0; color: var(--strong); }
+:root[data-look='journal'] .section-title h2 { font-size: 17px; }
+:root[data-look='journal'] .section-heading { border-bottom: 1px solid var(--divider); }
+:root[data-look='journal'] .title-input { font-family: var(--display); font-weight: 500; font-style: italic; font-size: 22px; }
+:root[data-look='journal'] :is(.cm-editor, .entry-text, .cal-composer-text, .cal-composer-description, .reminder-text) { font-size: 15px; }
+:root[data-look='journal'] .entry-tag { border-radius: 3px; background: transparent; box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--tag, var(--muted)) 75%, transparent); color: color-mix(in srgb, var(--tag, var(--muted)) 80%, var(--text));
   font: 600 10px var(--sans); text-transform: uppercase; letter-spacing: .07em; transform: rotate(-1.5deg); }
-:root[data-theme='journal'] .entry-tag:hover, :root[data-theme='journal'] .entry-tag[aria-expanded='true'] { background: color-mix(in srgb, var(--tag, var(--muted)) 12%, transparent); }
+:root[data-look='journal'] .entry-tag:hover, :root[data-look='journal'] .entry-tag[aria-expanded='true'] { background: color-mix(in srgb, var(--tag, var(--muted)) 12%, transparent); }
 /* Ink dots: the entry's symbol a little heavier, like a pen pressed down. */
-:root[data-theme='journal'] .entry-symbol .icon { stroke-width: 1.7; }
-:root[data-theme='journal'] .entry-symbol:hover, :root[data-theme='journal'] .entry-symbol[aria-expanded='true'] { background: var(--paper-shade); }
+:root[data-look='journal'] .entry-symbol .icon { stroke-width: 1.7; }
+:root[data-look='journal'] .entry-symbol:hover, :root[data-look='journal'] .entry-symbol[aria-expanded='true'] { background: var(--paper-shade); }
 
 /* ── Popups as paper slips (see popups.css); settings and shortcuts as index cards ─────────────────────────────── */
-:root[data-theme='journal'] { --popup-radius: 4px; --popup-shadow: var(--soft-shadow); }
-:root[data-theme='journal'] .shortcut-backdrop { background: color-mix(in srgb, #2b2620 32%, transparent); }
-:root[data-theme='journal'] .shortcuts { border-radius: 4px; box-shadow: 0 0 0 1px var(--edge), 0 26px 50px -16px color-mix(in srgb, #3b2a1a 60%, transparent); background-color: var(--surface); }
-:root[data-theme='journal'] .settings-head strong { font-family: var(--display); font-weight: 600; font-size: 16px; }
+:root[data-look='journal'] { --popup-radius: 4px; --popup-shadow: var(--soft-shadow); }
+:root[data-look='journal'] .shortcut-backdrop { background: color-mix(in srgb, #2b2620 32%, transparent); }
+:root[data-look='journal'] .shortcuts { border-radius: 4px; box-shadow: 0 0 0 1px var(--edge), 0 26px 50px -16px color-mix(in srgb, #3b2a1a 60%, transparent); background-color: var(--surface); }
+:root[data-look='journal'] .settings-head strong { font-family: var(--display); font-weight: 600; font-size: 16px; }
 
 /* ── The board: the page's paper instead of cork; the cards keep their pins and get a strip of tape ──────────── */
-:root[data-theme='journal'] .board-surface { background: transparent; box-shadow: inset 0 0 0 1px var(--divider); border-radius: 2px;
+:root[data-look='journal'] .board-surface { background: transparent; box-shadow: inset 0 0 0 1px var(--divider); border-radius: 2px;
   background-image: radial-gradient(color-mix(in srgb, var(--muted) 18%, transparent) .8px, transparent 1.2px); background-size: 22px 22px; }
-:root[data-theme='journal'] .board-card { box-shadow: 0 1px 1px var(--ink-shadow), 0 10px 20px -10px color-mix(in srgb, #3b2a1a 55%, transparent); }
-:root[data-theme='journal'] .board-card:hover { box-shadow: 0 1px 1px var(--ink-shadow), 0 14px 26px -10px color-mix(in srgb, #3b2a1a 65%, transparent); }
-:root[data-theme='journal'] .board-card::after { content: ''; position: absolute; top: -9px; right: 14px; width: 54px; height: 18px; transform: rotate(8deg); pointer-events: none;
+:root[data-look='journal'] .board-card { box-shadow: 0 1px 1px var(--ink-shadow), 0 10px 20px -10px color-mix(in srgb, #3b2a1a 55%, transparent); }
+:root[data-look='journal'] .board-card:hover { box-shadow: 0 1px 1px var(--ink-shadow), 0 14px 26px -10px color-mix(in srgb, #3b2a1a 65%, transparent); }
+:root[data-look='journal'] .board-card::after { content: ''; position: absolute; top: -9px; right: 14px; width: 54px; height: 18px; transform: rotate(8deg); pointer-events: none;
   background: color-mix(in srgb, #fffbe8 55%, transparent); box-shadow: 0 0 0 1px color-mix(in srgb, #5a462a 10%, transparent); backdrop-filter: blur(.5px); }
-:root[data-theme='journal'] .book-page .bulletin-board { margin-top: 6px; }
+:root[data-layout='book'] .book-page .bulletin-board { margin-top: 6px; }
 
 /* Ratings and checklist in ink. */
-:root[data-theme='journal'] .period-rating output { font-family: var(--display); }
-:root[data-theme='journal'] .activity-name { font-family: var(--serif); font-size: 14px; }
+:root[data-look='journal'] .period-rating output { font-family: var(--display); }
+:root[data-look='journal'] .activity-name { font-family: var(--serif); font-size: 14px; }
 
 /* ── The calendar on squared paper ────────────────────────────────────────────────────────────────────────────── */
-:root[data-theme='journal'] .cal.is-embedded, :root[data-theme='journal'] body > #root > .cal { background-color: var(--surface); background-image: none; }
-:root[data-theme='journal'] :is(.cal-month-day,.cal-month-kw,.cal-year-grid > *) {
+:root[data-look='journal'] .cal.is-embedded, :root[data-look='journal'] body > #root > .cal { background-color: var(--surface); background-image: none; }
+:root[data-look='journal'] :is(.cal-month-day,.cal-month-kw,.cal-year-grid > *) {
   background-image: linear-gradient(color-mix(in srgb, var(--accent) 8%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--accent) 8%, transparent) 1px, transparent 1px);
   background-size: calc(100% / var(--paper-columns, 1)) calc(100% / var(--paper-rows, 1));
   background-origin: border-box; background-position: 0 0;
 }
 /* Hour views share the midnight origin and quarter-hour spacing of the time grid.
    Month/year paper uses the bounds of its date cells instead. */
-:root[data-theme='journal'] .cal.is-embedded:is([data-view='week'], [data-view='workweek'], [data-view='day']),
-:root[data-theme='journal'] body > #root > .cal:is([data-view='week'], [data-view='workweek'], [data-view='day']) { background-image: none; }
-:root[data-theme='journal'] .cal-time-body {
+:root[data-look='journal'] .cal.is-embedded:is([data-view='week'], [data-view='workweek'], [data-view='day']),
+:root[data-look='journal'] body > #root > .cal:is([data-view='week'], [data-view='workweek'], [data-view='day']) { background-image: none; }
+:root[data-look='journal'] .cal-time-body {
   --paper-square: calc(var(--hour) / 4);
   background-image: linear-gradient(color-mix(in srgb, var(--accent) 8%, transparent) 1px, transparent 1px);
   background-size: 100% var(--paper-square);
   background-position: 0 0;
 }
-:root[data-theme='journal'] .cal-viewbar { background: var(--surface); }
-:root[data-theme='journal'] .cal-title { font-family: var(--display); }
+:root[data-look='journal'] .cal-viewbar { background: var(--surface); }
+:root[data-look='journal'] .cal-title { font-family: var(--display); }
 
 /* Scrollbars: thin ink lines on the paper. */
-:root[data-theme='journal'], :root[data-theme='journal'] * { scrollbar-color: var(--scrollbar) transparent; }
+:root[data-look='journal'], :root[data-look='journal'] * { scrollbar-color: var(--scrollbar) transparent; }
 
 /* ── The book ─────────────────────────────────────────────────────────────────────────────────────────────────── */
 .app.is-book .main { background: radial-gradient(120% 90% at 50% 40%, var(--leather-light), var(--leather) 55%, var(--leather-dark)); }
@@ -115,7 +119,7 @@
 
 .book-page-scroll { position: relative; flex: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; scrollbar-width: thin; }
 /* The scrollbar starts below the register tabs (they lie over the page's outer edge) and is shorter for it. */
-:root[data-theme='journal'] .book-page-scroll { scrollbar-width: auto; scrollbar-color: auto; }
+:root[data-layout='book'] .book-page-scroll { scrollbar-width: auto; scrollbar-color: auto; }
 .book-page-scroll::-webkit-scrollbar { width: 8px; }
 .book-page-scroll::-webkit-scrollbar-track { margin-top: calc(var(--tabs, 0) * var(--cut-h) + 6px); margin-bottom: 6px; background: transparent; }
 .book-page-scroll::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 4px; background: var(--scrollbar) padding-box; }
@@ -393,37 +397,37 @@
 .book-stage.is-beside .book-spread::after { animation: book-fade-in 200ms ease 480ms both; }
 .calendar-drawer:not(.is-overlay) .calendar-drawer-sheet { left: 32px; width: calc(var(--drawer-width) - 32px); }
 
-:root[data-theme='journal'] .calendar-drawer-sheet, :root[data-theme='journal'] .calendar-drawer .cal.is-embedded { overflow: visible; }
+:root[data-layout='book'] .calendar-drawer-sheet, :root[data-layout='book'] .calendar-drawer .cal.is-embedded { overflow: visible; }
 /* Views: tabs from the top. */
-:root[data-theme='journal'] .calendar-drawer .cal-viewbar { position: absolute; top: 48px; right: 100%; z-index: auto; display: flex; flex-direction: column; align-items: flex-end; gap: 2px;
+:root[data-layout='book'] .calendar-drawer .cal-viewbar { position: absolute; top: 48px; right: 100%; z-index: auto; display: flex; flex-direction: column; align-items: flex-end; gap: 2px;
   height: auto; margin: 0; padding: 0; border: 0; background: none; }
-:root[data-theme='journal'] .calendar-drawer .cal-viewbar .cal-views { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; padding: 0; background: none; box-shadow: none; }
-:root[data-theme='journal'] .calendar-drawer .cal-viewbar .cal-views-indicator { display: none; }
-:root[data-theme='journal'] .calendar-drawer .cal-viewbar :is(.cal-views > button, .cal-transfer > button), :root[data-theme='journal'] .calendar-drawer .cal-toolbar {
+:root[data-layout='book'] .calendar-drawer .cal-viewbar .cal-views { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; padding: 0; background: none; box-shadow: none; }
+:root[data-layout='book'] .calendar-drawer .cal-viewbar .cal-views-indicator { display: none; }
+:root[data-layout='book'] .calendar-drawer .cal-viewbar :is(.cal-views > button, .cal-transfer > button), :root[data-layout='book'] .calendar-drawer .cal-toolbar {
   background: color-mix(in srgb, var(--surface) 80%, var(--leather)); color: color-mix(in srgb, var(--muted) 85%, var(--leather));
   box-shadow: -1px 0 2px #1d0f0633, inset -4px 0 4px -3px #1d0f0630; border: 0; border-radius: 6px 0 0 6px; }
-:root[data-theme='journal'] .calendar-drawer .cal-viewbar .cal-views > button { position: relative; flex: none; width: 24px; height: auto; margin: 0; padding: 12px 0;
+:root[data-layout='book'] .calendar-drawer .cal-viewbar .cal-views > button { position: relative; flex: none; width: 24px; height: auto; margin: 0; padding: 12px 0;
   writing-mode: vertical-rl; font: 500 11px var(--sans); transition: width 160ms var(--ease), background-color 160ms ease, color 160ms ease; }
-:root[data-theme='journal'] .calendar-drawer .cal-viewbar .cal-views > button:hover { width: 26px; color: var(--text); }
-:root[data-theme='journal'] .calendar-drawer .cal-viewbar .cal-views > button:active { transform: none; }
-:root[data-theme='journal'] .calendar-drawer .cal-viewbar .cal-views > button[aria-selected='true'] { z-index: 1; width: 29px; margin-right: -1px; background: var(--surface); color: var(--strong); font-weight: 600; box-shadow: -1px 0 3px #1d0f0640; }
+:root[data-layout='book'] .calendar-drawer .cal-viewbar .cal-views > button:hover { width: 26px; color: var(--text); }
+:root[data-layout='book'] .calendar-drawer .cal-viewbar .cal-views > button:active { transform: none; }
+:root[data-layout='book'] .calendar-drawer .cal-viewbar .cal-views > button[aria-selected='true'] { z-index: 1; width: 29px; margin-right: -1px; background: var(--surface); color: var(--strong); font-weight: 600; box-shadow: -1px 0 3px #1d0f0640; }
 /* Read bottom-up like the calendar's own tab beside them. */
-:root[data-theme='journal'] .calendar-drawer .cal-viewbar .cal-view-long { display: inline-block !important; transform: rotate(180deg); }
-:root[data-theme='journal'] .calendar-drawer .cal-viewbar .cal-view-short { display: none !important; }
-:root[data-theme='journal'] .calendar-drawer .cal-viewbar > .cal-transfer { margin: 6px 0 0; }
-:root[data-theme='journal'] .calendar-drawer .cal-viewbar > .cal-transfer > button { display: grid; place-items: center; width: 24px; height: 30px; padding: 0; }
+:root[data-layout='book'] .calendar-drawer .cal-viewbar .cal-view-long { display: inline-block !important; transform: rotate(180deg); }
+:root[data-layout='book'] .calendar-drawer .cal-viewbar .cal-view-short { display: none !important; }
+:root[data-layout='book'] .calendar-drawer .cal-viewbar > .cal-transfer { margin: 6px 0 0; }
+:root[data-layout='book'] .calendar-drawer .cal-viewbar > .cal-transfer > button { display: grid; place-items: center; width: 24px; height: 30px; padding: 0; }
 /* Filters (tags, kinds): a tab from the bottom; the day navigation and title are the book's (the calendar follows its day). */
-:root[data-theme='journal'] .calendar-drawer .cal-toolbar { position: absolute; right: 100%; bottom: 44px; top: auto; display: flex; flex-direction: column; align-items: center; gap: 6px;
+:root[data-layout='book'] .calendar-drawer .cal-toolbar { position: absolute; right: 100%; bottom: 44px; top: auto; display: flex; flex-direction: column; align-items: center; gap: 6px;
   width: 28px; min-height: 0; margin: 0; padding: 8px 0; }
-:root[data-theme='journal'] .calendar-drawer .cal-toolbar :is(.cal-nav, .cal-title) { display: none; }
-:root[data-theme='journal'] .calendar-drawer .cal-toolbar .cal-actions { display: flex; flex-direction: column; align-items: center; gap: 6px; margin: 0; }
-:root[data-theme='journal'] .calendar-drawer .cal-toolbar .cal-filter { flex-direction: column; gap: 4px; }
-:root[data-theme='journal'] .calendar-drawer .cal-toolbar .cal-filter button { width: 22px; height: 22px; }
-:root[data-theme='journal'] .calendar-drawer .cal-toolbar .tag-filter-button { flex-direction: column; gap: 3px; width: 24px; height: auto; margin: 0; padding: 5px 0; border-radius: 6px; }
+:root[data-layout='book'] .calendar-drawer .cal-toolbar :is(.cal-nav, .cal-title) { display: none; }
+:root[data-layout='book'] .calendar-drawer .cal-toolbar .cal-actions { display: flex; flex-direction: column; align-items: center; gap: 6px; margin: 0; }
+:root[data-layout='book'] .calendar-drawer .cal-toolbar .cal-filter { flex-direction: column; gap: 4px; }
+:root[data-layout='book'] .calendar-drawer .cal-toolbar .cal-filter button { width: 22px; height: 22px; }
+:root[data-layout='book'] .calendar-drawer .cal-toolbar .tag-filter-button { flex-direction: column; gap: 3px; width: 24px; height: auto; margin: 0; padding: 5px 0; border-radius: 6px; }
 
 
 /* Each day's paper subdivisions terminate exactly at the day boundaries. */
-:root[data-theme='journal'] .cal-time-column {
+:root[data-look='journal'] .cal-time-column {
   background-image: repeating-linear-gradient(to bottom, var(--line) 0 1px, transparent 1px calc(var(--hour) / 2), color-mix(in srgb, var(--strong) 2.745%, transparent) calc(var(--hour) / 2) calc(var(--hour) / 2 + 1px), transparent calc(var(--hour) / 2 + 1px) var(--hour)), linear-gradient(90deg, color-mix(in srgb, var(--accent) 8%, transparent) 1px, transparent 1px);
   background-origin: border-box;
   background-size: 100% 100%, calc(100% / var(--paper-columns, 8)) 100%;
@@ -464,25 +468,25 @@
 @keyframes sheet-slide { from { transform: translateX(calc(-100% - 40px)) rotate(-1.5deg); } to { transform: rotate(-.35deg); } }
 
 /* Decluttered paper: no lines that repeat what the page shows or explain what can be done. */
-:root[data-theme='journal'] .page-hint { display: none; }
+:root[data-look='journal'] .page-hint { display: none; }
 .book-page.is-entries .section-title :is(h2, .entry-count) { display: none; }
 
 /* ── Journal with the pixel look ──────────────────────────────────────────────────────────────────────────────────
    The book stays a book; its type becomes the pixel fonts (the terminal face for writing, Pixelify for titles), at the
    sizes the pixel look uses. Square corners and stepped motion come from pixel.css. */
-:root[data-theme='journal'][data-pixel] {
+:root[data-look='journal'][data-pixel] {
   --write: 'VT323', Consolas, monospace;
   --serif: 'VT323', Consolas, monospace;
   --display: 'Pixelify Sans', system-ui, sans-serif;
 }
-:root[data-theme='journal'][data-pixel] :is(.cm-editor, .entry-text, .cal-composer-text, .cal-composer-description, .reminder-text, .activity-name) { font-size: 16px; }
-:root[data-theme='journal'][data-pixel] .title-input { font-style: normal; font-size: 24px; }
-:root[data-theme='journal'][data-pixel] :is(.eyebrow, .book-page-foot) { font-style: normal; }
-:root[data-theme='journal'][data-pixel] .font-warmup { font-family: 'Lilex'; }
+:root[data-look='journal'][data-pixel] :is(.cm-editor, .entry-text, .cal-composer-text, .cal-composer-description, .reminder-text, .activity-name) { font-size: 16px; }
+:root[data-look='journal'][data-pixel] .title-input { font-style: normal; font-size: 24px; }
+:root[data-layout='book'][data-pixel] :is(.eyebrow, .book-page-foot) { font-style: normal; }
+:root[data-look='journal'][data-pixel] .font-warmup { font-family: 'Lilex'; }
 /* The board's page: the board reaches down to the page's foot. */
-:root[data-theme='journal'] .book-page-content:has(> .bulletin-board) { display: flex; flex-direction: column; box-sizing: border-box; min-height: 100%; }
-:root[data-theme='journal'] .book-page .bulletin-board { display: flex; flex: 1; flex-direction: column; padding-bottom: 0; }
-:root[data-theme='journal'] .book-page .board-surface { flex: 1 0 auto; }
+:root[data-layout='book'] .book-page-content:has(> .bulletin-board) { display: flex; flex-direction: column; box-sizing: border-box; min-height: 100%; }
+:root[data-layout='book'] .book-page .bulletin-board { display: flex; flex: 1; flex-direction: column; padding-bottom: 0; }
+:root[data-layout='book'] .book-page .board-surface { flex: 1 0 auto; }
 
 /* ── The notebook: a tab below the calendar's, a sheet over the right page ────────────────────────────────────────
    Out of its tab the sheet slides in from the right and lies over the right page (one page: over the page, from the
@@ -495,10 +499,10 @@
 .notebook-tab:hover { transform: translateX(2px); }
 .notebook-tab.is-open { transform: none; filter: brightness(.82); }
 .notebook-tab:focus-visible { outline: 2px solid #fbeee0; outline-offset: -4px; }
-:root[data-theme='journal'][data-pixel] .notebook-tab { border-radius: 0; }
+:root[data-layout='book'][data-pixel] .notebook-tab { border-radius: 0; }
 /* The notebook is a sheet like the calendar's (same place, width and resizing); it scrolls inside itself and has no
    side tabs, so it keeps its edges. */
-.calendar-drawer.is-notebook .calendar-drawer-sheet, :root[data-theme='journal'] .calendar-drawer.is-notebook .calendar-drawer-sheet { overflow: hidden; }
+.calendar-drawer.is-notebook .calendar-drawer-sheet, :root[data-layout='book'] .calendar-drawer.is-notebook .calendar-drawer-sheet { overflow: hidden; }
 .calendar-drawer.is-notebook .calendar-drawer-sheet > .notebook { flex: 1; min-height: 0; }
 /* With the calendar out too, the notebook lies on the right page: the mirror of the left sheet, sliding in from the
    right edge. */

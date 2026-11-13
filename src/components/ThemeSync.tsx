@@ -28,7 +28,7 @@ export function ThemeSync() {
     });
     if (getCurrentWindow().label !== 'main') void Promise.all([appearance, hello]).then(() => emit('journal:appearance-hello', { label: getCurrentWindow().label }));
     else void appearance.then(() => emit('journal:appearance', loadSettings()));
-    const stop = listen<Pick<Settings, 'theme' | 'pixel' | 'popupStyle'>>('journal:theme', event => applyTheme(event.payload));
+    const stop = listen<Pick<Settings, 'layout' | 'look' | 'pixel' | 'popupStyle'>>('journal:theme', event => applyTheme(event.payload));
     const languageStop = listen<Language>('journal:language', event => setLanguage(event.payload));
     const colorStop = listen<ColorSettings>('journal:colors', event => applyColors(event.payload));
     const scaleStop = listen<{ scale: UiScale; pixel: boolean }>('journal:scale', event => void applyScale(event.payload.scale, event.payload.pixel));

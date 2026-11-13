@@ -102,5 +102,5 @@
 .system-message { overflow-wrap: anywhere; color: var(--muted); font-size: 12px; line-height: 1.6; }
 .system-release-notes { max-height: 180px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; line-height: 1.6; }
 .system-settings progress { width: 100%; accent-color: var(--accent); }
-:root[data-pixel] .system-actions button, :root[data-pixel] .system-confirm, :root[data-theme="nebula"] .system-actions button, :root[data-theme="nebula"] .system-confirm { border-radius: 0; }
+:root[data-pixel] .system-actions button, :root[data-pixel] .system-confirm, :root[data-look='nebula'] .system-actions button, :root[data-look='nebula'] .system-confirm { border-radius: 0; }
 :root[data-pixel] .system-actions button, :root[data-pixel] .system-message, :root[data-pixel] .system-path { font-size: 15px; }

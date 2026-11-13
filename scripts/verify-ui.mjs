@@ -899,7 +899,7 @@ async function checkColors() {
   await evaluate("document.querySelector('[data-theme-choice=classic]').click()");
   await evaluate("(() => { const s=document.querySelector('[data-pixel-toggle]'); if (s.getAttribute('aria-checked')==='true') s.click(); })()");
   await evaluate("document.querySelector('[data-language=de]').click()");
-  await until("document.documentElement.dataset.colorTheme==='original' && document.documentElement.dataset.theme==='classic' && document.documentElement.lang==='de'");
+  await until("document.documentElement.dataset.colorTheme==='original' && (document.documentElement.dataset.look==='classic'&&document.documentElement.dataset.layout==='classic') && document.documentElement.lang==='de'");
   await key('Escape');
   console.log('Colour checks passed: base palettes, live Markdown/editor/menu colours, picker/hex/opacity, validation, independent overrides, resets, unsaved content, persistence, compact layout, both UI styles, English labels and all window types.');
 }
@@ -1538,14 +1538,14 @@ async function checkPixelTheme() {
   await until("document.documentElement.dataset.pixel!==undefined && Boolean(document.querySelector('.cal'))");
   // Cross-window events also update windows already open, without reloading their content.
   await evaluate("window.__uiTest.emit('journal:theme','classic')");
-  await until("document.documentElement.dataset.theme==='classic'");
+  await until("(document.documentElement.dataset.look==='classic'&&document.documentElement.dataset.layout==='classic')");
   await command('Page.navigate',{url:origin});
   await until("Boolean(document.querySelector('.settings-button'))");
   await key(',', 'Comma', 2);
   await until("Boolean(document.querySelector('[data-theme-choice=classic]'))");
   await evaluate("document.querySelector('[data-theme-choice=classic]').click()");
   await evaluate("(() => { const s=document.querySelector('[data-pixel-toggle]'); if (s.getAttribute('aria-checked')==='true') s.click(); })()");
-  await until("document.documentElement.dataset.theme==='classic'");
+  await until("(document.documentElement.dataset.look==='classic'&&document.documentElement.dataset.layout==='classic')");
   await key('Escape');
   console.log('Pixel theme checks passed: unchanged palette/layout, bundled mono font, saved preference, editing/saving, shortcuts, calendar drawing and cross-window synchronization.');
 }
@@ -1565,7 +1565,7 @@ async function checkJournalTheme() {
   assert.deepEqual(await evaluate("[...document.querySelectorAll('.theme-options button')].map(b => b.dataset.themeChoice)"), ['classic', 'journal', 'nebula']);
   assert.equal(await evaluate("document.querySelector('[data-pixel-toggle]').getAttribute('role')"), 'switch');
   await evaluate("document.querySelector('[data-theme-choice=journal]').click()");
-  await until("document.documentElement.dataset.theme==='journal' && document.documentElement.dataset.colorTheme==='paper'");
+  await until("(document.documentElement.dataset.look==='journal'&&document.documentElement.dataset.layout==='book') && document.documentElement.dataset.colorTheme==='paper'");
   assert.equal(await evaluate("getComputedStyle(document.documentElement).getPropertyValue('--background').trim()"), '#f3ecdc');
   assert.equal(await evaluate("getComputedStyle(document.documentElement).colorScheme"), 'light');
   await evaluate("Promise.all([document.fonts.load('400 15px \"Source Serif 4\"'),document.fonts.load('600 30px Fraunces')])");
@@ -1788,16 +1788,16 @@ async function checkJournalTheme() {
   await until("document.querySelectorAll('.book-page').length===2");
   // Other windows take the style too.
   await command('Page.navigate',{url:`${origin}/?window=calendar`});
-  await until("document.documentElement.dataset.theme==='journal' && Boolean(document.querySelector('.cal'))");
+  await until("(document.documentElement.dataset.look==='journal'&&document.documentElement.dataset.layout==='book') && Boolean(document.querySelector('.cal'))");
   await pause(300); await screenshot('journal-calendar-window.png');
   await command('Page.navigate',{url:origin});
-  await until("document.documentElement.dataset.theme==='journal' && document.querySelectorAll('.book-page').length===2");
+  await until("(document.documentElement.dataset.look==='journal'&&document.documentElement.dataset.layout==='book') && document.querySelectorAll('.book-page').length===2");
   // Back to the classic style: the dark palette chosen before returns, with the sidebar.
   await key(',', 'Comma', 2);
   await until("Boolean(document.querySelector('[data-theme-choice=classic]'))");
   await evaluate("document.querySelector('[data-theme-choice=classic]').click()");
   await evaluate("(() => { const s=document.querySelector('[data-pixel-toggle]'); if (s.getAttribute('aria-checked')==='true') s.click(); })()");
-  await until("document.documentElement.dataset.theme==='classic' && document.documentElement.dataset.colorTheme==='original'");
+  await until("(document.documentElement.dataset.look==='classic'&&document.documentElement.dataset.layout==='classic') && document.documentElement.dataset.colorTheme==='original'");
   await key('Escape');
   await until("Boolean(document.querySelector('.sidebar')) && !document.querySelector('.book-stage')");
   assert.equal(await evaluate("getComputedStyle(document.documentElement).colorScheme"), 'dark');
@@ -1818,7 +1818,7 @@ async function checkNebulaTheme() {
   await evaluate("(() => { const s=document.querySelector('[data-pixel-toggle]'); if (s.getAttribute('aria-checked')!=='true') s.click(); })()");
   await until("document.documentElement.dataset.pixel!==undefined");
   await evaluate("document.querySelector('[data-theme-choice=nebula]').click()");
-  await until("document.documentElement.dataset.theme==='nebula'");
+  await until("(document.documentElement.dataset.look==='nebula'&&document.documentElement.dataset.layout==='desk')");
   assert.equal(await evaluate("document.documentElement.dataset.pixel"), undefined, 'Nebula has no pixel look.');
   assert.equal(await evaluate("document.querySelector('[data-pixel-toggle]').disabled"), true, 'The pixel switch is disabled in Nebula.');
   assert.equal(await evaluate("document.querySelector('[data-pixel-toggle]').getAttribute('aria-checked')"), 'true', 'The stored pixel choice stays.');
@@ -1999,11 +1999,11 @@ async function checkNebulaTheme() {
   await command('Emulation.setEmulatedMedia', { features:[] });
   // Other windows take the design (and no pixel look) too.
   await command('Page.navigate',{url:`${origin}/?window=calendar`});
-  await until("document.documentElement.dataset.theme==='nebula' && document.documentElement.dataset.pixel===undefined && Boolean(document.querySelector('.cal'))");
+  await until("(document.documentElement.dataset.look==='nebula'&&document.documentElement.dataset.layout==='desk') && document.documentElement.dataset.pixel===undefined && Boolean(document.querySelector('.cal'))");
   assert.equal(await evaluate("getComputedStyle(document.documentElement).getPropertyValue('--background').trim()"), '#050505');
   await pause(300); await screenshot('nebula-calendar-window.png');
   await command('Page.navigate',{url:origin});
-  await until("document.documentElement.dataset.theme==='nebula' && Boolean(document.querySelector('.nebula-desk .entry'))");
+  await until("(document.documentElement.dataset.look==='nebula'&&document.documentElement.dataset.layout==='desk') && Boolean(document.querySelector('.nebula-desk .entry'))");
   // Floating windows: the calendar moves by its bar, resizes at its corner, lies over the desk (the day's note stays usable
   // beside it), keeps its place after a reload; focus darkens the rest; a double click on the bar docks it again.
   await command('Emulation.setDeviceMetricsOverride',{width:1380,height:860,deviceScaleFactor:1,mobile:false});
@@ -2271,7 +2271,7 @@ async function checkNebulaTheme() {
   await key(',', 'Comma', 2);
   await until("Boolean(document.querySelector('[data-theme-choice=classic]'))");
   await evaluate("document.querySelector('[data-theme-choice=classic]').click()");
-  await until("document.documentElement.dataset.theme==='classic' && document.documentElement.dataset.pixel!==undefined && !document.querySelector('[data-pixel-toggle]').disabled");
+  await until("(document.documentElement.dataset.look==='classic'&&document.documentElement.dataset.layout==='classic') && document.documentElement.dataset.pixel!==undefined && !document.querySelector('[data-pixel-toggle]').disabled");
   await evaluate("document.querySelector('[data-pixel-toggle]').click()");
   await until("document.documentElement.dataset.pixel===undefined");
   assert.equal(await evaluate("getComputedStyle(document.documentElement).getPropertyValue('--background').trim()"), '#000000');
@@ -3201,10 +3201,10 @@ try {
     await command('Emulation.setDeviceMetricsOverride',{width:600,height:600,deviceScaleFactor:1,mobile:false});
     await evaluate("localStorage.setItem('journal.settings',JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'),theme:'nebula',popupStyle:'a',pixel:true}));localStorage.removeItem('journal.widget-chrome')");
     await command('Page.navigate',{url:`http://127.0.0.1:${server.address().port}/?window=widget-entries`});
-    await until("!!document.querySelector('.desktop-widget .entry') && document.documentElement.dataset.theme==='nebula'");
+    await until("!!document.querySelector('.desktop-widget .entry') && (document.documentElement.dataset.look==='nebula'&&document.documentElement.dataset.layout==='desk')");
     const chrome=value=>evaluate(`localStorage.setItem('journal.widget-chrome',JSON.stringify({entries:${JSON.stringify(value)}}));window.dispatchEvent(new StorageEvent('storage',{key:'journal.widget-chrome'}))`);
     await chrome({glass:true});
-    await until("document.documentElement.dataset.glass==='light' && document.documentElement.dataset.theme==='classic' && document.documentElement.dataset.popups==='b' && !('pixel' in document.documentElement.dataset) && !document.querySelector('.desktop-widget.nebula-terminal')");
+    await until("document.documentElement.dataset.glass==='light' && (document.documentElement.dataset.look==='classic'&&document.documentElement.dataset.layout==='classic') && document.documentElement.dataset.popups==='b' && !('pixel' in document.documentElement.dataset) && !document.querySelector('.desktop-widget.nebula-terminal')");
     await pause(300);
     assert.equal(await evaluate("getComputedStyle(document.querySelector('.desktop-widget')).backgroundColor"),'rgba(0, 0, 0, 0)','No background');
     assert.equal(await evaluate("getComputedStyle(document.querySelector('.desktop-widget .desktop-widget-head')).backgroundColor"),'rgba(0, 0, 0, 0)','No header bar');
@@ -3249,7 +3249,7 @@ try {
     assert.equal(await evaluate("getComputedStyle(document.querySelector('.desktop-widget-open')).borderRadius"),'20px','Rounding follows the slider');
     // A settings broadcast from the app does not bring its design back while the widget is transparent.
     await evaluate("window.__uiTest.emit('journal:theme',{theme:'journal',pixel:false,popupStyle:'a'})");await pause(100);
-    assert.equal(await evaluate("document.documentElement.dataset.theme"),'classic','Independent of the app design');
+    assert.equal(await evaluate("document.documentElement.dataset.look+'/'+document.documentElement.dataset.layout"),'classic/classic','Independent of the app design');
     // Popups: a panel of their own, not transparent.
     await evaluate("document.querySelector('.desktop-widget .widget-date').click()");
     await until("!!document.querySelector('.mini-picker-panel')");
@@ -3261,7 +3261,7 @@ try {
     await until("document.documentElement.dataset.glass==='dark'");
     assert.equal(await evaluate("getComputedStyle(document.documentElement).getPropertyValue('--text').trim()"),'#1b1b1f','Dark type');
     await chrome({glass:false});
-    await until("!('glass' in document.documentElement.dataset) && document.documentElement.dataset.theme==='journal'");
+    await until("!('glass' in document.documentElement.dataset) && (document.documentElement.dataset.look==='journal'&&document.documentElement.dataset.layout==='book')");
     // The switch and the type choice in the widget's settings.
     await command('Page.navigate',{url:`http://127.0.0.1:${server.address().port}/`});
     await until("document.querySelectorAll('.entry').length===5");
@@ -4064,11 +4064,11 @@ try {
     assert(await evaluate("[...document.querySelectorAll('.sidebar .cal-year-span')].every(n=>{const s=getComputedStyle(n);return s.backgroundColor==='rgba(0, 0, 0, 0)' && s.backgroundImage==='none' && s.pointerEvents==='none' && parseFloat(s.borderTopWidth)>0})"),'Year ranges are transparent outlines and leave existing markings accessible.');
     assert(await evaluate("document.querySelectorAll('.sidebar .cal-year-day.has-mark .cal-year-mark').length>0"));
     for(const theme of ['classic','journal','nebula']) for(const pixel of [false,true]) {
-      await evaluate(`document.documentElement.dataset.theme='${theme}';if(${pixel})document.documentElement.dataset.pixel='';else delete document.documentElement.dataset.pixel`);
+      await evaluate(`document.documentElement.dataset.look='${theme}';document.documentElement.dataset.layout=({journal:'book',nebula:'desk'})['${theme}']??'classic';if(${pixel})document.documentElement.dataset.pixel='';else delete document.documentElement.dataset.pixel`);
       const radius=await evaluate("parseFloat(getComputedStyle(document.querySelector('.sidebar .cal-year-span.is-span-start')).borderTopLeftRadius)");
       assert.equal(radius===0,pixel || theme==='nebula',`${theme} pixel=${pixel}: range end caps follow the theme.`);
     }
-    await evaluate("document.documentElement.dataset.theme='classic';delete document.documentElement.dataset.pixel");
+    await evaluate("document.documentElement.dataset.look='classic';document.documentElement.dataset.layout='classic';delete document.documentElement.dataset.pixel");
     await evaluate(`document.querySelector('.sidebar .cal-year-day[data-date="${month}-05"]').closest('.cal-year-month').scrollIntoView({block:'center'})`);
     await screenshot('calendar-connected-year.png');
     assert.deepEqual(errors,[]);console.log('Connected calendar spans passed: lanes, week boundaries, dragging, year outlines and theme end caps.');
@@ -4166,7 +4166,7 @@ try {
       await evaluate(`document.querySelectorAll('.sidebar .cal-views [role=tab]')[${viewIndex}].click()`);
       await until("Boolean(document.querySelector('.sidebar .cal-time-allday-cell'))");
       for (const theme of ['classic','journal']) for (const pixel of [false,true]) {
-        await evaluate(`document.documentElement.dataset.theme='${theme}';if(${pixel})document.documentElement.dataset.pixel='';else delete document.documentElement.dataset.pixel;`);
+        await evaluate(`document.documentElement.dataset.look='${theme}';document.documentElement.dataset.layout=({journal:'book',nebula:'desk'})['${theme}']??'classic';if(${pixel})document.documentElement.dataset.pixel='';else delete document.documentElement.dataset.pixel;`);
         await pause(80);
         const aligned=await evaluate(`(() => {const root=document.querySelector('.sidebar .cal'),corner=root.querySelector('.cal-time-allday > .cal-time-corner').getBoundingClientRect(),week=root.querySelector('.cal-time-head > .cal-time-corner').getBoundingClientRect(),cells=[...root.querySelectorAll('.cal-time-allday-cell')],headers=[...root.querySelectorAll('.cal-time-day')],timed=[...root.querySelectorAll('.cal-time-column')];return Math.abs(corner.left-week.left)<1 && cells.every((cell,i)=>{const r=cell.getBoundingClientRect(),h=headers[i].getBoundingClientRect(),t=timed[i].getBoundingClientRect();return Math.abs(r.left-h.left)<1 && Math.abs(r.width-h.width)<1 && Math.abs(r.left-t.left)<1;});})()`);
         assert(aligned,`All-day columns align with weekdays: view ${viewIndex}, ${theme}, pixel=${pixel}`);
@@ -4272,7 +4272,7 @@ try {
     await until("Boolean(document.querySelector('[data-pixel-toggle]'))");
     await evaluate("document.querySelector('[data-pixel-toggle]').click()");
     await key('Escape');
-    await until("!document.querySelector('.settings') && document.documentElement.dataset.pixel!==undefined && document.documentElement.dataset.theme==='journal'"); await pause(500);
+    await until("!document.querySelector('.settings') && document.documentElement.dataset.pixel!==undefined && (document.documentElement.dataset.look==='journal'&&document.documentElement.dataset.layout==='book')"); await pause(500);
     assert(await evaluate("Boolean(document.querySelector('.book-page .book-nav'))"));
     assert.match(await evaluate("getComputedStyle(document.querySelector('.book-nav h1')).fontFamily"), /Pixelify/);
     assert.match(await evaluate("getComputedStyle(document.querySelector('.book-page .entry-text')).fontFamily"), /VT323/);
@@ -4282,7 +4282,7 @@ try {
   } else if (process.env.JOURNAL_UI_SCOPE === 'journal-grid') {
     await evaluate("localStorage.setItem('journal.settings',JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'),theme:'journal',colorTheme:'paper'}))");
     await command('Page.navigate',{url:`http://127.0.0.1:${server.address().port}/?window=calendar`});
-    await until("document.documentElement.dataset.theme==='journal' && Boolean(document.querySelector('.cal-viewbar'))");
+    await until("(document.documentElement.dataset.look==='journal'&&document.documentElement.dataset.layout==='book') && Boolean(document.querySelector('.cal-viewbar'))");
     await evaluate("document.querySelector('.cal-viewbar button[title*=Woche]').click()");
     await until("Boolean(document.querySelector('.cal-time-body'))");
     const read=()=>evaluate("(() => {const body=document.querySelector('.cal-time-body'),column=document.querySelector('.cal-time-column'),style=getComputedStyle(body);const label=document.querySelector('.cal-time-hours').children[4].getBoundingClientRect();return {hour:parseFloat(getComputedStyle(document.querySelector('.cal-time')).getPropertyValue('--hour')),square:parseFloat(style.backgroundSize.split(' ')[1]),columns:Number(getComputedStyle(column).getPropertyValue('--paper-columns')),vertical:parseFloat(getComputedStyle(column).backgroundSize.split(',')[1]),origin:getComputedStyle(column).backgroundOrigin,phase:style.backgroundPosition,outer:getComputedStyle(document.querySelector('.cal')).backgroundImage,label:label.top+label.height/2-body.getBoundingClientRect().top,column:column.getBoundingClientRect().top-body.getBoundingClientRect().top};})()");
@@ -4609,10 +4609,10 @@ try {
     await evaluate("document.querySelector('.cal-composer-text').focus()");
     await pause(300); await screenshot('multi-composer.png');
     // The same fields in Holo-Papier: room between the type and the black frame.
-    await evaluate("document.documentElement.dataset.theme='nebula';document.documentElement.dataset.popups='b'");
+    await evaluate("document.documentElement.dataset.look='nebula';document.documentElement.dataset.layout='desk';document.documentElement.dataset.popups='b'");
     await pause(250); await screenshot('multi-composer-holo.png');
     assert(await evaluate("[...document.querySelectorAll('.cal-multi-form .field-trigger')].every(b => { const r=b.getBoundingClientRect(), t=b.querySelector('span').getBoundingClientRect(); return t.top-r.top>=4 && r.bottom-t.bottom>=4 && t.left-r.left>=6; })"), 'Holo fields leave room around their text.');
-    await evaluate("document.documentElement.dataset.theme='classic';document.documentElement.dataset.popups='a'");
+    await evaluate("document.documentElement.dataset.look='classic';document.documentElement.dataset.layout='classic';document.documentElement.dataset.popups='a'");
     await command('Input.insertText',{text:'Multiple days'});
     await key('Enter','Enter');
     await until("!document.querySelector('.cal-composer')");
@@ -5506,7 +5506,7 @@ try {
     for (const theme of ['classic', 'journal', 'nebula']) for (const style of ['a', 'b']) {
       await evaluate(`localStorage.setItem('journal.settings', JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'), theme:'${theme}', popupStyle:'${style}', pixel:false, colorTheme:'${theme === 'journal' ? 'paper' : 'original'}'})); localStorage.setItem('journal.calendarDrawer','0'); localStorage.setItem('journal.calendar', JSON.stringify({view:'month', kinds:{event:true,task:true,note:false}}))`);
       await command('Page.navigate', { url:origin });
-      await until(`document.documentElement.dataset.theme==='${theme}' && document.documentElement.dataset.popups==='${style}' && document.querySelectorAll('.entry').length===5`);
+      await until(`document.documentElement.dataset.look==='${theme}' && document.documentElement.dataset.popups==='${style}' && document.querySelectorAll('.entry').length===5`);
       await evaluate("document.fonts.ready.then(() => true)");
       await evaluate("[...document.querySelectorAll('.entry')].find(e => e.dataset.entryKind==='task' && e.dataset.status==='open').querySelector('.entry-text').focus()");
       await key('t', 'KeyT', 1);
@@ -5585,6 +5585,51 @@ try {
     }
     assert.deepEqual(errors, []);
     console.log('Popup styles passed: planner, composer, icon picker and reminder choice in both looks of the normal, journal and Nebula designs (icons also in pixel).');
+  } else if (process.env.JOURNAL_UI_SCOPE === 'combos') {
+    // Layout (what is where) and look (type, colours, shapes) are chosen apart: all nine pairs open, show their own
+    // structure with the look's attributes, stay usable (settings open, a day turns) and throw nothing.
+    const origin = `http://127.0.0.1:${server.address().port}`;
+    await command('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
+    const structure = { classic:'.sidebar', book:'.book-stage', desk:'.nebula-desk' };
+    for (const layout of ['classic', 'book', 'desk']) for (const look of ['classic', 'journal', 'nebula']) {
+      const palette = look === 'journal' ? 'paper' : 'original';
+      await evaluate(`localStorage.setItem('journal.settings', JSON.stringify((({theme, ...rest}) => ({...rest, layout:'${layout}', look:'${look}', pixel:false, colorTheme:'${palette}'}))(JSON.parse(localStorage.getItem('journal.settings')||'{}')))); localStorage.setItem('journal.calendarDrawer','0'); localStorage.setItem('journal.notebook','0')`);
+      await command('Page.navigate', { url:origin });
+      await until(`document.documentElement.dataset.layout==='${layout}' && document.documentElement.dataset.look==='${look}' && Boolean(document.querySelector('${structure[layout]}')) && document.querySelectorAll('.entry').length>=1`);
+      await evaluate("document.fonts.ready.then(() => true)"); await pause(500);
+      assert.equal(await evaluate("document.documentElement.dataset.theme"), undefined, 'The old single attribute is gone.');
+      // The layout keeps its own structure whatever the look.
+      assert.equal(await evaluate(`Boolean(document.querySelector('${structure[layout]}'))`), true, `${layout} layout shows ${structure[layout]} with the ${look} look.`);
+      assert.equal(await evaluate("document.body.innerText.length > 40"), true, `Something is drawn (${layout} + ${look}).`);
+      // A window that opens without the focus (here: always) is not idle, so the entrance animations finish and the entries show.
+      assert.equal(await evaluate("document.documentElement.hasAttribute('data-window-idle')"), false, 'Not idle before it has had the focus.');
+      assert.equal(await evaluate("getComputedStyle(document.querySelector('.editor')).opacity"), '1', `The entries show (${layout} + ${look}).`);
+      await screenshot(`combo-${layout}-${look}.png`);
+      // Settings open and name the pair.
+      await key(',', 'Comma', 2);
+      await until("Boolean(document.querySelector('[data-layout-choice]'))");
+      assert.equal(await evaluate(`document.querySelector('[data-layout-choice=${layout}]').getAttribute('aria-checked')`), 'true');
+      assert.equal(await evaluate(`document.querySelector('[data-look-choice=${look}]').getAttribute('aria-checked')`), 'true');
+      await key('Escape'); await until("!document.querySelector('.settings')");
+    }
+    // Choosing them apart in the settings: the layout changes the window, the look its type and colours.
+    await evaluate("localStorage.setItem('journal.settings', JSON.stringify((({theme, ...rest}) => ({...rest, layout:'classic', look:'classic', pixel:false, colorTheme:'original'}))(JSON.parse(localStorage.getItem('journal.settings')||'{}'))))");
+    await command('Page.navigate', { url:origin });
+    await until("document.documentElement.dataset.layout==='classic' && Boolean(document.querySelector('.sidebar'))");
+    await key(',', 'Comma', 2);
+    await until("Boolean(document.querySelector('[data-layout-choice=book]'))");
+    await evaluate("document.querySelector('[data-layout-choice=book]').click()");
+    await until("document.documentElement.dataset.layout==='book' && document.documentElement.dataset.look==='classic'");
+    assert.equal(await evaluate("document.querySelector('[data-theme-choice=classic]').getAttribute('aria-checked')"), 'false', 'A mix is none of the ready-made designs.');
+    await evaluate("document.querySelector('[data-look-choice=nebula]').click()");
+    await until("document.documentElement.dataset.look==='nebula' && document.documentElement.dataset.layout==='book'");
+    assert.equal(await evaluate("document.querySelector('[data-pixel-toggle]').disabled"), true, 'Nebula takes no pixel look.');
+    await evaluate("document.querySelector('[data-theme-choice=journal]').click()");
+    await until("document.documentElement.dataset.layout==='book' && document.documentElement.dataset.look==='journal' && document.querySelector('[data-theme-choice=journal]').getAttribute('aria-checked')==='true'");
+    assert.equal(await evaluate("JSON.parse(localStorage.getItem('journal.settings')).theme"), 'journal', 'Older versions still read a theme.');
+    await key('Escape'); await until("!document.querySelector('.settings')");
+    assert.deepEqual(errors, []);
+    console.log('Design combinations passed: all nine layouts and looks open and can be chosen apart.');
   } else if (process.env.JOURNAL_UI_SCOPE === 'calendar-start') {
     await checkCalendarStart();
   } else if (process.env.JOURNAL_UI_SCOPE === 'mail') {

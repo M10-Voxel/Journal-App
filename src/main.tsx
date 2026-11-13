@@ -177,9 +177,9 @@ function App() {
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const sidebar = useSidebarWidth();
   // The journal style shows the app as a book; its calendar comes down from a ribbon instead of the sidebar.
-  const bookMode = settings.theme === 'journal';
+  const bookMode = settings.layout === 'book';
   // Nebula lays the app out as a desktop of terminals (NebulaDesk); its calendar is a window of its own over them.
-  const nebulaMode = settings.theme === 'nebula';
+  const nebulaMode = settings.layout === 'desk';
   // Both have their own head for the day (the book's page, Nebula's poster) and their own calendar (Ctrl+K).
   const ownLayout = bookMode || nebulaMode;
   const [bookView, setBookView] = useBookView();

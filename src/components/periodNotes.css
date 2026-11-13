@@ -229,15 +229,15 @@
 .chart-point.is-active { transform:scale(1.45); }
 .chart-guide { stroke:var(--muted); stroke-width:1; stroke-dasharray:2 3; opacity:.6; }
 /* Journal: ink lines, dashed like a pen on paper, points as open circles. */
-:root[data-theme='journal'] .chart-line { stroke-width:1.6; stroke-dasharray:7 3; opacity:1; }
-:root[data-theme='journal'] .chart-point { fill:var(--background); stroke:var(--series); stroke-width:1.6; }
-:root[data-theme='journal'] .value-legend li, :root[data-theme='journal'] .scale-name { font-family:var(--write); }
+:root[data-look='journal'] .chart-line { stroke-width:1.6; stroke-dasharray:7 3; opacity:1; }
+:root[data-look='journal'] .chart-point { fill:var(--background); stroke:var(--series); stroke-width:1.6; }
+:root[data-look='journal'] .value-legend li, :root[data-look='journal'] .scale-name { font-family:var(--write); }
 /* Nebula: glowing, angular lines with square points. */
-:root[data-theme='nebula'] .chart-line { stroke-linejoin:miter; stroke-linecap:square; opacity:1; filter:none; }
-:root[data-theme='nebula'] .chart-point { rx:0; stroke:#000; }
-:root[data-theme='nebula'] .value-legend i { border-radius:0; box-shadow:none; }
-:root[data-theme='nebula'] .value-legend li { font:11px var(--mono); text-transform:lowercase; }
-:root[data-theme='nebula'] .scale-name { font:12px var(--mono); }
+:root[data-look='nebula'] .chart-line { stroke-linejoin:miter; stroke-linecap:square; opacity:1; filter:none; }
+:root[data-look='nebula'] .chart-point { rx:0; stroke:#000; }
+:root[data-look='nebula'] .value-legend i { border-radius:0; box-shadow:none; }
+:root[data-look='nebula'] .value-legend li { font:11px var(--mono); text-transform:lowercase; }
+:root[data-look='nebula'] .scale-name { font:12px var(--mono); }
 /* Pixel: stepped lines, square points, crisp edges. */
 :root[data-pixel] .chart-line { display:none; }
 :root[data-pixel] .chart-step { display:inline; stroke-width:3; shape-rendering:crispEdges; }

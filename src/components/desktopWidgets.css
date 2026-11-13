@@ -51,37 +51,37 @@ html.is-desktop-widget, .is-desktop-widget body, .is-desktop-widget #root { widt
 .widget-grip.is-nw { left: 0; top: 0; cursor: nwse-resize; } .widget-grip.is-se { right: 0; bottom: 0; cursor: nwse-resize; }
 
 /* Journal: a single sheet; the header a strip of the same paper with a fine rule, the date in the book's type. */
-:root[data-theme='journal'] .desktop-widget { border-color: var(--divider); border-radius: 4px; }
-:root[data-theme='journal'] .desktop-widget-head { background: var(--surface); border-bottom-color: var(--divider); }
-:root[data-theme='journal'] .desktop-widget .widget-date { font: italic 600 14px var(--display); }
-:root[data-theme='journal'] .desktop-widget-head .cal-title { font-size: 16px; }
-:root[data-theme='journal'] :is(.desktop-widget-open, .desktop-widget .widget-date) { border-radius: 3px; }
-:root[data-theme='journal'] .desktop-widget-body { background: var(--surface); }
+:root[data-look='journal'] .desktop-widget { border-color: var(--divider); border-radius: 4px; }
+:root[data-look='journal'] .desktop-widget-head { background: var(--surface); border-bottom-color: var(--divider); }
+:root[data-look='journal'] .desktop-widget .widget-date { font: italic 600 14px var(--display); }
+:root[data-look='journal'] .desktop-widget-head .cal-title { font-size: 16px; }
+:root[data-look='journal'] :is(.desktop-widget-open, .desktop-widget .widget-date) { border-radius: 3px; }
+:root[data-look='journal'] .desktop-widget-body { background: var(--surface); }
 /* Nebula: the terminal's light title bar holds the navigation in ink; square keys, mono type. */
-:root[data-theme='nebula'] .desktop-widget { border: 1px solid var(--nb-line); border-radius: 0; box-shadow: none; }
-:root[data-theme='nebula'] .desktop-widget-head { min-height: 32px; padding: 0 3px 0 4px; background: var(--nb-paper); color: var(--nb-ink); border-bottom-color: var(--nb-line); }
-:root[data-theme='nebula'] .desktop-widget-head .nav-cluster { border-color: var(--nb-ink); background: transparent; }
-:root[data-theme='nebula'] .desktop-widget-head .nav-cluster button { background: transparent; color: var(--nb-ink); }
-:root[data-theme='nebula'] .desktop-widget-head .nav-cluster .nav-today.is-current { color: #555; }
-:root[data-theme='nebula'] .desktop-widget-head .nav-cluster button:is(:hover, :focus-visible):not(:disabled) { background: var(--nb-ink); color: var(--nb-paper); }
-:root[data-theme='nebula'] .desktop-widget .widget-date, :root[data-theme='nebula'] .desktop-widget-head .cal-title { color: var(--nb-ink); font: 600 11.5px var(--mono); letter-spacing: .02em; }
-:root[data-theme='nebula'] .desktop-widget-head .cal-title-sub { color: #444; font: 11px var(--mono); }
-:root[data-theme='nebula'] :is(.desktop-widget-open, .desktop-widget .widget-date) { border-radius: 0; }
-:root[data-theme='nebula'] .desktop-widget-open { color: var(--nb-ink); }
-:root[data-theme='nebula'] .desktop-widget-open:is(:hover, :focus-visible), :root[data-theme='nebula'] .desktop-widget .widget-date:is(:hover, :focus-visible) { background: var(--nb-ink); color: var(--nb-paper); }
-:root[data-theme='nebula'][data-popups='b'] .desktop-widget-open:is(:hover, :focus-visible) { background: var(--holo); color: #111; box-shadow: inset 0 0 0 1px #111; }
-:root[data-theme='nebula'] .desktop-widget-save { border-radius: 0; background: var(--nb-ink); }
-:root[data-theme='nebula'] .desktop-widget-body { padding: 18px 18px 22px 26px; }
-:root[data-theme='nebula'] .desktop-widget .title-input { font-size: clamp(22px,4.4cqw,30px); }
+:root[data-look='nebula'] .desktop-widget { border: 1px solid var(--nb-line); border-radius: 0; box-shadow: none; }
+:root[data-look='nebula'] .desktop-widget-head { min-height: 32px; padding: 0 3px 0 4px; background: var(--nb-paper); color: var(--nb-ink); border-bottom-color: var(--nb-line); }
+:root[data-look='nebula'] .desktop-widget-head .nav-cluster { border-color: var(--nb-ink); background: transparent; }
+:root[data-look='nebula'] .desktop-widget-head .nav-cluster button { background: transparent; color: var(--nb-ink); }
+:root[data-look='nebula'] .desktop-widget-head .nav-cluster .nav-today.is-current { color: #555; }
+:root[data-look='nebula'] .desktop-widget-head .nav-cluster button:is(:hover, :focus-visible):not(:disabled) { background: var(--nb-ink); color: var(--nb-paper); }
+:root[data-look='nebula'] .desktop-widget .widget-date, :root[data-look='nebula'] .desktop-widget-head .cal-title { color: var(--nb-ink); font: 600 11.5px var(--mono); letter-spacing: .02em; }
+:root[data-look='nebula'] .desktop-widget-head .cal-title-sub { color: #444; font: 11px var(--mono); }
+:root[data-look='nebula'] :is(.desktop-widget-open, .desktop-widget .widget-date) { border-radius: 0; }
+:root[data-look='nebula'] .desktop-widget-open { color: var(--nb-ink); }
+:root[data-look='nebula'] .desktop-widget-open:is(:hover, :focus-visible), :root[data-look='nebula'] .desktop-widget .widget-date:is(:hover, :focus-visible) { background: var(--nb-ink); color: var(--nb-paper); }
+:root[data-look='nebula'][data-popups='b'] .desktop-widget-open:is(:hover, :focus-visible) { background: var(--holo); color: #111; box-shadow: inset 0 0 0 1px #111; }
+:root[data-look='nebula'] .desktop-widget-save { border-radius: 0; background: var(--nb-ink); }
+:root[data-look='nebula'] .desktop-widget-body { padding: 18px 18px 22px 26px; }
+:root[data-look='nebula'] .desktop-widget .title-input { font-size: clamp(22px,4.4cqw,30px); }
 /* Pixel: square, the pixel face a size up. */
 :root[data-pixel] :is(.desktop-widget, .desktop-widget-open, .desktop-widget .widget-date, .desktop-widget-save) { border-radius: 0; }
 :root[data-pixel] .desktop-widget .widget-date { font-size: 15px; }
-:root[data-theme='journal'] .desktop-widget-head .cal-views button { font: italic 13px var(--display); }
-:root[data-theme='nebula'] .desktop-widget-head .cal-views button { height: 22px; color: #444; font: 600 10.5px var(--mono); text-transform: lowercase; border-radius: 0; }
-:root[data-theme='nebula'] .desktop-widget-head .cal-views button:is(:hover, :focus-visible) { background: var(--nb-ink); color: var(--nb-paper); }
-:root[data-theme='nebula'] .desktop-widget-head .cal-views button[aria-selected='true'] { background: var(--nb-ink); color: var(--nb-paper); box-shadow: none; }
-:root[data-theme='nebula'][data-popups='b'] .desktop-widget-head .cal-views button[aria-selected='true'] { background: var(--holo); color: #111; box-shadow: inset 0 0 0 1px #111; }
-:root[data-theme='nebula'] .desktop-widget-drop { border-radius: 0; border-color: var(--nb-violet-light, #b388ff); }
+:root[data-look='journal'] .desktop-widget-head .cal-views button { font: italic 13px var(--display); }
+:root[data-look='nebula'] .desktop-widget-head .cal-views button { height: 22px; color: #444; font: 600 10.5px var(--mono); text-transform: lowercase; border-radius: 0; }
+:root[data-look='nebula'] .desktop-widget-head .cal-views button:is(:hover, :focus-visible) { background: var(--nb-ink); color: var(--nb-paper); }
+:root[data-look='nebula'] .desktop-widget-head .cal-views button[aria-selected='true'] { background: var(--nb-ink); color: var(--nb-paper); box-shadow: none; }
+:root[data-look='nebula'][data-popups='b'] .desktop-widget-head .cal-views button[aria-selected='true'] { background: var(--holo); color: #111; box-shadow: inset 0 0 0 1px #111; }
+:root[data-look='nebula'] .desktop-widget-drop { border-radius: 0; border-color: var(--nb-violet-light, #b388ff); }
 :root[data-pixel] :is(.desktop-widget-head .cal-views button, .desktop-widget-drop, .desktop-widget-drop span) { border-radius: 0; }
 /* Widget layout follows its visible rectangle even while the native popup canvas grows. */
 .desktop-widget { container: desktop-widget / inline-size; }
@@ -131,10 +131,10 @@ html.is-desktop-widget, .is-desktop-widget body, .is-desktop-widget #root { widt
 .desktop-widget-tools:empty { display: none; }
 .board-add-menu { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 7px; background: transparent; color: var(--muted); font: 300 20px/1 var(--sans); cursor: pointer; }
 .board-add-menu:is(:hover, :focus-visible) { background: var(--hover); color: var(--success, var(--accent)); outline: 0; }
-:root[data-theme='journal'] .desktop-widget-board .board-viewport.board-surface { box-shadow: none; }
-:root[data-theme='nebula'] .board-add-menu { border-radius: 0; color: var(--nb-ink); font-family: var(--mono); }
-:root[data-theme='nebula'] .board-add-menu:is(:hover, :focus-visible) { background: var(--nb-ink); color: var(--nb-paper); }
-:root[data-theme='nebula'][data-popups='b'] .board-add-menu:is(:hover, :focus-visible) { background: var(--holo-positive); color: #111; box-shadow: inset 0 0 0 1px #111; }
+:root[data-look='journal'] .desktop-widget-board .board-viewport.board-surface { box-shadow: none; }
+:root[data-look='nebula'] .board-add-menu { border-radius: 0; color: var(--nb-ink); font-family: var(--mono); }
+:root[data-look='nebula'] .board-add-menu:is(:hover, :focus-visible) { background: var(--nb-ink); color: var(--nb-paper); }
+:root[data-look='nebula'][data-popups='b'] .board-add-menu:is(:hover, :focus-visible) { background: var(--holo-positive); color: #111; box-shadow: inset 0 0 0 1px #111; }
 :root[data-pixel] .board-add-menu { border-radius: 0; }
 
 /* Day values and activities: only the values, a little apart; no headings, hints or manage buttons. */
@@ -159,7 +159,7 @@ html.is-desktop-widget, .is-desktop-widget body, .is-desktop-widget #root { widt
 .desktop-widget-notebook { flex: 1; display: flex; min-height: 0; min-width: 0; overflow: hidden; }
 .notebook.is-compact .notebook-body { display: flex; }
 .notebook.is-compact .notebook-page { flex: 1; gap: 10px; }
-:root[data-theme='classic'] .desktop-widget .notebook.is-compact .notebook-page { background: var(--surface); }
+:root[data-look='classic'] .desktop-widget .notebook.is-compact .notebook-page { background: var(--surface); }
 .notebook.is-compact .notebook-title { font-size: 19px; }
 .notebook.is-compact .notebook-page.is-empty { align-items: center; text-align: center; }
 .notebook.is-compact .notebook-attachments { padding-top: 6px; border-top: 1px solid var(--divider); }
@@ -176,13 +176,13 @@ html.is-desktop-widget, .is-desktop-widget body, .is-desktop-widget #root { widt
 .note-switch-option small { grid-column: 2; overflow: hidden; color: var(--muted); font-size: 11px; white-space: nowrap; text-overflow: ellipsis; }
 .note-switch-option[aria-selected='true'] { background: var(--hover); }
 .note-switch-option.is-current strong { color: var(--accent); }
-:root[data-theme='journal'] .desktop-widget .notebook.is-compact { background: var(--surface); }
-:root[data-theme='journal'] .note-switch-option { font-family: var(--serif, var(--sans)); }
-:root[data-theme='nebula'] :is(.notebook-widget-new, .note-switch-option, .note-switch-option i) { border-radius: 0; }
-:root[data-theme='nebula'] .notebook-widget-new { color: var(--nb-ink); font-family: var(--mono); }
-:root[data-theme='nebula'] .notebook-widget-new:is(:hover, :focus-visible) { background: var(--nb-ink); color: var(--nb-paper); }
-:root[data-theme='nebula'][data-popups='b'] .notebook-widget-new:is(:hover, :focus-visible) { background: var(--holo-positive); color: #111; box-shadow: inset 0 0 0 1px #111; }
-:root[data-theme='nebula'] .note-switch-option { font-family: var(--mono); }
+:root[data-look='journal'] .desktop-widget .notebook.is-compact { background: var(--surface); }
+:root[data-look='journal'] .note-switch-option { font-family: var(--serif, var(--sans)); }
+:root[data-look='nebula'] :is(.notebook-widget-new, .note-switch-option, .note-switch-option i) { border-radius: 0; }
+:root[data-look='nebula'] .notebook-widget-new { color: var(--nb-ink); font-family: var(--mono); }
+:root[data-look='nebula'] .notebook-widget-new:is(:hover, :focus-visible) { background: var(--nb-ink); color: var(--nb-paper); }
+:root[data-look='nebula'][data-popups='b'] .notebook-widget-new:is(:hover, :focus-visible) { background: var(--holo-positive); color: #111; box-shadow: inset 0 0 0 1px #111; }
+:root[data-look='nebula'] .note-switch-option { font-family: var(--mono); }
 :root[data-pixel] :is(.notebook-widget-new, .note-switch-option, .note-switch-option i, .period-section.is-bare .checklist-empty.is-action) { border-radius: 0; }
 
 /* An .ics file dragged over the calendar: a quiet frame and a line saying that dropping imports it. */

@@ -34,7 +34,7 @@
 .board-library-copy button { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 34px; height: 100%; padding: 0 12px; border: 0; border-radius: 6px; background: color-mix(in srgb, var(--paper-ink, #000) 11%, transparent); color: inherit; font: 12px var(--sans); white-space: nowrap; cursor: pointer; }
 .board-library-copy button:hover { background: color-mix(in srgb, var(--paper-ink, #000) 22%, transparent); }
 .board-library-copy .icon { width: 11px; height: 11px; }
-:root[data-theme='nebula'] .board-library-copy button { border-radius: 0; font-family: var(--mono); }
+:root[data-look='nebula'] .board-library-copy button { border-radius: 0; font-family: var(--mono); }
 .board-library small { opacity: .7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .board-library p { margin: 4px 2px 0; color: var(--muted); font: 11px var(--sans); }
 
@@ -122,7 +122,7 @@
 .board-card > .board-copy-sync > span { display: none; }
 .board-card:is(:hover, :focus-within) > .board-copy-sync > span { display: inline; }
 .board-card:is(:hover, :focus-within) > .board-copy-sync, .board-card > .board-copy-sync.is-on { opacity: 1; }
-:root[data-theme='nebula'] .board-copy-sync { font-family: var(--mono); }
+:root[data-look='nebula'] .board-copy-sync { font-family: var(--mono); }
 .board-scope-picker { width: 292px; max-width: calc(100vw - 24px); box-sizing: border-box; }
 .board-scope-choice { display: flex; gap: 3px; margin-bottom: 10px; padding: 3px; border-radius: 7px; background: var(--inset); }
 .board-scope-choice button { display: flex; align-items: center; justify-content: center; gap: 6px; flex: 1; min-width: 0; padding: 7px 5px; border: 0; border-radius: 5px; background: transparent; color: var(--muted); font: 12px var(--sans); cursor: pointer; }
@@ -136,7 +136,7 @@
 .board-scope-target input { flex: none; width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
 .board-scope-hint { margin: 9px 8px 3px; color: var(--muted); font: 11px/1.5 var(--sans); }
 .board-scope-choice button:focus-visible, .board-scope-target input:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
-:root[data-pixel] :is(.board-group-frame, .board-scope-choice, .board-scope-choice button, .board-scope-target), :root[data-theme='nebula'] :is(.board-group-frame, .board-scope-choice, .board-scope-choice button, .board-scope-target) { border-radius: 0; }
+:root[data-pixel] :is(.board-group-frame, .board-scope-choice, .board-scope-choice button, .board-scope-target), :root[data-look='nebula'] :is(.board-group-frame, .board-scope-choice, .board-scope-choice button, .board-scope-target) { border-radius: 0; }
 :root[data-pixel] .board-group-frame { border-width: 2px; }
 .board-paper i { width: 11px; height: 11px; border-radius: 50%; background: conic-gradient(#e9d98c 0 25%, #a9c8e6 0 50%, #b7d6a4 0 75%, #e5b3c2 0); box-shadow: 0 0 0 1px #0004; }
 .board-remove:hover { color: #c0392b !important; }
@@ -311,10 +311,10 @@
 /* CodeMirror's caret hit testing needs an axis-aligned writing surface. */
 .board-card.is-note { --tilt: 0deg !important; }
 /* Normal design: the board in the app's own surfaces – a dark sheet with a fine dot grid, framed like the panels. */
-:root[data-theme='classic'] .bulletin-board { --cork: color-mix(in srgb, var(--surface) 55%, var(--background)); --cork-fleck: color-mix(in srgb, var(--strong) 11%, transparent); --cork-hole: transparent; --cork-frame: var(--border); }
-:root[data-theme='classic'] .board-surface { border-radius: 12px; background-image: radial-gradient(var(--cork-fleck) 1px, transparent 1.4px); background-size: 18px 18px; background-position: 9px 9px;
+:root[data-look='classic'] .bulletin-board { --cork: color-mix(in srgb, var(--surface) 55%, var(--background)); --cork-fleck: color-mix(in srgb, var(--strong) 11%, transparent); --cork-hole: transparent; --cork-frame: var(--border); }
+:root[data-look='classic'] .board-surface { border-radius: 12px; background-image: radial-gradient(var(--cork-fleck) 1px, transparent 1.4px); background-size: 18px 18px; background-position: 9px 9px;
   box-shadow: inset 0 0 0 1px var(--divider), inset 0 1px 0 color-mix(in srgb, var(--strong) 6%, transparent), inset 0 14px 30px -18px #000c; }
-:root[data-theme='classic'][data-pixel] .board-surface { border-radius: 0; background-image: radial-gradient(var(--cork-fleck) 1px, transparent 1px); box-shadow: inset 0 0 0 2px var(--divider); }
+:root[data-look='classic'][data-pixel] .board-surface { border-radius: 0; background-image: radial-gradient(var(--cork-fleck) 1px, transparent 1px); box-shadow: inset 0 0 0 2px var(--divider); }
 
 /* ── Threads (BulletinBoard: threadPath) ───────────────────────────────────────────────────────────────────────────
    The pin is a handle: drawn to another card it ties both. Threads hang from pin to pin over the cards; only the line
@@ -330,7 +330,7 @@
 .board-thread-direction { fill: none; stroke: var(--thread, var(--accent)); stroke-width: 2px; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
 .board-thread-reverse { display: flex; align-items: center; gap: 7px; width: 100%; min-height: 30px; margin-bottom: 4px; padding: 0 10px; border: 0; border-radius: 5px; background: var(--hover); color: var(--text); font: 12px var(--sans); cursor: pointer; }
 .board-thread-reverse .icon { width: 13px; height: 13px; }
-:root[data-theme='nebula'] .board-thread-reverse { border-radius: 0; font-family: var(--mono); }
+:root[data-look='nebula'] .board-thread-reverse { border-radius: 0; font-family: var(--mono); }
 :root[data-pixel] .board-thread-reverse { border-radius: 0; }
 :root[data-pixel] .board-thread-direction { stroke-linecap: square; stroke-linejoin: miter; shape-rendering: crispEdges; }
 .board-thread-hit { fill: none; stroke: transparent; stroke-width: 12px; pointer-events: stroke; cursor: pointer; outline: none; }
@@ -346,11 +346,11 @@
 .board-thread-cut .icon { width: 13px; height: 13px; color: var(--error); }
 .board-library-path { display: flex; align-items: center; gap: 4px; font-size: 10.5px; opacity: .75; }
 .board-library-path .icon { width: 10px; height: 10px; }
-:root[data-theme='classic'] .bulletin-board { --thread: var(--accent); }
-:root[data-theme='journal'] .bulletin-board { --thread: #a8322c; }
-:root[data-theme='journal'] .board-thread { --thread-w: 2.2px; stroke-dasharray: 7 1.2; filter: drop-shadow(0 2px 1px #2a1a0c66); }
-:root[data-theme='nebula'] .bulletin-board { --thread: #a66cf0; }
-:root[data-theme='nebula'] .board-thread { --thread-w: 2px; stroke-dasharray: 6 4; stroke-linecap: butt; filter: drop-shadow(2px 2px 0 #000); }
+:root[data-look='classic'] .bulletin-board { --thread: var(--accent); }
+:root[data-look='journal'] .bulletin-board { --thread: #a8322c; }
+:root[data-look='journal'] .board-thread { --thread-w: 2.2px; stroke-dasharray: 7 1.2; filter: drop-shadow(0 2px 1px #2a1a0c66); }
+:root[data-look='nebula'] .bulletin-board { --thread: #a66cf0; }
+:root[data-look='nebula'] .board-thread { --thread-w: 2px; stroke-dasharray: 6 4; stroke-linecap: butt; filter: drop-shadow(2px 2px 0 #000); }
 :root[data-pixel] .board-thread { --thread-w: 2px; stroke-linecap: square; stroke-linejoin: miter; shape-rendering: crispEdges; filter: drop-shadow(2px 2px 0 #0009); transition: none; }
 :root[data-pixel] .board-thread.is-drawing { stroke-dasharray: 4 4; }
 :root[data-pixel] .board-thread-knot { shape-rendering: crispEdges; }
@@ -364,8 +364,8 @@
 :root .board-viewport.board-surface { border: 0 !important; border-radius: 0 !important; box-shadow: none !important; }
 .board-empty { pointer-events: none; }
 :root[data-pixel] .board-viewport { background-size: calc(4px * var(--board-scale)) calc(4px * var(--board-scale)), calc(12px * var(--board-scale)) calc(12px * var(--board-scale)); }
-:root[data-theme='classic'] .board-viewport.board-surface { background-size: calc(18px * var(--board-scale)) calc(18px * var(--board-scale)); background-position: calc(var(--board-pan-x) + 9px * var(--board-scale)) calc(var(--board-pan-y) + 9px * var(--board-scale)); }
-:root[data-theme='nebula'] .nebula-terminal .board-viewport.board-surface { background-size: calc(24px * var(--board-scale)) calc(24px * var(--board-scale)); background-position: var(--board-pan-x) var(--board-pan-y); }
+:root[data-look='classic'] .board-viewport.board-surface { background-size: calc(18px * var(--board-scale)) calc(18px * var(--board-scale)); background-position: calc(var(--board-pan-x) + 9px * var(--board-scale)) calc(var(--board-pan-y) + 9px * var(--board-scale)); }
+:root[data-layout='desk'] .nebula-terminal .board-viewport.board-surface { background-size: calc(24px * var(--board-scale)) calc(24px * var(--board-scale)); background-position: var(--board-pan-x) var(--board-pan-y); }
 .nebula-panel-body.has-height .bulletin-board { height: 100%; display: flex; flex-direction: column; min-height: 0; margin-block: 0; padding-bottom: 0; }
 .nebula-panel-body.has-height .board-viewport { flex: 1; height: auto; min-height: 80px; }
 
@@ -384,50 +384,50 @@
 
 /* Journal: ink on the page. The add buttons are written words between thin rules, underlined in ink when pointed at;
    a group is pencilled round with a dashed line and named in handwriting; sync is a small paper label. */
-:root[data-theme='journal'] .bulletin-board { --board-ground: var(--book-paper); }
-:root[data-theme='journal'] .board-actions { gap: 0; padding: 0; border-radius: 0; background: transparent; box-shadow: none; }
-:root[data-theme='journal'] .board-actions button { position: relative; height: 26px; padding: 0 9px; border-radius: 3px; color: var(--muted); font: italic 13.5px var(--write); }
-:root[data-theme='journal'] .board-actions button + button::before { content: ''; position: absolute; left: -.5px; top: 7px; bottom: 7px; width: 1px; background: var(--divider); }
-:root[data-theme='journal'] .board-actions button .icon { color: color-mix(in srgb, var(--accent) 80%, var(--text)); }
-:root[data-theme='journal'] .board-actions button:is(:hover, :focus-visible):not(:disabled), :root[data-theme='journal'] .board-actions button[aria-expanded='true'] { background: transparent; box-shadow: none; color: var(--strong);
+:root[data-look='journal'] .bulletin-board { --board-ground: var(--book-paper); }
+:root[data-look='journal'] .board-actions { gap: 0; padding: 0; border-radius: 0; background: transparent; box-shadow: none; }
+:root[data-look='journal'] .board-actions button { position: relative; height: 26px; padding: 0 9px; border-radius: 3px; color: var(--muted); font: italic 13.5px var(--write); }
+:root[data-look='journal'] .board-actions button + button::before { content: ''; position: absolute; left: -.5px; top: 7px; bottom: 7px; width: 1px; background: var(--divider); }
+:root[data-look='journal'] .board-actions button .icon { color: color-mix(in srgb, var(--accent) 80%, var(--text)); }
+:root[data-look='journal'] .board-actions button:is(:hover, :focus-visible):not(:disabled), :root[data-look='journal'] .board-actions button[aria-expanded='true'] { background: transparent; box-shadow: none; color: var(--strong);
   text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--accent) 70%, transparent); text-decoration-thickness: 1.5px; text-underline-offset: 4px; }
-:root[data-theme='journal'] .board-actions button:active:not(:disabled) { transform: translateY(1px); }
-:root[data-theme='journal'] :is(.board-link-form, .board-library) { border-radius: 3px; background: var(--book-paper); box-shadow: var(--soft-shadow); }
-:root[data-theme='journal'] :is(.board-link-form input, .board-library > input) { border-radius: 0; background: transparent; box-shadow: inset 0 -1px 0 var(--divider); font: 14px var(--write); }
-:root[data-theme='journal'] :is(.board-link-form input, .board-library > input):focus { box-shadow: inset 0 -1.5px 0 var(--accent); }
-:root[data-theme='journal'] .board-link-form button { border-radius: 3px; font: italic 13px var(--write); }
-:root[data-theme='journal'] .board-group-frame { --frame: color-mix(in srgb, var(--text) 28%, transparent); border-style: dashed; border-radius: 4px; background: transparent; }
-:root[data-theme='journal'] .board-group-frame:is(:hover, :focus-within) { --frame: color-mix(in srgb, var(--text) 50%, transparent); }
-:root[data-theme='journal'] .board-group-name { top: -11px; height: 21px; color: var(--text); font: italic 14px var(--write); }
-:root[data-theme='journal'] .board-group-name:focus { box-shadow: inset 0 -1.5px 0 var(--accent); }
-:root[data-theme='journal'] :is(.board-group-actions, .board-group-remove) { border-radius: 2px; }
-:root[data-theme='journal'] .board-copy-sync { height: 17px; border-radius: 2px; background: var(--book-paper); box-shadow: 0 0 0 1px var(--divider), 0 1px 2px var(--ink-shadow); font: italic 11.5px var(--write); }
-:root[data-theme='journal'] .board-copy-sync > i { border-radius: 2px; }
-:root[data-theme='journal'] .board-copy-sync > i::after { border-radius: 1px; }
-:root[data-theme='journal'] .board-group-actions .board-copy-sync { background: transparent; box-shadow: none; }
+:root[data-look='journal'] .board-actions button:active:not(:disabled) { transform: translateY(1px); }
+:root[data-look='journal'] :is(.board-link-form, .board-library) { border-radius: 3px; background: var(--book-paper); box-shadow: var(--soft-shadow); }
+:root[data-look='journal'] :is(.board-link-form input, .board-library > input) { border-radius: 0; background: transparent; box-shadow: inset 0 -1px 0 var(--divider); font: 14px var(--write); }
+:root[data-look='journal'] :is(.board-link-form input, .board-library > input):focus { box-shadow: inset 0 -1.5px 0 var(--accent); }
+:root[data-look='journal'] .board-link-form button { border-radius: 3px; font: italic 13px var(--write); }
+:root[data-look='journal'] .board-group-frame { --frame: color-mix(in srgb, var(--text) 28%, transparent); border-style: dashed; border-radius: 4px; background: transparent; }
+:root[data-look='journal'] .board-group-frame:is(:hover, :focus-within) { --frame: color-mix(in srgb, var(--text) 50%, transparent); }
+:root[data-look='journal'] .board-group-name { top: -11px; height: 21px; color: var(--text); font: italic 14px var(--write); }
+:root[data-look='journal'] .board-group-name:focus { box-shadow: inset 0 -1.5px 0 var(--accent); }
+:root[data-look='journal'] :is(.board-group-actions, .board-group-remove) { border-radius: 2px; }
+:root[data-look='journal'] .board-copy-sync { height: 17px; border-radius: 2px; background: var(--book-paper); box-shadow: 0 0 0 1px var(--divider), 0 1px 2px var(--ink-shadow); font: italic 11.5px var(--write); }
+:root[data-look='journal'] .board-copy-sync > i { border-radius: 2px; }
+:root[data-look='journal'] .board-copy-sync > i::after { border-radius: 1px; }
+:root[data-look='journal'] .board-group-actions .board-copy-sync { background: transparent; box-shadow: none; }
 /* The card's strip of tape sits at its upper right: the label hangs at the left instead. */
-:root[data-theme='journal'] .board-card > .board-copy-sync { right: auto; left: 8px; transform: rotate(-2deg); }
+:root[data-look='journal'] .board-card > .board-copy-sync { right: auto; left: 8px; transform: rotate(-2deg); }
 
 /* Nebula: terminal parts. Square, mono, a dashed violet frame named in small capitals on the board's black; the
    sync switch a little box that turns violet. In the Holo-Papier look the foils say what a button does: green for
    creating, lilac for neutral ones (existing notes, sync on), orange for deleting. */
-:root[data-theme='nebula'] .bulletin-board { --board-ground: #08080a; }
-:root[data-theme='nebula'] .board-group-frame { --frame: color-mix(in srgb, var(--nb-violet-light) 42%, transparent); border-style: dashed; background: transparent; }
-:root[data-theme='nebula'] .board-group-frame:is(:hover, :focus-within) { --frame: var(--nb-violet-light); }
-:root[data-theme='nebula'] .board-group-name { color: var(--nb-violet-light); font: 700 10px/18px var(--mono); letter-spacing: .12em; text-transform: uppercase; }
-:root[data-theme='nebula'] .board-group-name:focus { color: #fff; box-shadow: inset 0 -1px 0 var(--nb-violet-light); }
-:root[data-theme='nebula'] :is(.board-group-name, .board-group-actions, .board-group-remove, .board-copy-sync, .board-copy-sync > i, .board-copy-sync > i::after) { border-radius: 0; }
-:root[data-theme='nebula'] .board-copy-sync { background: #050505; box-shadow: 0 0 0 1px var(--edge); color: #b8b8b8; text-transform: lowercase; }
-:root[data-theme='nebula'] .board-copy-sync:is(:hover, :focus-visible) { box-shadow: 0 0 0 1px var(--nb-violet-light); color: #fff; }
-:root[data-theme='nebula'] .board-copy-sync.is-on { background: var(--nb-violet); box-shadow: 0 0 0 1px #000, 2px 2px 0 var(--nb-offset); color: #fff; }
-:root[data-theme='nebula'] .board-copy-sync.is-on > i { background: #0004; }
-:root[data-theme='nebula'] .board-group-actions .board-copy-sync:not(.is-on) { background: transparent; box-shadow: none; }
-:root[data-theme='nebula'][data-popups='b'] .board-actions button.is-create:is(:hover, :focus-visible):not(:disabled) { border-color: #111; background: var(--holo-positive); color: #111; }
-:root[data-theme='nebula'][data-popups='b'] .board-actions button:not(.is-create):is(:hover, :focus-visible, [aria-expanded='true']):not(:disabled),
-:root[data-theme='nebula'][data-popups='b'] .board-actions button.is-create[aria-expanded='true'] { border-color: #111; background: var(--holo); color: #111; }
-:root[data-theme='nebula'][data-popups='b'] .board-actions button:is(:hover, :focus-visible, [aria-expanded='true']):not(:disabled) .icon { color: #111; }
-:root[data-theme='nebula'][data-popups='b'] .board-copy-sync.is-on { background: var(--holo); box-shadow: 0 0 0 1px #111, 2px 2px 0 var(--nb-offset); color: #111; }
-:root[data-theme='nebula'][data-popups='b'] .board-group-remove:is(:hover, :focus-visible) { background: var(--holo-danger); color: #111; }
+:root[data-look='nebula'] .bulletin-board { --board-ground: #08080a; }
+:root[data-look='nebula'] .board-group-frame { --frame: color-mix(in srgb, var(--nb-violet-light) 42%, transparent); border-style: dashed; background: transparent; }
+:root[data-look='nebula'] .board-group-frame:is(:hover, :focus-within) { --frame: var(--nb-violet-light); }
+:root[data-look='nebula'] .board-group-name { color: var(--nb-violet-light); font: 700 10px/18px var(--mono); letter-spacing: .12em; text-transform: uppercase; }
+:root[data-look='nebula'] .board-group-name:focus { color: #fff; box-shadow: inset 0 -1px 0 var(--nb-violet-light); }
+:root[data-look='nebula'] :is(.board-group-name, .board-group-actions, .board-group-remove, .board-copy-sync, .board-copy-sync > i, .board-copy-sync > i::after) { border-radius: 0; }
+:root[data-look='nebula'] .board-copy-sync { background: #050505; box-shadow: 0 0 0 1px var(--edge); color: #b8b8b8; text-transform: lowercase; }
+:root[data-look='nebula'] .board-copy-sync:is(:hover, :focus-visible) { box-shadow: 0 0 0 1px var(--nb-violet-light); color: #fff; }
+:root[data-look='nebula'] .board-copy-sync.is-on { background: var(--nb-violet); box-shadow: 0 0 0 1px #000, 2px 2px 0 var(--nb-offset); color: #fff; }
+:root[data-look='nebula'] .board-copy-sync.is-on > i { background: #0004; }
+:root[data-look='nebula'] .board-group-actions .board-copy-sync:not(.is-on) { background: transparent; box-shadow: none; }
+:root[data-look='nebula'][data-popups='b'] .board-actions button.is-create:is(:hover, :focus-visible):not(:disabled) { border-color: #111; background: var(--holo-positive); color: #111; }
+:root[data-look='nebula'][data-popups='b'] .board-actions button:not(.is-create):is(:hover, :focus-visible, [aria-expanded='true']):not(:disabled),
+:root[data-look='nebula'][data-popups='b'] .board-actions button.is-create[aria-expanded='true'] { border-color: #111; background: var(--holo); color: #111; }
+:root[data-look='nebula'][data-popups='b'] .board-actions button:is(:hover, :focus-visible, [aria-expanded='true']):not(:disabled) .icon { color: #111; }
+:root[data-look='nebula'][data-popups='b'] .board-copy-sync.is-on { background: var(--holo); box-shadow: 0 0 0 1px #111, 2px 2px 0 var(--nb-offset); color: #111; }
+:root[data-look='nebula'][data-popups='b'] .board-group-remove:is(:hover, :focus-visible) { background: var(--holo-danger); color: #111; }
 
 /* Pixel: hard edges and offset shadows, the pixel face a size up so it stays legible. */
 :root[data-pixel] :is(.board-group-name, .board-group-actions, .board-group-remove, .board-copy-sync, .board-copy-sync > i, .board-copy-sync > i::after) { border-radius: 0; }
@@ -534,31 +534,31 @@
 .notebook-mode:hover, .notebook-mode[aria-pressed='true'] { background: color-mix(in srgb, var(--text) 10%, transparent); color: var(--text); }
 .notebook-mode svg { width: 15px; height: 15px; }
 /* Journal: fountain-pen blue, a squarer strip in ink. */
-:root[data-theme='journal'] .ink-note { --ink: #1f3d8f; }
-:root[data-theme='journal'] .ink-toolbar button { border-radius: 2px; }
-:root[data-theme='journal'] .ink-toolbar button[aria-pressed='true'] { background: transparent; box-shadow: inset 0 -1.5px 0 var(--ink); }
-:root[data-theme='journal'] .ink-toolbar button[aria-expanded='true'] { background: transparent; box-shadow: inset 0 -1.5px 0 var(--ink); }
-:root[data-theme='journal'] .ink-divider { background: color-mix(in srgb, var(--ink) 30%, transparent); }
+:root[data-look='journal'] .ink-note { --ink: #1f3d8f; }
+:root[data-look='journal'] .ink-toolbar button { border-radius: 2px; }
+:root[data-look='journal'] .ink-toolbar button[aria-pressed='true'] { background: transparent; box-shadow: inset 0 -1.5px 0 var(--ink); }
+:root[data-look='journal'] .ink-toolbar button[aria-expanded='true'] { background: transparent; box-shadow: inset 0 -1.5px 0 var(--ink); }
+:root[data-look='journal'] .ink-divider { background: color-mix(in srgb, var(--ink) 30%, transparent); }
 /* Journal: ruled in blue like an exercise book, a pencil-dashed frame. */
-:root[data-theme='journal'] .ink-note { --ink-rule: #5b7fc770; }
-:root[data-theme='journal'] .ink-frame rect:not(.ink-grip), :root[data-theme='journal'] .ink-marquee { stroke: #555c; stroke-dasharray: 3 2 1 2; }
-:root[data-theme='journal'] .ink-frame .ink-grip { fill: var(--book-paper, #fff); stroke: #555; }
-:root[data-theme='journal'] .ink-glow path { stroke: var(--ink); opacity: .22; }
-:root[data-theme='journal'] .ink-selection-bar { border-radius: 3px; }
-:root[data-theme='journal'] .ink-selection-bar button { border-radius: 2px; }
+:root[data-look='journal'] .ink-note { --ink-rule: #5b7fc770; }
+:root[data-look='journal'] .ink-frame rect:not(.ink-grip), :root[data-look='journal'] .ink-marquee { stroke: #555c; stroke-dasharray: 3 2 1 2; }
+:root[data-look='journal'] .ink-frame .ink-grip { fill: var(--book-paper, #fff); stroke: #555; }
+:root[data-look='journal'] .ink-glow path { stroke: var(--ink); opacity: .22; }
+:root[data-look='journal'] .ink-selection-bar { border-radius: 3px; }
+:root[data-look='journal'] .ink-selection-bar button { border-radius: 2px; }
 /* Nebula: violet ink with a slight glow, square mono parts. */
-:root[data-theme='nebula'] .ink-note { --ink: #5a189a; }
-:root[data-theme='nebula'] .ink-strokes { filter: drop-shadow(1px 1px 0 #7b2cbf40); }
-:root[data-theme='nebula'] .ink-toolbar { font: 700 10px var(--mono); }
-:root[data-theme='nebula'] .ink-toolbar button { border-radius: 0; }
-:root[data-theme='nebula'] .ink-toolbar button[aria-pressed='true'] { background: var(--nb-violet, #7b2cbf); color: #fff; }
-:root[data-theme='nebula'] .ink-toolbar button[aria-expanded='true'] { background: var(--nb-violet, #7b2cbf); color: #fff; }
-:root[data-theme='nebula'] :is(.ink-size i, .ink-width i) { border-radius: 0; }
-:root[data-theme='nebula'] .ink-frame rect:not(.ink-grip), :root[data-theme='nebula'] .ink-marquee { stroke: var(--nb-violet, #7b2cbf); stroke-dasharray: 5 3; }
-:root[data-theme='nebula'] .ink-frame .ink-grip { stroke: var(--nb-violet, #7b2cbf); }
-:root[data-theme='nebula'] .ink-glow path { stroke: var(--nb-violet, #7b2cbf); }
-:root[data-theme='nebula'] .ink-selection-bar { border-radius: 0; box-shadow: 0 0 0 1px #000, 3px 3px 0 var(--nb-violet, #7b2cbf); font-family: var(--mono); }
-:root[data-theme='nebula'] .ink-selection-bar button { border-radius: 0; }
+:root[data-look='nebula'] .ink-note { --ink: #5a189a; }
+:root[data-look='nebula'] .ink-strokes { filter: drop-shadow(1px 1px 0 #7b2cbf40); }
+:root[data-look='nebula'] .ink-toolbar { font: 700 10px var(--mono); }
+:root[data-look='nebula'] .ink-toolbar button { border-radius: 0; }
+:root[data-look='nebula'] .ink-toolbar button[aria-pressed='true'] { background: var(--nb-violet, #7b2cbf); color: #fff; }
+:root[data-look='nebula'] .ink-toolbar button[aria-expanded='true'] { background: var(--nb-violet, #7b2cbf); color: #fff; }
+:root[data-look='nebula'] :is(.ink-size i, .ink-width i) { border-radius: 0; }
+:root[data-look='nebula'] .ink-frame rect:not(.ink-grip), :root[data-look='nebula'] .ink-marquee { stroke: var(--nb-violet, #7b2cbf); stroke-dasharray: 5 3; }
+:root[data-look='nebula'] .ink-frame .ink-grip { stroke: var(--nb-violet, #7b2cbf); }
+:root[data-look='nebula'] .ink-glow path { stroke: var(--nb-violet, #7b2cbf); }
+:root[data-look='nebula'] .ink-selection-bar { border-radius: 0; box-shadow: 0 0 0 1px #000, 3px 3px 0 var(--nb-violet, #7b2cbf); font-family: var(--mono); }
+:root[data-look='nebula'] .ink-selection-bar button { border-radius: 0; }
 /* Pixel: crisp strokes, square parts. */
 :root[data-pixel] .ink-strokes { shape-rendering: crispEdges; }
 :root[data-pixel] :is(.ink-toolbar button, .ink-size i, .ink-width i, .ink-color i, .ink-swatch, .ink-selection-bar, .ink-selection-bar button, .ink-menu-item, .ink-sizes button, .ink-paper-kind, .ink-paper-step button, .ink-own-color, .notebook-mode) { border-radius: 0; }

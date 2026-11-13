@@ -31,12 +31,12 @@
 .notebook-sort button { flex: 1; min-width: 0; height: 22px; padding: 0 6px; border: 0; border-radius: 5px; background: transparent; color: var(--muted); font: 11px var(--sans); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
 .notebook-sort button:hover:not([aria-checked='true']) { color: var(--text); }
 .notebook-sort button[aria-checked='true'] { background: var(--surface); color: var(--strong); box-shadow: 0 0 0 1px var(--edge), 0 1px 2px #0003; }
-:root[data-theme='journal'] .notebook-sort { border-radius: 3px; background: color-mix(in srgb, var(--book-paper, var(--surface)) 85%, var(--leather, #6b3a24)); }
-:root[data-theme='journal'] .notebook-sort button { border-radius: 2px; font: italic 12px var(--serif); }
-:root[data-theme='journal'] .notebook-sort button[aria-checked='true'] { background: var(--book-paper, var(--surface)); font-style: normal; }
-:root[data-theme='nebula'] .notebook-sort { border-radius: 0; background: transparent; box-shadow: inset 0 0 0 1px currentColor; }
-:root[data-theme='nebula'] .notebook-sort button { border-radius: 0; font-family: var(--mono); text-transform: lowercase; }
-:root[data-theme='nebula'] .notebook-sort button[aria-checked='true'] { background: var(--accent); color: var(--on-accent); box-shadow: none; }
+:root[data-look='journal'] .notebook-sort { border-radius: 3px; background: color-mix(in srgb, var(--book-paper, var(--surface)) 85%, var(--leather, #6b3a24)); }
+:root[data-look='journal'] .notebook-sort button { border-radius: 2px; font: italic 12px var(--serif); }
+:root[data-look='journal'] .notebook-sort button[aria-checked='true'] { background: var(--book-paper, var(--surface)); font-style: normal; }
+:root[data-look='nebula'] .notebook-sort { border-radius: 0; background: transparent; box-shadow: inset 0 0 0 1px currentColor; }
+:root[data-look='nebula'] .notebook-sort button { border-radius: 0; font-family: var(--mono); text-transform: lowercase; }
+:root[data-look='nebula'] .notebook-sort button[aria-checked='true'] { background: var(--accent); color: var(--on-accent); box-shadow: none; }
 .notebook-add-folder, .notebook-folder-tools button { display: grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--muted); cursor: pointer; }
 .notebook-add-folder:hover, .notebook-folder-tools button:hover { background: var(--hover); color: var(--strong); }
 .notebook-add-folder .icon, .notebook-folder-tools .icon { width: 12px; height: 12px; }
@@ -77,7 +77,7 @@
 .notebook-subpage span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .notebook-subpage:hover { background: var(--hover); }
 .notebook-subpage.is-current { color: var(--text); background: var(--selected); border-left-color: var(--accent); }
-:root[data-theme='nebula'] .notebook-subpage { font-family: var(--mono); border-radius: 0; }
+:root[data-look='nebula'] .notebook-subpage { font-family: var(--mono); border-radius: 0; }
 :root[data-pixel] .notebook-subpage { font-size: 15px; border-radius: 0; }
 .notebook-empty { margin: 6px 6px; color: var(--muted); font: 12px var(--sans); }
 
@@ -158,115 +158,115 @@
 }
 
 /* ── Normal ─────────────────────────────────────────────────────────────────────────────────────────────────────── */
-:root[data-theme='classic'] .notebook-view { flex: 1; min-height: 0; display: flex; padding: 14px 18px 18px; }
-:root[data-theme='classic'] .notebook-view .notebook { border-radius: 12px; background: var(--surface); box-shadow: 0 0 0 1px var(--divider), 0 18px 40px -24px #000c; overflow: hidden; }
-:root[data-theme='classic'] .notebook-page { background: var(--background); }
+:root[data-look='classic'] .notebook-view { flex: 1; min-height: 0; display: flex; padding: 14px 18px 18px; }
+:root[data-look='classic'] .notebook-view .notebook { border-radius: 12px; background: var(--surface); box-shadow: 0 0 0 1px var(--divider), 0 18px 40px -24px #000c; overflow: hidden; }
+:root[data-look='classic'] .notebook-page { background: var(--background); }
 
 /* ── Journal: a sheet of the book. The tree is a contents page, the note ruled paper with a red margin. ───────── */
-:root[data-theme='journal'] .notebook { --nbk-side: clamp(260px, 36%, 360px); background: var(--book-paper, var(--surface)); font-family: var(--serif); }
-:root[data-theme='journal'] .notebook-head { min-height: 54px; padding: 4px 12px 0 22px; border-bottom: 1px solid color-mix(in srgb, var(--strong) 18%, transparent); }
-:root[data-theme='journal'] .notebook-head h2 { font: 600 22px var(--display); letter-spacing: -.01em; }
-:root[data-theme='journal'] .notebook-head h2 .icon { color: #a8322c; }
-:root[data-theme='journal'] .notebook-head-count { font: italic 13px var(--serif); }
-:root[data-theme='journal'] .notebook-new { border-radius: 3px; background: var(--leather, #6b3a24); color: #fbeee0; box-shadow: 0 1px 2px #1d0f0655; }
-:root[data-theme='journal'] .notebook-side { background: color-mix(in srgb, var(--book-paper, var(--surface)) 92%, var(--leather, #6b3a24)); border-right: 1px solid color-mix(in srgb, var(--strong) 14%, transparent);
+:root[data-look='journal'] .notebook { --nbk-side: clamp(260px, 36%, 360px); background: var(--book-paper, var(--surface)); font-family: var(--serif); }
+:root[data-look='journal'] .notebook-head { min-height: 54px; padding: 4px 12px 0 22px; border-bottom: 1px solid color-mix(in srgb, var(--strong) 18%, transparent); }
+:root[data-look='journal'] .notebook-head h2 { font: 600 22px var(--display); letter-spacing: -.01em; }
+:root[data-look='journal'] .notebook-head h2 .icon { color: #a8322c; }
+:root[data-look='journal'] .notebook-head-count { font: italic 13px var(--serif); }
+:root[data-look='journal'] .notebook-new { border-radius: 3px; background: var(--leather, #6b3a24); color: #fbeee0; box-shadow: 0 1px 2px #1d0f0655; }
+:root[data-look='journal'] .notebook-side { background: color-mix(in srgb, var(--book-paper, var(--surface)) 92%, var(--leather, #6b3a24)); border-right: 1px solid color-mix(in srgb, var(--strong) 14%, transparent);
   box-shadow: inset -10px 0 14px -12px #2a1a0c55; }
-:root[data-theme='journal'] .notebook-tree-head { font: italic 600 12px var(--display); letter-spacing: .02em; text-transform: none; color: color-mix(in srgb, var(--strong) 70%, transparent); }
-:root[data-theme='journal'] .notebook-search { border-radius: 3px; background: color-mix(in srgb, var(--book-paper, var(--surface)) 70%, #fff); }
-:root[data-theme='journal'] .notebook-folder-name { font: 14px var(--serif) !important; border-radius: 3px; }
+:root[data-look='journal'] .notebook-tree-head { font: italic 600 12px var(--display); letter-spacing: .02em; text-transform: none; color: color-mix(in srgb, var(--strong) 70%, transparent); }
+:root[data-look='journal'] .notebook-search { border-radius: 3px; background: color-mix(in srgb, var(--book-paper, var(--surface)) 70%, #fff); }
+:root[data-look='journal'] .notebook-folder-name { font: 14px var(--serif) !important; border-radius: 3px; }
 /* Contents: dotted leaders run from the folder's name to its count. */
-:root[data-theme='journal'] .notebook-folder-name > span:not(.notebook-branch, .notebook-twisty) { flex: 0 1 auto; }
-:root[data-theme='journal'] .notebook-folder-name small { flex: 1; min-width: 14px; text-align: right; font: italic 12px var(--serif);
+:root[data-look='journal'] .notebook-folder-name > span:not(.notebook-branch, .notebook-twisty) { flex: 0 1 auto; }
+:root[data-look='journal'] .notebook-folder-name small { flex: 1; min-width: 14px; text-align: right; font: italic 12px var(--serif);
   background: radial-gradient(circle, color-mix(in srgb, var(--strong) 35%, transparent) .8px, transparent 1.2px) 0 calc(100% - 4px) / 5px 4px repeat-x; padding-left: 4px; }
-:root[data-theme='journal'] .notebook-folder.is-current .notebook-folder-name { background: color-mix(in srgb, #a8322c 12%, transparent); color: var(--strong); }
-:root[data-theme='journal'] .notebook-folder.is-current .notebook-folder-name .icon { color: #a8322c; }
-:root[data-theme='journal'] .notebook-note { border-radius: 2px; box-shadow: inset 3px 0 0 var(--paper), 0 1px 0 color-mix(in srgb, var(--strong) 8%, transparent); }
-:root[data-theme='journal'] .notebook-note strong { font: 600 13.5px var(--display); }
-:root[data-theme='journal'] .notebook-note small { font: italic 12px var(--serif); }
-:root[data-theme='journal'] .notebook-page { --rule: 26px; padding: 16px 26px 14px 46px;
+:root[data-look='journal'] .notebook-folder.is-current .notebook-folder-name { background: color-mix(in srgb, #a8322c 12%, transparent); color: var(--strong); }
+:root[data-look='journal'] .notebook-folder.is-current .notebook-folder-name .icon { color: #a8322c; }
+:root[data-look='journal'] .notebook-note { border-radius: 2px; box-shadow: inset 3px 0 0 var(--paper), 0 1px 0 color-mix(in srgb, var(--strong) 8%, transparent); }
+:root[data-look='journal'] .notebook-note strong { font: 600 13.5px var(--display); }
+:root[data-look='journal'] .notebook-note small { font: italic 12px var(--serif); }
+:root[data-look='journal'] .notebook-page { --rule: 26px; padding: 16px 26px 14px 46px;
   background: linear-gradient(90deg, transparent 33px, color-mix(in srgb, #a8322c 45%, transparent) 33px 34px, transparent 34px),
     repeating-linear-gradient(to bottom, transparent 0 calc(var(--rule) - 1px), color-mix(in srgb, #5a7fa8 22%, transparent) calc(var(--rule) - 1px) var(--rule)) 0 12px / 100% var(--rule),
     var(--book-paper, var(--surface)); background-attachment: local; }
-:root[data-theme='journal'] .notebook-title { font: 600 26px var(--display); letter-spacing: -.01em; }
-:root[data-theme='journal'] .notebook-day, :root[data-theme='journal'] .notebook-page-foot { font: italic 13px var(--serif); }
-:root[data-theme='journal'] .notebook .notebook-text .cm-content { font: 15px/26px var(--write, var(--serif)); }
-:root[data-theme='journal'] .notebook-attachments { border-top: 1px dashed color-mix(in srgb, var(--strong) 25%, transparent); }
-:root[data-theme='journal'] .notebook-attachments h3 { font: italic 600 14px var(--display); }
+:root[data-look='journal'] .notebook-title { font: 600 26px var(--display); letter-spacing: -.01em; }
+:root[data-look='journal'] .notebook-day, :root[data-look='journal'] .notebook-page-foot { font: italic 13px var(--serif); }
+:root[data-look='journal'] .notebook .notebook-text .cm-content { font: 15px/26px var(--write, var(--serif)); }
+:root[data-look='journal'] .notebook-attachments { border-top: 1px dashed color-mix(in srgb, var(--strong) 25%, transparent); }
+:root[data-look='journal'] .notebook-attachments h3 { font: italic 600 14px var(--display); }
 /* Attachments as polaroids and index cards clipped to the page. */
-:root[data-theme='journal'] .notebook-attachment { border-radius: 2px; background: #fbf7ee; color: #2c2714; box-shadow: 0 1px 1px #0004, 0 8px 16px -8px #2a1a0c99; }
-:root[data-theme='journal'] .notebook-attachment.is-image { padding: 7px 7px 0; }
-:root[data-theme='journal'] .notebook-attachment:nth-child(odd) { transform: rotate(-1deg); }
-:root[data-theme='journal'] .notebook-attachment:nth-child(even) { transform: rotate(.8deg); }
-:root[data-theme='journal'] .notebook-attachment :is(strong, span, small) { color: #2c2714; }
-:root[data-theme='journal'] .notebook-attachment-foot { border-top: 0; font-style: italic; }
-:root[data-theme='journal'] .notebook-pager { background: color-mix(in srgb, var(--book-paper, var(--surface)) 92%, transparent); border-top: 1px solid color-mix(in srgb, var(--strong) 14%, transparent); }
-:root[data-theme='journal'] .notebook-page-number { font: italic 13px var(--serif); }
-:root[data-theme='journal'] .notebook-dots button[aria-current] { background: #a8322c; }
-:root[data-theme='journal'] .notebook-close { color: var(--muted); }
+:root[data-look='journal'] .notebook-attachment { border-radius: 2px; background: #fbf7ee; color: #2c2714; box-shadow: 0 1px 1px #0004, 0 8px 16px -8px #2a1a0c99; }
+:root[data-look='journal'] .notebook-attachment.is-image { padding: 7px 7px 0; }
+:root[data-look='journal'] .notebook-attachment:nth-child(odd) { transform: rotate(-1deg); }
+:root[data-look='journal'] .notebook-attachment:nth-child(even) { transform: rotate(.8deg); }
+:root[data-look='journal'] .notebook-attachment :is(strong, span, small) { color: #2c2714; }
+:root[data-look='journal'] .notebook-attachment-foot { border-top: 0; font-style: italic; }
+:root[data-look='journal'] .notebook-pager { background: color-mix(in srgb, var(--book-paper, var(--surface)) 92%, transparent); border-top: 1px solid color-mix(in srgb, var(--strong) 14%, transparent); }
+:root[data-look='journal'] .notebook-page-number { font: italic 13px var(--serif); }
+:root[data-look='journal'] .notebook-dots button[aria-current] { background: #a8322c; }
+:root[data-look='journal'] .notebook-close { color: var(--muted); }
 
 /* ── Nebula: a terminal. The tree is `tree` output, notes a listing; the current row is inverted. ─────────────── */
-:root[data-theme='nebula'] .notebook { --nbk-side: clamp(300px, 36%, 400px); background: var(--surface); font-family: var(--mono); }
-:root[data-theme='nebula'] .notebook-head { min-height: 40px; border-bottom: 1px solid var(--nb-line, #e8e8e8); }
-:root[data-theme='nebula'] .notebook-head h2 { font: italic 400 24px var(--display); color: var(--strong); }
-:root[data-theme='nebula'] .notebook-head h2 .icon { display: none; }
-:root[data-theme='nebula'] .notebook-head-count { font: 11px var(--mono); }
-:root[data-theme='nebula'] .notebook-new { border-radius: 0; background: var(--nb-violet, #7b2cbf); color: #fff; font: 700 11px var(--mono) !important; text-transform: lowercase; box-shadow: 3px 3px 0 #000; }
-:root[data-theme='nebula'] .notebook-new .icon { display: none; }
-:root[data-theme='nebula'] .notebook-new::before { content: './'; }
-:root[data-theme='nebula'] .notebook-side { gap: 12px; padding: 12px; background: #08080a; border-right: 1px solid var(--edge); }
-:root[data-theme='nebula'] .notebook-search { border-radius: 0; background: transparent; box-shadow: inset 0 0 0 1px var(--edge); }
-:root[data-theme='nebula'] .notebook-search::before { content: '$ grep'; color: var(--accent); font: 11px var(--mono); }
-:root[data-theme='nebula'] .notebook-search .icon { display: none; }
-:root[data-theme='nebula'] .notebook-search input { font: 12px var(--mono); }
-:root[data-theme='nebula'] .notebook-tree-head { color: var(--accent); font: 700 10px var(--mono); letter-spacing: .12em; }
-:root[data-theme='nebula'] .notebook-tree-head > span::before { content: '$ '; color: var(--muted); }
-:root[data-theme='nebula'] .notebook-branch { display: inline; color: #ffffff55; }
-:root[data-theme='nebula'] .notebook-folder-name { gap: 0; height: 22px; padding-left: 4px; font: 12px var(--mono) !important; }
-:root[data-theme='nebula'] .notebook-folder-name .icon, :root[data-theme='nebula'] .notebook-twisty { display: none; }
-:root[data-theme='nebula'] .notebook-folder:not(.is-all, .is-none) .notebook-folder-label::after { content: '/'; color: var(--accent); }
-:root[data-theme='nebula'] .notebook-folder-name small { padding-left: 8px; font: 10.5px var(--mono); }
-:root[data-theme='nebula'] .notebook-folder-name small::before { content: '['; } :root[data-theme='nebula'] .notebook-folder-name small::after { content: ']'; }
-:root[data-theme='nebula'] .notebook-folder:hover .notebook-folder-name { background: var(--hover); }
-:root[data-theme='nebula'] .notebook-folder.is-current .notebook-folder-name { background: var(--nb-paper, #cfcfcf); color: var(--nb-ink, #111); }
-:root[data-theme='nebula'] .notebook-folder.is-current .notebook-branch { color: #11111188; }
-:root[data-theme='nebula'] .notebook-folder.is-current small { color: #111; }
-:root[data-theme='nebula'] .notebook-folder.is-drop { box-shadow: inset 0 0 0 1px var(--accent), 3px 3px 0 var(--nb-violet, #7b2cbf); }
-:root[data-theme='nebula'] .notebook-folder-tools { top: 0; background: #08080a; }
-:root[data-theme='nebula'] .notebook-folder-tools button { border-radius: 0; background: transparent; box-shadow: none; }
-:root[data-theme='nebula'] .notebook-rename { height: 22px; border-radius: 0; font: 12px var(--mono); }
-:root[data-theme='nebula'] .notebook-note { --paper: #cfcfcf; padding: 5px 8px 6px 12px; border-radius: 0; box-shadow: inset 2px 0 0 var(--paper); }
-:root[data-theme='nebula'] .notebook-note.paper-blue { --paper: #d5b8ff; } :root[data-theme='nebula'] .notebook-note.paper-green { --paper: #a6f2dc; } :root[data-theme='nebula'] .notebook-note.paper-pink { --paper: #ffd0b0; }
-:root[data-theme='nebula'] .notebook-note strong { font: 700 12px var(--mono); text-transform: lowercase; }
-:root[data-theme='nebula'] .notebook-note strong::after { content: '.md'; color: var(--muted); font-weight: 400; }
-:root[data-theme='nebula'] .notebook-note :is(small, .notebook-note-meta) { font: 10.5px var(--mono); }
-:root[data-theme='nebula'] .notebook-note.is-current { background: var(--event-background); box-shadow: inset 2px 0 0 var(--accent); }
-:root[data-theme='nebula'] .notebook-page { padding: 18px 24px 14px 28px; background: var(--surface); }
-:root[data-theme='nebula'] .notebook-title { font: italic 400 32px/1.1 var(--display); border-bottom: 1px dashed var(--edge); }
-:root[data-theme='nebula'] .notebook-folder-pick, :root[data-theme='nebula'] .notebook-delete { border-radius: 0; }
-:root[data-theme='nebula'] .notebook-folder-pick select { font: 11px var(--mono); }
-:root[data-theme='nebula'] .notebook-day { font: 11.5px var(--mono); }
-:root[data-theme='nebula'] .notebook-day small::before { content: '# '; color: var(--accent); }
-:root[data-theme='nebula'] .notebook .notebook-text .cm-content { font: 13px/24px var(--write); }
-:root[data-theme='nebula'] .notebook-attachments { border-top: 1px solid var(--edge); }
-:root[data-theme='nebula'] .notebook-attachments h3 { font: 700 11px var(--sans); letter-spacing: .16em; text-transform: uppercase; }
-:root[data-theme='nebula'] .notebook-attach-actions { gap: 0; }
-:root[data-theme='nebula'] .notebook-attach-actions button { margin-left: -1px; border: 1px solid var(--edge); border-radius: 0; background: transparent; font: 11px var(--mono); text-transform: lowercase; }
-:root[data-theme='nebula'] .notebook-attach-actions button:hover:not(:disabled), :root[data-theme='nebula'] .notebook-attach-actions button[aria-expanded='true'] { border-color: var(--accent); background: var(--event-background); }
-:root[data-theme='nebula'] .notebook-attachment { border-radius: 0; background: #050505; box-shadow: 0 0 0 1px var(--nb-line, #e8e8e8), 4px 4px 0 var(--nb-violet, #7b2cbf); }
-:root[data-theme='nebula'] .notebook-attachment.is-link { background: var(--nb-paper, #cfcfcf); }
-:root[data-theme='nebula'] .notebook-attachment.is-link :is(strong) { color: var(--nb-violet, #7b2cbf); font: italic 400 16px/1.1 var(--display); }
-:root[data-theme='nebula'] .notebook-attachment.is-link :is(span, small) { color: #111; font-family: var(--mono); }
-:root[data-theme='nebula'] .notebook-attachment.is-link .notebook-attachment-foot { border-top-color: #11111133; }
-:root[data-theme='nebula'] .notebook-attachment.is-link .notebook-attachment-foot button { color: #111; }
-:root[data-theme='nebula'] .notebook-attachment-foot small { font-family: var(--mono); }
-:root[data-theme='nebula'] .notebook-pager { background: #050505ee; backdrop-filter: none; border-top: 1px solid var(--edge); }
-:root[data-theme='nebula'] .notebook-turn { border-radius: 0; background: transparent; box-shadow: inset 0 0 0 1px var(--edge); }
-:root[data-theme='nebula'] .notebook-dots button { border-radius: 0; }
-:root[data-theme='nebula'] .notebook-page-number, :root[data-theme='nebula'] .notebook-page-foot { font: 11px var(--mono); }
-:root[data-theme='nebula'] .notebook-page-number::before { content: '['; } :root[data-theme='nebula'] .notebook-page-number::after { content: ']'; }
-:root[data-theme='nebula'] .notebook-close { border-radius: 0; }
+:root[data-look='nebula'] .notebook { --nbk-side: clamp(300px, 36%, 400px); background: var(--surface); font-family: var(--mono); }
+:root[data-look='nebula'] .notebook-head { min-height: 40px; border-bottom: 1px solid var(--nb-line, #e8e8e8); }
+:root[data-look='nebula'] .notebook-head h2 { font: italic 400 24px var(--display); color: var(--strong); }
+:root[data-look='nebula'] .notebook-head h2 .icon { display: none; }
+:root[data-look='nebula'] .notebook-head-count { font: 11px var(--mono); }
+:root[data-look='nebula'] .notebook-new { border-radius: 0; background: var(--nb-violet, #7b2cbf); color: #fff; font: 700 11px var(--mono) !important; text-transform: lowercase; box-shadow: 3px 3px 0 #000; }
+:root[data-look='nebula'] .notebook-new .icon { display: none; }
+:root[data-look='nebula'] .notebook-new::before { content: './'; }
+:root[data-look='nebula'] .notebook-side { gap: 12px; padding: 12px; background: #08080a; border-right: 1px solid var(--edge); }
+:root[data-look='nebula'] .notebook-search { border-radius: 0; background: transparent; box-shadow: inset 0 0 0 1px var(--edge); }
+:root[data-look='nebula'] .notebook-search::before { content: '$ grep'; color: var(--accent); font: 11px var(--mono); }
+:root[data-look='nebula'] .notebook-search .icon { display: none; }
+:root[data-look='nebula'] .notebook-search input { font: 12px var(--mono); }
+:root[data-look='nebula'] .notebook-tree-head { color: var(--accent); font: 700 10px var(--mono); letter-spacing: .12em; }
+:root[data-look='nebula'] .notebook-tree-head > span::before { content: '$ '; color: var(--muted); }
+:root[data-look='nebula'] .notebook-branch { display: inline; color: #ffffff55; }
+:root[data-look='nebula'] .notebook-folder-name { gap: 0; height: 22px; padding-left: 4px; font: 12px var(--mono) !important; }
+:root[data-look='nebula'] .notebook-folder-name .icon, :root[data-look='nebula'] .notebook-twisty { display: none; }
+:root[data-look='nebula'] .notebook-folder:not(.is-all, .is-none) .notebook-folder-label::after { content: '/'; color: var(--accent); }
+:root[data-look='nebula'] .notebook-folder-name small { padding-left: 8px; font: 10.5px var(--mono); }
+:root[data-look='nebula'] .notebook-folder-name small::before { content: '['; } :root[data-look='nebula'] .notebook-folder-name small::after { content: ']'; }
+:root[data-look='nebula'] .notebook-folder:hover .notebook-folder-name { background: var(--hover); }
+:root[data-look='nebula'] .notebook-folder.is-current .notebook-folder-name { background: var(--nb-paper, #cfcfcf); color: var(--nb-ink, #111); }
+:root[data-look='nebula'] .notebook-folder.is-current .notebook-branch { color: #11111188; }
+:root[data-look='nebula'] .notebook-folder.is-current small { color: #111; }
+:root[data-look='nebula'] .notebook-folder.is-drop { box-shadow: inset 0 0 0 1px var(--accent), 3px 3px 0 var(--nb-violet, #7b2cbf); }
+:root[data-look='nebula'] .notebook-folder-tools { top: 0; background: #08080a; }
+:root[data-look='nebula'] .notebook-folder-tools button { border-radius: 0; background: transparent; box-shadow: none; }
+:root[data-look='nebula'] .notebook-rename { height: 22px; border-radius: 0; font: 12px var(--mono); }
+:root[data-look='nebula'] .notebook-note { --paper: #cfcfcf; padding: 5px 8px 6px 12px; border-radius: 0; box-shadow: inset 2px 0 0 var(--paper); }
+:root[data-look='nebula'] .notebook-note.paper-blue { --paper: #d5b8ff; } :root[data-look='nebula'] .notebook-note.paper-green { --paper: #a6f2dc; } :root[data-look='nebula'] .notebook-note.paper-pink { --paper: #ffd0b0; }
+:root[data-look='nebula'] .notebook-note strong { font: 700 12px var(--mono); text-transform: lowercase; }
+:root[data-look='nebula'] .notebook-note strong::after { content: '.md'; color: var(--muted); font-weight: 400; }
+:root[data-look='nebula'] .notebook-note :is(small, .notebook-note-meta) { font: 10.5px var(--mono); }
+:root[data-look='nebula'] .notebook-note.is-current { background: var(--event-background); box-shadow: inset 2px 0 0 var(--accent); }
+:root[data-look='nebula'] .notebook-page { padding: 18px 24px 14px 28px; background: var(--surface); }
+:root[data-look='nebula'] .notebook-title { font: italic 400 32px/1.1 var(--display); border-bottom: 1px dashed var(--edge); }
+:root[data-look='nebula'] .notebook-folder-pick, :root[data-look='nebula'] .notebook-delete { border-radius: 0; }
+:root[data-look='nebula'] .notebook-folder-pick select { font: 11px var(--mono); }
+:root[data-look='nebula'] .notebook-day { font: 11.5px var(--mono); }
+:root[data-look='nebula'] .notebook-day small::before { content: '# '; color: var(--accent); }
+:root[data-look='nebula'] .notebook .notebook-text .cm-content { font: 13px/24px var(--write); }
+:root[data-look='nebula'] .notebook-attachments { border-top: 1px solid var(--edge); }
+:root[data-look='nebula'] .notebook-attachments h3 { font: 700 11px var(--sans); letter-spacing: .16em; text-transform: uppercase; }
+:root[data-look='nebula'] .notebook-attach-actions { gap: 0; }
+:root[data-look='nebula'] .notebook-attach-actions button { margin-left: -1px; border: 1px solid var(--edge); border-radius: 0; background: transparent; font: 11px var(--mono); text-transform: lowercase; }
+:root[data-look='nebula'] .notebook-attach-actions button:hover:not(:disabled), :root[data-look='nebula'] .notebook-attach-actions button[aria-expanded='true'] { border-color: var(--accent); background: var(--event-background); }
+:root[data-look='nebula'] .notebook-attachment { border-radius: 0; background: #050505; box-shadow: 0 0 0 1px var(--nb-line, #e8e8e8), 4px 4px 0 var(--nb-violet, #7b2cbf); }
+:root[data-look='nebula'] .notebook-attachment.is-link { background: var(--nb-paper, #cfcfcf); }
+:root[data-look='nebula'] .notebook-attachment.is-link :is(strong) { color: var(--nb-violet, #7b2cbf); font: italic 400 16px/1.1 var(--display); }
+:root[data-look='nebula'] .notebook-attachment.is-link :is(span, small) { color: #111; font-family: var(--mono); }
+:root[data-look='nebula'] .notebook-attachment.is-link .notebook-attachment-foot { border-top-color: #11111133; }
+:root[data-look='nebula'] .notebook-attachment.is-link .notebook-attachment-foot button { color: #111; }
+:root[data-look='nebula'] .notebook-attachment-foot small { font-family: var(--mono); }
+:root[data-look='nebula'] .notebook-pager { background: #050505ee; backdrop-filter: none; border-top: 1px solid var(--edge); }
+:root[data-look='nebula'] .notebook-turn { border-radius: 0; background: transparent; box-shadow: inset 0 0 0 1px var(--edge); }
+:root[data-look='nebula'] .notebook-dots button { border-radius: 0; }
+:root[data-look='nebula'] .notebook-page-number, :root[data-look='nebula'] .notebook-page-foot { font: 11px var(--mono); }
+:root[data-look='nebula'] .notebook-page-number::before { content: '['; } :root[data-look='nebula'] .notebook-page-number::after { content: ']'; }
+:root[data-look='nebula'] .notebook-close { border-radius: 0; }
 @keyframes notebook-page-in-nebula { from { opacity: 0; clip-path: inset(0 0 100% 0); } }
-:root[data-theme='nebula'] .notebook-page { animation-name: notebook-page-in-nebula; animation-timing-function: steps(6); }
+:root[data-look='nebula'] .notebook-page { animation-name: notebook-page-in-nebula; animation-timing-function: steps(6); }
 
 /* ── Pixel: square corners, hard shadows, stepped motion (the fonts come from the design's pixel variables). ──── */
 :root[data-pixel] .notebook :is(.notebook-new, .notebook-close, .notebook-search, .notebook-add-folder, .notebook-folder, .notebook-folder-name, .notebook-folder-tools, .notebook-folder-tools button,
@@ -282,10 +282,10 @@
 :root[data-pixel] .notebook .notebook-text .cm-content { font-size: 18px; line-height: 24px; }
 :root[data-pixel] :is(.notebook-folder-name, .notebook-note strong) { font-size: 14px !important; }
 :root[data-pixel] .notebook-note small, :root[data-pixel] .notebook-note-meta, :root[data-pixel] .notebook-day { font-size: 13px; }
-:root[data-theme='journal'][data-pixel] .notebook-page { --rule: 24px; }
-:root[data-theme='journal'][data-pixel] .notebook-head h2, :root[data-theme='journal'][data-pixel] .notebook-title { font-family: var(--display); letter-spacing: 0; }
-:root[data-theme='journal'][data-pixel] :is(.notebook-day, .notebook-page-foot, .notebook-note small, .notebook-head-count) { font-style: normal; }
-:root[data-theme='classic'][data-pixel] .notebook-view .notebook { border-radius: 0; box-shadow: 0 0 0 2px var(--divider), 6px 6px 0 #000a; }
+:root[data-look='journal'][data-pixel] .notebook-page { --rule: 24px; }
+:root[data-look='journal'][data-pixel] .notebook-head h2, :root[data-look='journal'][data-pixel] .notebook-title { font-family: var(--display); letter-spacing: 0; }
+:root[data-look='journal'][data-pixel] :is(.notebook-day, .notebook-page-foot, .notebook-note small, .notebook-head-count) { font-style: normal; }
+:root[data-look='classic'][data-pixel] .notebook-view .notebook { border-radius: 0; box-shadow: 0 0 0 2px var(--divider), 6px 6px 0 #000a; }
 .notebook-add-folder b, .notebook-folder-tools b { font: 700 15px/1 var(--mono); }
 /* The normal design's tab, set apart from the views. */
 .journal-tab.is-notebook { margin-left: 8px; border-left: 1px solid var(--divider); }
@@ -304,16 +304,16 @@ button.notebook-folder-pick:hover, button.notebook-folder-pick[aria-expanded='tr
 .folder-pick-option[aria-selected='true'] { background: var(--hover); color: var(--strong); }
 .folder-pick-option.is-current > span { font-weight: 600; }
 /* Journal: handwritten list on paper, the chosen one underlined. */
-:root[data-theme='journal'] button.notebook-folder-pick { border-radius: 2px; background: transparent; box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--text) 35%, transparent); font: italic 13px var(--write, var(--serif)); }
-:root[data-theme='journal'] .folder-pick-option { border-radius: 2px; font: 14px var(--serif, var(--sans)); }
-:root[data-theme='journal'] .folder-pick-option[aria-selected='true'] { background: color-mix(in srgb, var(--priority) 30%, transparent); }
-:root[data-theme='journal'] .folder-pick-option.is-current > span { font-weight: 400; font-style: italic; text-decoration: underline; text-underline-offset: 3px; }
+:root[data-look='journal'] button.notebook-folder-pick { border-radius: 2px; background: transparent; box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--text) 35%, transparent); font: italic 13px var(--write, var(--serif)); }
+:root[data-look='journal'] .folder-pick-option { border-radius: 2px; font: 14px var(--serif, var(--sans)); }
+:root[data-look='journal'] .folder-pick-option[aria-selected='true'] { background: color-mix(in srgb, var(--priority) 30%, transparent); }
+:root[data-look='journal'] .folder-pick-option.is-current > span { font-weight: 400; font-style: italic; text-decoration: underline; text-underline-offset: 3px; }
 /* Nebula: a mono list with a violet bar; Holo-Papier in black on grey. */
-:root[data-theme='nebula'] button.notebook-folder-pick { border-radius: 0; background: #050505; box-shadow: inset 0 0 0 1px var(--edge); font: 11.5px var(--mono); }
-:root[data-theme='nebula'] .folder-pick-option { border-radius: 0; font: 12px var(--mono); }
-:root[data-theme='nebula'] .folder-pick-option[aria-selected='true'] { background: var(--nb-violet, #7b2cbf); color: #fff; }
-:root[data-theme='nebula'] .folder-pick-option[aria-selected='true'] .icon { color: #fff; }
-:root[data-theme='nebula'][data-popups='b'] .folder-pick-option { color: #111; }
+:root[data-look='nebula'] button.notebook-folder-pick { border-radius: 0; background: #050505; box-shadow: inset 0 0 0 1px var(--edge); font: 11.5px var(--mono); }
+:root[data-look='nebula'] .folder-pick-option { border-radius: 0; font: 12px var(--mono); }
+:root[data-look='nebula'] .folder-pick-option[aria-selected='true'] { background: var(--nb-violet, #7b2cbf); color: #fff; }
+:root[data-look='nebula'] .folder-pick-option[aria-selected='true'] .icon { color: #fff; }
+:root[data-look='nebula'][data-popups='b'] .folder-pick-option { color: #111; }
 :root[data-pixel] :is(button.notebook-folder-pick, .folder-pick-option) { border-radius: 0; }
 :root[data-pixel] .folder-pick-option { font-size: 15px; }
 
@@ -325,10 +325,10 @@ button.notebook-folder-pick:hover, button.notebook-folder-pick[aria-expanded='tr
 .notebook-chosen-clear { display: grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--muted); cursor: pointer; }
 .notebook-chosen-clear:hover { background: var(--hover); color: var(--text); }
 .notebook-chosen-clear .icon { width: 10px; height: 10px; }
-:root[data-theme='journal'] .notebook-note.is-chosen { background: color-mix(in srgb, var(--priority) 30%, transparent); box-shadow: inset 3px 0 0 var(--paper), inset 0 0 0 1px color-mix(in srgb, var(--priority) 70%, transparent); }
-:root[data-theme='journal'] .notebook-chosen { border-radius: 2px; background: color-mix(in srgb, var(--priority) 22%, var(--book-paper, var(--surface))); font: italic 600 12.5px var(--serif); }
-:root[data-theme='nebula'] .notebook-note.is-chosen { background: color-mix(in srgb, var(--nb-violet, #7b2cbf) 30%, transparent); box-shadow: inset 2px 0 0 var(--paper), inset 0 0 0 1px var(--nb-violet-light, #b388ff); }
-:root[data-theme='nebula'] .notebook-chosen { border-radius: 0; background: #0c0c0e; box-shadow: inset 0 0 0 1px var(--nb-violet-light, #b388ff); font: 700 11px var(--mono); }
+:root[data-look='journal'] .notebook-note.is-chosen { background: color-mix(in srgb, var(--priority) 30%, transparent); box-shadow: inset 3px 0 0 var(--paper), inset 0 0 0 1px color-mix(in srgb, var(--priority) 70%, transparent); }
+:root[data-look='journal'] .notebook-chosen { border-radius: 2px; background: color-mix(in srgb, var(--priority) 22%, var(--book-paper, var(--surface))); font: italic 600 12.5px var(--serif); }
+:root[data-look='nebula'] .notebook-note.is-chosen { background: color-mix(in srgb, var(--nb-violet, #7b2cbf) 30%, transparent); box-shadow: inset 2px 0 0 var(--paper), inset 0 0 0 1px var(--nb-violet-light, #b388ff); }
+:root[data-look='nebula'] .notebook-chosen { border-radius: 0; background: #0c0c0e; box-shadow: inset 0 0 0 1px var(--nb-violet-light, #b388ff); font: 700 11px var(--mono); }
 :root[data-pixel] :is(.notebook-chosen, .notebook-note.is-chosen, .notebook-chosen-clear) { border-radius: 0; }
 
 .notebook-day-link { padding: 0; border: 0; background: transparent; color: var(--muted); font: inherit; text-align: left; cursor: pointer; text-decoration: underline; text-decoration-color: color-mix(in srgb, currentColor 35%, transparent); text-underline-offset: 3px; }

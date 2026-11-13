@@ -258,11 +258,33 @@ async fn show_note(app: tauri::AppHandle, id: String) -> Result<(), String> {
     main.set_focus().map_err(|e| e.to_string())
 }
 
+/// The app has no console window, so a failed start (a database made by a newer version, a damaged vault …) would end
+/// without a word. This shows the reason in a message box instead.
+#[cfg(all(windows, not(debug_assertions)))]
+fn show_startup_error(message: &str) {
+    use windows::{core::HSTRING, Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONERROR, MB_OK}};
+    unsafe { MessageBoxW(None, &HSTRING::from(message), &HSTRING::from("Journal"), MB_OK | MB_ICONERROR); }
+}
+#[cfg(not(all(windows, not(debug_assertions))))]
+fn show_startup_error(_message: &str) {}
+
 fn main() {
     if std::env::args().nth(1).as_deref() == Some("--mail-ml-worker") {
         if let Some(root) = std::env::args_os().nth(2) { if mail::ml::worker(std::path::Path::new(&root)).is_err() { std::process::exit(1); } }
         return;
     }
+    std::panic::set_hook({
+        let previous = std::panic::take_hook();
+        Box::new(move |info| {
+            let reason = info.payload().downcast_ref::<String>().cloned().or_else(|| info.payload().downcast_ref::<&str>().map(|text| text.to_string())).unwrap_or_default();
+            show_startup_error(&format!("Journal konnte nicht gestartet werden.
+
+{reason}
+
+Ist die Datenbank von einer neueren Version angelegt, bitte Journal aktualisieren. Deine Daten werden dabei nicht verändert."));
+            previous(info);
+        })
+    });
     let mut context=tauri::generate_context!();
     if let Some(root)=widget_smoke_root(){
         assert!(root.is_absolute() && root.join("widget-smoke-fixture").is_file(),"Native widget tests require an explicitly marked isolated directory");

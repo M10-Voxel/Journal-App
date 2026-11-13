@@ -1,8 +1,10 @@
 import { t, useLanguage } from '../i18n';
 import { useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent, ReactNode } from 'react';
-import { pixelActive, swipeAvailable, themes, withTheme } from '../settings';
-import type { PopupStyle, Settings, Theme } from '../settings';
+import { pixelActive, swipeAvailable, withDesign, withLayout, withLook } from '../settings';
+import type { PopupStyle, Settings } from '../settings';
+import { layouts as layoutIds, looks as lookIds, presetOf, presets, takesPixel } from '../designs';
+import type { Layout, Look, Preset } from '../designs';
 import type { ActionLayout } from './EntryActionDock';
 import type { BookView } from './JournalBook';
 import type { CalendarImport } from '../journal';
@@ -29,25 +31,29 @@ const tabInfo = (): Record<SettingsTab, { icon: IconName; label: string }> => ({
   activities: { icon: 'check', label: t('Aktivitäten') }, scales: { icon: 'week', label: t('Tageswerte') }, storage: { icon: 'save', label: t('Speicherort') }, drive: { icon: 'transfer', label: 'Google Drive' }, mail: { icon: 'mail', label: t("E-Mail-Konten") }, updates: { icon: 'repeat', label: t('Updates') },
 });
 
-const themeInfo = (): Record<Theme, { title: string; text: string }> => ({
+const themeInfo = (): Record<Preset['id'], { title: string; text: string }> => ({
   classic: { title: t('Normal'), text: t('Klar und kompakt') },
   journal: { title: 'Journal', text: t('Ein Buch zum Umblättern') },
   nebula: { title: 'Nebula', text: t('Y2K · Cybercore · Brutalismus') },
 });
 
-const layouts = (): { value: ActionLayout; title: string; text: string }[] => ([
+const actionLayouts = (): { value: ActionLayout; title: string; text: string }[] => ([
   { value: 'orbit', title: 'Orbit', text: t("Aktionen kreisen um den Punkt.") },
   { value: 'inline', title: t("Eingebettet"), text: t("Eine Zeile Wörter unter dem Eintrag.") },
   // Swiping stays for touch screens (the Android version); on the desktop it is not offered (settings.ts).
   ...swipeAvailable() ? [{ value: 'swipe' as const, title: t("Wischen"), text: t("Den Punkt zur Seite ziehen.") }] : [],
 ]);
 
-/** The two looks of the popups in each design (popup-styles.css). */
-const popupStyles = (theme: Theme): { value: PopupStyle; title: string; text: string }[] => ({
+/** The names of the layouts and looks, for the two rows that choose them apart (designs.ts). */
+const layoutNames = (): Record<Layout, string> => ({ classic: t('Normal'), book: t('Buch'), desk: t('Desk') });
+const lookNames = (): Record<Look, string> => ({ classic: t('Normal'), journal: 'Journal', nebula: 'Nebula' });
+
+/** The two variants of the popups in each look (popup-styles.css). */
+const popupStyles = (look: Look): { value: PopupStyle; title: string; text: string }[] => ({
   classic: [{ value: 'a' as const, title: t('Karte'), text: t('Fest, mit weichem Schatten') }, { value: 'b' as const, title: t('Glas'), text: t('Durchscheinend und hell umrandet') }],
   journal: [{ value: 'a' as const, title: t('Karteikarte'), text: t('Papier mit rotem Rand') }, { value: 'b' as const, title: t('Notizblock'), text: t('Gelbes Blatt mit Ringbindung') }],
   nebula: [{ value: 'a' as const, title: 'Terminal', text: t('Schwarzes Fenster mit Prompt') }, { value: 'b' as const, title: t('Holo-Papier'), text: t('Graues Papier, violetter Balken') }],
-})[theme];
+})[look];
 
 /** Arrow keys move through a row of radio buttons (the options' order), like a native radio group. */
 function arrowStep<T>(event: KeyboardEvent, values: readonly T[], current: T): T | null {
@@ -126,21 +132,32 @@ export function SettingsDialog({ settings, onChange, onClose, onImport, mailStat
   const appearance = <>
     <section className="settings-section">
       <h3 id="settings-theme">{t('Design')}</h3>
+      {/* The three ready-made designs set layout and look together; the two rows below choose them apart (designs.ts). */}
       <div className="theme-options" role="radiogroup" aria-labelledby="settings-theme" onKeyDown={event => {
-        const theme = arrowStep(event, themes, settings.theme);
-        if (theme === null) return;
-        onChange(withTheme(settings, theme));
-        requestAnimationFrame(() => dialogRef.current?.querySelector<HTMLElement>(`[data-theme-choice="${theme}"]`)?.focus());
+        const current = presetOf(settings.layout, settings.look);
+        const next = arrowStep(event, presets.map(preset => preset.id), current ?? presets[0].id);
+        if (next === null) return;
+        const preset = presets.find(item => item.id === next)!;
+        onChange(withDesign(settings, preset.layout, preset.look));
+        requestAnimationFrame(() => dialogRef.current?.querySelector<HTMLElement>(`[data-theme-choice="${next}"]`)?.focus());
       }}>
-        {themes.map(theme => <button key={theme} type="button" role="radio" aria-checked={settings.theme === theme} tabIndex={settings.theme === theme ? 0 : -1} data-theme-choice={theme}
-          onClick={() => onChange(withTheme(settings, theme))}>
-          <span className={`theme-sample is-${theme}${settings.pixel && theme !== 'nebula' ? ' is-pixel' : ''}`} aria-hidden="true"><span>Aa</span><i /><i /><i /></span>
-          <strong>{themeInfo()[theme].title}</strong>
-          <small>{themeInfo()[theme].text}</small>
-        </button>)}
+        {presets.map(preset => { const current = presetOf(settings.layout, settings.look); return <button key={preset.id} type="button" role="radio" aria-checked={current === preset.id} tabIndex={current === preset.id || (!current && preset.id === presets[0].id) ? 0 : -1} data-theme-choice={preset.id}
+          onClick={() => onChange(withDesign(settings, preset.layout, preset.look))}>
+          <span className={`theme-sample is-${preset.id}${settings.pixel && takesPixel(preset.look) ? ' is-pixel' : ''}`} aria-hidden="true"><span>Aa</span><i /><i /><i /></span>
+          <strong>{themeInfo()[preset.id].title}</strong>
+          <small>{themeInfo()[preset.id].text}</small>
+        </button>; })}
       </div>
-      <SettingRow id="settings-pixel" label={t('Pixel-Look')} note={settings.theme === 'nebula' ? t('Nebula hat eine eigene Schrift; gilt für Normal und Journal') : t('Pixelschrift, eckige Formen, Bewegung in Stufen')}>
-        <button type="button" role="switch" className="switch" aria-checked={settings.pixel} aria-labelledby="settings-pixel" data-pixel-toggle disabled={settings.theme === 'nebula'} onClick={() => onChange({ ...settings, pixel: !settings.pixel })}><span /></button>
+      <SettingRow id="settings-layout" label={t('Aufbau')} note={t('Was wo steht: das Fenster, das Buch oder der Desktop')}>
+        <Segmented labelledBy="settings-layout" attribute="data-layout-choice" value={settings.layout} onChange={layout => onChange(withLayout(settings, layout))}
+          options={layoutIds.map(value => ({ value, label: layoutNames()[value] }))} />
+      </SettingRow>
+      <SettingRow id="settings-look" label={t('Optik')} note={t('Schrift, Farben und Formen')}>
+        <Segmented labelledBy="settings-look" attribute="data-look-choice" value={settings.look} onChange={look => onChange(withLook(settings, look))}
+          options={lookIds.map(value => ({ value, label: lookNames()[value] }))} />
+      </SettingRow>
+      <SettingRow id="settings-pixel" label={t('Pixel-Look')} note={!takesPixel(settings.look) ? t('Nebula hat eine eigene Schrift; gilt für Normal und Journal') : t('Pixelschrift, eckige Formen, Bewegung in Stufen')}>
+        <button type="button" role="switch" className="switch" aria-checked={settings.pixel} aria-labelledby="settings-pixel" data-pixel-toggle disabled={!takesPixel(settings.look)} onClick={() => onChange({ ...settings, pixel: !settings.pixel })}><span /></button>
       </SettingRow>
       <h3 id="settings-popups" className="settings-subhead">{t('Popups')}</h3>
       <p className="settings-hint">{t('Planer, Kalendereinträge und Auswahlen')}</p>
@@ -150,15 +167,15 @@ export function SettingsDialog({ settings, onChange, onClose, onImport, mailStat
         onChange({ ...settings, popupStyle: next });
         requestAnimationFrame(() => dialogRef.current?.querySelector<HTMLElement>(`[data-popup-style="${next}"]`)?.focus());
       }}>
-        {popupStyles(settings.theme).map(option => <button key={option.value} type="button" role="radio" aria-checked={settings.popupStyle === option.value} tabIndex={settings.popupStyle === option.value ? 0 : -1}
+        {popupStyles(settings.look).map(option => <button key={option.value} type="button" role="radio" aria-checked={settings.popupStyle === option.value} tabIndex={settings.popupStyle === option.value ? 0 : -1}
           data-popup-style={option.value} onClick={() => onChange({ ...settings, popupStyle: option.value })}>
-          <span className={`popup-sample is-${settings.theme}-${option.value}`} aria-hidden="true"><b /><span>{Array.from({ length: 14 }, (_, index) => <i key={index} className={index === 9 ? 'is-on' : undefined} />)}</span><em /></span>
+          <span className={`popup-sample is-${settings.look}-${option.value}`} aria-hidden="true"><b /><span>{Array.from({ length: 14 }, (_, index) => <i key={index} className={index === 9 ? 'is-on' : undefined} />)}</span><em /></span>
           <strong>{option.title}</strong>
           <small>{option.text}</small>
         </button>)}
       </div>
     </section>
-    {settings.theme === 'journal' && <section className="settings-section">
+    {settings.layout === 'book' && <section className="settings-section">
       <h3>{t('Buch')}</h3>
       <SettingRow id="settings-book-view" label={t('Ansicht')} note={t('Im schmalen Fenster immer eine Seite')}>
         <Segmented labelledBy="settings-book-view" attribute="data-book-view" value={bookView} onChange={view => onBookView?.(view)}
@@ -193,12 +210,12 @@ export function SettingsDialog({ settings, onChange, onClose, onImport, mailStat
     {swipeAvailable() && <section className="settings-section">
       <h3 id="settings-layout">{t("Aktionen am Eintrag")}</h3>
       <div className="settings-options" role="radiogroup" aria-labelledby="settings-layout" onKeyDown={event => {
-        const next = arrowStep(event, layouts().map(layout => layout.value), settings.actionLayout);
+        const next = arrowStep(event, actionLayouts().map(layout => layout.value), settings.actionLayout);
         if (next === null) return;
         onChange({ ...settings, actionLayout: next });
         requestAnimationFrame(() => dialogRef.current?.querySelector<HTMLElement>('.settings-option[aria-checked="true"]')?.focus());
       }}>
-        {layouts().map(layout => <button key={layout.value} type="button" role="radio" className="settings-option" aria-checked={settings.actionLayout === layout.value}
+        {actionLayouts().map(layout => <button key={layout.value} type="button" role="radio" className="settings-option" aria-checked={settings.actionLayout === layout.value}
           tabIndex={settings.actionLayout === layout.value ? 0 : -1} data-layout={layout.value} onClick={event => { event.currentTarget.focus(); onChange({ ...settings, actionLayout: layout.value }); }}>
           <Preview layout={layout.value} />
           <strong>{layout.title}</strong>

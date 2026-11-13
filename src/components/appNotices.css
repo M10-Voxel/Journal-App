@@ -4,9 +4,9 @@
 .mail-import-toast .notice-action { display: inline-flex; align-items: center; min-height: 32px; margin-top: 12px; padding: 5px 10px; border: 1px solid var(--accent); border-radius: 6px; color: var(--accent); font: 500 12px var(--sans); text-align: left; }
 .mail-import-toast .notice-action:hover { background: var(--hover); }
 .mail-import-toast button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-:root[data-theme='journal'] .app-notices > .mail-import-toast { border: 1px solid var(--edge); border-radius: 3px 7px 7px 3px; box-shadow: 2px 4px 10px #3b2a1a38; border-left: 3px solid var(--accent); }
-:root[data-theme='nebula'] .app-notices > .mail-import-toast { border: 1px solid var(--edge); border-top: 3px solid var(--accent); border-radius: 0; box-shadow: 3px 3px 0 var(--nb-offset); font-family: var(--mono); }
-:root[data-theme='nebula'] .mail-import-toast .notice-action { border-radius: 0; font-family: var(--mono); }
+:root[data-look='journal'] .app-notices > .mail-import-toast { border: 1px solid var(--edge); border-radius: 3px 7px 7px 3px; box-shadow: 2px 4px 10px #3b2a1a38; border-left: 3px solid var(--accent); }
+:root[data-look='nebula'] .app-notices > .mail-import-toast { border: 1px solid var(--edge); border-top: 3px solid var(--accent); border-radius: 0; box-shadow: 3px 3px 0 var(--nb-offset); font-family: var(--mono); }
+:root[data-look='nebula'] .mail-import-toast .notice-action { border-radius: 0; font-family: var(--mono); }
 :root[data-pixel] .mail-import-toast .notice-action { border-radius: 0; font-size: 16px; }
 :root[data-pixel] .app-notices > .mail-import-toast { border-radius: 0; }
 .mail-auto-import { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 6px 12px; padding-block: 10px; }

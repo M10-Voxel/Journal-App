@@ -261,18 +261,18 @@ body:has(.shortcut-backdrop) .tag-picker { z-index:90; }
 .tag-group { display: flex; flex-direction: column; gap: 5px; }
 .tag-group + .tag-group { margin-top: 10px; }
 .tag-group > .tag-group-label { margin: 0 0 2px 2px; }
-:root[data-theme='journal'] .tag-group-label { font: italic 600 11px var(--serif, var(--sans)); letter-spacing: .04em; text-transform: none; color: color-mix(in srgb, var(--error) 65%, var(--text)); }
-:root[data-theme='journal'] .tag-filter-group + .tag-filter-group { border-top-style: dashed; }
-:root[data-theme='nebula'] .tag-group-label { font: 700 10px var(--mono); }
-:root[data-theme='nebula'] .tag-group-label::before { content: '# '; color: var(--nb-violet-light, #b388ff); }
+:root[data-look='journal'] .tag-group-label { font: italic 600 11px var(--serif, var(--sans)); letter-spacing: .04em; text-transform: none; color: color-mix(in srgb, var(--error) 65%, var(--text)); }
+:root[data-look='journal'] .tag-filter-group + .tag-filter-group { border-top-style: dashed; }
+:root[data-look='nebula'] .tag-group-label { font: 700 10px var(--mono); }
+:root[data-look='nebula'] .tag-group-label::before { content: '# '; color: var(--nb-violet-light, #b388ff); }
 :root[data-pixel] .tag-group-label { font-size: 13px; }
 
 /* Choosing entries by a frame (calendarSelection.ts): the frame while drawing, chosen entries ringed. */
 .cal-frame { position: fixed; z-index: 900; border: 1px dashed var(--accent); border-radius: 4px; background: color-mix(in srgb, var(--accent) 10%, transparent); pointer-events: none; }
 :root .cal-item.is-selected { outline: 2px solid var(--tone, var(--accent)); outline-offset: 1px; box-shadow: 0 0 0 4px color-mix(in srgb, var(--tone, var(--accent)) 25%, transparent) !important; z-index: 3; }
-:root[data-pixel] .cal-frame, :root[data-theme='nebula'] .cal-frame { border-radius: 0; border-width: 2px; }
-:root[data-theme='nebula'] .cal-frame { border-color: var(--nb-violet-light, #b388ff); background: color-mix(in srgb, var(--nb-violet, #7b2cbf) 14%, transparent); }
-:root[data-theme='journal'] .cal-frame { border-color: color-mix(in srgb, var(--error) 70%, transparent); background: color-mix(in srgb, var(--error) 6%, transparent); }
+:root[data-pixel] .cal-frame, :root[data-look='nebula'] .cal-frame { border-radius: 0; border-width: 2px; }
+:root[data-look='nebula'] .cal-frame { border-color: var(--nb-violet-light, #b388ff); background: color-mix(in srgb, var(--nb-violet, #7b2cbf) 14%, transparent); }
+:root[data-look='journal'] .cal-frame { border-color: color-mix(in srgb, var(--error) 70%, transparent); background: color-mix(in srgb, var(--error) 6%, transparent); }
 /* In the settings the kind's heading carries its grip on the same line (drag the heading to move the kind). */
 .tag-settings .tag-group > .tag-group-label { display: flex; align-items: center; justify-content: flex-start; gap: 2px; cursor: grab; }
 .tag-settings .tag-group-label .sort-handle { width: 18px; height: 20px; margin-left: -4px; }
