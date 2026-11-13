@@ -22,10 +22,7 @@ body:
     - Calendar and Times
     - entries
     - Google Drive
-    - Journal Theme
     - Mail
-    - Nebula Theme
-    - Normal Theme
     - Notebook
     - pinboard
     - rating
@@ -37,6 +34,18 @@ body:
     - Other / Not sure
   validations:
     required: true
+- type: dropdown
+  id: themes
+  attributes:
+    label: Affected Themes
+    description: Select all affected themes, if applicable.
+    multiple: true
+    options:
+    - Journal Theme
+    - Nebula Theme
+    - Normal Theme
+  validations:
+    required: false
 - type: textarea
   id: current
   attributes:

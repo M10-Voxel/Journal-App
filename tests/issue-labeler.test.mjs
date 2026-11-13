@@ -39,6 +39,28 @@ test('unknown options and text outside the area section cannot assign labels', a
   const manual = fixture('A manually created issue without the area section', ['Mail']);
   await manual.execute();assert.deepEqual([...manual.assigned], ['Mail']);assert.equal(manual.calls.length, 0);
 });
+test('area and theme dropdowns assign labels together without reading description text', async () => {
+  const f = fixture('### Affected Areas\r\n\r\nMail\r\n\r\n### Affected Themes\r\n\r\nJournal Theme, Nebula Theme\r\n\r\n### Bug Description\r\n\r\nNormal Theme');
+  await f.execute();
+  assert.deepEqual([...f.assigned], ['Mail', 'Journal Theme', 'Nebula Theme']);
+});
+
+test('editing or clearing themes removes stale labels and preserves other selections', async () => {
+  const f = fixture('### Affected Areas\n\nMail\n\n### Affected Themes\n\nNormal Theme', ['Mail', 'Journal Theme', 'wontfix']);
+  await f.execute();
+  assert.deepEqual([...f.assigned], ['Mail', 'wontfix', 'Normal Theme']);
+  f.issue.labels = [...f.assigned].map(name => ({ name }));
+  f.issue.body = '### Affected Areas\n\nMail\n\n### Affected Themes\n\n_No response_';
+  await f.execute();
+  assert.deepEqual([...f.assigned], ['Mail', 'wontfix']);
+});
+
+test('older issues still accept themes from the area dropdown', async () => {
+  const f = fixture('### Affected Areas\n\nMail, Nebula Theme');
+  await f.execute();
+  assert.deepEqual([...f.assigned], ['Mail', 'Nebula Theme']);
+});
+
 test('concurrent label creation is tolerated but permission errors propagate', async () => {
   const f = fixture('### Affected Areas\n\nMail');
   f.issues.createLabel = async ({ name }) => { f.labels.add(name); throw Object.assign(new Error('exists'), { status: 422 }); };
@@ -56,6 +78,16 @@ test('chooser has exactly Task, Bug and Feature, mapped to GitHub issue types', 
     assert.equal(/^name: (.+)$/m.exec(form)[1], /^type: (.+)$/m.exec(form)[1]);
     assert.match(form, /^description: .+/m);
     assert.doesNotMatch(form, /^- \{\}/m);
+    const fields = form.split(/^- type: /m);
+    const areas = fields.find(field => /^  id: areas$/m.test(field));
+    const themes = fields.find(field => /^  id: themes$/m.test(field));
+    assert.doesNotMatch(areas, /Theme/);
+    assert.match(themes, /label: Affected Themes/);
+    assert.match(themes, /multiple: true/);
+    assert.match(themes, /required: false/);
+    for (const theme of ['Journal Theme', 'Nebula Theme', 'Normal Theme']) {
+      assert(themes.includes('    - ' + theme + '\n'));
+    }
   }
   assert.match(forms.find(form => form.startsWith('name: Task')), /Improve existing functionality/);
   assert.match(workflow, /types: \[opened, edited, reopened\]/);
