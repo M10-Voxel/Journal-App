@@ -71,4 +71,3 @@ body:
     description: What happens instead?
   validations:
     required: true
-- {}

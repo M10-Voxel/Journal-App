@@ -52,4 +52,3 @@ body:
     description: What should change?
   validations:
     required: true
-- {}

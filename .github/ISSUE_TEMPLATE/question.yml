@@ -45,4 +45,3 @@ body:
     description: What would you like to know?
   validations:
     required: true
-- {}
