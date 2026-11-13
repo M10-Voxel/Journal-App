@@ -2,6 +2,7 @@ pub(crate) mod oauth;
 pub(crate) mod secrets;
 mod transport;
 pub mod ml;
+pub mod learning;
 
 use std::{collections::HashSet, path::Path, sync::{Mutex, atomic::{AtomicBool, Ordering}}, time::Duration};
 use rusqlite::{params, Connection, OptionalExtension};
@@ -51,6 +52,7 @@ pub struct Candidate {
     pub id: String, pub account_id: String, pub message_key: String,
     pub subject: String, pub sender: String, pub sent_at: i64,
     pub date: String, pub entry: Entry, pub evidence: String, pub automatic: bool,
+    #[serde(default, skip_serializing_if="Option::is_none")] pub relevance: Option<f64>,
 }
 pub struct MailState { db: Mutex<Connection>, operation: Mutex<()>, cancel: AtomicBool }
 fn err(error: impl std::fmt::Display) -> String { format!("Mail-Speicher: {error}") }
@@ -67,6 +69,7 @@ impl MailState {
           CREATE TABLE IF NOT EXISTS candidates(id TEXT PRIMARY KEY, account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
             data TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'pending', created INTEGER NOT NULL);").map_err(err)?;
         db.execute_batch("CREATE TABLE IF NOT EXISTS mail_settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);").map_err(err)?;
+        learning::initialize(&db)?;
         db.execute_batch("CREATE INDEX IF NOT EXISTS mail_candidate_source ON candidates(account_id,json_extract(data,'$.messageKey'));").map_err(err)?;
         Ok(Self { db: Mutex::new(db), operation: Mutex::new(()), cancel: AtomicBool::new(false) })
     }
@@ -370,17 +373,18 @@ pub fn mail_stage(app: tauri::AppHandle, account_id: String, message_key: String
 #[tauri::command]
 pub fn mail_candidates(state: tauri::State<'_, MailState>) -> Result<Vec<Candidate>> {
     let db = state.db.lock().map_err(err)?;
+    let model=learning::load(&db)?;
     let mut query = db.prepare("SELECT data FROM candidates WHERE state='pending' ORDER BY created DESC LIMIT 500").map_err(err)?;
     let rows = query.query_map([], |r| r.get::<_, String>(0)).map_err(err)?;
-    rows.map(|row| serde_json::from_str(&row.map_err(err)?).map_err(err)).collect()
+    rows.map(|row| {let mut candidate:Candidate=serde_json::from_str(&row.map_err(err)?).map_err(err)?;candidate.relevance=model.score(&candidate);Ok(candidate)}).collect()
 }
 #[tauri::command]
-pub fn mail_resolve(app: tauri::AppHandle, ids: Vec<String>, accepted: bool) -> Result<()> {
+pub fn mail_resolve(app: tauri::AppHandle, ids: Vec<String>, accepted: bool, manual: Option<bool>) -> Result<()> {
     if ids.len() > 500 { return Err("Zu viele Vorschläge".into()); }
     let state = app.state::<MailState>();
     let mut db = state.db.lock().map_err(err)?;
     let tx = db.transaction().map_err(err)?;
-    for id in ids { tx.execute("UPDATE candidates SET state=?2 WHERE id=?1 AND state='pending'", params![id,if accepted { "accepted" } else { "dismissed" }]).map_err(err)?; }
+    learning::resolve(&tx,&ids,accepted,manual.unwrap_or(false))?;
     tx.commit().map_err(err)?; let _ = app.emit("mail:changed", ()); Ok(())
 }
 

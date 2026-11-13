@@ -9,6 +9,7 @@ import { mailApi } from '../mailApi';
 import { Icon } from './Icon';
 import { DateField, TimeField } from './FieldPickers';
 import { MailModelSetup } from './MailModelSetup';
+import { MailLearningSettings } from './MailLearningSettings';
 
 export function MailSettings({ onImport, importError }: { onImport: (entries: CalendarImport[]) => Promise<void>; importError: string }) {
   const en = useLanguage() === 'en';
@@ -72,6 +73,7 @@ export function MailSettings({ onImport, importError }: { onImport: (entries: Ca
   const suggestions = latestMailCandidates(candidates);
   return <section className="mail-settings" aria-label={t("E-Mail-Konten")} ref={sectionRef}>
     <MailModelSetup />
+    <MailLearningSettings />
     <p className="mail-intro">{t("Verbinde deine Postfächer und übernimm Lieferungen und Termine in den Kalender. Der Abruf läuft alle fünf Minuten, solange Journal auch im Hintergrund geöffnet ist.")}</p>
     {!draft && !adding && <>
       <div className="mail-section-head"><h3>{t("Verbundene Konten")}</h3><button type="button" className="mail-button is-primary" onClick={() => { setAdding(true); setError(''); }}>{t("Konto hinzufügen")}</button></div>
@@ -155,6 +157,7 @@ export function MailSettings({ onImport, importError }: { onImport: (entries: Ca
       <div className="mail-suggestions">{suggestions.map(item => <article className="mail-suggestion" key={item.id}>
         <div><strong>{item.entry.text}</strong><p className="mail-when">{formatDate(item.date)}{item.entry.time ? ` · ${item.entry.time}${item.entry.end ? `–${item.entry.end}` : ''}` : t(" · ganztägig")}</p></div>
         <p className="mail-source">{accounts.find(a => a.id === item.accountId)?.label} · {item.sender}</p><blockquote>{item.evidence}</blockquote>
+        {typeof item.relevance === 'number' && <p className="mail-storage">{item.relevance < 0.35 ? (en ? 'Personal model: low relevance — review manually.' : 'Persönliches Modell: eher unerwünscht – bitte selbst prüfen.') : (en ? 'Personal model: likely relevant.' : 'Persönliches Modell: eher relevant.')}</p>}
         {editing?.id === item.id && <div className="mail-proposal-edit">
           <label>{t("Titel")}<input value={editing.entry.text} onChange={event => setEditing({ ...editing, entry: { ...editing.entry, text: event.target.value } })} /></label>
           <div className="mail-fields"><span className="mail-field">{t("Datum")}<DateField label={t("Datum")} value={editing.date} onChange={date => setEditing({ ...editing, date })} /></span>
@@ -163,7 +166,7 @@ export function MailSettings({ onImport, importError }: { onImport: (entries: Ca
         </div>}
         <div className="mail-actions"><button type="button" className="mail-button is-primary" disabled={Boolean(busy)} onClick={() => void run(item.id, () => accept(editing?.id === item.id ? editing : item))}><Icon name="check" />{t("Übernehmen")}</button>
           <button type="button" className="mail-button" disabled={Boolean(busy)} onClick={() => setEditing(editing?.id === item.id ? null : { ...item, entry: { ...item.entry } })}>{editing?.id === item.id ? t("Bearbeitung schließen") : t("Bearbeiten")}</button>
-          <button type="button" className="mail-button" disabled={Boolean(busy)} onClick={() => void run(item.id, () => mailApi.resolve(candidates.filter(candidate => candidate.entry.calendarUid === item.entry.calendarUid).map(candidate => candidate.id), false))}>{t("Ignorieren")}</button></div>
+          <button type="button" className="mail-button" disabled={Boolean(busy)} onClick={() => void run(item.id, () => mailApi.resolve(candidates.filter(candidate => candidate.entry.calendarUid === item.entry.calendarUid).map(candidate => candidate.id), false))}>{en ? 'Reject and learn' : 'Ablehnen und lernen'}</button></div>
       </article>)}</div>
       {suggestions.length > 0 && <p className="mail-storage">{t("Ein bereits vorhandener Eintrag mit derselben Kalenderkennung wird beim Übernehmen aktualisiert.")}</p>}
       {notices.length > 0 && <details className="mail-notices"><summary>{t("Hinweise zur Auswertung")}</summary>{[...new Set(notices)].map((notice, index) => <p key={index}>{notice}</p>)}</details>}

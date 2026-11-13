@@ -2,7 +2,12 @@ import { invoke } from '@tauri-apps/api/core';
 import type { MailAccount, MailCandidate, MailPending } from './mail';
 import type { ModelAnalysis } from './mailMl';
 export interface MailModelStatus { installed: boolean; enabled: boolean; installing: boolean; downloaded: number; total: number; error: string }
+export interface MailLearningStatus { accepted: number; rejected: number; ready: boolean }
 export const mailApi = {
+  learningStatus: () => invoke<MailLearningStatus>('mail_learning_status'),
+  resetLearning: () => invoke<void>('mail_learning_reset'),
+  exportLearning: () => invoke<boolean>('mail_learning_export'),
+  importLearning: () => invoke<boolean>('mail_learning_import'),
   modelStatus: () => invoke<MailModelStatus>('mail_ml_status'),
   installModel: (fromFolder = false) => invoke<void>('mail_ml_install', { fromFolder }),
   enableModel: (value: boolean) => invoke<void>('mail_ml_enabled', { value }),
@@ -19,5 +24,5 @@ export const mailApi = {
   pending: () => invoke<MailPending[]>('mail_pending'),
   stage: (accountId: string, messageKey: string, candidates: MailCandidate[], notice: string) => invoke<void>('mail_stage', { accountId, messageKey, candidates, notice }),
   candidates: () => invoke<MailCandidate[]>('mail_candidates'),
-  resolve: (ids: string[], accepted: boolean) => invoke<void>('mail_resolve', { ids, accepted }),
+  resolve: (ids: string[], accepted: boolean, manual = true) => invoke<void>('mail_resolve', { ids, accepted, manual }),
 };

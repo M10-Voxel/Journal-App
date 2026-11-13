@@ -182,6 +182,8 @@ const bootstrap = `
       days:Object.fromEntries(Array.from({length:28},(_,i)=>{ const scales=JSON.parse(localStorage.getItem('test.scales') ?? '[]'); return [shift(-i),{rating:i%4===0?undefined:4+i%7,...(scales.length && i>0 ? { scales:{ [scales[0].id]:i%5*2, ...(i%3===1 ? {} : { [scales[1].id]:20-i%9 }) } } : {}),items:{reading:{done:i%2===0,minutes:30},sport:{done:i%3===0,minutes:45}}}]; })) });
     if (command === 'save_period_data') { if (window.__uiTest.failPeriodSave) { window.__uiTest.failPeriodSave=false; throw new Error('Timer save test failure'); } window.__uiTest.periodData=JSON.parse(payload.data); return; }
     if (command === 'mail_ml_status') return structuredClone(mail.model);
+    if (command === 'mail_learning_status') return {...(mail.learning ?? {accepted:0,rejected:0}),ready:false};
+    if (command === 'mail_learning_reset') { mail.learning={accepted:0,rejected:0};mailChanged();return; }
     if (command === 'mail_ml_install') { mail.model.installed=true; mail.model.enabled=true; void window.__uiTest.emit('mail:ml',null); mailChanged(); return; }
     if (command === 'mail_ml_enabled') { mail.model.enabled=payload.value; void window.__uiTest.emit('mail:ml',null); mailChanged(); return; }
     if (command === 'mail_ml_analyze') {
@@ -213,7 +215,7 @@ const bootstrap = `
       }
       return;
     }
-    if (command === 'mail_resolve') { mail.candidates = mail.candidates.filter(c => !payload.ids.includes(c.id)); mailChanged(); return; }
+    if (command === 'mail_resolve') { if(payload.manual){mail.learning??={accepted:0,rejected:0};mail.learning[payload.accepted?'accepted':'rejected']+=mail.candidates.filter(c=>payload.ids.includes(c.id)).length;} mail.candidates = mail.candidates.filter(c => !payload.ids.includes(c.id)); mailChanged(); return; }
     if (command === 'mail_sync') {
       const account = mail.accounts.find(a => a.id === payload.id); account.lastSync = Date.now()/1000;
       if (!mail.delivered.has(account.id)) {
@@ -572,6 +574,7 @@ async function checkMailSettings() {
   await evaluate("document.querySelector('.mail-suggestion .is-primary').click()");
   await until("Boolean(document.querySelector('.mail-import-toast')) === false && !document.querySelector('.mail-suggestion')");
   assert(await evaluate("window.__uiTest.day(window.__uiTest.shift(1))?.entries.some(entry=>entry.text.includes('Lieferung') && entry.time==='10:00' && entry.end==='12:00' && entry.showInJournal===false)"),'A reviewed suggestion is imported only on acceptance.');
+  await until("window.__uiTest.mail.learning?.accepted===1");
   // Turning on the account switch enables the same pipeline for subsequent ML and ICS suggestions.
   await evaluate("document.querySelector('[data-mail-auto-import]').click()");
   await until("window.__uiTest.mail.accounts[0].autoImport===true");
@@ -580,6 +583,7 @@ async function checkMailSettings() {
   await evaluate("document.querySelector('.mail-suggestion .mail-actions button:last-child').click()");
   await until("!document.querySelector('.mail-suggestion') && !document.querySelector('.mail-suggestions-notice')");
   assert(!await evaluate("window.__uiTest.day(window.__uiTest.shift(2))?.entries.some(e=>e.text==='Rejected appointment') ?? false"),'Rejecting a suggestion never creates a calendar entry.');
+  await until("window.__uiTest.mail.learning?.rejected===1");
   await evaluate("document.querySelector('[data-mail-auto-import]').click()");await until("window.__uiTest.mail.accounts[0].autoImport===true");
   await click('Bearbeiten');
   await until("Boolean(document.querySelector('.mail-form'))");
@@ -598,6 +602,7 @@ async function checkMailSettings() {
     return window.__uiTest.emit('mail:changed',null); })()`);
   await enqueueCalendar('auto-1',1);
   await until("window.__uiTest.day(window.__uiTest.shift(1))?.entries.some(entry => entry.text === 'Mail-Auto-Test') && window.__uiTest.mail.candidates.length === 0");
+  assert.equal(await evaluate("window.__uiTest.mail.learning.accepted"),1,'Automatic imports must not train the personal model.');
   await until("document.querySelector('.mail-import-toast')?.textContent.includes('Mail-Auto-Test')");
   await screenshot('mail-auto-import.png');
   await enqueueCalendar('auto-2',3);

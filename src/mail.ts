@@ -16,7 +16,7 @@ export interface MailAccount {
 export interface MailMessage { key: string; subject: string; sender: string; sentAt: number; text: string; html: string; calendars: string[]; notice?: string }
 export interface MailPending { account: MailAccount; message: MailMessage }
 export interface MailCandidate extends CalendarImport {
-  id: string; accountId: string; messageKey: string; subject: string; sender: string; sentAt: number; evidence: string; automatic: boolean;
+  id: string; accountId: string; messageKey: string; subject: string; sender: string; sentAt: number; evidence: string; automatic: boolean; relevance?: number;
 }
 export const mailProviders = () => ([
   { id: 'gmail', name: 'Google', caption: t("Gmail · Browseranmeldung"), protocol: 'gmail', host: 'imap.gmail.com', pop: 'pop.gmail.com', help: t("Mit Google anmelden. Alternativ IMAP/POP3 mit einem von Google zugelassenen App-Passwort."), url: 'https://support.google.com/accounts/answer/185833' },

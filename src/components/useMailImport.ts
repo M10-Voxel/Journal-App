@@ -42,11 +42,11 @@ export function useMailImport(onImport: (entries: CalendarImport[]) => Promise<v
           const candidates = await mailApi.candidates() ?? [];
           // Read current account preferences, rather than the snapshot attached to a queued mail.
           const accounts = await mailApi.accounts() ?? [];
-          const automatic = latestMailCandidates(candidates).filter(candidate => accounts.some(account => account.id === candidate.accountId && account.autoImport === true));
+          const automatic = latestMailCandidates(candidates).filter(candidate => (candidate.relevance ?? 1) >= 0.35 && accounts.some(account => account.id === candidate.accountId && account.autoImport === true));
           if (automatic.length && !disposed) {
             await latest.current(automatic.map(({ date, entry }) => ({ date, entry })));
             const uids = new Set(automatic.map(item => item.entry.calendarUid));
-            await mailApi.resolve(candidates.filter(item => uids.has(item.entry.calendarUid)).map(item => item.id), true);
+            await mailApi.resolve(candidates.filter(item => uids.has(item.entry.calendarUid)).map(item => item.id), true, false);
             await emit('journal:mail-imported', automatic.map(item => ({ id:item.id, text:item.entry.text, date:item.date, time:item.entry.time, end:item.entry.end })));
           }
           if (!disposed) {
