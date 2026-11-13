@@ -1,30 +1,60 @@
-name: Label new issues
+name: Label issue areas
 on:
   issues:
-    types: [opened]
+    types: [opened, edited, reopened]
 permissions:
   contents: read
   issues: write
+concurrency:
+  group: issue-areas-${{ github.event.issue.number }}
+  cancel-in-progress: false
 jobs:
   label:
     runs-on: ubuntu-latest
     steps:
-      - name: Apply selected area labels
+      - name: Synchronize selected area labels
         uses: actions/github-script@v7
         with:
           script: |
-            const issue = context.payload.issue;
+            // Read the current issue so overlapping edit events cannot use an old selection.
+            const { data: issue } = await github.rest.issues.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number
+            });
             const body = issue.body || "";
-            const allowed = new Set(['accessibility', 'activities', 'Calendar and Times', 'entries', 'Google Drive', 'Journal Theme', 'Mail', 'Nebula Theme', 'Normal Theme', 'Notebook', 'pinboard', 'rating', 'scales', 'Sketches', 'Storage', 'Tags', 'Widgets']);
+            const allowed = new Set(['accessibility', 'activities', 'Calendar and Times', 'entries', 'Google Drive', 'Journal Theme', 'Mail', 'Nebula Theme', 'Normal Theme', 'Notebook', 'pinboard', 'rating', 'scales', 'Sketches', 'Storage', 'Tags', 'Widgets', 'Other / Not sure']);
             // GitHub Issue Forms render dropdown selections below a Markdown heading.
-            const match = body.match(/(?:^|\n)### Affected Areas\s*\n([\s\S]*?)(?=\n### |$)/);
+            const match = body.replace(/\r\n/g, '\n').match(/^### Affected Areas[ \t]*\n([\s\S]*)/m);
             if (!match) return;
-            const choices = match[1].trim()
+            const choices = match[1].split(/^#{1,6}[ \t]/m)[0].trim()
               .split(/,\s*|\r?\n/)
               .map(s => s.replace(/^[-*]\s*/, "").trim())
               .filter(s => allowed.has(s));
+            const selected = new Set(choices);
             const existing = new Set(issue.labels.map(l => typeof l === "string" ? l : l.name));
-            const additions = [...new Set(choices)].filter(l => !existing.has(l));
+            // Keep unrelated maintainer labels (e.g. wontfix), and remove only deselected areas.
+            for (const name of existing) {
+              if (allowed.has(name) && !selected.has(name)) {
+                await github.rest.issues.removeLabel({ ...context.repo, issue_number: issue.number, name });
+              }
+            }
+            const additions = [...selected].filter(l => !existing.has(l));
+            // A dropdown option does not create a repository label by itself.
+            for (const name of additions) {
+              try {
+                await github.rest.issues.getLabel({ ...context.repo, name });
+              } catch (error) {
+                if (error.status !== 404) throw error;
+                try {
+                  await github.rest.issues.createLabel({ ...context.repo, name, color: '1D76DB', description: 'Affected area: ' + name });
+                } catch (creationError) {
+                  if (creationError.status !== 422) throw creationError;
+                  // Another issue may have created the same label concurrently.
+                  await github.rest.issues.getLabel({ ...context.repo, name });
+                }
+              }
+            }
             if (additions.length) {
               await github.rest.issues.addLabels({
                 owner: context.repo.owner,
