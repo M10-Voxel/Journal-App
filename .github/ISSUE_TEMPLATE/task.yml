@@ -1,8 +1,7 @@
-name: Question
-description: Ask a question about the project.
-title: '[Question]: '
-labels:
-- question
+name: Task
+description: Improve existing functionality or suggest maintenance and other project work.
+type: Task
+title: '[Task]: '
 body:
 - type: checkboxes
   id: checklist
@@ -39,9 +38,16 @@ body:
   validations:
     required: true
 - type: textarea
-  id: question
+  id: current
   attributes:
-    label: Your Question
-    description: What would you like to know?
+    label: Current Situation
+    description: What could be improved or needs attention?
+  validations:
+    required: true
+- type: textarea
+  id: proposal
+  attributes:
+    label: Task / Improvement
+    description: What should be changed or done?
   validations:
     required: true

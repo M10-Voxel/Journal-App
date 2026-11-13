@@ -1,8 +1,7 @@
-name: Feature Request
+name: Feature
 description: Suggest a new feature.
+type: Feature
 title: '[Feature]: '
-labels:
-- enhancement
 body:
 - type: checkboxes
   id: checklist
