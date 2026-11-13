@@ -1,0 +1,35 @@
+name: Label new issues
+on:
+  issues:
+    types: [opened]
+permissions:
+  contents: read
+  issues: write
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Apply selected area labels
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            const body = issue.body || "";
+            const allowed = new Set(['accessibility', 'activities', 'Calendar and Times', 'entries', 'Google Drive', 'Journal Theme', 'Mail', 'Nebula Theme', 'Normal Theme', 'Notebook', 'pinboard', 'rating', 'scales', 'Sketches', 'Storage', 'Tags', 'Widgets']);
+            // GitHub Issue Forms render dropdown selections below a Markdown heading.
+            const match = body.match(/(?:^|\n)### Affected Areas\s*\n([\s\S]*?)(?=\n### |$)/);
+            if (!match) return;
+            const choices = match[1].trim()
+              .split(/,\s*|\r?\n/)
+              .map(s => s.replace(/^[-*]\s*/, "").trim())
+              .filter(s => allowed.has(s));
+            const existing = new Set(issue.labels.map(l => typeof l === "string" ? l : l.name));
+            const additions = [...new Set(choices)].filter(l => !existing.has(l));
+            if (additions.length) {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                labels: additions
+              });
+            }

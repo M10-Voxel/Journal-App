@@ -1,0 +1,55 @@
+name: Improvement
+description: Suggest an improvement to existing functionality.
+title: '[Improvement]: '
+labels:
+- enhancement
+body:
+- type: checkboxes
+  id: checklist
+  attributes:
+    label: Before submitting
+    options:
+    - label: I searched for existing issues.
+      required: true
+- type: dropdown
+  id: areas
+  attributes:
+    label: Affected Areas
+    description: Select all affected areas. Choose Other / Not sure if none fits.
+    multiple: true
+    options:
+    - accessibility
+    - activities
+    - Calendar and Times
+    - entries
+    - Google Drive
+    - Journal Theme
+    - Mail
+    - Nebula Theme
+    - Normal Theme
+    - Notebook
+    - pinboard
+    - rating
+    - scales
+    - Sketches
+    - Storage
+    - Tags
+    - Widgets
+    - Other / Not sure
+  validations:
+    required: true
+- type: textarea
+  id: current
+  attributes:
+    label: Current Behavior
+    description: How does it work today?
+  validations:
+    required: true
+- type: textarea
+  id: proposal
+  attributes:
+    label: Suggested Improvement
+    description: What should change?
+  validations:
+    required: true
+- {}

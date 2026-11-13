@@ -1,0 +1,74 @@
+name: Bug Report
+description: Report a problem or unexpected behavior.
+title: '[Bug]: '
+labels:
+- bug
+body:
+- type: checkboxes
+  id: checklist
+  attributes:
+    label: Before submitting
+    options:
+    - label: I searched for existing issues.
+      required: true
+- type: dropdown
+  id: areas
+  attributes:
+    label: Affected Areas
+    description: Select all affected areas. Choose Other / Not sure if none fits.
+    multiple: true
+    options:
+    - accessibility
+    - activities
+    - Calendar and Times
+    - entries
+    - Google Drive
+    - Journal Theme
+    - Mail
+    - Nebula Theme
+    - Normal Theme
+    - Notebook
+    - pinboard
+    - rating
+    - scales
+    - Sketches
+    - Storage
+    - Tags
+    - Widgets
+    - Other / Not sure
+  validations:
+    required: true
+- type: textarea
+  id: description
+  attributes:
+    label: Bug Description
+    description: What is broken?
+  validations:
+    required: true
+- type: textarea
+  id: steps
+  attributes:
+    label: Steps to Reproduce
+    description: List steps to reproduce the issue.
+    placeholder: '1. Open ...
+
+      2. Click ...
+
+      3. Observe ...'
+  validations:
+    required: true
+- type: textarea
+  id: expected
+  attributes:
+    label: Expected Behavior
+    description: What should happen?
+  validations:
+    required: true
+- type: textarea
+  id: actual
+  attributes:
+    label: Actual Behavior
+    description: What happens instead?
+  validations:
+    required: true
+- {}
