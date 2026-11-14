@@ -1,5 +1,9 @@
 # Desktop-Widgets unter Windows
 
+**Live Blur** steht beim Hintergrund-Blur unter **Durchsichtig** zur Verfügung und ist je Widget standardmäßig ausgeschaltet. Es verwendet den Windows-Kompositor für laufende Hintergrundanimationen statt eines statischen Bildes. Die Stärke bestimmt Windows; der Bild-Blur-Regler erscheint wieder beim Ausschalten. Die Rundung bleibt einstellbar. Lehnt Windows den Effekt ab, erscheint ein Hinweis und das Widget verwendet den Bild-Blur. Die Wirkung auf Wallpaper Engine/Lively hängt von deren Desktop-Einbindung und Windows ab. Live Blur wird wie alle Widget-Einstellungen nicht synchronisiert.
+
+Weichgezeichnete Widgets prüfen den Desktop-Hintergrund alle fünf Sekunden sowie bei Fokus- und Bildschirmwechseln. Die Bildkennung berücksichtigt Dateipfad, Größe und den vollständigen Änderungszeitpunkt; verschiedene Bilder mit gleichem Zeitstempel werden dadurch neu geladen. Unveränderte Bilder bleiben im Cache.
+
 Unter **Einstellungen → Desktop-Widgets → Widget hinzufügen** lassen sich Tagesnotizen, Kalender, Pinnwände, Tageswerte, Aktivitäten und Notizen anlegen. Jedes Widget liegt innerhalb seiner Fläche über den Desktop-Symbolen und unter normalen Anwendungen. Es bleibt bei **Win+D** sichtbar und lässt sich mit Maus und Tastatur bearbeiten.
 
 Die Verwaltung zeigt alle angelegten Widgets mit eigenem Namen, Sichtbarkeit und Positionssperre. Ein Widget lässt sich duplizieren, seine Position zurücksetzen oder entfernen. Das Entfernen löscht die Widget-Instanz; Notizen und Einträge bleiben erhalten. „Alle einblenden“ und „Alle ausblenden“ steuern die Gruppe. Über das Journal-Symbol im Infobereich sind Verwaltung und Gruppenumschaltung ebenfalls erreichbar.

@@ -37,10 +37,29 @@ impl Surface {
         #[cfg(windows)] {
             let mut regions=vec![(self.position.x-self.canvas.position.x,self.position.y-self.canvas.position.y,self.size.width as i32,self.size.height as i32)];
             for r in rects {regions.push(((r.left*self.units).floor() as i32,(r.top*self.units).floor() as i32,(r.width*self.units).ceil() as i32,(r.height*self.units).ceil() as i32));}
-            super::host::region(window.hwnd().map_err(|e|e.to_string())?.0 as isize,Some(&regions))?;
+            let state=window.state::<DesktopWidgets>();let (_,runtime)=state.from_window(window)?;
+            let radius=runtime.live_blur.lock().map_err(|e|e.to_string())?.map_or(0,|r|(r*self.units).round() as i32);
+            super::host::region(window.hwnd().map_err(|e|e.to_string())?.0 as isize,Some(&regions),radius)?;
         }
         Ok(())
     }
+}
+
+/// Only widget WebViews may change their own compositor background. Disabling
+/// also restores the ordinary input region; the setting stays device-local.
+#[tauri::command]
+pub fn desktop_widget_live_blur(window:tauri::WebviewWindow,enabled:bool,radius:f64)->Result<(),String>{
+    if !radius.is_finite() || !(0.0..=24.0).contains(&radius){return Err("Ungültige Rundung.".into());}
+    let state=window.state::<DesktopWidgets>();let (_,runtime)=state.from_window(&window)?;
+    #[cfg(windows)] {
+        super::host::live_blur(window.hwnd().map_err(|e|e.to_string())?.0 as isize,enabled)?;
+        *runtime.live_blur.lock().map_err(|e|e.to_string())?=if enabled{Some(radius+4.0)}else{None};
+        let surface=runtime.surface.lock().map_err(|e|e.to_string())?.clone();
+        if let Some(surface)=surface{surface.region(&window,&[])?;}
+        window.emit("widget:surface-changed",()).map_err(|e|e.to_string())?;
+        return Ok(());
+    }
+    #[cfg(not(windows))] {let _=runtime;if enabled{Err("Live Blur ist nur unter Windows verfügbar.".into())}else{Ok(())}}
 }
 
 /// Placement and monitor topology can change independently of popup visibility.

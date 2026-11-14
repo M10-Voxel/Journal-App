@@ -8,12 +8,46 @@
 use serde::Serialize;
 
 #[derive(Clone, Serialize)]
-pub struct Monitor { x:i32, y:i32, width:u32, height:u32, modified:u64, #[serde(skip)] path:String }
+pub struct Monitor { x:i32, y:i32, width:u32, height:u32, modified:u64, revision:String, #[serde(skip)] path:String }
 #[derive(Serialize)]
 pub struct Wallpapers { position:String, monitors:Vec<Monitor> }
 
 fn modified(path:&str)->u64{
     std::fs::metadata(path).and_then(|m|m.modified()).ok().and_then(|t|t.duration_since(std::time::UNIX_EPOCH).ok()).map_or(0,|d|d.as_secs())
+}
+// A newly selected file can have exactly the same modification time as the old
+// one (themes and downloaded wallpaper packs commonly do). Include its identity
+// and full timestamp without exposing the local path to the page.
+fn revision(path:&str)->String{
+    use std::hash::{Hash,Hasher};
+    let mut hash=std::collections::hash_map::DefaultHasher::new();
+    path.hash(&mut hash);
+    if let Ok(metadata)=std::fs::metadata(path){
+        metadata.len().hash(&mut hash);
+        metadata.modified().ok().hash(&mut hash);
+    }
+    format!("{:016x}",hash.finish())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn different_files_with_identical_timestamps_have_different_revisions(){
+        let dir=std::env::temp_dir().join(format!("journal-wallpaper-{}",uuid::Uuid::new_v4()));
+        std::fs::create_dir(&dir).unwrap();
+        let a=dir.join("a.bmp");let b=dir.join("b.bmp");
+        std::fs::write(&a,b"first").unwrap();std::fs::copy(&a,&b).unwrap();
+        let time=std::time::UNIX_EPOCH+std::time::Duration::from_secs(1000);
+        for path in [&a,&b]{std::fs::File::options().write(true).open(path).unwrap().set_modified(time).unwrap();}
+        let a=a.to_str().unwrap();let b=b.to_str().unwrap();
+        assert_eq!(modified(a),modified(b));assert_ne!(revision(a),revision(b));
+        let before=revision(a);assert_eq!(before,revision(a));
+        // Same filename, same second, different subsecond timestamp.
+        std::fs::File::options().write(true).open(a).unwrap().set_modified(time+std::time::Duration::from_millis(50)).unwrap();
+        assert_eq!(modified(a),modified(b));assert_ne!(before,revision(a));
+        std::fs::remove_file(a).unwrap();std::fs::remove_file(b).unwrap();std::fs::remove_dir(dir).unwrap();
+    }
 }
 /// Windows keeps its own copy of the shown picture; the original may have been moved or deleted since.
 fn existing(path:String)->String{
@@ -47,7 +81,7 @@ fn per_monitor()->Result<Wallpapers,String>{
             let Ok(rect)=rect else {continue};
             if rect.right<=rect.left||rect.bottom<=rect.top{continue;}
             let path=existing(path);
-            monitors.push(Monitor{x:rect.left,y:rect.top,width:(rect.right-rect.left) as u32,height:(rect.bottom-rect.top) as u32,modified:modified(&path),path});
+            monitors.push(Monitor{x:rect.left,y:rect.top,width:(rect.right-rect.left) as u32,height:(rect.bottom-rect.top) as u32,modified:modified(&path),revision:revision(&path),path});
         }
         if monitors.is_empty(){return Err("Keine Bildschirme mit Hintergrundbild.".into());}
         Ok(Wallpapers{position,monitors})
@@ -63,7 +97,8 @@ fn from_registry(screens:&[(i32,i32,u32,u32)])->Result<Wallpapers,String>{
     let tile:String=desktop.get_value("TileWallpaper").unwrap_or_else(|_|String::from("0"));
     let position=if tile.trim()=="1"{"tile"}else{match style.trim(){"0"=>"center","2"=>"stretch","6"=>"fit","22"=>"span",_=>"fill"}}.to_string();
     let changed=modified(&path);
-    Ok(Wallpapers{position,monitors:screens.iter().map(|&(x,y,width,height)|Monitor{x,y,width,height,modified:changed,path:path.clone()}).collect()})
+    let revision=revision(&path);
+    Ok(Wallpapers{position,monitors:screens.iter().map(|&(x,y,width,height)|Monitor{x,y,width,height,modified:changed,revision:revision.clone(),path:path.clone()}).collect()})
 }
 #[cfg(windows)]
 fn read(screens:Vec<(i32,i32,u32,u32)>)->Result<Wallpapers,String>{per_monitor().or_else(|_|from_registry(&screens))}

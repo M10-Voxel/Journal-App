@@ -78,7 +78,18 @@ try {
   const main = pages.get('main'), widget = pages.get('widget-entries');
   await main.until("!!document.querySelector('.title-input')");
   await widget.until("!!document.querySelector('.title-input')");
-  if (process.env.JOURNAL_WIDGET_SCOPE === 'calendar') {
+  if (process.env.JOURNAL_WIDGET_SCOPE === 'live-blur') {
+    await widget.invoke('desktop_widget_live_blur',{enabled:true,radius:12});
+    await widget.eval("localStorage.setItem('journal.widget-chrome',JSON.stringify({entries:{glass:true,liveBlur:true,glassBlur:16,glassRadius:12}}));window.dispatchEvent(new StorageEvent('storage',{key:'journal.widget-chrome'}))");
+    await widget.until("document.documentElement.dataset.glass==='light' && !document.querySelector('.desktop-widget-backdrop') && !document.querySelector('.widget-message')");
+    await widget.invoke('desktop_widget_live_blur',{enabled:true,radius:0});
+    await widget.invoke('desktop_widget_live_blur',{enabled:false,radius:12});
+    await widget.eval("localStorage.setItem('journal.widget-chrome',JSON.stringify({entries:{glass:true,liveBlur:false,glassBlur:16,glassRadius:12}}));window.dispatchEvent(new StorageEvent('storage',{key:'journal.widget-chrome'}))");
+    await widget.until("!!document.querySelector('.desktop-widget-backdrop')");
+    await assert.rejects(()=>main.invoke('desktop_widget_live_blur',{enabled:true,radius:12}));
+    assert.deepEqual(errors,[]);
+    console.log('PASS: native Live Blur enable/disable, rounded region and static wallpaper restore.');
+  } else if (process.env.JOURNAL_WIDGET_SCOPE === 'calendar') {
     await main.invoke('widget_smoke_cdp',{label:'main',method:'Journal.disableInput',params:'{}'});
     await main.invoke('widget_smoke_cdp',{label:'widget-entries',method:'Journal.disableInput',params:'{}'});
     await widget.click('.kind-picker button:has([data-icon="task"])');await widget.type('.entry-text','Keep the daily widget draft');

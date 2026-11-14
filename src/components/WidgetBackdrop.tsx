@@ -10,10 +10,10 @@ import { getWidgetSurface, subscribeWidgetSurface } from '../widgetSurface';
  * may show a picture of its own (wallpaper.rs reads them per monitor); moved to another monitor, the widget takes that
  * one. Windows can only frost a whole window at one fixed strength; this way the strength is free and the corners follow
  * the rounding. Widgets lie on the desktop below every window, so only the wallpaper is ever behind them.
- * The pictures are checked again on focus, when the canvas changes and every minute.
+ * The pictures are checked again on focus, when the canvas changes and every five seconds.
  */
 type Position = 'fill' | 'fit' | 'stretch' | 'center' | 'tile' | 'span';
-interface Monitor { x: number; y: number; width: number; height: number; modified: number }
+interface Monitor { x: number; y: number; width: number; height: number; modified: number; revision?: string }
 interface Wallpapers { position: Position; monitors: Monitor[] }
 interface Rect { left: number; top: number; width: number; height: number }
 
@@ -21,9 +21,10 @@ let info: Wallpapers | null = null, checking: Promise<void> | null = null;
 // What the widgets read: replaced on every change (a new picture as well), so React notices it.
 let snapshot: { info: Wallpapers | null; pictures: number } = { info: null, pictures: 0 };
 const pictures = new Map<string, Promise<string | null>>(), urls = new Map<string, string>();
+let currentKeys = new Set<string>();
 const listeners = new Set<() => void>();
 const notify = () => { snapshot = { info, pictures: urls.size }; listeners.forEach(listener => listener()); };
-const keyOf = (index: number, monitor: Monitor) => `${index}|${monitor.x},${monitor.y},${monitor.width},${monitor.height}|${monitor.modified}`;
+const keyOf = (index: number, monitor: Monitor) => `${index}|${monitor.x},${monitor.y},${monitor.width},${monitor.height}|${monitor.revision ?? monitor.modified}`;
 const kind = (bytes: Uint8Array) => bytes[0] === 0x89 && bytes[1] === 0x50 ? 'image/png' : bytes[0] === 0xff && bytes[1] === 0xd8 ? 'image/jpeg'
   : bytes[0] === 0x42 && bytes[1] === 0x4d ? 'image/bmp' : bytes[0] === 0x3c ? 'image/svg+xml' : bytes[0] === 0x52 && bytes[8] === 0x57 ? 'image/webp' : '';
 
@@ -31,12 +32,16 @@ function check() {
   return checking ??= (async () => {
     try {
       const next = await invoke<Wallpapers>('desktop_wallpaper_info');
+      if (JSON.stringify(next) === JSON.stringify(info)) return;
       const keys = new Set(next.monitors.map((monitor, index) => keyOf(index, monitor)));
+      currentKeys = keys;
       // Pictures that changed (or whose monitor did) are let go.
       for (const [key, url] of urls) if (!keys.has(key)) { URL.revokeObjectURL(url); urls.delete(key); pictures.delete(key); }
+      for (const key of pictures.keys()) if (!keys.has(key)) pictures.delete(key);
       info = next;
-    } catch { info = null; }
-    finally { checking = null; notify(); }
+      notify();
+    } catch { if (info !== null) { info = null; notify(); } }
+    finally { checking = null; }
   })();
 }
 /** The picture of one monitor, loaded once per change. */
@@ -45,6 +50,7 @@ function picture(index: number, monitor: Monitor) {
   if (!pictures.has(key)) pictures.set(key, (async () => {
     try {
       const bytes = new Uint8Array(await invoke<ArrayBuffer>('desktop_wallpaper', { monitor: index }));
+      if (!currentKeys.has(key)) return null;
       const url = URL.createObjectURL(new Blob([bytes], { type: kind(bytes) }));
       urls.set(key, url); notify(); return url;
     } catch { pictures.delete(key); return null; }
@@ -55,7 +61,7 @@ function useWallpapers(active: boolean) {
   useEffect(() => {
     if (!active) return;
     void check();
-    const timer = globalThis.setInterval(() => void check(), 60000);
+    const timer = globalThis.setInterval(() => void check(), 5000);
     // Also when the canvas changes (moved to another monitor, monitors added or rearranged).
     globalThis.addEventListener('focus', check); globalThis.addEventListener('widget:popup-geometry', check);
     return () => { globalThis.clearInterval(timer); globalThis.removeEventListener('focus', check); globalThis.removeEventListener('widget:popup-geometry', check); };

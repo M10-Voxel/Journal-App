@@ -13,9 +13,10 @@ use tauri::{Emitter,Manager};
 
 pub struct WidgetRuntime {
     content_ready:AtomicBool,opening:AtomicBool,changed:AtomicU64,
+    live_blur:Mutex<Option<f64>>,
     error:Mutex<Option<String>>,surface:Mutex<Option<surface::Surface>>,last_attempt:Mutex<Instant>,copy_from:Mutex<Option<String>>,
 }
-impl Default for WidgetRuntime{fn default()->Self{Self{content_ready:AtomicBool::new(false),opening:AtomicBool::new(false),changed:AtomicU64::new(0),error:Mutex::new(None),surface:Mutex::new(None),last_attempt:Mutex::new(Instant::now()-Duration::from_secs(3)),copy_from:Mutex::new(None)}}}
+impl Default for WidgetRuntime{fn default()->Self{Self{live_blur:Mutex::new(None),content_ready:AtomicBool::new(false),opening:AtomicBool::new(false),changed:AtomicU64::new(0),error:Mutex::new(None),surface:Mutex::new(None),last_attempt:Mutex::new(Instant::now()-Duration::from_secs(3)),copy_from:Mutex::new(None)}}}
 pub struct DesktopWidgets {
     path:PathBuf,config:Mutex<Config>,ready:AtomicBool,updating:AtomicBool,legacy:AtomicBool,
     error:Mutex<Option<String>>,runtimes:Mutex<HashMap<String,Arc<WidgetRuntime>>>,

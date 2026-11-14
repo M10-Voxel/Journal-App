@@ -1,4 +1,5 @@
 import type { ReactNode, Ref } from 'react';
+import { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { updateDesktopWidget, widgetDisplayName } from '../desktopWidgets';
 import type { DesktopWidgetInstance, DesktopWidgetState } from '../desktopWidgets';
@@ -32,12 +33,23 @@ export function DesktopWidgetFrame({ widget, registry, date, nav, navRef, toolsR
 }) {
   const en = useLanguage() === 'en', nebula = usePopupLook().startsWith('nebula-');
   const [chrome] = useWidgetChrome(widget.id);
+  const [liveBlur, setLiveBlur] = useState(false);
+  const [blurError,setBlurError] = useState('');
+  useEffect(() => {
+    let current=true;
+    const enabled=chrome.glass && chrome.liveBlur;
+    void invoke('desktop_widget_live_blur',{enabled,radius:chrome.glassRadius}).then(() => {
+      if(current){setLiveBlur(enabled);setBlurError('');}
+    }, reason => {if(current){setLiveBlur(false);setBlurError(enabled?String(reason):'');}});
+    return () => {current=false;};
+  },[chrome.glass,chrome.liveBlur,chrome.glassRadius]);
   const name = widgetDisplayName(widget, registry.widgets, en);
   const report = (work: Promise<unknown>) => void work.catch(reason => onError(String(reason)));
   const saveLabel = save === 'error' ? t('Nicht gespeichert') : save === 'saving' ? t('Wird gespeichert …') : t('Wird gleich gespeichert …');
   return <section className={`desktop-widget${nebula ? ' nebula-terminal' : ''} is-${widget.kind}${widget.kind === 'daily-note' ? ' is-entries' : ''}`} data-widget-id={widget.id} data-date={date} data-locked={widget.locked || undefined} aria-label={name}>
     <WidgetPopupSurface />
-    <WidgetBackdrop active={chrome.glass && chrome.glassBlur > 0} blur={chrome.glassBlur} />
+    <WidgetBackdrop active={chrome.glass && !liveBlur && (chrome.glassBlur > 0 || chrome.liveBlur)} blur={chrome.glassBlur || 14} />
+    {blurError && <span className="widget-message" role="status" title={blurError}>{en?'Live Blur unavailable · using wallpaper image':'Live Blur nicht verfügbar · Hintergrundbild wird verwendet'}</span>}
     <header className="desktop-widget-head" onPointerDown={event => {
       if (event.button !== 0 || widget.locked || (event.target as Element).closest('button,input,a,[role=button]')) return;
       startWidgetGesture(event);

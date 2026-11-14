@@ -333,7 +333,8 @@ const bootstrap = `
     const wallMonitors = () => JSON.parse(localStorage.getItem('test.monitors') ?? 'null') ?? [{ x:0, y:0, width:Math.round(innerWidth*devicePixelRatio), height:Math.round(innerHeight*devicePixelRatio), svg:localStorage.getItem('test.wallpaper') ?? '<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900"><rect width="1600" height="900" fill="#203a43"/><circle cx="380" cy="260" r="260" fill="#3a8fd6"/><circle cx="1180" cy="620" r="300" fill="#c2304f"/><path d="M0 700 L1600 300" stroke="#ffd166" stroke-width="60"/></svg>' }];
     // The native popup surface: remember what the widget asked for (its popups' rectangles), no geometry of its own.
     if (command === 'desktop_widget_surface') { window.__uiTest.surface = payload; return null; }
-    if (command === 'desktop_wallpaper_info') return { position:localStorage.getItem('test.wallPosition') ?? 'fill', monitors:wallMonitors().map(({svg,...monitor})=>({...monitor, modified:Number(localStorage.getItem('test.wallModified') ?? 1)})) };
+    if(command==='desktop_widget_live_blur'){invoked.push([command,payload]);if(payload.enabled && localStorage.getItem('test.liveBlurFail'))throw Error('Live Blur unavailable');return null;}
+    if (command === 'desktop_wallpaper_info') return { position:localStorage.getItem('test.wallPosition') ?? 'fill', monitors:wallMonitors().map(({svg,...monitor})=>({...monitor, revision:localStorage.getItem('test.wallRevision') ?? svg, modified:Number(localStorage.getItem('test.wallModified') ?? 1)})) };
     if (command === 'desktop_wallpaper') { const monitor = wallMonitors()[payload.monitor]; if (!monitor) throw new Error('Kein Hintergrundbild für diesen Bildschirm.'); return new TextEncoder().encode(monitor.svg).buffer; }
     if (command === 'open_window' || command === 'show_day' || command === 'show_note' || command === 'desktop_widget_open_settings' || command === 'panel_detach' || command.startsWith('plugin:window|')) { invoked.push([command, payload]); return null; }
     if (command === 'load_linked') {
@@ -3339,9 +3340,27 @@ try {
     await until("getComputedStyle(document.documentElement).getPropertyValue('--glass-blur').trim()==='24px'");
     await until("!!document.querySelector('.desktop-widget-backdrop feGaussianBlur')");
     assert.equal(await evaluate("document.querySelector('.desktop-widget-backdrop feGaussianBlur').getAttribute('stdDeviation')"),'24','Wallpaper blur follows the slider');
+    await chrome({glass:true,liveBlur:true,glassBlur:24,glassRadius:20});
+    await until("!document.querySelector('.desktop-widget-backdrop') && window.__uiTest.invoked.some(c=>c[0]==='desktop_widget_live_blur' && c[1].enabled)");
+    await chrome({glass:true,liveBlur:false,glassBlur:24,glassRadius:20});
+    await until("!!document.querySelector('.desktop-widget-backdrop')");
+    await evaluate("localStorage.setItem('test.liveBlurFail','1')");
+    await chrome({glass:true,liveBlur:true,glassBlur:24,glassRadius:20});
+    await until("!!document.querySelector('.desktop-widget [role=status]') && !!document.querySelector('.desktop-widget-backdrop')");
+    await evaluate("localStorage.removeItem('test.liveBlurFail')");
+    await chrome({glass:true,liveBlur:false,glassBlur:24,glassRadius:20});
+    await until("!!document.querySelector('.desktop-widget-backdrop > i')");
+    const oldWallpaper=await evaluate("document.querySelector('.desktop-widget-backdrop > i').style.backgroundImage");
+    // Windows may select a different file with the same mtime. No focus or
+    // geometry event: the periodic metadata check must refresh it by itself.
+    await evaluate("localStorage.setItem('test.wallpaper','<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"600\" height=\"600\"><rect width=\"600\" height=\"600\" fill=\"#ab3456\"/></svg>')");
+    await until(`document.querySelector('.desktop-widget-backdrop > i')?.style.backgroundImage && document.querySelector('.desktop-widget-backdrop > i').style.backgroundImage!==${JSON.stringify(oldWallpaper)}`);
+    const updatedWallpaper=await evaluate("document.querySelector('.desktop-widget-backdrop > i').style.backgroundImage");
+    await evaluate("window.dispatchEvent(new Event('focus'))");await pause(150);
+    assert.equal(await evaluate("document.querySelector('.desktop-widget-backdrop > i').style.backgroundImage"),updatedWallpaper,'Unchanged wallpaper keeps its cached image');
     assert.equal(await evaluate("getComputedStyle(document.querySelector('.desktop-widget-open')).borderRadius"),'20px','Rounding follows the slider');
     // A settings broadcast from the app does not bring its design back while the widget is transparent.
-    await evaluate("window.__uiTest.emit('journal:theme',{theme:'journal',pixel:false,popupStyle:'a'})");await pause(100);
+    await evaluate("window.__uiTest.emit('journal:theme',{layout:'book',look:'journal',pixel:false,popupStyle:'a'})");await pause(100);
     assert.equal(await evaluate("document.documentElement.dataset.look+'/'+document.documentElement.dataset.layout"),'classic/classic','Independent of the app design');
     // Popups: a panel of their own, not transparent.
     await evaluate("document.querySelector('.desktop-widget .widget-date').click()");
@@ -3369,6 +3388,10 @@ try {
       await evaluate(`(()=>{const input=document.querySelector('.widgets-details [data-widget-setting=${setting}]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'${value}');input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
       await until(`JSON.parse(localStorage.getItem('journal.widget-chrome')).entries.${field}===${value}`);
     }
+    await evaluate("document.querySelector('[data-widget-setting=live-blur]').click()");
+    await until("JSON.parse(localStorage.getItem('journal.widget-chrome')).entries.liveBlur===true && !document.querySelector('[data-widget-setting=blur]')");
+    await evaluate("document.querySelector('[data-widget-setting=live-blur]').click()");
+    await until("JSON.parse(localStorage.getItem('journal.widget-chrome')).entries.liveBlur===false && !!document.querySelector('[data-widget-setting=blur]')");
     await pause(200);await screenshot('widgets-manager-glass.png');
     assert.deepEqual(errors,[]);console.log('Widget glass passed: per widget, own palette and base independent of the app design, header without fills or layers, no outline on focus, blur and rounding sliders, glass popups, light/dark type, settings.');
   } else if (process.env.JOURNAL_UI_SCOPE === 'sorting') {

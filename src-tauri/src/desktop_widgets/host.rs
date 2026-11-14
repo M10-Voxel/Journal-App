@@ -28,19 +28,39 @@ mod windows {
         fn CreateRectRgn(left:i32,top:i32,right:i32,bottom:i32)->isize;
         fn CombineRgn(dest:isize,a:isize,b:isize,mode:i32)->i32;
         fn DeleteObject(object:isize)->i32;
+        fn CreateRoundRectRgn(left:i32,top:i32,right:i32,bottom:i32,width:i32,height:i32)->isize;
     }
     /// A region keeps the transparent canvas outside the widget and popup rectangles click-through.
-    pub fn region(hwnd:isize,rects:Option<&[(i32,i32,i32,i32)]>)->Result<(),String>{unsafe{
+    pub fn region(hwnd:isize,rects:Option<&[(i32,i32,i32,i32)]>,radius:i32)->Result<(),String>{unsafe{
         let Some(rects)=rects else {return if SetWindowRgn(hwnd,0,1)==0{Err(std::io::Error::last_os_error().to_string())}else{Ok(())};};
         let combined=CreateRectRgn(0,0,0,0);if combined==0{return Err(std::io::Error::last_os_error().to_string());}
-        for &(x,y,w,h) in rects{
-            let part=CreateRectRgn(x,y,x.saturating_add(w),y.saturating_add(h));
+        for (index,&(x,y,w,h)) in rects.iter().enumerate(){
+            let part=if index==0 && radius>0{CreateRoundRectRgn(x,y,x.saturating_add(w)+1,y.saturating_add(h)+1,radius*2,radius*2)}else{CreateRectRgn(x,y,x.saturating_add(w),y.saturating_add(h))};
             if part==0{DeleteObject(combined);return Err(std::io::Error::last_os_error().to_string());}
             let result=CombineRgn(combined,combined,part,2);DeleteObject(part);
             if result==0{DeleteObject(combined);return Err(std::io::Error::last_os_error().to_string());}
         }
         if SetWindowRgn(hwnd,combined,1)==0{DeleteObject(combined);return Err(std::io::Error::last_os_error().to_string());}
         // Windows owns the region after a successful SetWindowRgn.
+        Ok(())
+    }}
+    /// Windows' composition blur samples the live desktop behind this window,
+    /// including video wallpapers. Its strength is controlled by Windows.
+    pub fn live_blur(hwnd:isize,enabled:bool)->Result<(),String>{unsafe{
+        #[repr(C)] struct Accent {state:i32,flags:u32,color:u32,animation:u32}
+        #[repr(C)] struct Data {attribute:i32,data:*const c_void,size:usize}
+        #[link(name="kernel32")] unsafe extern "system" {
+            fn GetModuleHandleW(name:*const u16)->isize;
+            fn GetProcAddress(module:isize,name:*const u8)->*const c_void;
+        }
+        let name:Vec<u16>="user32.dll".encode_utf16().chain(Some(0)).collect();
+        let module=GetModuleHandleW(name.as_ptr());
+        let address=if module!=0{GetProcAddress(module,b"SetWindowCompositionAttribute\0".as_ptr())}else{std::ptr::null()};
+        if address.is_null(){return if enabled{Err("Windows unterstützt Live Blur nicht.".into())}else{Ok(())};}
+        let set:unsafe extern "system" fn(isize,*const Data)->i32=std::mem::transmute(address);
+        let accent=Accent{state:if enabled{3}else{0},flags:0,color:0,animation:0};
+        let data=Data{attribute:19,data:&accent as *const _ as *const c_void,size:std::mem::size_of::<Accent>()};
+        if set(hwnd,&data)==0{return Err("Windows konnte Live Blur nicht aktivieren.".into());}
         Ok(())
     }}
     type Subclass = unsafe extern "system" fn(Hwnd,u32,usize,isize,usize,usize)->isize;
@@ -153,4 +173,4 @@ mod windows {
     }}
 }
 #[cfg(windows)]
-pub use windows::{configure,maintain,region,restack};
+pub use windows::{configure,maintain,region,restack,live_blur};
