@@ -1,6 +1,6 @@
 /* The frames of the popup looks (PopupChrome.tsx) around the planner, the calendar's card and the small popups. The
    head sits flush with the popup's edges (`--pad` is each popup's own padding). The drawn-in imitations in
-   popup-styles.css (the prompt bar and spiral as backgrounds, their extra padding) give way to the real elements. */
+   popup-styles.css (the prompt bar as a background, its extra padding) give way to the real elements. */
 .planner, .cal-composer { --pad: 10px; }
 .popover { --pad: 6px; }
 .chrome-head { display: flex; align-items: center; gap: 8px; margin: calc(-1 * var(--pad)) calc(-1 * var(--pad)) 8px; min-height: 0; font: 600 11px var(--sans); }
@@ -14,10 +14,18 @@
 .chrome-head.is-glass i { width: 34px; height: 4px; border-radius: 99px; background: color-mix(in srgb, var(--strong) 22%, transparent); }
 /* Karteikarte: the title over the red rule */
 .chrome-head.is-card { height: 34px; padding: 3px 12px 0; border-bottom: 1px solid color-mix(in srgb, var(--error) 45%, transparent); color: var(--strong); font: italic 600 14px var(--display, var(--serif, var(--sans))); }
-/* Notizblock: the spiral binding over the sheet, the title on a tab */
-.chrome-head.is-pad { position: relative; height: 22px; padding: 0 10px; background: var(--binding, color-mix(in srgb, var(--priority) 30%, var(--surface))); }
-.chrome-rings { position: absolute; inset: 0; background: radial-gradient(circle at 50% 9px, color-mix(in srgb, var(--text) 75%, transparent) 2.6px, transparent 3.3px) 4px 0 / 16px 22px repeat-x; }
-.chrome-label { position: relative; flex: none !important; margin-left: auto; padding: 1px 8px; border-radius: 3px; background: var(--surface); box-shadow: 0 1px 0 color-mix(in srgb, #3b2a1a 25%, transparent); color: var(--text); font: 600 10.5px var(--serif, var(--sans)); }
+/* Sticker: the title on a small label sticker, tilted, over the top edge. */
+.chrome-head.is-sticker { height: 30px; padding: 4px 10px 0; }
+.chrome-head.is-sticker .chrome-label, .chrome-head.is-sheet .chrome-label { flex: none; padding: 1px 10px 2px; border-radius: var(--wobble, 6px); background: color-mix(in srgb, var(--violet, var(--accent)) 30%, var(--tint-base, var(--surface)));
+  box-shadow: var(--sticker-sm); color: var(--ink, var(--text)); font: 700 15px var(--hand, var(--sans)); transform: rotate(-2.5deg); }
+/* Sticker-Bogen: a label „Wort klein-Zusatz“ (the title, the command small beside it), a dashed cut line below. */
+.chrome-head.is-sheet { height: 36px; padding: 6px 14px 0; border-bottom: 1.5px dashed color-mix(in srgb, var(--ink, var(--text)) 35%, transparent); }
+.chrome-head.is-sheet .chrome-label { display: inline-flex; align-items: baseline; gap: 6px; background: color-mix(in srgb, var(--mint, var(--success)) 45%, var(--tint-base, var(--surface))); transform: rotate(-1.5deg); }
+.chrome-head.is-sheet .chrome-label small { font: 600 10.5px var(--sans); letter-spacing: .02em; opacity: .7; }
+/* Papierschnipsel: the title written on a strip of washi tape across the top. */
+.chrome-head.is-scrap { justify-content: center; height: 30px; padding: 0 10px; }
+.chrome-tape { flex: none !important; padding: 3px 18px; background: repeating-linear-gradient(-45deg, color-mix(in srgb, var(--pink, var(--priority)) 62%, transparent) 0 7px, color-mix(in srgb, var(--pink, var(--priority)) 44%, transparent) 7px 14px);
+  color: var(--ink, var(--text)); font: 700 15px var(--hand, var(--sans)); transform: rotate(-2deg); }
 /* Terminal: the prompt bar */
 .chrome-head.is-prompt { height: 22px; padding: 0 4px 0 10px; background: var(--nb-paper, #d4d4d4); color: var(--nb-ink, #111); font: 10px/22px var(--mono); }
 .chrome-head.is-prompt b { font-weight: 700; }
@@ -28,8 +36,7 @@
 
 /* The imitations from popup-styles.css give way. */
 :root[data-popups] :is(.planner, .cal-composer, .popover):has(> .chrome-head)::before { display: none !important; }
-:root[data-look='nebula'] :is(.planner, .cal-composer, .popover):has(> .chrome-head), :root[data-look='journal'][data-popups='b'] :is(.planner, .cal-composer, .popover):has(> .chrome-head) { padding-top: var(--pad) !important; }
-:root[data-look='journal'][data-popups='b'] :is(.planner, .cal-composer, .popover):has(> .chrome-head) { background-image: none; }
+:root[data-look='nebula'] :is(.planner, .cal-composer, .popover):has(> .chrome-head) { padding-top: var(--pad) !important; }
 :root[data-look='nebula'][data-popups='b'] :is(.planner, .cal-composer, .popover):has(> .chrome-head) { box-shadow: 0 0 0 1px #000, 6px 6px 0 #000; }
 
 /* Views as tabs (the planner): segmented in Glas, index tabs on paper, flags in the terminal, a property sheet in the window. */
@@ -39,10 +46,15 @@
 .chrome-tabs.is-classic-b { padding: 2px; border-radius: 999px; background: color-mix(in srgb, var(--strong) 7%, transparent); }
 .chrome-tabs.is-classic-b button { border-radius: 999px; }
 .chrome-tabs.is-classic-b button[aria-selected='true'] { background: color-mix(in srgb, var(--strong) 16%, transparent); color: var(--strong); box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 35%, transparent); }
-.chrome-tabs:is(.is-journal-a, .is-journal-b) { gap: 4px; border-bottom: 1px solid color-mix(in srgb, var(--text) 25%, transparent); }
-.chrome-tabs:is(.is-journal-a, .is-journal-b) button { flex: none; position: relative; top: 1px; border-radius: 5px 5px 0 0; font: italic 13px var(--write, var(--serif, var(--sans))); color: var(--text); }
-.chrome-tabs:is(.is-journal-a, .is-journal-b) button[aria-selected='true'] { background: var(--surface); box-shadow: inset 1px 1px 0 color-mix(in srgb, var(--text) 25%, transparent), inset -1px 0 0 color-mix(in srgb, var(--text) 25%, transparent); color: var(--accent); }
-.chrome-tabs.is-journal-b button:not([aria-selected='true']) { background: color-mix(in srgb, var(--priority) 30%, transparent); }
+.chrome-tabs.is-journal-a { gap: 4px; border-bottom: 1px solid color-mix(in srgb, var(--text) 25%, transparent); }
+.chrome-tabs.is-journal-a button { flex: none; position: relative; top: 1px; border-radius: 5px 5px 0 0; font: 700 16px var(--hand, var(--serif, var(--sans))); color: var(--text); }
+.chrome-tabs.is-journal-a button[aria-selected='true'] { background: var(--surface); box-shadow: inset 1px 1px 0 color-mix(in srgb, var(--text) 25%, transparent), inset -1px 0 0 color-mix(in srgb, var(--text) 25%, transparent); color: var(--accent); }
+/* The sticker variants: the views as small stickers, the open one coloured and tilted (circled on the scrap). */
+.chrome-tabs:is(.is-journal-b, .is-journal-c, .is-journal-d) { gap: 8px; padding: 4px 4px 2px; }
+.chrome-tabs:is(.is-journal-b, .is-journal-c, .is-journal-d) button { flex: none; height: 26px; padding: 0 12px; border-radius: var(--wobble, 6px); color: var(--muted); font: 700 16px var(--hand, var(--sans)); transition: transform 160ms var(--spring); }
+.chrome-tabs:is(.is-journal-b, .is-journal-c) button[aria-selected='true'] { background: color-mix(in srgb, var(--pink, var(--accent)) 38%, var(--tint-base, var(--surface))); color: var(--ink-fixed, var(--text)); box-shadow: var(--sticker-sm); transform: rotate(-2deg); }
+.chrome-tabs.is-journal-c button[aria-selected='true'] { background: color-mix(in srgb, var(--mint, var(--accent)) 45%, var(--tint-base, var(--surface))); }
+.chrome-tabs.is-journal-d button[aria-selected='true'] { color: var(--ink-fixed, var(--text)); background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 40' preserveAspectRatio='none'%3E%3Cpath d='M14 22 C 10 8, 60 3, 104 9 C 120 12, 118 32, 92 35 C 60 39, 16 37, 8 26 C 3 18, 30 6, 62 6' fill='none' stroke='%237b62c9' stroke-width='2.4' stroke-linecap='round' vector-effect='non-scaling-stroke'/%3E%3C/svg%3E") center / 100% 100% no-repeat; }
 .chrome-tabs.is-nebula-a button { flex: none; height: 22px; padding: 0 6px; font: 11.5px var(--mono); color: #8a8a92; }
 .chrome-tabs.is-nebula-a button[aria-selected='true'] { background: var(--nb-violet, #7b2cbf); color: #fff; }
 .chrome-tabs.is-nebula-b { gap: 0; border-bottom: 1px solid #111; }
@@ -65,9 +77,12 @@
 .chrome-actions button:disabled { opacity: .45; cursor: default; }
 :root[data-look='classic'][data-popups='b'] .chrome-actions button { border-radius: 999px; }
 :root[data-look='classic'][data-popups='b'] .chrome-actions .chrome-submit { box-shadow: 0 0 16px color-mix(in srgb, var(--accent) 55%, transparent); }
-:root[data-look='journal'] .chrome-actions button { border-radius: 2px; font: italic 14px var(--write, var(--serif)); }
+:root[data-look='journal'] .chrome-actions button { border-radius: 2px; font: 700 16px var(--hand, var(--serif)); }
 :root[data-look='journal'] .chrome-actions .chrome-cancel { text-decoration: underline; text-underline-offset: 3px; text-decoration-color: color-mix(in srgb, var(--text) 35%, transparent); }
-:root[data-look='journal'][data-popups='b'] .chrome-actions .chrome-submit { background: var(--priority); color: #2b2620; }
+:root[data-look='journal']:is([data-popups='b'], [data-popups='c']) .chrome-actions button { border-radius: var(--wobble); }
+:root[data-look='journal']:is([data-popups='b'], [data-popups='c']) .chrome-actions .chrome-cancel { text-decoration: none; box-shadow: inset 0 0 0 1.5px var(--ink-soft); }
+:root[data-look='journal']:is([data-popups='b'], [data-popups='c']) .cal-composer .chrome-actions button.chrome-submit { background: var(--accent); color: var(--on-accent); box-shadow: var(--sticker-sm); transform: rotate(-1.5deg); }
+:root[data-look='journal'][data-popups='d'] .cal-composer .chrome-actions button.chrome-submit { background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 40' preserveAspectRatio='none'%3E%3Cpath d='M14 22 C 10 8, 60 3, 104 9 C 120 12, 118 32, 92 35 C 60 39, 16 37, 8 26 C 3 18, 30 6, 62 6' fill='none' stroke='%237b62c9' stroke-width='2.4' stroke-linecap='round' vector-effect='non-scaling-stroke'/%3E%3C/svg%3E") center / 100% 100% no-repeat; color: var(--accent); box-shadow: none; }
 :root[data-look='nebula'][data-popups='a'] .chrome-actions button { border-radius: 0; font: 12px var(--mono); color: #d8d8d8; box-shadow: inset 0 0 0 1px var(--edge); }
 :root[data-look='nebula'][data-popups='a'] .chrome-actions .chrome-submit { background: var(--nb-violet, #7b2cbf); color: #fff; box-shadow: none; }
 :root[data-look='nebula'][data-popups='a'] .chrome-actions button::before { content: '> '; opacity: .6; }
@@ -77,7 +92,7 @@
 
 /* Pixel look: square, and the pixel faces. */
 :root[data-pixel] :is(.chrome-head, .chrome-tabs, .chrome-tabs button, .chrome-actions button, .chrome-label) { border-radius: 0 !important; }
-:root[data-pixel] .chrome-head.is-card, :root[data-pixel] .chrome-tabs:is(.is-journal-a, .is-journal-b) button, :root[data-pixel] .chrome-actions button { font-style: normal; font-size: 15px; }
+:root[data-pixel] .chrome-head.is-card, :root[data-pixel] .chrome-tabs:is(.is-journal-a, .is-journal-b, .is-journal-c, .is-journal-d) button, :root[data-pixel] .chrome-actions button { font-style: normal; font-size: 15px; }
 :root[data-pixel] .chrome-keys { font-size: 14px; }
 /* Worded buttons: one height and shape in every look, the label centred. */
 .cal-composer .chrome-actions button:is(.chrome-cancel, .chrome-remove, .chrome-submit) { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; height: 28px; padding: 0 14px; line-height: 1; white-space: nowrap; }

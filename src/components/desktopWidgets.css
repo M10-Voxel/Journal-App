@@ -51,12 +51,14 @@ html.is-desktop-widget, .is-desktop-widget body, .is-desktop-widget #root { widt
 .widget-grip.is-nw { left: 0; top: 0; cursor: nwse-resize; } .widget-grip.is-se { right: 0; bottom: 0; cursor: nwse-resize; }
 
 /* Journal: a single sheet; the header a strip of the same paper with a fine rule, the date in the book's type. */
-:root[data-look='journal'] .desktop-widget { border-color: var(--divider); border-radius: 4px; }
-:root[data-look='journal'] .desktop-widget-head { background: var(--surface); border-bottom-color: var(--divider); }
-:root[data-look='journal'] .desktop-widget .widget-date { font: italic 600 14px var(--display); }
-:root[data-look='journal'] .desktop-widget-head .cal-title { font-size: 16px; }
-:root[data-look='journal'] :is(.desktop-widget-open, .desktop-widget .widget-date) { border-radius: 3px; }
-:root[data-look='journal'] .desktop-widget-body { background: var(--surface); }
+:root[data-look='journal'] .desktop-widget { border: 0; border-radius: var(--wobble-lg); background-color: var(--surface); background-image: var(--paper-grain); box-shadow: inset 0 0 0 2px var(--sticker-line); }
+/* The head is a paper strip with a dashed cut line; its buttons are small stickers. */
+:root[data-look='journal'] .desktop-widget-head { background-color: color-mix(in srgb, var(--violet) 14%, var(--surface)); background-image: var(--paper-grain); border-bottom: 1.5px dashed var(--ink-soft); border-radius: var(--wobble-lg) var(--wobble-lg) 0 0; }
+:root[data-look='journal'] .desktop-widget .widget-date { font: 700 17px var(--hand); }
+:root[data-look='journal'] .desktop-widget-head .cal-title { font-size: 18px; }
+:root[data-look='journal'] :is(.desktop-widget-open, .desktop-widget .widget-date) { border-radius: var(--wobble); }
+:root[data-look='journal'] :is(.desktop-widget-open, .desktop-widget .widget-date):is(:hover, :focus-visible) { background: var(--surface); color: var(--ink); box-shadow: var(--sticker-flat); }
+:root[data-look='journal'] .desktop-widget-body { background: transparent; }
 /* Nebula: the terminal's light title bar holds the navigation in ink; square keys, mono type. */
 :root[data-look='nebula'] .desktop-widget { border: 1px solid var(--nb-line); border-radius: 0; box-shadow: none; }
 :root[data-look='nebula'] .desktop-widget-head { min-height: 32px; padding: 0 3px 0 4px; background: var(--nb-paper); color: var(--nb-ink); border-bottom-color: var(--nb-line); }
@@ -76,7 +78,7 @@ html.is-desktop-widget, .is-desktop-widget body, .is-desktop-widget #root { widt
 /* Pixel: square, the pixel face a size up. */
 :root[data-pixel] :is(.desktop-widget, .desktop-widget-open, .desktop-widget .widget-date, .desktop-widget-save) { border-radius: 0; }
 :root[data-pixel] .desktop-widget .widget-date { font-size: 15px; }
-:root[data-look='journal'] .desktop-widget-head .cal-views button { font: italic 13px var(--display); }
+:root[data-look='journal'] .desktop-widget-head .cal-views button { font: 700 15px var(--hand); }
 :root[data-look='nebula'] .desktop-widget-head .cal-views button { height: 22px; color: #444; font: 600 10.5px var(--mono); text-transform: lowercase; border-radius: 0; }
 :root[data-look='nebula'] .desktop-widget-head .cal-views button:is(:hover, :focus-visible) { background: var(--nb-ink); color: var(--nb-paper); }
 :root[data-look='nebula'] .desktop-widget-head .cal-views button[aria-selected='true'] { background: var(--nb-ink); color: var(--nb-paper); box-shadow: none; }

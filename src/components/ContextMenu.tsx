@@ -5,6 +5,7 @@ import { useLanguage } from '../i18n';
 import { usePopupLook } from '../popupLook';
 import type { PopupLook } from '../popupLook';
 import { Icon } from './Icon';
+import { Scribble } from './ActionSheet';
 import { useDismissLayer } from './useDismissLayer';
 import { inDesktopWidget, popupViewport } from './WidgetPopupSurface';
 import './contextMenu.css';
@@ -16,7 +17,9 @@ import type { IconName } from './Icon';
  * - Normal · Karte: a rounded card, icons and keys;
  * - Normal · Glas: frosted glass, pill rows that glow;
  * - Journal · Karteikarte: an index card – the title over the red rule, ruled lines, a tick box per row;
- * - Journal · Notizblock: a sheet on a spiral binding, the title on a tab, rows like a handwritten list;
+ * - Journal · Sticker: a cut-out sticker, the title on a label sticker, rows as small stickers when pointed at;
+ * - Journal · Sticker-Bogen: a sheet of stickers, every row its own sticker, the groups apart by dashed cut lines;
+ * - Journal · Papierschnipsel: torn paper under washi tape, a handwritten list, an ink scribble around the row;
  * - Nebula · Terminal: a prompt bar, every row a command with its description and keys in brackets;
  * - Nebula · Holo-Papier: a window menu – title bar, check column, underlined letters (pressed: run), etched separators.
  * Arrow keys move (→ opens a submenu, ← closes it), Enter runs, a letter jumps to its row, Escape closes. The menu key
@@ -200,7 +203,9 @@ function MenuPanel({ look, spec, x, y, depth, byKey, onBack, side, onHold }: {
   const head = depth > 0 ? null
     : look === 'classic-b' ? <div className="ctx-head is-glass">{spec.title}</div>
     : look === 'journal-a' ? <div className="ctx-head is-card">{spec.title}</div>
-    : look === 'journal-b' ? <div className="ctx-head is-pad"><span className="ctx-rings" aria-hidden="true" /><span className="ctx-tab">{spec.title}</span></div>
+    : look === 'journal-b' ? <div className="ctx-head is-sticker"><span className="ctx-tab">{spec.title}</span></div>
+    : look === 'journal-c' ? <div className="ctx-head is-sheet"><span className="ctx-tab">{spec.title}<small>{spec.command}</small></span></div>
+    : look === 'journal-d' ? <div className="ctx-head is-scrap"><span className="ctx-tab">{spec.title}</span></div>
     : look === 'nebula-a' ? <div className="ctx-head is-prompt"><b>[journal@~]$</b> ./{spec.command}.sh --menu</div>
     : look === 'nebula-b' ? <div className="ctx-head is-window"><span>{spec.title}.exe</span></div>
     : null;
@@ -211,6 +216,7 @@ function MenuPanel({ look, spec, x, y, depth, byKey, onBack, side, onHold }: {
   };
   const mark = (item: MenuItem) => item.swatch ? <i className={`ctx-swatch ${item.swatch}`} aria-hidden="true" />
     : look === 'journal-a' || look === 'nebula-b' ? <span className="ctx-check">{item.checked ? '✓' : ''}</span>
+    : look === 'journal-d' ? <span className="ctx-check" aria-hidden="true">{item.checked ? <Scribble /> : null}</span>
     : item.icon ? <Icon name={item.icon} /> : <span className="ctx-check">{item.checked ? '✓' : ''}</span>;
   const subItem = sub ? spec.items.find(entry => entry !== '-' && entry.id === sub.id) as MenuItem | undefined : undefined;
 
@@ -235,6 +241,7 @@ function MenuPanel({ look, spec, x, y, depth, byKey, onBack, side, onHold }: {
             onClick={event => run(item, event.currentTarget, event.detail === 0)}>
             {look === 'nebula-a'
               ? <><span className="ctx-command">{item.command ?? item.id}</span><span className="ctx-label">{item.label}</span></>
+              : look === 'journal-d' ? <>{mark(item)}<span className="ctx-label"><span className="ctx-word"><Scribble className="ctx-scribble" />{item.label}</span></span></>
               : <>{mark(item)}<span className="ctx-label">{label(item)}</span></>}
             {item.keys && <kbd>{item.keys}</kbd>}
             {item.items && <span className="ctx-arrow" aria-hidden="true">{look === 'nebula-a' ? '→' : '▸'}</span>}

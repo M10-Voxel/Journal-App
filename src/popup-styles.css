@@ -1,4 +1,4 @@
-/* The popups for entries and calendar entries in two looks per design (Settings → Darstellung → Popups, `data-popups`
+/* The popups for entries and calendar entries in two looks per design (the journal look: four) (Settings → Darstellung → Popups, `data-popups`
    on the root, settings.ts): the planner (date, time, repeat), the calendar's composer (creating and editing), and the
    pickers and cards (`.popover`: tags, details, choices). Variant `a` of the normal design is the base in popups.css,
    styles.css and calendar.css; everything else is laid over it here. Most of it works through the colour tokens set on
@@ -29,18 +29,18 @@
 
 /* ── Journal · A · Karteikarte: plain paper, a red rule on top, underlined fields, circled days ──────────────────── */
 :root[data-look='journal'][data-popups='a'] :is(.planner, .cal-composer, .popover) {
-  border-radius: 2px;
+  border-radius: 3px;
   background-color: var(--surface);
-  box-shadow: inset 0 3px 0 color-mix(in srgb, var(--error) 55%, transparent), 0 0 0 1px var(--edge), 0 18px 34px -14px color-mix(in srgb, #3b2a1a 60%, transparent);
+  box-shadow: inset 0 3px 0 color-mix(in srgb, var(--error) 55%, transparent), 0 0 0 1px var(--edge), 0 18px 34px -14px color-mix(in srgb, var(--ink) 50%, transparent);
   font-family: var(--serif);
 }
 :root[data-look='journal'][data-popups='a'] .planner::before, :root[data-look='journal'][data-popups='a'] .cal-composer:not(.has-tag)::before { background: var(--surface); }
 :root[data-look='journal'][data-popups='a'] :is(.cal-composer-text, .cal-composer-description, .tag-picker-search) {
-  border-radius: 0; background: transparent; box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--text) 35%, transparent); font-family: var(--write); font-style: italic; }
+  border-radius: 0; background: transparent; box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--text) 35%, transparent); font-family: var(--write); }
 :root[data-look='journal'][data-popups='a'] :is(.cal-composer-text:focus, .cal-composer-description:focus-within) { outline: none; box-shadow: inset 0 -2px 0 var(--accent); }
 :root[data-look='journal'][data-popups='a'] .cal-composer-text { font-size: 15px; }
 :root[data-look='journal'][data-popups='a'] :is(.cal-composer-when, .planner-time, .planner-reminder, .planner-confirm, .repeat-chip) { border-radius: 3px; background: transparent; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 30%, transparent); }
-:root[data-look='journal'][data-popups='a'] :is(.planner-month, .mini-picker-head strong) { font: italic 600 15px var(--display); }
+:root[data-look='journal'] :is(.planner-month, .mini-picker-head strong) { font: 700 18px var(--hand); }
 :root[data-look='journal'][data-popups='a'] :is(.planner-day, .cal-composer .cal-compact-day) { border-radius: 50% 45% 55% 42% / 48% 55% 45% 52%; font-family: var(--serif); }
 :root[data-look='journal'][data-popups='a'] :is(.planner:not(.is-multi) .planner-day[aria-selected='true'], .cal-composer .cal-compact-day[aria-selected='true']) { background: transparent !important; color: var(--accent) !important; box-shadow: inset 0 0 0 2px var(--accent); }
 :root[data-look='journal'][data-popups='a'] .planner:not(.is-multi) .planner-day[aria-selected='true']::after { background: var(--accent); }
@@ -48,39 +48,58 @@
 :root[data-look='journal'][data-popups='a'] .planner-foot { border-top: 1px solid color-mix(in srgb, var(--error) 35%, transparent); }
 :root[data-look='journal'][data-popups='a'] .cal-composer-create { border-radius: 3px; }
 
-/* ── Journal · B · Notizblock: an amber sheet on a spiral binding, a highlighter for the choice ─────────── */
-:root[data-look='journal'][data-popups='b'] :is(.planner, .cal-composer, .popover) {
-  --surface: color-mix(in srgb, var(--priority) 26%, var(--book-paper, var(--surface)));
-  --border: color-mix(in srgb, var(--priority) 12%, transparent);
-  --hover: color-mix(in srgb, var(--priority) 22%, transparent);
-  --binding: color-mix(in srgb, var(--priority) 34%, var(--book-paper, var(--surface)));
-  border-radius: 3px 3px 1px 1px;
-  background-color: var(--surface);
-  background-image: radial-gradient(circle at 50% 9px, color-mix(in srgb, var(--text) 75%, transparent) 2.6px, transparent 3.3px),
-    linear-gradient(var(--binding) 0 18px, transparent 18px);
-  background-size: 16px 18px, 100% 100%;
-  background-repeat: repeat-x, no-repeat;
-  background-position: 4px 0, 0 0;
-  box-shadow: 0 0 0 1px var(--edge), 0 3px 0 -1px color-mix(in srgb, var(--surface) 86%, #000), 0 5px 0 -2px color-mix(in srgb, var(--surface) 78%, #000), 0 20px 34px -14px color-mix(in srgb, #3b2a1a 60%, transparent);
-  font-family: var(--serif);
+/* The three sticker variants share their fields: round pills with an ink line, the choice a filled sticker. */
+:root[data-look='journal']:is([data-popups='b'], [data-popups='c'], [data-popups='d']) :is(.cal-composer-text, .cal-composer-description, .tag-picker-search) {
+  border-radius: var(--wobble); background: color-mix(in srgb, var(--sticker-edge) 55%, var(--surface)); box-shadow: inset 0 0 0 1.5px var(--ink-soft); font-family: var(--write); }
+:root[data-look='journal']:is([data-popups='b'], [data-popups='c'], [data-popups='d']) :is(.cal-composer-text:focus, .cal-composer-description:focus-within, .tag-picker-search:focus) { outline: none; box-shadow: inset 0 0 0 2px var(--accent); }
+:root[data-look='journal']:is([data-popups='b'], [data-popups='c'], [data-popups='d']) .cal-composer-text { font-size: 15px; }
+:root[data-look='journal']:is([data-popups='b'], [data-popups='c']) :is(.cal-composer-when, .planner-time, .planner-reminder, .repeat-chip) {
+  border-radius: var(--wobble); background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--sticker-line), 0 0 0 2.5px var(--sticker-edge); font-family: var(--hand); font-weight: 700; font-size: 15px; }
+:root[data-look='journal']:is([data-popups='b'], [data-popups='c'], [data-popups='d']) :is(.planner-day, .cal-composer .cal-compact-day) { border-radius: 50% 44% 52% 46% / 46% 52% 44% 50%; font-family: var(--write); }
+:root[data-look='journal']:is([data-popups='b'], [data-popups='c']) :is(.planner:not(.is-multi) .planner-day[aria-selected='true'], .cal-composer .cal-compact-day[aria-selected='true']) {
+  background: var(--pink) !important; color: var(--ink-fixed) !important; box-shadow: inset 0 0 0 1.5px var(--sticker-line), 0 0 0 2.5px var(--sticker-edge), 1px 2px 0 2.5px var(--sticker-shade); transform: rotate(-6deg); }
+:root[data-look='journal']:is([data-popups='b'], [data-popups='c'], [data-popups='d']) .planner:not(.is-multi) .planner-day[aria-selected='true']::after { background: var(--ink); }
+:root[data-look='journal']:is([data-popups='b'], [data-popups='c'], [data-popups='d']) .planner-day.is-today { box-shadow: inset 0 0 0 1.5px var(--now); }
+:root[data-look='journal']:is([data-popups='b'], [data-popups='c'], [data-popups='d']) :is(.cal-composer-create, .planner-confirm) { border-radius: var(--wobble); background: var(--accent) !important; color: var(--on-accent) !important; box-shadow: var(--sticker-sm); font: 700 15px var(--hand); }
+:root[data-look='journal']:is([data-popups='b'], [data-popups='c'], [data-popups='d']) .planner-foot { border-top: 1.5px dashed var(--ink-soft); }
+:root[data-look='journal']:is([data-popups='b'], [data-popups='c'], [data-popups='d']) .planner::before, :root[data-look='journal']:is([data-popups='b'], [data-popups='c'], [data-popups='d']) .cal-composer::before { display: none; }
+
+/* ── Journal · B · Sticker: the popup a cut-out sticker – a thick white edge, an ink line, a soft shadow ─────────── */
+:root[data-look='journal'][data-popups='b'] :is(.planner, .cal-composer, .popover, .repeat-suggest) {
+  border-radius: var(--wobble-lg); background-color: var(--surface); box-shadow: var(--sticker); font-family: var(--serif); }
+:root[data-look='journal'][data-popups='b'] .cal-composer.has-tag { box-shadow: inset 5px 0 0 var(--tag), var(--sticker); }
+
+/* ── Journal · C · Sticker-Bogen: a sheet of grained paper, cut lines around it, every field its own sticker ──── */
+:root[data-look='journal'][data-popups='c'] :is(.planner, .cal-composer, .popover, .repeat-suggest) {
+  border-radius: 6px; background-color: color-mix(in srgb, var(--sticker-edge) 40%, var(--surface)); background-image: var(--paper-grain);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 18%, transparent), 0 14px 28px -12px color-mix(in srgb, var(--ink) 55%, transparent), 0 2px 4px color-mix(in srgb, var(--ink) 18%, transparent);
+  outline: 1.5px dashed color-mix(in srgb, var(--ink) 40%, transparent); outline-offset: -7px; font-family: var(--serif); }
+:root[data-look='journal'][data-popups='c'] .cal-composer.has-tag { box-shadow: inset 0 5px 0 var(--tag), inset 0 0 0 1px color-mix(in srgb, var(--ink) 18%, transparent), 0 14px 28px -12px color-mix(in srgb, var(--ink) 55%, transparent); }
+:root[data-look='journal'][data-popups='c'] :is(.cal-composer-when, .planner-time, .planner-reminder, .repeat-chip):nth-child(2n) { transform: rotate(1.5deg); }
+:root[data-look='journal'][data-popups='c'] :is(.cal-composer-when, .planner-time, .planner-reminder, .repeat-chip):nth-child(2n+1) { transform: rotate(-1.5deg); }
+:root[data-look='journal'][data-popups='c'] :is(.planner:not(.is-multi) .planner-day[aria-selected='true'], .cal-composer .cal-compact-day[aria-selected='true']) { background: var(--mint) !important; }
+
+/* ── Journal · D · Papierschnipsel: a torn scrap (zigzag edges top and bottom), washi tape over the top, written
+   in ink; the choice is circled. The torn edge is a mask, so the scrap has no outer shadow: its paper is the lightest. */
+:root[data-look='journal'] {
+  --torn: linear-gradient(#000 0 0) 0 6px / 100% calc(100% - 12px) no-repeat,
+    conic-gradient(from 135deg at 50% 0, #000 90deg, transparent 0) 0 0 / 11px 6px repeat-x,
+    conic-gradient(from -45deg at 50% 100%, #000 90deg, transparent 0) 0 100% / 11px 6px repeat-x;
 }
-:root[data-look='journal'][data-popups='b'] .planner { padding-top: 26px; }
-:root[data-look='journal'][data-popups='b'] .cal-composer { padding-top: 26px; }
-:root[data-look='journal'][data-popups='b'] .popover { padding-top: 24px; }
-:root[data-look='journal'][data-popups='b'] .planner::before, :root[data-look='journal'][data-popups='b'] .cal-composer::before { display: none; }
-:root[data-look='journal'][data-popups='b'] .cal-composer.has-tag { box-shadow: inset 4px 0 0 var(--tag), 0 0 0 1px var(--edge), 0 20px 34px -14px color-mix(in srgb, #3b2a1a 60%, transparent); }
-:root[data-look='journal'][data-popups='b'] :is(.cal-composer-text, .cal-composer-description, .tag-picker-search) {
-  border-radius: 0; background: transparent; box-shadow: inset 0 -1.5px 0 color-mix(in srgb, var(--text) 40%, transparent); font-family: var(--write); font-style: italic; }
-:root[data-look='journal'][data-popups='b'] .cal-composer-text { font-size: 15px; }
-:root[data-look='journal'][data-popups='b'] :is(.cal-composer-text:focus, .cal-composer-description:focus-within) { outline: none; box-shadow: inset 0 -2px 0 var(--accent); }
-:root[data-look='journal'][data-popups='b'] :is(.cal-composer-when, .planner-time, .planner-reminder, .repeat-chip) { border-radius: 2px; background: color-mix(in srgb, var(--surface) 70%, #fff 30%); box-shadow: 0 1px 0 color-mix(in srgb, #3b2a1a 25%, transparent); }
-:root[data-look='journal'][data-popups='b'] :is(.planner-month, .mini-picker-head strong) { font: italic 600 15px var(--display); }
-:root[data-look='journal'][data-popups='b'] :is(.planner-day, .cal-composer .cal-compact-day) { border-radius: 2px 6px 3px 5px; font-family: var(--serif); }
-:root[data-look='journal'][data-popups='b'] :is(.planner:not(.is-multi) .planner-day[aria-selected='true'], .cal-composer .cal-compact-day[aria-selected='true']) {
-  background: color-mix(in srgb, var(--priority) 60%, transparent) !important; color: var(--strong) !important; transform: rotate(-2deg); }
-:root[data-look='journal'][data-popups='b'] .planner:not(.is-multi) .planner-day[aria-selected='true']::after { background: var(--strong); }
-:root[data-look='journal'][data-popups='b'] :is(.cal-composer-create, .planner-confirm) { border-radius: 2px; background: var(--priority) !important; color: #2b2620 !important; }
-:root[data-look='journal'][data-popups='b'] .planner-foot { border-top: 1px dashed color-mix(in srgb, var(--text) 30%, transparent); }
+:root[data-look='journal'][data-popups='d'] :is(.planner, .cal-composer, .popover, .repeat-suggest) {
+  border-radius: 0; background-color: color-mix(in srgb, var(--sticker-edge) 82%, var(--surface)); color: var(--ink);
+  background-image: repeating-linear-gradient(transparent 0 25px, color-mix(in srgb, var(--accent) 16%, transparent) 25px 26px), var(--paper-grain); background-position: 0 14px, 0 0;
+  box-shadow: inset 1.5px 0 0 color-mix(in srgb, var(--ink) 25%, transparent), inset -1.5px 0 0 color-mix(in srgb, var(--ink) 25%, transparent);
+  -webkit-mask: var(--torn); mask: var(--torn); font-family: var(--serif);
+  --text: var(--ink); --strong: var(--ink); --muted: color-mix(in srgb, var(--ink) 70%, transparent); --placeholder: color-mix(in srgb, var(--ink) 50%, transparent); --surface: color-mix(in srgb, var(--sticker-edge) 82%, #e9e4f5); --hover: color-mix(in srgb, var(--accent) 12%, transparent); --border: color-mix(in srgb, var(--ink) 8%, transparent); --inset: color-mix(in srgb, var(--ink) 5%, transparent);
+  color-scheme: light; }
+:root[data-look='journal'][data-popups='d'] :is(.planner, .cal-composer, .popover) { padding-top: calc(var(--pad, 8px) + 6px) !important; padding-bottom: calc(var(--pad, 8px) + 6px) !important; }
+:root[data-look='journal'][data-popups='d'] :is(.cal-composer-text, .cal-composer-description, .tag-picker-search) { border-radius: 0; background: transparent; box-shadow: inset 0 -1.5px 0 color-mix(in srgb, var(--ink-fixed) 45%, transparent); }
+:root[data-look='journal'][data-popups='d'] :is(.cal-composer-when, .planner-time, .planner-reminder, .repeat-chip) { border-radius: 40% 55% 45% 60% / 60% 45% 55% 40%; background: transparent; box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--ink-fixed) 60%, transparent); font: 700 15px var(--hand); }
+:root[data-look='journal'][data-popups='d'] :is(.planner:not(.is-multi) .planner-day[aria-selected='true'], .cal-composer .cal-compact-day[aria-selected='true']) {
+  background: transparent !important; color: var(--ink) !important; box-shadow: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Cpath d='M8 24 C 4 10, 30 2, 35 14 C 40 28, 18 38, 8 30 C 2 24, 10 8, 24 7' fill='none' stroke='%237b62c9' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E") !important; background-size: 100% 100% !important; }
+:root[data-look='journal'][data-popups='d'] :is(.cal-composer-create, .planner-confirm) { border-radius: 40% 55% 45% 60% / 60% 45% 55% 40%; }
 
 /* ── Nebula · A · Terminal: a black window with a grey prompt bar, mono type, a violet offset shadow ─────────── */
 :root[data-look='nebula'][data-popups='a'] :is(.planner, .cal-composer, .popover) {

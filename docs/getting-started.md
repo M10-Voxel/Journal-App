@@ -27,7 +27,7 @@ Ein Klick auf ein Datum im Kalender öffnet den Journaltag und schließt die ge�
 
 ## Darstellung und Bedienung
 
-Unter **Einstellungen → Darstellung** stehen Normal, [Journal](journal-style.md) und [Nebula](nebula-style.md) zur Wahl. Pixel ist eine zusätzliche Option für Normal und Journal; Nebula hat eigene Schriften und eine feste Palette. Popups besitzen je Design [zwei Varianten](popup-styles.md). Die UI-Größe kann automatisch gewählt oder von 75 bis 200 Prozent eingestellt werden. Farben, Markdown-Farben, Sprache und Tags haben eigene Einstellungsbereiche; in Nebula bleibt die eigene Farbpalette maßgeblich.
+Unter **Einstellungen → Darstellung** stehen Normal, [Journal](journal-style.md) und [Nebula](nebula-style.md) als Vorlagen zur Wahl. Aufbau und Optik lassen sich auch unabhängig kombinieren ([Design-Achsen](design-axes.md)). Pixel ist eine zusätzliche Option für Normal und Journal; die Nebula-Optik hat eigene Schriften und eine feste Palette. Popups besitzen [zwei Varianten, bei Journal vier](popup-styles.md). Die Journal-Optik verwendet Sticker und die hellen oder dunklen Lavendel-Paletten. Die UI-Größe kann automatisch gewählt oder von 75 bis 200 Prozent eingestellt werden. Farben, Markdown-Farben, Sprache und Tags haben eigene Einstellungsbereiche.
 
 Die Desktop-Eintragsaktionen können als Orbit oder eingebettete Leiste erscheinen. Die im Code vorhandene Wischvariante ist auf dem Desktop nicht als normale Option angeboten.
 

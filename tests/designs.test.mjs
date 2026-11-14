@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { fromTheme, legacyTheme, nativeLook, presetOf, storedDesign, takesPixel, hasFixedPalette, layouts, looks } from '../src/designs.ts';
+import { fromTheme, legacyTheme, nativeLook, presetOf, storedDesign, takesPixel, hasFixedPalette, layouts, looks, popupVariants, popupStyleFor } from '../src/designs.ts';
 
 test('the three ready-made designs are a layout with its look; mixes are none of them', () => {
   assert.equal(presetOf('book', 'journal'), 'journal');
@@ -31,4 +31,17 @@ test('stored layout and look win, unless the theme beside them was changed by an
   // No theme (or an unknown one): layout and look as stored, a missing or invalid half from the theme.
   assert.deepEqual(storedDesign({ layout: 'desk', look: 'classic' }), { layout: 'desk', look: 'classic' });
   assert.deepEqual(storedDesign({ layout: 'bogus', look: 'bogus' }), { layout: 'classic', look: 'classic' });
+});
+
+test('the journal look has four popup variants, the others two; a variant the look lacks falls back to a', () => {
+  assert.deepEqual(popupVariants('journal'), ['a', 'b', 'c', 'd']);
+  assert.deepEqual(popupVariants('classic'), ['a', 'b']);
+  assert.deepEqual(popupVariants('nebula'), ['a', 'b']);
+  assert.equal(popupStyleFor('journal', 'c'), 'c');
+  assert.equal(popupStyleFor('journal', 'd'), 'd');
+  assert.equal(popupStyleFor('classic', 'c'), 'a', 'Sticker-Bogen is the journal look\'s own.');
+  assert.equal(popupStyleFor('nebula', 'd'), 'a', 'Papierschnipsel is the journal look\'s own.');
+  assert.equal(popupStyleFor('nebula', 'b'), 'b');
+  assert.equal(popupStyleFor('journal', undefined), 'a');
+  assert.equal(popupStyleFor('journal', 'z'), 'a');
 });

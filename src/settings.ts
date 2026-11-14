@@ -2,8 +2,8 @@ import type { ActionLayout } from './components/EntryActionDock';
 import { emit } from '@tauri-apps/api/event';
 import { setLanguage } from './i18n';
 import type { Language } from './i18n';
-import { hasFixedPalette, isLayout, isLook, legacyTheme, storedDesign, takesPixel } from './designs';
-import type { Layout, Look } from './designs';
+import { hasFixedPalette, isLayout, isLook, legacyTheme, popupStyleFor, storedDesign, takesPixel } from './designs';
+import type { Layout, Look, PopupStyle } from './designs';
 import { applyColors, colorThemeIds, defaultColorSettings, journalColorThemes, normalizeColorSettings } from './colors';
 import type { ColorSettings, ColorTheme } from './colors';
 import { applyScale, isUiScale } from './uiScale';
@@ -17,10 +17,11 @@ import type { UiScale } from './uiScale';
 /** In the journal style: one page at a time, or both at once (`spread`, the board then lies over both pages). */
 export type BookPaging = 'page' | 'spread';
 /**
- * The look of the popups (planner, calendar entries, pickers): two variants per design, `a` and `b` (settings.css and
- * popup-styles.css name them: Karte/Glas, Karteikarte/Notizblock, Terminal/Holo-Papier).
+ * The look of the popups (planner, calendar entries, pickers): `a` and `b` per look, the journal look also `c` and `d`
+ * (designs.ts `popupVariants`; settings.css and popup-styles.css name them: Karte/Glas, Karteikarte/Sticker/Sticker-Bogen/
+ * Papierschnipsel, Terminal/Holo-Papier).
  */
-export type PopupStyle = 'a' | 'b';
+export type { PopupStyle };
 /**
  * Swiping an entry's dot (the `swipe` action layout) is kept for touch screens (the Android version) but not offered on
  * the desktop. The UI checks still exercise it through `window.__journalSwipeLayout`.
@@ -37,8 +38,7 @@ export function loadSettings(): Settings {
   try {
     const stored = JSON.parse(localStorage.getItem(key) ?? '{}') as Partial<Settings> & { theme?: string };
     // Before layout and look were chosen apart there was one theme for both; and the pixel style used to be a theme of its own.
-    return { actionLayout: stored.actionLayout === 'inline' || (stored.actionLayout === 'swipe' && swipeAvailable()) ? stored.actionLayout : defaultSettings.actionLayout, popupStyle: stored.popupStyle === 'b' ? 'b' : 'a',
-      ...storedDesign(stored),
+    return { actionLayout: stored.actionLayout === 'inline' || (stored.actionLayout === 'swipe' && swipeAvailable()) ? stored.actionLayout : defaultSettings.actionLayout, ...(design => ({ ...design, popupStyle: popupStyleFor(design.look, stored.popupStyle) }))(storedDesign(stored)),
       pixel: stored.pixel === true || stored.theme === 'pixel', language: stored.language === 'en' ? 'en' : 'de', uiScale: isUiScale(stored.uiScale) ? stored.uiScale : 'auto', ...normalizeColorSettings(stored),
       bookPaging: stored.bookPaging === 'spread' ? 'spread' : 'page', inkPressure: stored.inkPressure !== false,
       ...colorThemeIds.includes(stored.previousColorTheme as ColorTheme) ? { previousColorTheme: stored.previousColorTheme } : {} };
@@ -72,7 +72,7 @@ export function applyTheme({ layout, look, pixel, popupStyle }: Design) {
   delete root.dataset.glass;
   root.dataset.layout = isLayout(layout) ? layout : 'classic';
   root.dataset.look = isLook(look) ? look : 'classic';
-  root.dataset.popups = popupStyle === 'b' ? 'b' : 'a';
+  root.dataset.popups = popupStyleFor(isLook(look) ? look : 'classic', popupStyle);
   if (pixelActive({ look, pixel })) root.dataset.pixel = ''; else delete root.dataset.pixel;
 }
 let glassLook: 'light' | 'dark' | null = null;
@@ -87,14 +87,16 @@ export function setGlassLook(look: 'light' | 'dark' | null) {
 /** Choosing the layout: only the structure changes. */
 export const withLayout = (settings: Settings, layout: Layout): Settings => layout === settings.layout ? settings : { ...settings, layout };
 /**
- * Choosing the look. The journal look brings its paper palette (only when switching to it, and only if none of its own
+ * Choosing the look. The journal look brings its lavender palette (only when switching to it, and only if none of its own
  * palettes is chosen; the palette stays free to change afterwards). Leaving it with one of its palettes still chosen
  * brings back the palette chosen before.
  */
-export function withLook(settings: Settings, look: Look): Settings {
-  if (look === settings.look) return settings;
+export function withLook(current: Settings, look: Look): Settings {
+  if (look === current.look) return current;
+  // The popup variant stays if the new look has it (the journal look's c and d fall back to a elsewhere).
+  const settings = { ...current, popupStyle: popupStyleFor(look, current.popupStyle) };
   const own = journalColorThemes.includes(settings.colorTheme);
-  if (look === 'journal') return own ? { ...settings, look, previousColorTheme: settings.colorTheme } : { ...settings, look, colorTheme: 'paper', previousColorTheme: settings.colorTheme };
+  if (look === 'journal') return own ? { ...settings, look, previousColorTheme: settings.colorTheme } : { ...settings, look, colorTheme: 'lavender', previousColorTheme: settings.colorTheme };
   if (settings.look === 'journal' && own) return { ...settings, look, colorTheme: settings.previousColorTheme ?? 'original' };
   return { ...settings, look };
 }

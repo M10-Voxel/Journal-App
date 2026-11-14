@@ -10,7 +10,7 @@ Diese technische Übersicht ergänzt die [Einrichtung und Bedienung von Google D
 | `settings.period-data` | Aktivitäten, Checklisten, Bewertungen, erfasste Zeit, eigene Tageswerte samt Definitionen, Farben und Wertebereichen sowie Tages-/Zeitraum-Notizen |
 | `settings.board:card:*`, `board:folder:*` | Pinnwand-/Notizkarten, Ordner, Inhalt, Anhänge/Verbindungen, Tagesbezug, Monats-/Jahrespinnwände mit eigenen Positionen und Größen, Farben, Linkvorschauen und Handschrift (`mode`, `ink` mit den optionalen Strichfeldern `tool`/`color`, Hintergrund `inkPaper`) |
 | `images` | Referenzierte AVIF-Dateien, im Paket als Base64 |
-| `preferences` | Allgemeine Darstellungseinstellungen aus `journal.settings`, einschließlich Design, Farben, Sprache und UI-Größe |
+| `preferences` | Allgemeine Darstellungseinstellungen aus `journal.settings`, einschließlich getrenntem Aufbau und Optik, Popup-Variante (auch Journal C/D), Farben, Sprache, UI-Größe und Schreibdruck-Option |
 | `mailAccounts` | Kontometadaten und Abrufeinstellungen ohne Passwörter, Client-Secrets oder Anmeldetokens |
 
 Übernommene Mailtermine enthalten ihre gespeicherte Mailbeschreibung einschließlich begrenztem HTML-/Textinhalt und werden über die normalen Kalendereinträge übertragen. Mailkonten müssen auf jedem Gerät erneut angemeldet werden.

@@ -66,7 +66,7 @@
 .widgets-empty p { max-width: 330px; margin: 0; color: var(--muted); font: 11px/1.6 var(--sans); }
 .widgets-global { padding-top: 15px; margin-top: 18px; border-top: 1px solid var(--divider); }
 .widgets-footnote { margin-top: 10px; font-size: 11px; }
-:root[data-look='journal'] .desktop-widget-settings { --widget-menu-radius: 3px; }
+:root[data-look='journal'] .desktop-widget-settings { --widget-menu-radius: 10px; }
 :root[data-look='nebula'] .desktop-widget-settings, :root[data-pixel] .desktop-widget-settings { --widget-menu-radius: 0; }
 :root[data-look='nebula'] .desktop-widget-settings :is(button,input,.widgets-instance-icon,.widgets-type-badge), :root[data-pixel] .desktop-widget-settings :is(button,input,.widgets-instance-icon,.widgets-type-badge) { border-radius: 0; }
 :root[data-look='nebula'] .widgets-type, :root[data-look='nebula'] .widgets-instance { border-color: var(--divider); }

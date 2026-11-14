@@ -36,6 +36,7 @@ Reihenfolge-Empfehlung: zuerst kleine/unabhängige, dann Datenmodell-Änderungen
 Ziel: weitere Aufbauten, Optiken und Popup-Varianten sollen sich leicht ergänzen lassen. Beschreibung der Achsen und Anleitung: `docs/design-axes.md`.
 - [x] **Stufe 1: Achsen trennen** – `data-layout` und `data-look` statt `data-theme`, `src/designs.ts`, Einstellungen „Aufbau“ und „Optik“, alle CSS-Regeln einsortiert, Bereich `combos` in `scripts/verify-ui.mjs`.
 - [ ] **Stufe 2: die sechs Mischungen gestalten** – Liste im Abschnitt „Stufe 2“ von `docs/design-axes.md` (Aufbau-Komponenten lesen Optik-Variablen, Palette je Kombination, Suche trennen, Popups/Pixel/Widgets je Mischung, Vorschaubilder, Tests).
+- [ ] **Journal-Optik neu: Sticker auf Lavendelpapier** – umgesetzt: Gaegu/Nunito, Paletten Lavendel und Lavendel Nacht, Sticker-Bausteine (`journal-look.css`), Popups a–d (Karteikarte, Sticker, Sticker-Bogen, Papierschnipsel), Buch, Desk ohne Fenster (`journal-desk.css`), Widgets, Bereich `journal-sticker`. Offen: Auswahl, welche Popup-Varianten bleiben, und Feinschliff nach Durchsicht der Screenshots (`docs/journal-style.md`).
 
 ## Offene Fragen
 - **Pinnwand für Zeiträume** (Woche…Jahr) – gewünscht? Blockiert „Suche: Monats-/Jahres-Pinnwand“.

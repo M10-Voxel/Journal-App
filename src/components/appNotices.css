@@ -4,7 +4,7 @@
 .mail-import-toast .notice-action { display: inline-flex; align-items: center; min-height: 32px; margin-top: 12px; padding: 5px 10px; border: 1px solid var(--accent); border-radius: 6px; color: var(--accent); font: 500 12px var(--sans); text-align: left; }
 .mail-import-toast .notice-action:hover { background: var(--hover); }
 .mail-import-toast button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-:root[data-look='journal'] .app-notices > .mail-import-toast { border: 1px solid var(--edge); border-radius: 3px 7px 7px 3px; box-shadow: 2px 4px 10px #3b2a1a38; border-left: 3px solid var(--accent); }
+:root[data-look='journal'] .app-notices > .mail-import-toast { border: 1px solid var(--edge); border-radius: 3px 7px 7px 3px; box-shadow: 2px 4px 10px color-mix(in srgb, var(--ink, #3b2a1a) 22%, transparent); border-left: 3px solid var(--accent); }
 :root[data-look='nebula'] .app-notices > .mail-import-toast { border: 1px solid var(--edge); border-top: 3px solid var(--accent); border-radius: 0; box-shadow: 3px 3px 0 var(--nb-offset); font-family: var(--mono); }
 :root[data-look='nebula'] .mail-import-toast .notice-action { border-radius: 0; font-family: var(--mono); }
 :root[data-pixel] .mail-import-toast .notice-action { border-radius: 0; font-size: 16px; }

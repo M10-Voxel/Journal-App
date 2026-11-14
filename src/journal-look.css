@@ -1,0 +1,230 @@
+/* The journal look (`data-look='journal'`) in every layout: stickers on lavender paper. Paper with a light grain,
+   cut-out stickers with a white die-cut edge and a dark ink line, round handwriting (Gaegu) for headings, buttons and
+   labels, a round readable face (Nunito) for what is written. Violet with pink and mint accents (palettes `lavender`
+   and `lavender-night` in colors.ts; `paper` and `candle` stay choosable and take the same shapes).
+   The book's own structure is in journal-theme.css, the desk's sticker board in journal-desk.css. This file is loaded
+   after the component CSS, so its rules win at equal specificity. */
+
+/* ── Building blocks ──────────────────────────────────────────────────────────────────────────────────────────────
+   --ink           the ink of text and drawn lines (dark violet on light paper, pale lilac on dark paper)
+   --ink-fixed     dark ink whatever the paper: for text on the bright sticker colours and on the light paper scrap
+   --sticker-line  the dark line around a sticker (dark on light and on dark paper)
+   --sticker-edge  the white die-cut edge around a sticker
+   --sticker       a sticker: ink line, white edge, a faint rim and a soft offset shadow (box-shadow chain)
+   --sticker-sm    the same for small parts (buttons, tags)
+   --paper-grain   the paper's grain (an SVG noise tile, `img-src data:` is allowed by the CSP)
+   --wobble        slightly uneven corners, drawn by hand */
+:root[data-look='journal'] {
+  --ink: #2b2140;
+  --ink-fixed: #2b2140;
+  --sticker-line: var(--ink);
+  /* What the sticker colours are mixed on: the paper on light paper; a pale lilac on dark paper, so they glow. */
+  --tint-base: var(--surface);
+  --ink-soft: color-mix(in srgb, var(--ink) 55%, transparent);
+  --sticker-edge: #ffffff;
+  --sticker-rim: color-mix(in srgb, var(--ink) 16%, transparent);
+  --sticker-shade: color-mix(in srgb, var(--ink) 20%, transparent);
+  --sticker: inset 0 0 0 2px var(--sticker-line), 0 0 0 5px var(--sticker-edge), 0 0 0 6px var(--sticker-rim), 3px 5px 0 6px var(--sticker-shade);
+  --sticker-sm: inset 0 0 0 1.5px var(--sticker-line), 0 0 0 3px var(--sticker-edge), 0 0 0 3.5px var(--sticker-rim), 1.5px 2.5px 0 3.5px var(--sticker-shade);
+  --sticker-flat: inset 0 0 0 1.5px var(--sticker-line), 0 0 0 3px var(--sticker-edge), 0 0 0 3.5px var(--sticker-rim);
+  --pink: #e48aa8;
+  --mint: #7cc7b2;
+  --violet: #9b84e0;
+  --paper-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .17 0 0 0 0 .13 0 0 0 0 .25 0 0 0 .16 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+  /* Large soft violet blots at the edges, their rims in steps like a coarse print. */
+  --blots: radial-gradient(closest-side at 50% 50%, color-mix(in srgb, var(--violet) 30%, transparent) 0 62%, color-mix(in srgb, var(--violet) 18%, transparent) 62% 78%, color-mix(in srgb, var(--violet) 8%, transparent) 78% 92%, transparent 92%);
+  --wobble: 14px 7px 13px 6px / 6px 13px 7px 14px;
+  --wobble-lg: 20px 9px 18px 8px / 8px 18px 9px 20px;
+  --hand: 'Gaegu', 'Comic Sans MS', 'Segoe Print', cursive;
+  --write: 'Nunito', 'Segoe UI', system-ui, sans-serif;
+  --serif: 'Nunito', 'Segoe UI', system-ui, sans-serif;
+  --display: var(--hand);
+  --sans: 'Nunito', 'Segoe UI', system-ui, sans-serif;
+  /* What older journal rules (popups, board, book) mix their shadows from: the ink instead of brown. */
+  --ink-shadow: color-mix(in srgb, var(--ink) 26%, transparent);
+  --paper-shade: color-mix(in srgb, var(--accent) 12%, transparent);
+  --soft-shadow: var(--sticker);
+  --popup-radius: 10px;
+  --popup-shadow: var(--sticker);
+}
+/* Dark paper: the stickers keep their white edge (a little softer) and a dark line of their own; light grain. */
+:root[data-look='journal']:is([data-color-theme='lavender-night'], [data-color-theme='candle'], [data-color-theme='original'], [data-color-theme='green'], [data-color-theme='summer']) {
+  --ink: #ece6fb;
+  --sticker-line: #120c1e;
+  --tint-base: #f1ecfb;
+  --sticker-edge: #ece6fb;
+  --sticker-rim: #00000055;
+  --sticker-shade: #00000070;
+  --paper-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .95 0 0 0 0 .92 0 0 0 0 1 0 0 0 .07 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+  --violet: #6b4fd0;
+  --ink-soft: color-mix(in srgb, var(--text) 40%, transparent);
+  --ink-shadow: #00000055;
+}
+:root[data-look='journal'][data-color-theme='paper'] { --ink: #3b2a1a; --ink-fixed: #3b2a1a; --violet: #c9a46a; }
+:root[data-look='journal'][data-color-theme='candle'] { --violet: #9a6a2a; }
+:root[data-look='journal'] .font-warmup { font-family: 'Nunito'; }
+:root[data-look='journal'], :root[data-look='journal'] * { scrollbar-color: var(--scrollbar) transparent; }
+:root[data-look='journal'] ::selection { background: color-mix(in srgb, var(--pink) 45%, transparent); }
+
+/* ── Type: handwriting for headings and labels, Nunito for writing ───────────────────────────────────────────── */
+:root[data-look='journal'] h1 { font-family: var(--hand); font-weight: 700; letter-spacing: 0; color: var(--strong); }
+:root[data-look='journal'] .eyebrow { font: 700 16px var(--hand); color: var(--muted); letter-spacing: .01em; }
+:root[data-look='journal'] .today-label { font-style: normal; }
+:root[data-look='journal'] :is(.section-title h2, .checklist-section-heading h3, .board-head h3, .period-section h3) { font-family: var(--hand); font-weight: 700; font-size: 20px; letter-spacing: 0; color: var(--strong); text-transform: none; }
+:root[data-look='journal'] .section-heading { border-bottom: 1.5px dashed var(--ink-soft); }
+:root[data-look='journal'] .title-input { font-family: var(--hand); font-weight: 700; font-style: normal; font-size: 28px; }
+:root[data-look='journal'] :is(.cm-editor, .entry-text, .cal-composer-text, .cal-composer-description, .reminder-text) { font-size: 15px; }
+:root[data-look='journal'] .entry-count { font: 700 15px var(--hand); }
+:root[data-look='journal'] .settings-head strong { font: 700 22px var(--hand); }
+:root[data-look='journal'] .dialog-panes .settings-panel h3, :root[data-look='journal'] .settings-subhead { font-family: var(--hand); font-size: 17px; letter-spacing: .02em; text-transform: none; }
+:root[data-look='journal'] .dialog-panes .settings-panel .settings-section > h3 { font: 700 17px var(--hand); letter-spacing: .02em; text-transform: none; color: var(--accent); }
+:root[data-look='journal'] .period-rating output { font-family: var(--hand); }
+:root[data-look='journal'] .activity-name { font-family: var(--write); font-size: 14px; }
+:root[data-look='journal'] .page-hint { display: none; }
+:root[data-look='journal'] .entry-symbol .icon { stroke-width: 1.9; }
+:root[data-look='journal'] .entry-symbol:hover, :root[data-look='journal'] .entry-symbol[aria-expanded='true'] { background: var(--paper-shade); }
+
+/* ── Buttons as small stickers ───────────────────────────────────────────────────────────────────────────────── */
+:root[data-look='journal'] :is(.icon-button, .today-button, .cal-icon-button, .date-picker-button, .tag-filter-button, .kind-picker button, .titlebar-button, .scale-slider button, .system-actions button) {
+  font-family: var(--hand); font-weight: 700; font-size: 15px; border-radius: var(--wobble); transition: transform 160ms var(--spring), box-shadow var(--fast) ease, background-color var(--fast) ease, color var(--fast) ease; }
+:root[data-look='journal'] :is(.icon-button, .today-button, .cal-icon-button, .date-picker-button, .tag-filter-button, .kind-picker button, .scale-slider button, .system-actions button):is(:hover, [aria-expanded='true']):not(:disabled) {
+  background: var(--surface); color: var(--strong); box-shadow: var(--sticker-sm); transform: rotate(-2deg); }
+:root[data-look='journal'] :is(.icon-button, .today-button, .cal-icon-button, .date-picker-button, .tag-filter-button, .kind-picker button):active:not(:disabled) { transform: rotate(-2deg) scale(.94); }
+:root[data-look='journal'] .toolbar .date-picker-button { font: 700 17px var(--hand); color: var(--text); }
+:root[data-look='journal'] .tag-filter-button.is-filtering { color: var(--accent); background: color-mix(in srgb, var(--pink) 22%, var(--tint-base, var(--surface))); box-shadow: var(--sticker-sm); }
+:root[data-look='journal'] .kind-picker button > .icon { color: var(--accent); }
+/* The day's turning: a row of two round stickers with the today label between them. */
+:root[data-look='journal'] .nav-cluster { gap: 6px; padding: 0; box-shadow: none; }
+:root[data-look='journal'] .nav-cluster .nav-step { width: 28px; height: 28px; background: var(--surface); color: var(--ink); box-shadow: var(--sticker-sm); transition: transform 180ms var(--spring); }
+:root[data-look='journal'] .nav-cluster .nav-step:hover { background: color-mix(in srgb, var(--mint) 40%, var(--tint-base, var(--surface))); color: var(--ink-fixed); transform: rotate(-6deg); }
+:root[data-look='journal'] .nav-cluster .nav-today { height: 28px; padding: 0 12px; border-radius: var(--wobble); background: color-mix(in srgb, var(--pink) 30%, var(--tint-base, var(--surface))); color: var(--ink-fixed); box-shadow: var(--sticker-sm); font: 700 15px var(--hand); }
+:root[data-look='journal'] .nav-cluster .nav-today.is-current { background: transparent; color: var(--muted); box-shadow: inset 0 0 0 1.5px var(--ink-soft); }
+:root[data-look='journal'] .nav-cluster .nav-today:hover:not(:disabled) { background: color-mix(in srgb, var(--pink) 45%, var(--tint-base, var(--surface))); color: var(--ink-fixed); }
+/* Primary buttons: a filled violet sticker. */
+:root[data-look='journal'] :is(.planner-confirm, .cal-composer-create, .board-link-form button:first-of-type, .mail-import-toast .notice-action) { border-radius: var(--wobble); background: var(--accent); color: var(--on-accent); box-shadow: var(--sticker-sm); font: 700 15px var(--hand); }
+/* The window's own controls stay plain (they belong to the window, not to the page), in handwriting colours. */
+:root[data-look='journal'] .window-controls button { border-radius: 0; box-shadow: none; transform: none; }
+
+/* Choices side by side: sticker tabs on a dashed strip. */
+:root[data-look='journal'] .segmented { gap: 6px; padding: 4px; border-radius: var(--wobble-lg); background: transparent; box-shadow: inset 0 0 0 1.5px var(--ink-soft); }
+:root[data-look='journal'] .segmented button { border-radius: var(--wobble); font: 700 15px var(--hand); color: var(--muted); }
+:root[data-look='journal'] .segmented button[aria-checked='true'] { background: color-mix(in srgb, var(--violet) 26%, var(--tint-base, var(--surface))); color: var(--ink-fixed); box-shadow: var(--sticker-flat); transform: rotate(-1.5deg); }
+/* The calendar's views: the same. */
+:root[data-look='journal'] .cal-views { gap: 4px; padding: 3px; border-radius: var(--wobble-lg); background: transparent; box-shadow: inset 0 0 0 1.5px var(--ink-soft); }
+:root[data-look='journal'] .cal-views-indicator { border-radius: var(--wobble); background: color-mix(in srgb, var(--violet) 26%, var(--tint-base, var(--surface))); box-shadow: var(--sticker-flat); }
+:root[data-look='journal'] .cal-views button { font: 700 15px var(--hand); }
+/* On / off: a pill with an ink rim, the knob a round sticker. */
+:root[data-look='journal'] .switch { background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--ink); }
+:root[data-look='journal'] .switch > span { background: var(--ink-soft); box-shadow: 0 0 0 1.5px var(--sticker-edge); }
+:root[data-look='journal'] .switch[aria-checked='true'] { background: var(--mint); }
+:root[data-look='journal'] .switch[aria-checked='true'] > span { background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--ink), 0 0 0 1.5px var(--sticker-edge); }
+/* The big choices (designs, popup variants, palettes) as stickers on the page. */
+:root[data-look='journal'] :is(.theme-options, .popup-style-options) > button { border-radius: var(--wobble-lg); background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--ink-soft); transition: transform 180ms var(--spring), box-shadow var(--fast) ease; }
+:root[data-look='journal'] :is(.theme-options, .popup-style-options) > button:hover { transform: rotate(-1deg); }
+:root[data-look='journal'] :is(.theme-options, .popup-style-options) > button[aria-checked='true'] { background: color-mix(in srgb, var(--violet) 14%, var(--tint-base, var(--surface))); box-shadow: var(--sticker-sm); transform: rotate(-1deg); }
+:root[data-look='journal'] :is(.theme-options, .popup-style-options) strong { font: 700 17px var(--hand); }
+:root[data-look='journal'] :is(.theme-options, .popup-style-options) > button[aria-checked='true'] strong { color: var(--accent); }
+/* The settings' tabs: labels in handwriting, the open one a sticker. */
+:root[data-look='journal'] .settings-tabs { background: transparent; }
+:root[data-look='journal'] .dialog-panes .settings-tabs { background: color-mix(in srgb, var(--background) 60%, var(--surface)); background-image: var(--paper-grain); border-right: 1.5px dashed var(--ink-soft); }
+:root[data-look='journal'] .settings-tabs > button { border-radius: var(--wobble); font: 700 16px var(--hand); }
+:root[data-look='journal'] .settings-tabs > button[aria-selected='true'] { background: var(--surface); color: var(--ink); box-shadow: var(--sticker-sm); transform: rotate(-1deg); }
+:root[data-look='journal'] .dialog-panes .settings-tabs > button[aria-selected='true'] { margin: 4px 6px; }
+
+/* ── Tags: sticker labels – the word large, the tag's colour as a small dot on the edge ──────────────────────── */
+:root[data-look='journal'] .entry-tag { height: 22px; padding: 0 9px 0 7px; border-radius: 7px 4px 8px 3px / 3px 8px 4px 7px; background: color-mix(in srgb, var(--tag, var(--muted)) 20%, var(--surface));
+  color: var(--ink); box-shadow: var(--sticker-flat); font: 700 14px var(--hand); letter-spacing: .01em; text-transform: lowercase; transform: rotate(-2deg); }
+:root[data-look='journal'] .entry-tag .tag-dot { box-shadow: 0 0 0 1.5px var(--ink); }
+:root[data-look='journal'] .entry-tag:hover, :root[data-look='journal'] .entry-tag[aria-expanded='true'] { background: color-mix(in srgb, var(--tag, var(--muted)) 34%, var(--surface)); transform: rotate(1deg); }
+:root[data-look='journal'] .tag-group-label { font: 700 14px var(--hand); letter-spacing: .02em; text-transform: none; color: var(--accent); }
+
+/* ── Tick boxes: drawn by hand, a circle for activities ──────────────────────────────────────────────────────── */
+:root[data-look='journal'] .activity-checkbox input[type=checkbox] { border-radius: 50% 44% 52% 46% / 46% 52% 44% 50%; box-shadow: inset 0 0 0 1.8px var(--ink); }
+:root[data-look='journal'] .activity-checkbox input[type=checkbox]:checked { background: var(--activity-color); box-shadow: inset 0 0 0 1.8px var(--ink), 0 0 0 2px var(--sticker-edge); }
+:root[data-look='journal'] .activity-check-mark.icon { color: var(--ink); stroke-width: 2.6; }
+
+/* ── Tooltips, toasts, reminders: sticker labels ─────────────────────────────────────────────────────────────── */
+:root[data-look='journal'] :is(.mail-import-toast, .reminder) { border: 0; border-radius: var(--wobble-lg); background: var(--surface); background-image: var(--paper-grain); box-shadow: var(--sticker); }
+:root[data-look='journal'] .app-notices > .mail-import-toast { border: 0; border-radius: var(--wobble-lg); box-shadow: var(--sticker); }
+:root[data-look='journal'] .mail-import-toast strong { font: 700 16px var(--hand); }
+:root[data-look='journal'] :is(.shortcuts) { border-radius: var(--wobble-lg); background-color: var(--surface); background-image: var(--paper-grain); box-shadow: var(--sticker); }
+:root[data-look='journal'] .shortcut-backdrop { background: color-mix(in srgb, var(--ink) 30%, transparent); }
+:root[data-look='journal'] .shortcuts h3 { font: 700 15px var(--hand); letter-spacing: .03em; text-transform: none; color: var(--accent); }
+:root[data-look='journal'] :is(.shortcuts kbd, .help-button kbd) { border-radius: 5px 3px 6px 3px; background: var(--surface); color: var(--ink); box-shadow: var(--sticker-flat); font-family: var(--hand); font-weight: 700; }
+
+/* ── Popups in general (the variants are in popup-styles.css): sticker paper ────────────────────────────────── */
+:root[data-look='journal'] :is(.format-menu, .mini-picker-panel, .cal-transfer-panel, .repeat-suggest) { border-radius: var(--wobble-lg); background-color: var(--surface); box-shadow: var(--sticker); }
+
+/* ── Board: paper cards with a sticker edge and washi tape (bulletinBoard.css has the cork and pins) ─────────── */
+:root[data-look='journal'] .board-surface { border-radius: var(--wobble-lg); background-color: color-mix(in srgb, var(--background) 70%, var(--surface)); box-shadow: inset 0 0 0 1.5px var(--ink-soft);
+  background-image: radial-gradient(color-mix(in srgb, var(--accent) 22%, transparent) 1px, transparent 1.5px), var(--paper-grain); background-size: 22px 22px, auto; }
+:root[data-look='journal'] .board-card { border-radius: 4px 8px 5px 9px / 9px 5px 8px 4px; box-shadow: var(--sticker-sm); }
+:root[data-look='journal'] .board-card:hover { box-shadow: var(--sticker); }
+:root[data-look='journal'] .board-card::after { content: ''; position: absolute; top: -10px; right: 14px; width: 56px; height: 18px; transform: rotate(7deg); pointer-events: none;
+  background: repeating-linear-gradient(-45deg, color-mix(in srgb, var(--pink) 70%, transparent) 0 6px, color-mix(in srgb, var(--pink) 50%, transparent) 6px 12px);
+  -webkit-mask-image: linear-gradient(90deg, transparent 0 2px, #000 2px calc(100% - 2px), transparent calc(100% - 2px)); opacity: .85; }
+:root[data-look='journal'] .board-card:nth-child(3n+2)::after { background: repeating-linear-gradient(-45deg, color-mix(in srgb, var(--mint) 75%, transparent) 0 6px, color-mix(in srgb, var(--mint) 55%, transparent) 6px 12px); transform: rotate(-6deg); right: auto; left: 16px; }
+:root[data-look='journal'] .board-card:nth-child(3n)::after { background: repeating-linear-gradient(-45deg, color-mix(in srgb, var(--violet) 60%, transparent) 0 6px, color-mix(in srgb, var(--violet) 40%, transparent) 6px 12px); }
+
+/* ── The calendar on squared paper, in lavender ──────────────────────────────────────────────────────────────── */
+:root[data-look='journal'] .cal.is-embedded, :root[data-look='journal'] body > #root > .cal { background-color: var(--surface); background-image: none; }
+:root[data-look='journal'] :is(.cal-month-day,.cal-month-kw,.cal-year-grid > *) {
+  background-image: linear-gradient(color-mix(in srgb, var(--accent) 9%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--accent) 9%, transparent) 1px, transparent 1px);
+  background-size: calc(100% / var(--paper-columns, 1)) calc(100% / var(--paper-rows, 1));
+  background-origin: border-box; background-position: 0 0;
+}
+/* Hour views share the midnight origin and quarter-hour spacing of the time grid.
+   Month/year paper uses the bounds of its date cells instead. */
+:root[data-look='journal'] .cal.is-embedded:is([data-view='week'], [data-view='workweek'], [data-view='day']),
+:root[data-look='journal'] body > #root > .cal:is([data-view='week'], [data-view='workweek'], [data-view='day']) { background-image: none; }
+:root[data-look='journal'] .cal-time-body {
+  --paper-square: calc(var(--hour) / 4);
+  background-image: linear-gradient(color-mix(in srgb, var(--accent) 9%, transparent) 1px, transparent 1px);
+  background-size: 100% var(--paper-square);
+  background-position: 0 0;
+}
+/* Each day's paper subdivisions terminate exactly at the day boundaries. */
+:root[data-look='journal'] .cal-time-column {
+  background-image: repeating-linear-gradient(to bottom, var(--line) 0 1px, transparent 1px calc(var(--hour) / 2), color-mix(in srgb, var(--strong) 2.745%, transparent) calc(var(--hour) / 2) calc(var(--hour) / 2 + 1px), transparent calc(var(--hour) / 2 + 1px) var(--hour)), linear-gradient(90deg, color-mix(in srgb, var(--accent) 9%, transparent) 1px, transparent 1px);
+  background-origin: border-box;
+  background-size: 100% 100%, calc(100% / var(--paper-columns, 8)) 100%;
+  background-position: 0 0;
+}
+:root[data-look='journal'] .cal-viewbar { background: var(--surface); }
+:root[data-look='journal'] .cal-title { font-family: var(--hand); font-weight: 700; font-size: 1.25em; }
+:root[data-look='journal'] .cal-item { border-radius: 5px 3px 6px 3px / 3px 6px 3px 5px; }
+:root[data-look='journal'] .cal-compact-day[aria-selected='true'] { border-radius: 50% 44% 52% 46% / 46% 52% 44% 50%; }
+
+/* ── Layout Normal: the side bar and the head are paper strips, the views sticker labels, the page lavender
+   paper with soft violet blots at its edges ─────────────────────────────────────────────────────────────────── */
+:root[data-layout='classic'][data-look='journal'] .sidebar { background-color: var(--surface); background-image: var(--paper-grain); border-right: 0; box-shadow: 1.5px 0 0 var(--ink-soft), 4px 0 0 color-mix(in srgb, var(--sticker-edge) 70%, transparent); }
+:root[data-layout='classic'][data-look='journal'] .topbar { background-color: var(--surface); background-image: var(--paper-grain); border-bottom: 0; box-shadow: 0 1.5px 0 var(--ink-soft); }
+:root[data-layout='classic'][data-look='journal'] .main { background-color: var(--background);
+  background-image: var(--blots), var(--blots), var(--blots), var(--paper-grain);
+  background-size: 520px 420px, 380px 340px, 300px 260px, auto; background-position: right -180px bottom -160px, left -150px top 50%, right 12% top -150px, 0 0; background-repeat: no-repeat, no-repeat, no-repeat, repeat; }
+:root[data-layout='classic'][data-look='journal'] .toolbar { background: transparent; border-bottom: 1.5px dashed var(--ink-soft); }
+:root[data-layout='classic'][data-look='journal'] .statusbar { background-color: var(--surface); background-image: var(--paper-grain); border-top: 1.5px dashed var(--ink-soft); }
+:root[data-look='journal'] .statusbar { font-family: var(--hand); font-size: 15px; }
+:root[data-layout='classic'][data-look='journal'] .journal-tabs { gap: 8px; padding: 0 10px; }
+:root[data-layout='classic'][data-look='journal'] .journal-tab { align-self: center; height: 28px; padding: 0 12px; border: 0; border-radius: var(--wobble); color: var(--muted); font: 700 16px var(--hand); transition: transform 180ms var(--spring), background-color var(--fast) ease; }
+:root[data-layout='classic'][data-look='journal'] .journal-tab:hover { background: color-mix(in srgb, var(--violet) 14%, transparent); color: var(--ink); transform: rotate(-2deg); }
+:root[data-layout='classic'][data-look='journal'] .journal-tab[aria-current=page] { background: color-mix(in srgb, var(--violet) 28%, var(--tint-base, var(--surface))); color: var(--ink-fixed); box-shadow: var(--sticker-sm); transform: rotate(-2deg); }
+:root[data-layout='classic'][data-look='journal'] .journal-tab:nth-child(2n)[aria-current=page] { background: color-mix(in srgb, var(--pink) 34%, var(--tint-base, var(--surface))); transform: rotate(1.5deg); }
+:root[data-layout='classic'][data-look='journal'] .journal-tab:nth-child(3n)[aria-current=page] { background: color-mix(in srgb, var(--mint) 40%, var(--tint-base, var(--surface))); }
+:root[data-layout='classic'][data-look='journal'] .journal-tab[aria-current=page]::after { display: none; }
+:root[data-layout='classic'][data-look='journal'] .journal-tab.is-notebook { margin-left: 4px; border-left: 0; }
+
+/* ── Journal with the pixel look ──────────────────────────────────────────────────────────────────────────────────
+   The stickers stay stickers; the type becomes the pixel fonts (the terminal face for writing, Pixelify for titles
+   and labels), at the sizes the pixel look uses. Square corners and stepped motion come from pixel.css. */
+:root[data-look='journal'][data-pixel] {
+  --sans: 'Pixelify Sans', system-ui, sans-serif;
+  --write: 'VT323', Consolas, monospace;
+  --serif: 'VT323', Consolas, monospace;
+  --hand: 'Pixelify Sans', system-ui, sans-serif;
+  --display: 'Pixelify Sans', system-ui, sans-serif;
+}
+:root[data-look='journal'][data-pixel] :is(.cm-editor, .entry-text, .cal-composer-text, .cal-composer-description, .reminder-text, .activity-name) { font-size: 16px; }
+:root[data-look='journal'][data-pixel] .title-input { font-style: normal; font-size: 24px; }
+:root[data-look='journal'][data-pixel] .font-warmup { font-family: 'Lilex'; }
+:root[data-look='journal'][data-pixel] :is(.entry-tag, .journal-tab, .segmented button, .nav-cluster .nav-today) { font-size: 13px; }

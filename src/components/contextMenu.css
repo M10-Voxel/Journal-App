@@ -44,7 +44,7 @@
 
 /* ── Journal · Karteikarte: an index card – the title over the red rule, a blue line under each row, tick boxes ─── */
 .ctx-menu.is-journal-a { --row: 27px; padding: 0 0 6px; border-radius: 2px; background: var(--surface);
-  box-shadow: 0 0 0 1px var(--edge), 0 18px 34px -14px color-mix(in srgb, #3b2a1a 60%, transparent); font-family: var(--serif); }
+  box-shadow: 0 0 0 1px var(--edge), 0 18px 34px -14px color-mix(in srgb, var(--ink, #3b2a1a) 55%, transparent); font-family: var(--serif); }
 .ctx-menu.is-journal-a.is-sub { padding-top: 4px; }
 /* The card's blue line under every row (drawn by the row, so the lines always meet the rows). */
 .ctx-menu.is-journal-a .ctx-item { box-shadow: inset 0 -1px 0 color-mix(in srgb, #4a7bb7 30%, transparent); }
@@ -58,20 +58,52 @@
 .ctx-menu.is-journal-a .ctx-separator { height: 0; margin: 0; background: transparent; border-top: 1px dashed color-mix(in srgb, var(--error) 35%, transparent); }
 .ctx-menu.is-journal-a .ctx-swatch { border-radius: 50%; }
 
-/* ── Journal · Notizblock: an amber sheet on a spiral binding, the title on a tab, a highlighter for the row ────── */
-.ctx-menu.is-journal-b { --surface: color-mix(in srgb, var(--priority) 26%, var(--book-paper, var(--surface))); padding: 0 6px 8px; border-radius: 3px 3px 1px 1px; background: var(--surface);
-  box-shadow: 0 0 0 1px var(--edge), 0 3px 0 -1px color-mix(in srgb, var(--surface) 86%, #000), 0 5px 0 -2px color-mix(in srgb, var(--surface) 78%, #000), 0 20px 34px -14px color-mix(in srgb, #3b2a1a 60%, transparent); font-family: var(--serif); }
-.ctx-menu.is-journal-b.is-sub { padding-top: 6px; }
-.ctx-menu.is-journal-b .ctx-head.is-pad { position: relative; display: flex; justify-content: flex-end; height: 22px; margin: 0 -6px 6px; padding: 0 10px; background: color-mix(in srgb, var(--priority) 34%, var(--book-paper, var(--surface))); overflow: visible; }
-.ctx-menu.is-journal-b .ctx-rings { position: absolute; inset: 0; background: radial-gradient(circle at 50% 9px, color-mix(in srgb, var(--text) 75%, transparent) 2.6px, transparent 3.3px) 4px 0 / 16px 22px repeat-x; }
-.ctx-menu.is-journal-b .ctx-tab { position: relative; align-self: flex-end; margin-bottom: -6px; padding: 2px 9px; border-radius: 3px 3px 0 0; background: var(--surface); box-shadow: 0 -1px 0 color-mix(in srgb, #3b2a1a 18%, transparent); color: var(--text); font: 600 11px var(--serif); }
-.ctx-menu.is-journal-b .ctx-item { gap: 8px; min-height: 27px; padding-left: calc(8px + var(--depth, 0) * 14px); border-radius: 2px 6px 3px 5px; font: 14px var(--write, var(--serif)); }
-.ctx-menu.is-journal-b .ctx-item .icon { color: color-mix(in srgb, var(--text) 70%, transparent); }
-.ctx-menu.is-journal-b .ctx-item:is(:hover, :focus-visible, .is-open):not(:disabled) { background: color-mix(in srgb, var(--priority) 55%, transparent); color: var(--strong); transform: rotate(-.6deg); }
-.ctx-menu.is-journal-b .ctx-item.is-danger:is(:hover, :focus-visible) { background: color-mix(in srgb, var(--error) 22%, transparent); color: var(--error); }
+/* ── Journal · Sticker: a cut-out sticker, the title on a label sticker, the row pointed at a small sticker ────── */
+.ctx-menu.is-journal-b { padding: 6px 8px 10px; border-radius: var(--wobble-lg, 14px); background: var(--surface); box-shadow: var(--sticker); font-family: var(--hand, var(--sans)); }
+.ctx-menu.is-journal-b .ctx-head.is-sticker, .ctx-menu.is-journal-c .ctx-head.is-sheet { display: flex; padding: 4px 4px 8px; overflow: visible; }
+.ctx-menu :is(.ctx-head.is-sticker, .ctx-head.is-sheet) .ctx-tab { display: inline-flex; align-items: baseline; gap: 6px; max-width: 100%; overflow: hidden; padding: 1px 10px 2px; border-radius: var(--wobble, 6px);
+  background: color-mix(in srgb, var(--violet, var(--accent)) 30%, var(--tint-base, var(--surface))); box-shadow: var(--sticker-sm); color: var(--ink-fixed, var(--text)); font: 700 15px var(--hand, var(--sans)); text-overflow: ellipsis; transform: rotate(-2deg); }
+.ctx-menu.is-journal-b .ctx-item, .ctx-menu.is-journal-c .ctx-item { min-height: 28px; border-radius: var(--wobble, 6px); font: 700 16px var(--hand, var(--sans)); transition: transform 160ms var(--spring); }
+.ctx-menu.is-journal-b .ctx-item .icon { color: var(--ink, var(--text)); }
+.ctx-menu.is-journal-b .ctx-item:is(:hover, :focus-visible, .is-open):not(:disabled) { background: color-mix(in srgb, var(--pink, var(--accent)) 34%, var(--tint-base, var(--surface))); color: var(--ink-fixed, var(--strong)); box-shadow: var(--sticker-sm); transform: rotate(-1deg); }
+.ctx-menu.is-journal-b .ctx-item.is-danger:is(:hover, :focus-visible) { background: color-mix(in srgb, var(--error) 22%, var(--surface)); color: var(--error); }
 .ctx-menu.is-journal-b .ctx-item.is-checked .ctx-label { text-decoration: underline wavy color-mix(in srgb, var(--accent) 60%, transparent); text-underline-offset: 4px; }
-.ctx-menu.is-journal-b .ctx-item kbd { padding: 0 4px; border-radius: 2px; background: color-mix(in srgb, var(--surface) 70%, #fff 30%); box-shadow: 0 1px 0 color-mix(in srgb, #3b2a1a 25%, transparent); color: var(--text); }
-.ctx-menu.is-journal-b .ctx-separator { height: 0; margin: 4px 6px; background: transparent; border-top: 1px dashed color-mix(in srgb, var(--text) 30%, transparent); }
+.ctx-menu:is(.is-journal-b, .is-journal-c) .ctx-item kbd { font: 600 10.5px var(--sans); }
+.ctx-menu.is-journal-b .ctx-separator { height: 0; margin: 5px 8px; background: transparent; border-top: 1.5px dashed var(--ink-soft, var(--edge)); }
+
+/* ── Journal · Sticker-Bogen: a sheet of grained paper, every row its own sticker, dashed cut lines between groups ─ */
+.ctx-menu.is-journal-c { padding: 8px 12px 12px; border-radius: 6px; background-color: color-mix(in srgb, var(--sticker-edge, #fff) 40%, var(--surface)); background-image: var(--paper-grain);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink, #000) 18%, transparent), 0 14px 28px -12px color-mix(in srgb, var(--ink, #000) 55%, transparent);
+  outline: 1.5px dashed color-mix(in srgb, var(--ink, #000) 40%, transparent); outline-offset: -6px; color: var(--ink, var(--text)); }
+.ctx-menu.is-journal-c .ctx-head.is-sheet .ctx-tab { background: color-mix(in srgb, var(--mint, var(--success)) 45%, var(--tint-base, var(--surface))); }
+.ctx-menu.is-journal-c .ctx-head .ctx-tab small { font: 600 10px var(--sans); opacity: .65; }
+.ctx-menu.is-journal-c .ctx-list { gap: 8px; padding: 4px 2px; }
+.ctx-menu.is-journal-c .ctx-item { width: auto; align-self: flex-start; padding: 0 10px; background: var(--surface); box-shadow: var(--sticker-sm); }
+.ctx-menu.is-journal-c .ctx-item:nth-child(2n) { transform: rotate(1.2deg); } .ctx-menu.is-journal-c .ctx-item:nth-child(2n+1) { transform: rotate(-1.2deg); }
+.ctx-menu.is-journal-c .ctx-item .icon { color: var(--ink, var(--text)); }
+.ctx-menu.is-journal-c .ctx-item:is(:hover, :focus-visible, .is-open):not(:disabled) { background: color-mix(in srgb, var(--mint, var(--accent)) 45%, var(--tint-base, var(--surface))); box-shadow: var(--sticker); transform: none; }
+.ctx-menu.is-journal-c .ctx-item.is-checked { background: color-mix(in srgb, var(--violet, var(--accent)) 30%, var(--tint-base, var(--surface))); }
+.ctx-menu.is-journal-c .ctx-item.is-danger:is(:hover, :focus-visible) { background: color-mix(in srgb, var(--error) 22%, var(--surface)); color: var(--error); }
+.ctx-menu.is-journal-c .ctx-separator { height: 0; margin: 2px -4px; background: transparent; border-top: 1.5px dashed color-mix(in srgb, var(--ink, #000) 32%, transparent); }
+
+/* ── Journal · Papierschnipsel: torn paper under washi tape, a handwritten list, an ink scribble around the row ──── */
+.ctx-menu.is-journal-d { padding: 10px 14px 14px; border-radius: 0; --text: var(--ink-fixed, #2b2140); background-color: color-mix(in srgb, var(--sticker-edge, #fff) 82%, var(--surface)); color: var(--ink-fixed, var(--text));
+  background-image: repeating-linear-gradient(transparent 0 27px, color-mix(in srgb, var(--accent) 16%, transparent) 27px 28px), var(--paper-grain); background-position: 0 38px, 0 0;
+  box-shadow: inset 1.5px 0 0 color-mix(in srgb, var(--ink, #000) 22%, transparent), inset -1.5px 0 0 color-mix(in srgb, var(--ink, #000) 22%, transparent); -webkit-mask: var(--torn); mask: var(--torn); font-family: var(--hand, var(--sans)); }
+.ctx-menu.is-journal-d .ctx-head.is-scrap { display: flex; justify-content: center; padding: 0 0 4px; overflow: visible; }
+.ctx-menu.is-journal-d .ctx-head.is-scrap .ctx-tab { padding: 2px 16px; background: repeating-linear-gradient(-45deg, color-mix(in srgb, var(--pink, var(--priority)) 62%, transparent) 0 7px, color-mix(in srgb, var(--pink, var(--priority)) 44%, transparent) 7px 14px);
+  font: 700 15px var(--hand, var(--sans)); transform: rotate(-2deg); }
+.ctx-menu.is-journal-d .ctx-item { height: 28px; min-height: 0; font: 700 17px var(--hand, var(--sans)); }
+.ctx-menu.is-journal-d .ctx-label { overflow: visible; }
+.ctx-menu.is-journal-d .ctx-word { position: relative; }
+.ctx-menu.is-journal-d .ctx-scribble { position: absolute; top: -6px; left: -10px; width: calc(100% + 20px); height: calc(100% + 12px); opacity: 0; transition: opacity 120ms ease; }
+.ctx-menu.is-journal-d .ctx-item:is(:hover, :focus-visible, .is-open):not(:disabled) .ctx-scribble { opacity: 1; }
+.ctx-menu.is-journal-d .ctx-item.is-danger:is(:hover, :focus-visible) .ctx-scribble path { stroke: var(--error); }
+.ctx-menu.is-journal-d .ctx-check { width: 18px; height: 18px; border-radius: 50%; box-shadow: inset 0 0 0 1.2px color-mix(in srgb, var(--ink-fixed, #000) 45%, transparent); }
+.ctx-menu.is-journal-d .ctx-check .scribble { width: 100%; height: 100%; }
+.ctx-menu.is-journal-d .ctx-check .scribble path { stroke: var(--pink, var(--accent)); stroke-width: 3; }
+.ctx-menu.is-journal-d .ctx-item kbd { font: 600 10.5px var(--sans); }
+.ctx-menu.is-journal-d .ctx-separator { height: 0; margin: 4px 6px; background: transparent; border-top: 1.5px dashed color-mix(in srgb, var(--ink-fixed, #000) 30%, transparent); }
 
 /* ── Nebula · Terminal: a black window under a prompt bar, every row a command, keys in brackets ──────────────── */
 .ctx-menu.is-nebula-a { min-width: 260px; padding: 0 0 4px; border-radius: 0; background: #0c0c0e; box-shadow: 0 0 0 1px var(--nb-line, #2a2a30), 4px 4px 0 var(--nb-offset, #2e2340); color: #d8d8d8; font: 12px var(--mono); }
@@ -115,7 +147,7 @@
 :root[data-pixel] .ctx-menu, :root[data-pixel] .ctx-menu :is(.ctx-item, .ctx-swatch, kbd, .ctx-tab) { border-radius: 0 !important; }
 :root[data-pixel] .ctx-menu { font-size: 15px; }
 :root[data-pixel] .ctx-menu :is(.ctx-item, .ctx-head) { font-style: normal; }
-:root[data-pixel] .ctx-menu.is-journal-a .ctx-item, :root[data-pixel] .ctx-menu.is-journal-b .ctx-item { font-size: 15px; }
+:root[data-pixel] .ctx-menu:is(.is-journal-a, .is-journal-b, .is-journal-c, .is-journal-d) .ctx-item { font-size: 15px; }
 :root[data-pixel] .ctx-menu .ctx-item kbd { font-size: 13px; }
-:root[data-pixel] .ctx-menu.is-journal-b .ctx-item:hover { transform: none; }
-@media (prefers-reduced-motion: reduce) { .ctx-menu { animation: none; } .ctx-menu.is-journal-b .ctx-item:hover { transform: none; } }
+:root[data-pixel] .ctx-menu:is(.is-journal-b, .is-journal-c) .ctx-item { transform: none !important; }
+@media (prefers-reduced-motion: reduce) { .ctx-menu { animation: none; } }

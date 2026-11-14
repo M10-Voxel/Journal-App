@@ -47,14 +47,15 @@
 .theme-sample i { width: 14px; height: 14px; border-radius: 50%; background: var(--accent); }
 .theme-sample i:nth-of-type(2) { background: var(--priority); }
 .theme-sample i:nth-of-type(3) { background: var(--success); }
-.theme-sample.is-journal > span { font-family: 'Fraunces', 'Source Serif 4', Georgia, serif; font-style: italic; }
-.theme-sample.is-journal i { border-radius: 50% 45% 55% 40%; background: #2f5d9e; }
-.theme-sample.is-journal i:nth-of-type(2) { background: #a8641a; }
-.theme-sample.is-journal i:nth-of-type(3) { background: #3f7a3a; }
+.theme-sample.is-journal { padding: 0 6px; border-radius: 6px; background: #e9e4f5; }
+.theme-sample.is-journal > span { color: #2b2140; font-family: 'Gaegu', cursive; font-weight: 700; font-size: 26px; }
+.theme-sample.is-journal i { border-radius: 50% 45% 55% 40%; background: #9b84e0; box-shadow: inset 0 0 0 1.5px #2b2140, 0 0 0 2px #fff; }
+.theme-sample.is-journal i:nth-of-type(2) { background: #e48aa8; }
+.theme-sample.is-journal i:nth-of-type(3) { background: #7cc7b2; }
 .theme-sample.is-pixel > span { font-family: 'Pixelify Sans'; font-style: normal; }
 .theme-sample.is-pixel i { border-radius: 0; }
 
-/* The popups' two looks per design, as cards with a small popup drawn in each (popup-styles.css has the real ones). */
+/* The popups' looks per design (two; the journal look four), as cards with a small popup drawn in each (popup-styles.css has the real ones). */
 .settings-subhead { margin: 18px 0 2px; color: var(--muted); font: 600 11px var(--sans); letter-spacing: .06em; text-transform: uppercase; }
 .popup-style-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 8px; }
 .popup-style-options > button { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; padding: 12px; border: 0; border-radius: 10px; background: var(--border);
@@ -76,14 +77,31 @@
   background: linear-gradient(140deg, #6b7fa855, #3a3a3a99), repeating-linear-gradient(45deg, #ffffff08 0 6px, transparent 6px 12px); }
 .popup-sample.is-classic-b i { border-radius: 50%; }
 .popup-sample.is-classic-b > em { border-radius: 999px; box-shadow: 0 0 10px #569eff99; }
-.popup-sample:is(.is-journal-a, .is-journal-b) { --ps-ink: #2b2620; --ps-day: transparent; --ps-on: #2f5d9e; --ps-head: #2b262055; border-radius: 2px; font-family: 'Source Serif 4', serif; }
-.popup-sample.is-journal-a { background: #f8f3e7; box-shadow: inset 0 2px 0 #c0392b88, 0 6px 14px -6px #3b2a1a99; }
-.popup-sample.is-journal-a i.is-on { border-radius: 50% 45% 55% 40%; background: transparent; box-shadow: inset 0 0 0 1.5px #2f5d9e; }
-.popup-sample.is-journal-a > em { height: 2px; width: 50px; border-radius: 0; background: #2b2620aa; }
-.popup-sample.is-journal-b { padding-top: 15px; background: radial-gradient(circle at 50% 5px, #3b2a1a 2px, transparent 2.5px) 0 0 / 12px 10px repeat-x, #f3df8f; box-shadow: inset 0 10px 0 #e3c96a, 0 6px 14px -6px #3b2a1a99; }
-.popup-sample.is-journal-b i { background: #2b262014; }
-.popup-sample.is-journal-b i.is-on { background: #a8641a; }
-.popup-sample.is-journal-b > em { background: #a8641a; border-radius: 1px; }
+.popup-sample:is(.is-journal-a, .is-journal-b, .is-journal-c, .is-journal-d) { --ps-ink: #2b2140; --ps-day: transparent; --ps-on: #6246b8; --ps-head: #2b214055; border-radius: 2px; font-family: 'Nunito', sans-serif; }
+.popup-sample.is-journal-a { background: #f5f2fb; box-shadow: inset 0 2px 0 #b33c5c88, 0 6px 14px -6px #2b214099; }
+.popup-sample.is-journal-a i.is-on { border-radius: 50% 45% 55% 40%; background: transparent; box-shadow: inset 0 0 0 1.5px #6246b8; }
+.popup-sample.is-journal-a > em { height: 2px; width: 50px; border-radius: 0; background: #2b2140aa; }
+/* Sticker: a white die-cut edge and an ink line; the choice a pink round sticker. */
+.popup-sample.is-journal-b { margin: 4px; width: 124px; height: 66px; border-radius: 12px 6px 11px 5px / 5px 11px 6px 12px; background: #f5f2fb; box-shadow: inset 0 0 0 1.5px #2b2140, 0 0 0 4px #fff, 0 0 0 4.5px #2b214022, 2px 4px 0 4.5px #2b214030; }
+.popup-sample.is-journal-b > b { width: 40%; height: 8px; margin: 0; border-radius: 4px 2px; background: #c9b8f0; box-shadow: inset 0 0 0 1px #2b2140; transform: rotate(-3deg); }
+.popup-sample.is-journal-b i { border-radius: 50%; background: #2b214012; }
+.popup-sample.is-journal-b i.is-on { background: #e48aa8; box-shadow: inset 0 0 0 1px #2b2140, 0 0 0 1.5px #fff; transform: rotate(-8deg); }
+.popup-sample.is-journal-b > em { border-radius: 6px 3px; background: #6246b8; box-shadow: inset 0 0 0 1px #2b2140, 0 0 0 2px #fff; }
+/* Sticker-Bogen: grained paper, a dashed cut line, the actions as small stickers. */
+.popup-sample.is-journal-c { background: #f8f6fc; box-shadow: inset 0 0 0 1px #2b21402e, 0 6px 14px -6px #2b214099; outline: 1px dashed #2b214066; outline-offset: -4px; }
+.popup-sample.is-journal-c > b { width: 44%; height: 8px; margin: 0; border-radius: 3px; background: #a8dccd; box-shadow: inset 0 0 0 1px #2b2140; transform: rotate(-2deg); }
+.popup-sample.is-journal-c > span { gap: 4px; }
+.popup-sample.is-journal-c i { border-radius: 3px; background: #fff; box-shadow: inset 0 0 0 1px #2b214099; }
+.popup-sample.is-journal-c i:nth-child(odd) { transform: rotate(-6deg); } .popup-sample.is-journal-c i:nth-child(even) { transform: rotate(5deg); }
+.popup-sample.is-journal-c i.is-on { background: #7cc7b2; box-shadow: inset 0 0 0 1px #2b2140; }
+.popup-sample.is-journal-c > em { border-radius: 3px; background: #e48aa8; box-shadow: inset 0 0 0 1px #2b2140; transform: rotate(3deg); }
+/* Papierschnipsel: torn edges, a strip of washi tape, the choice circled in ink. */
+.popup-sample.is-journal-d { padding-top: 14px; border-radius: 0; background: repeating-linear-gradient(transparent 0 11px, #6246b822 11px 12px) 0 14px, #fdfcff; box-shadow: none;
+  -webkit-mask: linear-gradient(#000 0 0) 0 4px / 100% calc(100% - 8px) no-repeat, conic-gradient(from 135deg at 50% 0, #000 90deg, transparent 0) 0 0 / 8px 4px repeat-x, conic-gradient(from -45deg at 50% 100%, #000 90deg, transparent 0) 0 100% / 8px 4px repeat-x;
+  mask: linear-gradient(#000 0 0) 0 4px / 100% calc(100% - 8px) no-repeat, conic-gradient(from 135deg at 50% 0, #000 90deg, transparent 0) 0 0 / 8px 4px repeat-x, conic-gradient(from -45deg at 50% 100%, #000 90deg, transparent 0) 0 100% / 8px 4px repeat-x; }
+.popup-sample.is-journal-d > b { position: absolute; top: 3px; left: 50%; width: 46px; height: 9px; margin-left: -23px; border-radius: 0; background: repeating-linear-gradient(-45deg, #e48aa8bb 0 4px, #e48aa877 4px 8px); transform: rotate(-3deg); }
+.popup-sample.is-journal-d i.is-on { border-radius: 50% 40% 55% 45%; box-shadow: 0 0 0 1.5px #6246b8; transform: rotate(-10deg); }
+.popup-sample.is-journal-d > em { height: 2px; width: 46px; border-radius: 0; background: #e48aa8; }
 .popup-sample:is(.is-nebula-a, .is-nebula-b) { border-radius: 0; font-family: 'Space Mono', monospace; }
 .popup-sample:is(.is-nebula-a, .is-nebula-b) i, .popup-sample:is(.is-nebula-a, .is-nebula-b) > em { border-radius: 0; }
 .popup-sample.is-nebula-a { --ps-bg: #0c0c0e; --ps-day: #ffffff1f; --ps-on: #7b2cbf; --ps-head: #cfcfcf; padding-top: 0; background: #0c0c0e; box-shadow: 0 0 0 1px #e8e8e8, 4px 4px 0 #7b2cbf; }

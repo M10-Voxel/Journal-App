@@ -53,3 +53,11 @@ export const takesPixel = (look: Look) => look !== 'nebula';
 export const hasFixedPalette = (look: Look) => look === 'nebula';
 /** The look a layout is made for: what a layout shows first, and what the search and other parts use when they need one name. */
 export const nativeLook = (layout: Layout): Look => presets.find(preset => preset.layout === layout)?.look ?? 'classic';
+
+/**
+ * The popup variants (`data-popups`): every look has `a` and `b`; the journal look has four (Karteikarte, Sticker,
+ * Sticker-Bogen, Papierschnipsel). A stored variant the look does not have falls back to `a`.
+ */
+export type PopupStyle = 'a' | 'b' | 'c' | 'd';
+export const popupVariants = (look: Look): readonly PopupStyle[] => look === 'journal' ? ['a', 'b', 'c', 'd'] : ['a', 'b'];
+export const popupStyleFor = (look: Look, value: unknown): PopupStyle => popupVariants(look).includes(value as PopupStyle) ? value as PopupStyle : 'a';

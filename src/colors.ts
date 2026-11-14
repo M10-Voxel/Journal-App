@@ -31,7 +31,7 @@ export const colorGroups = [
 export type ColorToken = typeof colorGroups[number]['colors'][number][0];
 export type Palette = Record<ColorToken, string>;
 export type ColorOverrides = Partial<Palette>;
-export const colorThemeIds = ['original', 'green', 'summer', 'paper', 'candle'] as const;
+export const colorThemeIds = ['original', 'green', 'summer', 'paper', 'candle', 'lavender', 'lavender-night'] as const;
 export type ColorTheme = typeof colorThemeIds[number];
 export type CustomColors = Partial<Record<ColorTheme, ColorOverrides>>;
 export interface ColorSettings { colorTheme: ColorTheme; customColors: CustomColors }
@@ -99,14 +99,42 @@ const candle: Palette = {
   'md-highlight-background': '#e3ab5233', 'md-highlight-text': '#f8e2b0',
   cover: '#5a3020', spine: '#000000',
 };
-/** The palettes made for the journal style. */
-export const journalColorThemes: readonly ColorTheme[] = ['paper', 'candle'];
+// The journal look's own: lavender paper with violet ink, pink and mint stickers (the reference sheet „purpl“).
+const lavender: Palette = {
+  background: '#e9e4f5', surface: '#f5f2fb', inset: '#ebe6f6', hover: '#ddd4f1', selected: '#d0c4ef', focus: '#d4c9ee',
+  border: '#ded6ef', divider: '#c9bde6', edge: '#2b214026', line: '#2b21401f', scrollbar: '#b3a4dc',
+  text: '#2b2140', strong: '#1b1330', muted: '#594e74', placeholder: '#7e7399', disabled: '#a59dbe',
+  accent: '#6246b8', priority: '#a8476a', success: '#2f7a64', error: '#b33c5c', cancelled: '#8a5a80',
+  event: '#6246b8', 'event-background': '#ddd3f5', 'event-text': '#36266e', 'task-background': '#e3dcf2',
+  now: '#c8476f', saturday: '#5b4cb8', sunday: '#b04a6e',
+  'md-red': '#a8334f', 'md-orange': '#8c4a1c', 'md-yellow': '#6b580b', 'md-green': '#24684f', 'md-cyan': '#22686e',
+  'md-blue': '#4750b0', 'md-purple': '#6246b8', 'md-pink': '#9b3672',
+  'md-highlight-background': '#e48aa855', 'md-highlight-text': '#2b2140',
+  cover: '#cbbfe9', spine: '#5a4a86',
+};
+// The same sheet at night: deep violet paper, pale lilac ink, the stickers glowing a little.
+const lavenderNight: Palette = {
+  background: '#1e1830', surface: '#2a2240', inset: '#241d38', hover: '#352b50', selected: '#43375f', focus: '#463a64',
+  border: '#1a1529', divider: '#3d3358', edge: '#efe8ff21', line: '#efe8ff1f', scrollbar: '#5c4f80',
+  text: '#e6e0f5', strong: '#f7f3ff', muted: '#b9afd0', placeholder: '#8f84aa', disabled: '#665c80',
+  accent: '#b3a0ff', priority: '#f0a0bc', success: '#8fdcc5', error: '#f592a9', cancelled: '#c9a3c4',
+  event: '#b3a0ff', 'event-background': '#3a2d60', 'event-text': '#e8e0ff', 'task-background': '#2f2747',
+  now: '#f0a0bc', saturday: '#aea5f2', sunday: '#f2a5bb',
+  'md-red': '#f592a9', 'md-orange': '#f2b386', 'md-yellow': '#efd98f', 'md-green': '#8fdcc5', 'md-cyan': '#8fd6dc',
+  'md-blue': '#a5b4ff', 'md-purple': '#c8b0ff', 'md-pink': '#f2a4d2',
+  'md-highlight-background': '#b3a0ff40', 'md-highlight-text': '#f7f3ff',
+  cover: '#2e2349', spine: '#000000',
+};
+/** The palettes made for the journal look (lavender first: the look brings it, see settings.ts withLook). */
+export const journalColorThemes: readonly ColorTheme[] = ['lavender', 'lavender-night', 'paper', 'candle'];
 export const colorThemes: { id: ColorTheme; name: string; description: string; colors: Palette }[] = [
   { id: 'original', name: 'Original', description: 'Schwarz, Graphit und kühles Blau.', colors: original },
   { id: 'green', name: 'Graphit & Limette', description: 'Dunkles Waldgrün, sanfte Grautöne und frische Limette.', colors: green },
   { id: 'summer', name: 'Himmel & Sonne', description: 'Himmelblau, Türkis und Sonnenwärme auf dunklem Marineblau.', colors: summer },
   { id: 'paper', name: 'Papier & Tinte', description: 'Helles Papier, dunkle Tinte und Blau-Tinte als Akzent.', colors: paper },
   { id: 'candle', name: 'Leder & Kerzenlicht', description: 'Dunkle Buchseiten, warme Tinte und Kerzengold – das Journal am Abend.', colors: candle },
+  { id: 'lavender', name: 'Lavendel', description: 'Lavendelpapier, violette Tinte, rosa und mintgrüne Sticker.', colors: lavender },
+  { id: 'lavender-night', name: 'Lavendel Nacht', description: 'Tiefes Violett, helle Tinte und leuchtende Sticker.', colors: lavenderNight },
 ];
 /** Light palettes (paper) need light form controls and scrollbars. */
 export const isLightPalette = (palette: Palette) => contrastRatio(palette.background, '#000000') > contrastRatio(palette.background, '#ffffff');

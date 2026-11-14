@@ -94,6 +94,13 @@ import '@fontsource/space-grotesk/500.css';
 import '@fontsource/space-grotesk/700.css';
 import '@fontsource/instrument-serif/400.css';
 import '@fontsource/instrument-serif/400-italic.css';
+import '@fontsource/gaegu/400.css';
+import '@fontsource/gaegu/700.css';
+import '@fontsource/nunito/400.css';
+import '@fontsource/nunito/400-italic.css';
+import '@fontsource/nunito/600.css';
+import '@fontsource/nunito/700.css';
+import '@fontsource/nunito/700-italic.css';
 import './pixel-sizes.css';
 import './pixel.css';
 import './colors.css';
@@ -113,6 +120,9 @@ import './search.css';
 import './components/mailDetails.css';
 import './components/appNotices.css';
 import './components/desktopWidgets.css';
+// The journal look last: its stickers lie over the component CSS (ContextMenu, BulletinBoard … are imported above).
+import './journal-look.css';
+import './journal-desk.css';
 import { applyColors } from './colors';
 
 applyTheme(loadSettings());

@@ -1,7 +1,7 @@
 import type { Json } from './merge';
 // Explicitly shared presentation settings. Window layouts, widget instances,
 // placements, autostart and future device settings must never enter the cloud.
-const preferenceKeys = new Set(['actionLayout','theme','pixel','popupStyle','language','uiScale','bookPaging','previousColorTheme','colorTheme','customColors']);
+const preferenceKeys = new Set(['actionLayout','theme','layout','look','pixel','popupStyle','language','uiScale','bookPaging','inkPressure','previousColorTheme','colorTheme','customColors']);
 export function syncPreferences(value: Json): Record<string,Json> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
   return Object.fromEntries(Object.entries(value).filter(([key]) => preferenceKeys.has(key)));

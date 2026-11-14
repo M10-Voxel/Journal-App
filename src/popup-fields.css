@@ -22,16 +22,27 @@
   border-radius: 50% 45% 55% 42% / 48% 55% 45% 52%; background: transparent; color: var(--accent); box-shadow: inset 0 0 0 1.5px var(--accent); }
 :root[data-look='journal'][data-popups='a'] .planner.is-multi .planner-day.is-added { border-radius: 50% 45% 55% 42% / 48% 55% 45% 52%; background: transparent; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 60%, transparent); }
 
-/* Journal · Notizblock: the range a stroke of highlighter, its ends a heavier one, the choice tilted. */
-:root[data-look='journal'][data-popups='b'] .field-trigger { border-radius: 2px; background: color-mix(in srgb, var(--surface) 70%, #fff 30%); box-shadow: 0 1px 0 color-mix(in srgb, #3b2a1a 25%, transparent); font-family: var(--serif); }
-:root[data-look='journal'][data-popups='b'] :is(.field-picker .cal-compact-day, .popover .time-option) { border-radius: 2px 6px 3px 5px; font-family: var(--serif); }
-:root[data-look='journal'][data-popups='b'] :is(.field-picker .cal-compact-day[aria-selected='true'], .popover .time-option[aria-selected='true']) {
-  background: color-mix(in srgb, var(--priority) 60%, transparent) !important; color: var(--strong) !important; transform: rotate(-2deg); }
-:root[data-look='journal'][data-popups='b'] .time-column { border-radius: 2px; background: color-mix(in srgb, var(--surface) 75%, #fff 25%); }
-:root[data-look='journal'][data-popups='b'] .popover .time-option { font-size: 14px; }
-:root[data-look='journal'][data-popups='b'] .planner.is-multi .planner-day.in-range { border-radius: 0; background: color-mix(in srgb, var(--priority) 32%, transparent); }
-:root[data-look='journal'][data-popups='b'] .planner.is-multi .planner-day:is(.range-start, .range-end):not(.is-excluded) { border-radius: 2px 6px 3px 5px; background: color-mix(in srgb, var(--priority) 70%, transparent); color: var(--strong); }
-:root[data-look='journal'][data-popups='b'] .planner.is-multi .planner-day.is-added { border-radius: 2px 6px 3px 5px; background: color-mix(in srgb, var(--priority) 45%, transparent); }
+/* Journal · Sticker and Sticker-Bogen: fields as small stickers, the choice a round coloured sticker, the range a strip
+   of tape with sticker ends. */
+:root[data-look='journal']:is([data-popups='b'], [data-popups='c']) .field-trigger { border-radius: var(--wobble); background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--sticker-line), 0 0 0 2.5px var(--sticker-edge); font-family: var(--write); }
+:root[data-look='journal']:is([data-popups='b'], [data-popups='c'], [data-popups='d']) :is(.field-picker .cal-compact-day, .popover .time-option) { border-radius: 50% 44% 52% 46% / 46% 52% 44% 50%; font-family: var(--write); }
+:root[data-look='journal']:is([data-popups='b'], [data-popups='c']) :is(.field-picker .cal-compact-day[aria-selected='true'], .popover .time-option[aria-selected='true']) {
+  background: var(--pink) !important; color: var(--ink-fixed) !important; box-shadow: inset 0 0 0 1.5px var(--sticker-line), 0 0 0 2px var(--sticker-edge); transform: rotate(-4deg); }
+:root[data-look='journal'][data-popups='c'] :is(.field-picker .cal-compact-day[aria-selected='true'], .popover .time-option[aria-selected='true']) { background: var(--mint) !important; }
+:root[data-look='journal']:is([data-popups='b'], [data-popups='c'], [data-popups='d']) .time-column { border-radius: var(--wobble); background: transparent; box-shadow: inset 0 0 0 1.5px var(--ink-soft); }
+:root[data-look='journal']:is([data-popups='b'], [data-popups='c'], [data-popups='d']) .popover .time-option { font-size: 14px; }
+:root[data-look='journal']:is([data-popups='b'], [data-popups='c']) .planner.is-multi .planner-day.in-range { border-radius: 0; background: repeating-linear-gradient(-45deg, color-mix(in srgb, var(--pink) 45%, transparent) 0 6px, color-mix(in srgb, var(--pink) 30%, transparent) 6px 12px); }
+:root[data-look='journal']:is([data-popups='b'], [data-popups='c']) .planner.is-multi .planner-day:is(.range-start, .range-end):not(.is-excluded) {
+  border-radius: 50% 44% 52% 46% / 46% 52% 44% 50%; background: var(--pink); color: var(--ink-fixed); box-shadow: inset 0 0 0 1.5px var(--sticker-line), 0 0 0 2px var(--sticker-edge); }
+:root[data-look='journal']:is([data-popups='b'], [data-popups='c']) .planner.is-multi .planner-day.is-added { border-radius: 50% 44% 52% 46% / 46% 52% 44% 50%; background: color-mix(in srgb, var(--pink) 55%, var(--tint-base, var(--surface))); box-shadow: inset 0 0 0 1.5px var(--ink-soft); }
+
+/* Journal · Papierschnipsel: fields underlined in ink, the choice circled, the range underlined by hand. */
+:root[data-look='journal'][data-popups='d'] .field-trigger { border-radius: 0; background: transparent; box-shadow: inset 0 -1.5px 0 color-mix(in srgb, var(--ink-fixed) 45%, transparent); font-family: var(--write); }
+:root[data-look='journal'][data-popups='d'] :is(.field-picker .cal-compact-day[aria-selected='true'], .popover .time-option[aria-selected='true']) {
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Cpath d='M8 24 C 4 10, 30 2, 35 14 C 40 28, 18 38, 8 30 C 2 24, 10 8, 24 7' fill='none' stroke='%237b62c9' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E") center / 100% 100% no-repeat !important; color: var(--ink) !important; box-shadow: none; }
+:root[data-look='journal'][data-popups='d'] .planner.is-multi .planner-day.in-range { border-radius: 0; background: transparent; box-shadow: inset 0 -2.5px 0 color-mix(in srgb, var(--pink) 80%, transparent); }
+:root[data-look='journal'][data-popups='d'] .planner.is-multi .planner-day:is(.range-start, .range-end):not(.is-excluded) { border-radius: 0; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Cpath d='M8 24 C 4 10, 30 2, 35 14 C 40 28, 18 38, 8 30 C 2 24, 10 8, 24 7' fill='none' stroke='%237b62c9' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E") center / 100% 100% no-repeat; color: var(--ink-fixed); box-shadow: inset 0 -3.5px 0 var(--pink); }
+:root[data-look='journal'][data-popups='d'] .planner.is-multi .planner-day.is-added { border-radius: 50%; background: transparent; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink-fixed) 50%, transparent); }
 
 /* Nebula · Terminal: square, mono, violet; the columns are two framed listings. */
 :root[data-look='nebula'][data-popups='a'] :is(.field-trigger, .field-picker .cal-compact-day, .time-column, .popover .time-option, .field-clear) { border-radius: 0; font-family: var(--mono); }

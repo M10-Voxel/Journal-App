@@ -24,7 +24,10 @@ export interface SheetItem {
  * An entry's actions in the popup look's own build (all looks but Normal · Karte, which keeps the orbit):
  * - Glas: a frosted strip of tiles, icon over word, the groups apart;
  * - Karteikarte: an index card – the entry on top, the actions as a ticked list in columns by group;
- * - Notizblock: register tabs per group, the open tab's actions as a list with their keys;
+ * - Sticker: a cut-out sticker, the actions a grid of small icon stickers with their word („erledigt“, „morgen“ …);
+ * - Sticker-Bogen: a sheet of paper, every action its own sticker (a little tilted, „Wort klein-Zusatz“), the groups
+ *   apart by dashed cut lines;
+ * - Papierschnipsel: torn paper under washi tape, the actions a handwritten list, an ink scribble around the choice;
  * - Terminal: a prompt to type a command (filtered as typed, Enter runs) over the list of commands;
  * - Holo-Papier: a small window – title bar, menu of groups, big toolbar buttons and a status bar describing the action.
  * Arrow keys move between all buttons (EntryActionDock), Escape closes.
@@ -57,18 +60,34 @@ export function ActionSheet({ look, title, items, onClose }: { look: PopupLook; 
     </div>
   </div>;
 
-  if (look === 'journal-b') {
-    const open = groups.find(group => group.id === tab) ?? groups[0];
-    return <div className="entry-dock sheet sheet-tabs">
-      <div className="sheet-tablist" role="tablist" aria-label={t('Bereiche')}>
-        {groups.map(group => <button key={group.id} type="button" role="tab" className={`sheet-tab is-${group.id}`} aria-selected={group === open}
-          onPointerEnter={() => setTab(group.id)} onFocus={() => setTab(group.id)} onClick={() => setTab(group.id)}>{group.title}</button>)}
-      </div>
-      <div className={`sheet-tabpanel is-${open.id}`} role="tabpanel" aria-label={open.title}>
-        {open.items.map(item => button(item, <><Icon name={item.icon} /><span>{item.label.replace(/ …$/, '')}</span>{item.keys && <kbd>{item.keys}</kbd>}</>))}
-      </div>
+  if (look === 'journal-b') return <div className="entry-dock sheet sheet-stickers">
+    <header className="sheet-sticker-head"><span>{title || t('Eintrag')}</span></header>
+    {groups.map(group => <div className={`sheet-group is-${group.id}`} key={group.id} role="group" aria-label={group.title}>
+      {group.items.map(item => button(item, <><span className="sheet-badge" aria-hidden="true"><Icon name={item.icon} /></span><span>{item.short}</span></>))}
+    </div>)}
+  </div>;
+
+  if (look === 'journal-c') {
+    let index = 0;
+    return <div className="entry-dock sheet sheet-sheet">
+      <header className="sheet-sheet-head"><b>{title || t('Eintrag')}</b><small>{t('Sticker-Bogen')}</small></header>
+      {groups.map(group => <section key={group.id} className={`sheet-group is-${group.id}`} aria-label={group.title}>
+        <h4>{group.title}</h4>
+        <div className="sheet-sheet-row">
+          {group.items.map(item => button(item, <><Icon name={item.icon} /><b>{item.short}</b>{item.keys && <small>{item.keys.toLowerCase()}</small>}</>, ` tilt-${index++ % 4}`))}
+        </div>
+      </section>)}
     </div>;
   }
+
+  if (look === 'journal-d') return <div className="entry-dock sheet sheet-scrap">
+    <span className="sheet-scrap-tape" aria-hidden="true" />
+    <header className="sheet-scrap-head">{title || t('Eintrag')}</header>
+    {groups.map(group => <section key={group.id} className={`sheet-group is-${group.id}`} aria-label={group.title}>
+      <h4>{group.title}</h4>
+      {group.items.map(item => button(item, <><span className="sheet-word"><Scribble className="sheet-scribble" />{item.label.replace(/ …$/, '')}</span>{item.keys && <kbd>{item.keys}</kbd>}</>))}
+    </section>)}
+  </div>;
 
   if (look === 'nebula-a') {
     const wanted = query.trim().toLowerCase();
@@ -113,4 +132,11 @@ export function ActionSheet({ look, title, items, onClose }: { look: PopupLook; 
     </div>
     <div className="sheet-statusbar" aria-live="polite">{hint ? <>{hint.label}{hint.keys && <kbd>{hint.keys}</kbd>}</> : t('Bereit')}</div>
   </div>;
+}
+
+/** An ink scribble drawn around a word (Papierschnipsel): the choice, and the row pointed at. */
+export function Scribble({ className }: { className?: string }) {
+  return <svg className={`scribble${className ? ` ${className}` : ''}`} viewBox="0 0 120 40" preserveAspectRatio="none" aria-hidden="true">
+    <path d="M14 22 C 10 8, 60 3, 104 9 C 120 12, 118 32, 92 35 C 60 39, 16 37, 8 26 C 3 18, 30 6, 62 6" />
+  </svg>;
 }

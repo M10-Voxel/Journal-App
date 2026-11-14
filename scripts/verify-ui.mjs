@@ -521,6 +521,89 @@ async function pointerClick(point) {
   await command('Input.dispatchMouseEvent',{type:'mousePressed',...point,button:'left',buttons:1,clickCount:1});
   await command('Input.dispatchMouseEvent',{type:'mouseReleased',...point,button:'left',buttons:0,clickCount:1});
 }
+/** The journal look as stickers on lavender paper (journal-look.css, journal-desk.css): every layout in both lavender
+ *  palettes, the four popup variants, and the desk without windows (labels and icon stickers instead of prompts and glyphs).
+ *  JOURNAL_STICKER_ONLY=layouts|popups|desk runs one part. */
+async function checkJournalSticker() {
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  const only = process.env.JOURNAL_STICKER_ONLY ?? '';
+  await command('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
+  const open = async (layout, palette, popups = 'a', pixel = false) => {
+    await evaluate(`localStorage.setItem('journal.settings', JSON.stringify((({theme, ...rest}) => ({...rest, layout:'${layout}', look:'journal', pixel:${pixel}, popupStyle:'${popups}', colorTheme:'${palette}'}))(JSON.parse(localStorage.getItem('journal.settings')||'{}')))); localStorage.setItem('journal.calendarDrawer','0'); localStorage.setItem('journal.notebook','0'); localStorage.removeItem('journal.nebulaLayout.v1'); localStorage.removeItem('journal.nebulaWindow.scales')`);
+    await command('Page.navigate', { url:origin });
+    await until(`document.documentElement.dataset.layout==='${layout}' && document.documentElement.dataset.look==='journal' && document.documentElement.dataset.popups==='${popups}' && document.querySelectorAll('.entry').length>=1`);
+    await evaluate("document.fonts.ready.then(() => true)"); await pause(600);
+  };
+  if (!only || only === 'layouts') for (const layout of ['classic', 'book', 'desk']) for (const palette of ['lavender', 'lavender-night']) for (const pixel of [false,true]) {
+    await open(layout, palette, 'a', pixel);
+    // Type and palette: Gaegu for headings, Nunito for writing.
+    assert.match(await evaluate("getComputedStyle(document.querySelector('.entry-text')).fontFamily"), pixel ? /VT323/ : /Nunito/, `Writing font (${layout}, ${palette}, pixel=${pixel}).`);
+    assert.match(await evaluate("getComputedStyle(document.querySelector('.title-input, h1')).fontFamily"), pixel ? /Pixelify/ : /Gaegu/, `Heading font (${layout}, ${palette}, pixel=${pixel}).`);
+    await screenshot(`sticker-${layout}-${palette}${pixel?'-pixel':''}.png`);
+  }
+  if (!only || only === 'popups') for (const style of ['a', 'b', 'c', 'd']) for (const palette of ['lavender','lavender-night']) {
+    await open('classic', palette, style);
+    const task = "[...document.querySelectorAll('.entry')].find(e => e.dataset.entryKind==='task' && e.dataset.status==='open')";
+    await evaluate(`${task}.querySelector('.entry-text').focus()`);
+    await key('t', 'KeyT', 1);
+    await until("Boolean(document.querySelector('.planner-grid'))");
+    await pause(450); await screenshot(`sticker-popup-${style}-planner.png`);
+    assert(await evaluate("Boolean(document.querySelector('.planner .chrome-head'))"), `The planner has its head (${style}).`);
+    await key('Escape'); await until("!document.querySelector('.planner-grid')");
+    // The entry's actions (the dot's popup).
+    await evaluate(`${task}.querySelector('.entry-symbol').click()`);
+    await until("Boolean(document.querySelector('.entry-dock-shell.is-open .sheet'))");
+    await pause(400); await screenshot(`sticker-popup-${style}-actions.png`);
+    assert(await evaluate("Boolean(document.querySelector('.entry-dock-shell.is-open .sheet-done'))"), `The actions include „erledigt“ (${style}).`);
+    await key('Escape'); await pause(250);
+    // A context menu (right click on the day's board).
+    await evaluate("(() => { const item=document.querySelector('.board-surface'); item.scrollIntoView({block:'center'}); const r=item.getBoundingClientRect(); item.dispatchEvent(new MouseEvent('contextmenu', { bubbles:true, cancelable:true, clientX:r.left+60, clientY:r.top+40 })); })()");
+    await pause(350);
+    if (await evaluate("Boolean(document.querySelector('.ctx-menu'))")) {
+      await screenshot(`sticker-popup-${style}-menu.png`);
+      assert.equal(await evaluate(`document.querySelector('.ctx-menu').classList.contains('is-journal-${style}')`), true, `The menu is built for the variant (${style}).`);
+      await key('Escape'); await pause(200);
+    }
+    // The calendar's composer (right click on an entry in the side bar's calendar).
+    if (await evaluate("Boolean(document.querySelector('.sidebar .cal-item'))")) {
+      await evaluate("(() => { const item=document.querySelector('.sidebar .cal-item'); const r=item.getBoundingClientRect(); item.dispatchEvent(new MouseEvent('contextmenu', { bubbles:true, cancelable:true, clientX:r.left+5, clientY:r.top+5 })); })()");
+      if (await evaluate("new Promise(done => setTimeout(() => done(Boolean(document.querySelector('.cal-composer.is-placed'))), 600))")) { await pause(300); await screenshot(`sticker-popup-${style}-composer.png`); await key('Escape'); await pause(200); }
+    }
+    // Settings: the four variants as cards.
+    await key(',', 'Comma', 2);
+    await until("Boolean(document.querySelector('[data-popup-style]'))");
+    assert.equal(await evaluate("document.querySelectorAll('[data-popup-style]').length"), 4, 'The journal look has four popup variants.');
+    await evaluate("document.querySelector('[data-popup-style]').scrollIntoView({block:'center'})"); await pause(200);
+    await screenshot(`sticker-popup-${style}-settings.png`);
+    await key('Escape'); await until("!document.querySelector('.settings')");
+  }
+  if (!only || only === 'desk') for (const palette of ['lavender', 'lavender-night']) {
+    await open('desk', palette);
+    assert.equal(await evaluate("document.body.innerText.includes('[journal@~]$') || document.body.innerText.includes('./layout')"), false, 'No terminal prompts on the sticker desk.');
+    assert.equal(await evaluate("[...document.querySelectorAll('.nebula-window-tools button, .nebula-cal-panel button')].some(b => /^[◐▣_⧉×◫▭▢⊞⊡]$/.test(b.textContent.trim()))"), false, 'Icon stickers instead of glyphs.');
+    assert(await evaluate("document.querySelectorAll('.nebula-panel .desk-label').length >= 3"), 'Every panel carries its label.');
+    if (palette === 'lavender-night') { await screenshot('sticker-desk-night.png'); continue; }
+    // Minimizing and restoring a panel.
+    await evaluate("document.querySelector('[data-panel=rating] .nebula-panel-minimize').click()");
+    await until("document.querySelector('[data-panel=rating]').classList.contains('is-minimized')");
+    await pause(200); await screenshot('sticker-desk-minimized.png');
+    await evaluate("document.querySelector('[data-panel=rating] .nebula-panel-minimize').click()");
+    await until("!document.querySelector('[data-panel=rating]').classList.contains('is-minimized')");
+    // Floating a panel out of the grid and docking it again.
+    await evaluate("document.querySelector('[data-panel=scales] .nebula-panel-float').click()");
+    await until("Boolean(document.querySelector('.nebula-floating.is-scales'))");
+    await pause(300); await screenshot('sticker-desk-floating.png');
+    await evaluate("document.querySelector('.nebula-floating.is-scales .nebula-window-grid').click()");
+    await until("!document.querySelector('.nebula-floating.is-scales') && Boolean(document.querySelector('[data-panel=scales]'))");
+    // The calendar window as a paper card.
+    await evaluate("document.activeElement?.blur()"); await key('k', 'KeyK', 2);
+    await until("Boolean(document.querySelector('.nebula-calendar.is-open'))"); await pause(500);
+    await screenshot('sticker-desk-calendar.png');
+    assert.equal(await evaluate("document.querySelector('.nebula-calendar .desk-label') !== null"), true, 'The calendar card carries a label.');
+  }
+  assert.deepEqual(errors, []);
+  console.log('Journal sticker look passed: three layouts in both lavender palettes, four popup variants, the desk without windows.');
+}
 async function checkMailSettings() {
   await command('Emulation.setFocusEmulationEnabled',{enabled:true});
   const click = text => evaluate(`Array.from(document.querySelectorAll('.mail-settings button')).find(button => button.textContent.trim() === ${JSON.stringify(text)}).click()`);
@@ -755,9 +838,15 @@ async function checkColors() {
   assert.equal(await evaluate("document.querySelector('.entry-text').value"),draft,'A palette change preserves unsaved Markdown.');
   assert.equal(await evaluate("getComputedStyle(document.querySelector('.md-color')).color"),'rgb(236, 163, 144)','Existing Markdown inherits the selected theme.');
   await pause(250); await screenshot('colors-green-settings.png');
-  assert.equal(await evaluate("document.querySelectorAll('[data-color-theme-choice]').length"),5);
-  // The last palettes are the journal style's: candlelight, and paper (light, so its form controls are light too).
+  assert.equal(await evaluate("document.querySelectorAll('[data-color-theme-choice]').length"),7);
+  // The last palettes are the journal look's: lavender night and lavender (the look's own), candlelight, and paper
+  // (light, so its form controls are light too).
   await key('End');
+  await until("document.documentElement.dataset.colorTheme==='lavender-night' && getComputedStyle(document.documentElement).colorScheme==='dark'");
+  await key('ArrowLeft');
+  await until("document.documentElement.dataset.colorTheme==='lavender' && getComputedStyle(document.documentElement).colorScheme==='light'");
+  assert.equal(await token('background'),'#e9e4f5');
+  await key('ArrowLeft');
   await until("document.documentElement.dataset.colorTheme==='candle'");
   await key('ArrowLeft');
   await until("document.documentElement.dataset.colorTheme==='paper' && getComputedStyle(document.documentElement).colorScheme==='light'");
@@ -780,9 +869,13 @@ async function checkColors() {
   await key('ArrowRight');
   await until("document.documentElement.dataset.colorTheme==='candle'");
   await key('ArrowRight');
+  await until("document.documentElement.dataset.colorTheme==='lavender'");
+  await key('ArrowRight');
+  await until("document.documentElement.dataset.colorTheme==='lavender-night'");
+  await key('ArrowRight');
   await until("document.documentElement.dataset.colorTheme==='original'");
   await key('ArrowLeft');
-  await until("document.documentElement.dataset.colorTheme==='candle'");
+  await until("document.documentElement.dataset.colorTheme==='lavender-night'");
   await key('Home');
   await until("document.documentElement.dataset.colorTheme==='original'");
   await evaluate("document.querySelector('[data-color-theme-choice=summer]').click()");
@@ -1558,24 +1651,24 @@ async function checkJournalTheme() {
   // The app's day is the one whose page carries the head with the navigation (the date picker).
   const pickerDate = value => `document.querySelector('.book-page:not(.is-outgoing):has(.book-nav)')?.dataset.date === ${JSON.stringify(value)}`;
   const today = await evaluate('window.__uiTest.date'), tomorrow = await evaluate('window.__uiTest.shift(1)');
-  // Choosing the style brings the paper palette and the book (a spread: entries | data).
+  // Choosing the style brings the lavender palette and the book (a spread: entries | data).
   await key(',', 'Comma', 2);
   await until("Boolean(document.querySelector('[data-theme-choice=journal]'))");
   // Three designs (normal, journal, Nebula); the pixel look is a switch over the first two.
   assert.deepEqual(await evaluate("[...document.querySelectorAll('.theme-options button')].map(b => b.dataset.themeChoice)"), ['classic', 'journal', 'nebula']);
   assert.equal(await evaluate("document.querySelector('[data-pixel-toggle]').getAttribute('role')"), 'switch');
   await evaluate("document.querySelector('[data-theme-choice=journal]').click()");
-  await until("(document.documentElement.dataset.look==='journal'&&document.documentElement.dataset.layout==='book') && document.documentElement.dataset.colorTheme==='paper'");
-  assert.equal(await evaluate("getComputedStyle(document.documentElement).getPropertyValue('--background').trim()"), '#f3ecdc');
+  await until("(document.documentElement.dataset.look==='journal'&&document.documentElement.dataset.layout==='book') && document.documentElement.dataset.colorTheme==='lavender'");
+  assert.equal(await evaluate("getComputedStyle(document.documentElement).getPropertyValue('--background').trim()"), '#e9e4f5');
   assert.equal(await evaluate("getComputedStyle(document.documentElement).colorScheme"), 'light');
-  await evaluate("Promise.all([document.fonts.load('400 15px \"Source Serif 4\"'),document.fonts.load('600 30px Fraunces')])");
+  await evaluate("Promise.all([document.fonts.load('400 15px Nunito'),document.fonts.load('700 30px Gaegu')])");
   await pause(250); await screenshot('journal-settings.png');
   await key('Escape');
   await until("!document.querySelector('.settings') && document.querySelectorAll('.book-page').length===2");
   assert.equal(await evaluate("document.querySelector('.sidebar')"), null, 'The book has no sidebar; the calendar comes down from its ribbon.');
   assert.equal(await evaluate(pagesNow), `entries:${today},data:${today}`);
-  assert.match(await evaluate("getComputedStyle(document.querySelector('.book-page .entry-edit')).fontFamily"), /Source Serif 4/);
-  assert.match(await evaluate("getComputedStyle(document.querySelector('.book-page h1')).fontFamily"), /Fraunces/);
+  assert.match(await evaluate("getComputedStyle(document.querySelector('.book-page .entry-edit')).fontFamily"), /Nunito/);
+  assert.match(await evaluate("getComputedStyle(document.querySelector('.book-page h1')).fontFamily"), /Gaegu/);
   // The register on the outer page: all kinds of page at fixed heights, the right page's own tab is current.
   assert.deepEqual(await evaluate("[...document.querySelectorAll('.book-cut-tab')].map(b => b.dataset.page)"), ['entries', 'data', 'board']);
   assert.equal(await evaluate("document.querySelector('.book-cut-tab[aria-current=page]').dataset.page"), 'data');
@@ -1703,7 +1796,7 @@ async function checkJournalTheme() {
   // one line per line of text (wrapped lines too).
   await key(',', 'Comma', 2);
   await until("Boolean(document.querySelector('.settings'))");
-  assert.equal(await evaluate("getComputedStyle(document.querySelector('.settings')).backgroundImage"), 'none');
+  assert.equal(/linear-gradient/.test(await evaluate("getComputedStyle(document.querySelector('.settings')).backgroundImage")), false, 'Settings are a plain card (paper grain, no rules).');
   await key('Escape');
   await until("!document.querySelector('.settings') && document.querySelectorAll('.entry').length===5");
   assert.equal(await evaluate("getComputedStyle(document.querySelector('.book-page.is-entries .book-page-scroll')).backgroundImage"), 'none');
@@ -4457,7 +4550,7 @@ try {
     await key('Escape');
     console.log('Review screenshots taken.');
   } else if (process.env.JOURNAL_UI_SCOPE === 'context-menus') {
-    // Right-click menus in all six popup looks: the notebook's folders and notes (with submenus), the board's cards and cork.
+    // Right-click menus in all eight popup looks: the notebook's folders and notes (with submenus), the board's cards and cork.
     const rightClick = async expression => {
       const point = await evaluate(`(() => { const e=(${expression}); e.scrollIntoView({block:'center'}); const r=e.getBoundingClientRect(); return { x:r.left+Math.min(40,r.width/2), y:r.top+Math.min(14,r.height/2) }; })()`);
       await command('Input.dispatchMouseEvent', { type:'mouseMoved', x:point.x, y:point.y });
@@ -4465,7 +4558,7 @@ try {
       await command('Input.dispatchMouseEvent', { type:'mouseReleased', x:point.x, y:point.y, button:'right', buttons:0, clickCount:1 });
       return point;
     };
-    for (const [theme, popups] of [['classic','a'],['classic','b'],['journal','a'],['journal','b'],['nebula','a'],['nebula','b']]) {
+    for (const [theme, popups] of [['classic','a'],['classic','b'],['journal','a'],['journal','b'],['journal','c'],['journal','d'],['nebula','a'],['nebula','b']]) {
       const look = `${theme}-${popups}`;
       await evaluate(`(() => {
         localStorage.setItem('journal.settings', JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'), theme:'${theme}', popupStyle:'${popups}', colorTheme:'${theme === 'journal' ? 'paper' : 'original'}'}));
@@ -4526,7 +4619,7 @@ try {
     console.log('Context menu checks passed.');
   } else if (process.env.JOURNAL_UI_SCOPE === 'looks') {
     // Each popup look builds an entry's actions its own way (ActionSheet); Normal · Karte keeps the orbit.
-    for (const [theme, popups] of [['classic','a'],['classic','b'],['journal','a'],['journal','b'],['nebula','a'],['nebula','b']]) {
+    for (const [theme, popups] of [['classic','a'],['classic','b'],['journal','a'],['journal','b'],['journal','c'],['journal','d'],['nebula','a'],['nebula','b']]) {
       await evaluate(`localStorage.setItem('journal.settings', JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'), theme:'${theme}', popupStyle:'${popups}', colorTheme:'${theme === 'journal' ? 'paper' : 'original'}'}))`);
       await command('Page.reload');
       await until("document.querySelectorAll('.entry').length>=5");
@@ -4547,7 +4640,6 @@ try {
       if (!(theme === 'classic' && popups === 'a')) {
         const id = await evaluate("document.querySelector('.entry-dock-shell.is-open').closest('.entry').dataset.entryId");
         if (theme === 'nebula' && popups === 'a') { await command('Input.insertText',{text:'done'}); await key('Enter','Enter'); }
-        else if (theme === 'journal' && popups === 'b') await evaluate("document.querySelector('.entry-dock-shell.is-open .sheet-tab.is-status').click(); document.querySelector('.entry-dock-shell.is-open .sheet-done').click()");
         else if (theme === 'classic') await evaluate("document.querySelector('.entry-dock-shell.is-open .dock-done').click()");
         else await evaluate("document.querySelector('.entry-dock-shell.is-open .sheet-done').click()");
         await until(`document.querySelector('[data-entry-id="${id}"]').dataset.status==='done'`);
@@ -5500,11 +5592,11 @@ try {
   } else if (process.env.JOURNAL_UI_SCOPE === 'nebula') {
     await checkNebulaTheme();
   } else if (process.env.JOURNAL_UI_SCOPE === 'popups') {
-    // Two looks of the popups per design: the planner (Alt+T) and editing a calendar entry (right click).
+    // The looks of the popups per design (two; the journal look four): the planner (Alt+T) and editing a calendar entry (right click).
     const origin = `http://127.0.0.1:${server.address().port}`;
     await command('Emulation.setDeviceMetricsOverride',{width:1380,height:860,deviceScaleFactor:1,mobile:false});
-    for (const theme of ['classic', 'journal', 'nebula']) for (const style of ['a', 'b']) {
-      await evaluate(`localStorage.setItem('journal.settings', JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'), theme:'${theme}', popupStyle:'${style}', pixel:false, colorTheme:'${theme === 'journal' ? 'paper' : 'original'}'})); localStorage.setItem('journal.calendarDrawer','0'); localStorage.setItem('journal.calendar', JSON.stringify({view:'month', kinds:{event:true,task:true,note:false}}))`);
+    for (const theme of ['classic', 'journal', 'nebula']) for (const style of theme === 'journal' ? ['a', 'b', 'c', 'd'] : ['a', 'b']) {
+      await evaluate(`localStorage.setItem('journal.settings', JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'), theme:'${theme}', popupStyle:'${style}', pixel:false, colorTheme:'${theme === 'journal' ? 'lavender' : 'original'}'})); localStorage.setItem('journal.calendarDrawer','0'); localStorage.setItem('journal.calendar', JSON.stringify({view:'month', kinds:{event:true,task:true,note:false}}))`);
       await command('Page.navigate', { url:origin });
       await until(`document.documentElement.dataset.look==='${theme}' && document.documentElement.dataset.popups==='${style}' && document.querySelectorAll('.entry').length===5`);
       await evaluate("document.fonts.ready.then(() => true)");
@@ -5584,7 +5676,9 @@ try {
       await pause(250); await screenshot(`popups-${theme}-${style}-calendar-icon.png`);
     }
     assert.deepEqual(errors, []);
-    console.log('Popup styles passed: planner, composer, icon picker and reminder choice in both looks of the normal, journal and Nebula designs (icons also in pixel).');
+    console.log('Popup styles passed: planner, composer, icon picker and reminder choice in every popup look of the normal, journal (four) and Nebula designs (icons also in pixel).');
+  } else if (process.env.JOURNAL_UI_SCOPE === 'journal-sticker') {
+    await checkJournalSticker();
   } else if (process.env.JOURNAL_UI_SCOPE === 'combos') {
     // Layout (what is where) and look (type, colours, shapes) are chosen apart: all nine pairs open, show their own
     // structure with the look's attributes, stay usable (settings open, a day turns) and throw nothing.

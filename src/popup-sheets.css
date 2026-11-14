@@ -29,7 +29,7 @@
 /* ── Journal · Karteikarte: an index card – the entry as its heading, the actions ticked off in columns ── */
 .sheet-card { width: max-content; padding: 0 0 10px; border-radius: 2px; background: var(--surface);
   background-image: repeating-linear-gradient(transparent 0 25px, color-mix(in srgb, var(--accent) 16%, transparent) 25px 26px); background-position: 0 38px;
-  box-shadow: inset 0 3px 0 color-mix(in srgb, var(--error) 55%, transparent), 0 0 0 1px var(--edge), 0 18px 34px -14px color-mix(in srgb, #3b2a1a 60%, transparent); font-family: var(--serif, var(--sans)); }
+  box-shadow: inset 0 3px 0 color-mix(in srgb, var(--error) 55%, transparent), 0 0 0 1px var(--edge), 0 18px 34px -14px color-mix(in srgb, var(--ink, #3b2a1a) 55%, transparent); font-family: var(--serif, var(--sans)); }
 .sheet-card-head { height: 36px; padding: 0 14px; border-bottom: 1px solid color-mix(in srgb, var(--error) 40%, transparent); color: var(--strong); font: italic 600 14px/36px var(--display, var(--sans)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 520px; }
 .sheet-columns { display: flex; gap: 4px 18px; padding: 2px 14px 0; }
 .sheet-columns section { display: flex; flex-direction: column; min-width: 96px; }
@@ -41,19 +41,73 @@
 .sheet-card .sheet-action[aria-pressed='true'] { color: var(--accent); }
 .sheet-card .sheet-remove:hover { color: var(--error) !important; }
 
-/* ── Journal · Notizblock: register tabs per group, the open tab's actions as a list with their keys ── */
-.sheet-tabs { width: 260px; }
-.sheet-tablist { display: flex; gap: 2px; padding-left: 8px; }
-.sheet-tab { position: relative; top: 1px; height: 24px; padding: 0 10px !important; border-radius: 6px 6px 0 0 !important; background: color-mix(in srgb, var(--tab) 55%, var(--surface)) !important; color: var(--text) !important; font: 600 11px var(--sans) !important; box-shadow: inset 0 0 0 1px var(--edge); }
-.sheet-tab[aria-selected='true'] { z-index: 1; height: 26px; top: 0; background: var(--tab-paper) !important; box-shadow: inset 1px 1px 0 var(--edge), inset -1px 0 0 var(--edge); }
-.sheet-tab.is-status { --tab: var(--success); } .sheet-tab.is-entry { --tab: var(--priority); } .sheet-tab.is-plan { --tab: var(--accent); } .sheet-tab.is-order { --tab: var(--md-purple); } .sheet-tab.is-remove { --tab: var(--error); }
-.sheet-tabs { --tab-paper: color-mix(in srgb, var(--priority) 26%, var(--book-paper, var(--surface))); }
-.sheet-tabpanel { display: flex; flex-direction: column; padding: 8px 6px; border-radius: 0 3px 3px 3px; background: var(--tab-paper);
-  background-image: radial-gradient(circle at 8px 50%, color-mix(in srgb, var(--text) 60%, transparent) 2.2px, transparent 2.8px); background-size: 16px 16px; background-repeat: repeat-y; background-position: 0 4px;
-  box-shadow: 0 0 0 1px var(--edge), 0 3px 0 -1px color-mix(in srgb, var(--tab-paper) 86%, #000), 0 18px 32px -14px color-mix(in srgb, #3b2a1a 60%, transparent); padding-left: 20px; }
-.sheet-tabpanel .sheet-action { display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 6px !important; border-radius: 3px !important; text-align: left; font: 13px var(--serif, var(--sans)) !important; }
-.sheet-tabpanel .sheet-action:is(:hover, :focus-visible):not(:disabled) { background: color-mix(in srgb, var(--priority) 55%, transparent) !important; outline: 0; transform: rotate(-.6deg); }
-.sheet-tabpanel .sheet-action[aria-pressed='true'] { box-shadow: inset 3px 0 0 var(--accent); }
+/* ── Journal · Sticker: a cut-out sticker, the actions a grid of small icon stickers with their word ── */
+.sheet-stickers { display: grid; grid-template-columns: repeat(5, minmax(58px, auto)); gap: 12px 10px; width: max-content; max-width: min(460px, calc(100vw - 80px)); padding: 10px 14px 14px;
+  border-radius: var(--wobble-lg, 14px); background: var(--surface); box-shadow: var(--sticker); font-family: var(--hand, var(--sans)); }
+.sheet-sticker-head { grid-column: 1 / -1; justify-self: start; max-width: 100%; overflow: hidden; padding: 1px 10px 2px; border-radius: var(--wobble, 6px); background: color-mix(in srgb, var(--violet, var(--accent)) 30%, var(--tint-base, var(--surface)));
+  box-shadow: var(--sticker-sm); color: var(--ink, var(--text)); font: 700 15px var(--hand, var(--sans)); white-space: nowrap; text-overflow: ellipsis; transform: rotate(-2deg); }
+.sheet-stickers .sheet-group { display: contents; }
+.sheet-stickers .sheet-action { display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 58px; padding: 2px; color: var(--ink, var(--text)); font: 700 14px/1 var(--hand, var(--sans)); white-space: nowrap; transition: transform 180ms var(--spring); }
+.sheet-badge { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50% 44% 52% 46% / 46% 52% 44% 50%; background: var(--tint, var(--surface)); box-shadow: var(--sticker-sm); }
+.sheet-badge .icon { width: 16px; height: 16px; color: var(--ink-fixed, var(--text)); }
+.sheet-stickers .sheet-group.is-status { --tint: color-mix(in srgb, var(--mint, var(--success)) 50%, var(--tint-base, var(--surface))); }
+.sheet-stickers .sheet-group.is-entry { --tint: color-mix(in srgb, var(--violet, var(--accent)) 32%, var(--tint-base, var(--surface))); }
+.sheet-stickers .sheet-group.is-plan { --tint: color-mix(in srgb, var(--pink, var(--priority)) 42%, var(--tint-base, var(--surface))); }
+.sheet-stickers .sheet-group.is-order { --tint: var(--tint-base, var(--surface)); }
+.sheet-stickers .sheet-group.is-remove { --tint: color-mix(in srgb, var(--error) 28%, var(--tint-base, var(--surface))); }
+.sheet-stickers .sheet-action:nth-child(2n) { --turn: 4deg; } .sheet-stickers .sheet-action:nth-child(2n+1) { --turn: -4deg; }
+.sheet-stickers .sheet-action:is(:hover, :focus-visible):not(:disabled) { outline: 0; transform: rotate(var(--turn)) translateY(-2px); }
+.sheet-stickers .sheet-action:is(:hover, :focus-visible):not(:disabled) .sheet-badge { box-shadow: var(--sticker); }
+.sheet-stickers .sheet-action[aria-pressed='true'] .sheet-badge { background: var(--accent); }
+.sheet-stickers .sheet-action[aria-pressed='true'] .sheet-badge .icon { color: var(--on-accent); }
+
+/* ── Journal · Sticker-Bogen: a sheet of grained paper; every action its own sticker („Wort klein-Zusatz“), a
+   little tilted; the groups apart by dashed cut lines ── */
+.sheet-sheet { width: max-content; max-width: min(470px, calc(100vw - 80px)); padding: 10px 14px 12px; border-radius: 6px; background-color: color-mix(in srgb, var(--sticker-edge, #fff) 40%, var(--surface)); background-image: var(--paper-grain);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink, #000) 18%, transparent), 0 14px 28px -12px color-mix(in srgb, var(--ink, #000) 55%, transparent);
+  outline: 1.5px dashed color-mix(in srgb, var(--ink, #000) 40%, transparent); outline-offset: -6px; color: var(--ink, var(--text)); }
+.sheet-sheet-head { display: flex; align-items: baseline; gap: 8px; padding: 2px 4px 6px; font: 700 17px var(--hand, var(--sans)); white-space: nowrap; overflow: hidden; }
+.sheet-sheet-head b { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.sheet-sheet-head small { font: 600 10.5px var(--sans); opacity: .65; }
+.sheet-sheet section { padding: 6px 2px 8px; border-top: 1.5px dashed color-mix(in srgb, var(--ink, #000) 32%, transparent); }
+.sheet-sheet h4 { margin: 0 0 6px; font: 700 13px var(--hand, var(--sans)); letter-spacing: .04em; opacity: .7; }
+.sheet-sheet-row { display: flex; flex-wrap: wrap; gap: 10px 12px; padding: 2px 4px; }
+.sheet-sheet .sheet-action { display: inline-flex; align-items: baseline; gap: 5px; padding: 3px 10px 4px; border-radius: var(--wobble, 6px); background: var(--tint, var(--surface)); box-shadow: var(--sticker-sm);
+  color: var(--ink-fixed, var(--text)); font: 700 15px var(--hand, var(--sans)); white-space: nowrap; transition: transform 180ms var(--spring), box-shadow var(--fast) ease; }
+.sheet-sheet .sheet-action .icon { align-self: center; width: 13px; height: 13px; }
+.sheet-sheet .sheet-action small { font: 600 10px var(--sans); opacity: .65; }
+.sheet-sheet .sheet-action.tilt-0 { transform: rotate(-3deg); } .sheet-sheet .sheet-action.tilt-1 { transform: rotate(2deg); }
+.sheet-sheet .sheet-action.tilt-2 { transform: rotate(-1deg); } .sheet-sheet .sheet-action.tilt-3 { transform: rotate(3deg); }
+.sheet-sheet .is-status { --tint: color-mix(in srgb, var(--mint, var(--success)) 50%, var(--tint-base, var(--surface))); }
+.sheet-sheet .is-entry { --tint: color-mix(in srgb, var(--violet, var(--accent)) 30%, var(--tint-base, var(--surface))); }
+.sheet-sheet .is-plan { --tint: color-mix(in srgb, var(--pink, var(--priority)) 40%, var(--tint-base, var(--surface))); }
+.sheet-sheet .is-remove { --tint: color-mix(in srgb, var(--error) 26%, var(--tint-base, var(--surface))); }
+.sheet-sheet .sheet-action:is(:hover, :focus-visible):not(:disabled) { outline: 0; box-shadow: var(--sticker); transform: rotate(0) translateY(-2px); }
+.sheet-sheet .sheet-action[aria-pressed='true'] { background: var(--accent); color: var(--on-accent); }
+
+/* ── Journal · Papierschnipsel: a torn scrap under washi tape; a handwritten list, an ink scribble around the row
+   pointed at and the current one ── */
+.sheet-scrap { position: relative; width: max-content; min-width: 220px; max-width: min(380px, calc(100vw - 80px)); padding: 18px 18px 16px; --text: var(--ink-fixed, #2b2140);
+  background-color: color-mix(in srgb, var(--sticker-edge, #fff) 82%, var(--surface)); color: var(--ink, var(--text));
+  background-image: repeating-linear-gradient(transparent 0 27px, color-mix(in srgb, var(--accent) 16%, transparent) 27px 28px), var(--paper-grain); background-position: 0 44px, 0 0;
+  box-shadow: inset 1.5px 0 0 color-mix(in srgb, var(--ink, #000) 22%, transparent), inset -1.5px 0 0 color-mix(in srgb, var(--ink, #000) 22%, transparent);
+  -webkit-mask: var(--torn); mask: var(--torn); }
+.sheet-scrap-tape { position: absolute; top: 0; left: 50%; width: 92px; height: 18px; margin-left: -46px; transform: rotate(-3deg); pointer-events: none;
+  background: repeating-linear-gradient(-45deg, color-mix(in srgb, var(--pink, var(--priority)) 66%, transparent) 0 7px, color-mix(in srgb, var(--pink, var(--priority)) 46%, transparent) 7px 14px); }
+.sheet-scrap-head { margin: 2px 0 4px; overflow: hidden; font: 700 19px var(--hand, var(--sans)); white-space: nowrap; text-overflow: ellipsis; }
+.sheet-scrap section { display: flex; flex-direction: column; }
+.sheet-scrap h4 { margin: 4px 0 0; font: 700 12.5px/22px var(--hand, var(--sans)); letter-spacing: .05em; opacity: .55; }
+.sheet-scrap .sheet-action { position: relative; display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 6px; color: var(--ink-fixed, var(--text)); font: 700 17px var(--hand, var(--sans)); text-align: left; white-space: nowrap; }
+.sheet-word { position: relative; }
+.sheet-scrap .sheet-action kbd { background: transparent; box-shadow: none; color: color-mix(in srgb, var(--ink-fixed, #000) 50%, transparent); font: 600 10px var(--sans); }
+.scribble { pointer-events: none; }
+.scribble path { fill: none; stroke: var(--accent); stroke-width: 2.2; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.sheet-scribble { position: absolute; top: -6px; left: -10px; width: calc(100% + 20px); height: calc(100% + 12px); opacity: 0; transition: opacity 120ms ease; }
+.sheet-scrap .sheet-action:is(:hover, :focus-visible):not(:disabled) { outline: 0; }
+.sheet-scrap .sheet-action:is(:hover, :focus-visible, [aria-pressed='true']):not(:disabled) .sheet-scribble { opacity: 1; }
+.sheet-scrap .sheet-action[aria-pressed='true'] .sheet-scribble path { stroke: var(--pink, var(--priority)); stroke-width: 3; }
+.sheet-scrap .sheet-remove:hover { color: var(--error); }
+.sheet-scrap .sheet-remove:hover .sheet-scribble path { stroke: var(--error); }
 
 /* ── Nebula · Terminal: type a command (or pick one), Enter runs it ── */
 .sheet-terminal { width: 330px; padding: 0 0 6px; background: #0c0c0e; box-shadow: 0 0 0 1px var(--nb-line, #333), 4px 4px 0 var(--nb-offset, #2e2340); font-family: var(--mono); }
@@ -99,16 +153,12 @@
 
 /* Pixel look over Normal and Journal: hard corners, offset shadows, the pixel faces a size up. */
 :root[data-pixel] .sheet, :root[data-pixel] .sheet * { border-radius: 0 !important; }
-:root[data-pixel] .sheet-glass, :root[data-pixel] .sheet-card, :root[data-pixel] .sheet-tabpanel { outline: 1px solid var(--edge); outline-offset: 1px; box-shadow: 3px 3px 0 var(--border), 5px 5px 0 #0008; -webkit-backdrop-filter: none; backdrop-filter: none; }
-:root[data-pixel] .sheet-card .sheet-action, :root[data-pixel] .sheet-tabpanel .sheet-action { font-size: 16px !important; font-style: normal; }
+:root[data-pixel] .sheet-glass, :root[data-pixel] .sheet-card, :root[data-pixel] .sheet-stickers, :root[data-pixel] .sheet-sheet { outline: 1px solid var(--edge); outline-offset: 1px; box-shadow: 3px 3px 0 var(--border), 5px 5px 0 #0008; -webkit-backdrop-filter: none; backdrop-filter: none; }
+:root[data-pixel] .sheet-card .sheet-action, :root[data-pixel] :is(.sheet-stickers, .sheet-sheet, .sheet-scrap) .sheet-action { font-size: 15px !important; font-style: normal; }
 :root[data-pixel] .sheet kbd { font-size: 14px; }
-:root[data-pixel] .sheet-glass .sheet-action, :root[data-pixel] .sheet-tabpanel .sheet-action:hover { transform: none; }
+:root[data-pixel] .sheet-glass .sheet-action, :root[data-pixel] :is(.sheet-stickers, .sheet-sheet) .sheet-action { transform: none !important; }
 @media (prefers-reduced-motion: reduce) { .actions-sheet .entry-dock-shell > .sheet { transition: none; } }
 /* The index card keeps to its page: columns wrap, boxes keep their size. */
 .sheet-box { flex: none; }
 .sheet-card { max-width: min(420px, calc(100vw - 80px)); }
 .sheet-columns { flex-wrap: wrap; }
-/* The notepad's tabs all fit next to each other. */
-.sheet-tabs { width: max-content; min-width: 300px; }
-.sheet-tablist { flex-wrap: nowrap; }
-.sheet-tab { white-space: nowrap; }

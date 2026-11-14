@@ -1,0 +1,190 @@
+/* The desk layout (`data-layout='desk'`) in the journal look: no windows, but stickers and paper cards on a paper
+   board. NebulaDesk keeps its structure, classes and behaviour (grid, dragging, sizing, floating, detaching, menus);
+   with the journal look it draws sticker labels instead of prompts and icon stickers instead of glyphs (useLook), and
+   this file turns the black desk into lavender paper. The desk's own measures (`--nb-*`) take the look's colours, so
+   the rules in nebula-theme.css that read them follow. */
+:root[data-layout='desk'][data-look='journal'] {
+  --nb-black: var(--background);
+  --nb-paper: var(--surface);
+  --nb-ink: var(--ink);
+  --nb-line: var(--ink);
+  --nb-violet: var(--accent);
+  --nb-violet-light: var(--violet);
+  --nb-violet-dark: color-mix(in srgb, var(--accent) 70%, var(--ink));
+  --nb-offset: var(--sticker-shade);
+}
+/* The grey paper of Nebula's rail and poster is the look's own paper here. */
+:root[data-layout='desk'][data-look='journal'] :is(.nebula-paper, .shortcuts),
+:root[data-layout='desk'][data-look='journal'] :is(.nebula-paper, .shortcuts) :is(.popover, .planner, .format-menu, .mini-picker-panel, .tag-filter-list, .color-picker-panel) {
+  --background: inherit; --surface: inherit; --inset: inherit; --hover: inherit; --selected: inherit; --focus: inherit; --border: inherit; --divider: inherit; --edge: inherit; --line: inherit;
+  --scrollbar: inherit; --text: inherit; --strong: inherit; --muted: inherit; --placeholder: inherit; --disabled: inherit; --accent: inherit; --on-accent: inherit; --selection: inherit; }
+
+/* ── The board: lavender paper with grain and large soft violet blots (stepped rims), no orbits ───────────────── */
+:root[data-layout='desk'][data-look='journal'] :is(.app.is-nebula .main, .nebula-stage) { background-color: var(--background); }
+:root[data-layout='desk'][data-look='journal'] .nebula-stage {
+  background-image: var(--blots), var(--blots), var(--blots), var(--blots), var(--paper-grain);
+  background-size: 640px 520px, 460px 400px, 380px 320px, 300px 260px, auto;
+  background-position: right -220px bottom -200px, left -200px bottom 8%, right 22% top -170px, left 30% top 40%, 0 0;
+  background-repeat: no-repeat, no-repeat, no-repeat, no-repeat, repeat; }
+:root[data-layout='desk'][data-look='journal'] .nebula-backdrop { display: none; }
+
+/* ── The bar on top: a paper strip with sticker tabs ──────────────────────────────────────────────────────────── */
+:root[data-layout='desk'][data-look='journal'] .nebula-window-bar { height: 40px; border-bottom: 0; background-color: var(--surface); background-image: var(--paper-grain); color: var(--ink);
+  box-shadow: 0 1.5px 0 var(--ink-soft), 0 4px 0 color-mix(in srgb, var(--sticker-edge) 60%, transparent); }
+:root[data-layout='desk'][data-look='journal'] .nebula-window-bar :is(.titlebar-button, .window-controls button) { height: 40px; color: color-mix(in srgb, var(--ink) 70%, transparent); }
+:root[data-layout='desk'][data-look='journal'] .nebula-window-bar :is(.titlebar-button, .window-controls button):hover { color: var(--ink); background: color-mix(in srgb, var(--violet) 18%, transparent); box-shadow: none; transform: none; }
+:root[data-layout='desk'][data-look='journal'] .nebula-tabs { gap: 6px; align-items: center; }
+:root[data-layout='desk'][data-look='journal'] .nebula-tab { height: 28px; padding: 0 12px; border-radius: var(--wobble); color: var(--muted); font: 700 16px var(--hand); letter-spacing: 0; text-transform: none; transition: transform 180ms var(--spring), background-color var(--fast) ease; }
+:root[data-layout='desk'][data-look='journal'] .nebula-tab:hover { background: color-mix(in srgb, var(--violet) 16%, transparent); color: var(--ink); transform: rotate(-2deg); }
+:root[data-layout='desk'][data-look='journal'] .nebula-tab[aria-current='page'] { background: color-mix(in srgb, var(--pink) 36%, var(--tint-base, var(--surface))); color: var(--ink-fixed); box-shadow: var(--sticker-sm); transform: rotate(-2deg); }
+:root[data-layout='desk'][data-look='journal'] .nebula-tab[aria-current='page']::after { display: none; }
+:root[data-layout='desk'][data-look='journal'] .nebula-tab .unsaved-dot { background: var(--accent); }
+:root[data-layout='desk'][data-look='journal'] .nebula-window-bar :is(.nebula-calendar-toggle, .nebula-notebook-toggle) { align-self: center; height: 28px; margin: 0 6px; padding: 0 12px; border-radius: var(--wobble); color: var(--ink-fixed); background: color-mix(in srgb, var(--mint) 34%, var(--tint-base, var(--surface))); box-shadow: var(--sticker-flat); }
+:root[data-layout='desk'][data-look='journal'] .nebula-window-bar :is(.nebula-calendar-toggle, .nebula-notebook-toggle):hover { background: color-mix(in srgb, var(--mint) 50%, var(--tint-base, var(--surface))); transform: rotate(-2deg); }
+:root[data-layout='desk'][data-look='journal'] .nebula-window-bar :is(.nebula-calendar-toggle, .nebula-notebook-toggle).is-open { background: var(--mint); color: var(--ink-fixed); box-shadow: var(--sticker-sm); }
+:root[data-layout='desk'][data-look='journal'] .nebula-calendar-command { font: 700 16px var(--hand); letter-spacing: 0; }
+:root[data-layout='desk'][data-look='journal'] .nebula-window-bar :is(.nebula-tab, .nebula-calendar-toggle, .nebula-notebook-toggle):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* The search: the plain field in the look's style, where Nebula's grep prompt stood. */
+:root[data-layout='desk'][data-look='journal'] .nebula-window-bar .search.is-on-nebula { flex: 0 1 auto; align-self: center; width: calc(50% - 190px); min-width: 0; margin-left: 12px; }
+@container journal (max-width: 1000px) { :root[data-layout='desk'][data-look='journal'] .nebula-window-bar .search.is-on-nebula { width: calc(50% - 90px); } }
+:root[data-layout='desk'][data-look='journal'] .nebula-window-bar .search.is-on-nebula .search-field { height: 28px; border-radius: var(--wobble-lg); background: var(--sticker-edge); box-shadow: inset 0 0 0 1.5px var(--ink-soft); }
+
+/* ── Cards: paper with a sticker edge, a slight tilt, no title bar – the label sticks on top ──────────────────── */
+:root[data-layout='desk'][data-look='journal'] :is(.nebula-terminal, .nebula-panel, .nebula-cal-panel, .nebula-calendar, .nebula-notebook, .nebula-floating, .nebula-poster) {
+  border: 0; border-radius: var(--wobble-lg); background-color: var(--surface); background-image: var(--paper-grain); color: var(--text); box-shadow: var(--sticker); }
+:root[data-layout='desk'][data-look='journal'] .nebula-grid > :nth-child(4n+1 of .nebula-panel, .nebula-stack) { rotate: -.35deg; }
+:root[data-layout='desk'][data-look='journal'] .nebula-grid > :nth-child(4n+2 of .nebula-panel, .nebula-stack) { rotate: .3deg; }
+:root[data-layout='desk'][data-look='journal'] .nebula-grid > :nth-child(4n+3 of .nebula-panel, .nebula-stack) { rotate: -.2deg; }
+:root[data-layout='desk'][data-look='journal'] .nebula-panel.is-held { box-shadow: var(--sticker), 0 26px 50px -16px color-mix(in srgb, var(--ink) 50%, transparent); }
+:root[data-layout='desk'][data-look='journal'] .nebula-terminal-head { position: relative; gap: 6px; min-height: 36px; padding: 0 6px 0 14px; border-bottom: 0; background: transparent; color: var(--ink); font: 700 15px var(--hand); }
+:root[data-layout='desk'][data-look='journal'] .nebula-panel.is-minimized .nebula-terminal-head { min-height: 40px; }
+/* The label: „Name klein-Zusatz“, a coloured sticker on the card's top edge. */
+.desk-label { display: inline-flex; flex: 0 1 auto; align-items: baseline; gap: 6px; min-width: 0; max-width: 100%; margin-top: -14px; padding: 2px 11px 3px; overflow: hidden;
+  border-radius: var(--wobble); background: var(--label-tint, color-mix(in srgb, var(--violet) 30%, var(--tint-base, var(--surface)))); box-shadow: var(--sticker-sm); color: var(--ink-fixed);
+  font: 700 16px var(--hand); white-space: nowrap; transform: rotate(-2deg); transform-origin: left center; }
+.desk-label b { min-width: 0; overflow: hidden; font-weight: 700; text-overflow: ellipsis; }
+.desk-label small { flex: none; font: 600 10.5px var(--sans); letter-spacing: .02em; opacity: .7; }
+:root[data-layout='desk'][data-look='journal'] :is(.nebula-panel, .nebula-floating):is(.is-rating, .is-ratings, .is-calendar) { --label-tint: color-mix(in srgb, var(--pink) 40%, var(--tint-base, var(--surface))); }
+:root[data-layout='desk'][data-look='journal'] :is(.nebula-panel, .nebula-floating):is(.is-scales, .is-activities, .is-notebook) { --label-tint: color-mix(in srgb, var(--mint) 45%, var(--tint-base, var(--surface))); }
+:root[data-layout='desk'][data-look='journal'] :is(.nebula-panel, .nebula-floating).is-board { --label-tint: color-mix(in srgb, var(--sticker-edge) 70%, var(--surface)); }
+:root[data-layout='desk'][data-look='journal'] :is(.nebula-cal-panel, .nebula-calendar) { --label-tint: color-mix(in srgb, var(--pink) 40%, var(--tint-base, var(--surface))); }
+:root[data-layout='desk'][data-look='journal'] .nebula-notebook { --label-tint: color-mix(in srgb, var(--mint) 45%, var(--tint-base, var(--surface))); }
+:root[data-layout='desk'][data-look='journal'] .nebula-panel.is-upright .desk-label { writing-mode: vertical-rl; margin-top: 0; transform: rotate(180deg); }
+:root[data-layout='desk'][data-look='journal'] .nebula-panel-state { color: var(--muted); font: 700 14px var(--hand); letter-spacing: 0; }
+/* The tools: small round icon stickers. */
+:root[data-layout='desk'][data-look='journal'] .nebula-window-tools { align-items: center; align-self: center; gap: 6px; padding: 4px 2px; }
+:root[data-layout='desk'][data-look='journal'] :is(.nebula-window-tools button, .nebula-cal-panel > .nebula-terminal-head > :is(.nebula-window-focus, .nebula-calendar-toggle)) {
+  display: grid; place-items: center; width: 26px; height: 26px; min-height: 0; padding: 0; border: 0; border-radius: 50% 44% 52% 46% / 46% 52% 44% 50%; background: var(--surface); color: var(--ink);
+  box-shadow: var(--sticker-flat); font: 700 13px var(--hand); transition: transform 180ms var(--spring), background-color var(--fast) ease; }
+:root[data-layout='desk'][data-look='journal'] :is(.nebula-window-tools button, .nebula-cal-panel > .nebula-terminal-head > :is(.nebula-window-focus, .nebula-calendar-toggle)) .icon { width: 13px; height: 13px; }
+:root[data-layout='desk'][data-look='journal'] :is(.nebula-window-tools button, .nebula-cal-panel > .nebula-terminal-head > :is(.nebula-window-focus, .nebula-calendar-toggle)):hover { background: color-mix(in srgb, var(--mint) 45%, var(--tint-base, var(--surface))); color: var(--ink-fixed); transform: rotate(-8deg); }
+:root[data-layout='desk'][data-look='journal'] :is(.nebula-window-tools .nebula-calendar-close):hover { background: color-mix(in srgb, var(--error) 30%, var(--surface)); }
+:root[data-layout='desk'][data-look='journal'] .nebula-window-focus[aria-pressed='true'], :root[data-layout='desk'][data-look='journal'] .nebula-cal-panel .nebula-calendar-toggle.is-open { background: var(--accent) !important; color: var(--on-accent) !important; }
+:root[data-layout='desk'][data-look='journal'] .nebula-cal-panel > .nebula-terminal-head > .nebula-window-focus { margin: 0 6px 0 4px; }
+/* The body: the card's paper. */
+:root[data-layout='desk'][data-look='journal'] :is(.nebula-terminal-body, .nebula-calendar-body, .nebula-notebook-body, .nebula-cal-body, .nebula-cal-day) { background: transparent; }
+:root[data-layout='desk'][data-look='journal'] .nebula-terminal-body { padding-top: 10px; }
+:root[data-layout='desk'][data-look='journal'] .nebula-panel-resize::after, :root[data-layout='desk'][data-look='journal'] .nebula-panel-width::after { background: repeating-linear-gradient(90deg, var(--ink-soft) 0 3px, transparent 3px 6px); }
+
+/* What runs inside the cards: the look's own type, not the terminal's. */
+:root[data-layout='desk'][data-look='journal'] .nebula-terminal .title-input { padding: 2px 0 8px; border-bottom: 1.5px dashed var(--ink-soft); color: var(--strong); font: 700 30px/1.2 var(--hand); letter-spacing: 0; }
+:root[data-layout='desk'][data-look='journal'] .nebula-terminal :is(.section-title h2, .checklist-section-heading h3, .board-head h3, .period-section h3, .rating-heading label, .rating-heading > span) { color: var(--strong); font: 700 19px var(--hand); letter-spacing: 0; text-transform: none; }
+:root[data-layout='desk'][data-look='journal'] .nebula-terminal .section-heading { border-bottom: 1.5px dashed var(--ink-soft); }
+:root[data-layout='desk'][data-look='journal'] .nebula-terminal .entry-count { color: var(--accent); font: 700 15px var(--hand); }
+:root[data-layout='desk'][data-look='journal'] .nebula-terminal .kind-picker { gap: 4px; }
+:root[data-layout='desk'][data-look='journal'] .nebula-terminal .kind-picker button { margin-left: 0; padding: 4px 9px; border: 0; color: var(--text); font: 700 15px var(--hand); text-transform: none; }
+:root[data-layout='desk'][data-look='journal'] .nebula-terminal .period-rating output { color: var(--strong); font: 700 30px var(--hand); }
+:root[data-layout='desk'][data-look='journal'] .nebula-terminal .activity-name { font: 14px var(--write); }
+:root[data-layout='desk'][data-look='journal'] .nebula-terminal .empty { border: 1.5px dashed var(--ink-soft); border-radius: var(--wobble-lg); }
+:root[data-layout='desk'][data-look='journal'] .nebula-terminal .board-surface { background-color: color-mix(in srgb, var(--background) 70%, var(--surface));
+  background-image: radial-gradient(color-mix(in srgb, var(--accent) 22%, transparent) 1px, transparent 1.5px), var(--paper-grain); background-size: 22px 22px, auto; box-shadow: inset 0 0 0 1.5px var(--ink-soft); }
+:root[data-layout='desk'][data-look='journal'] .nebula-terminal .board-card { box-shadow: var(--sticker-sm); }
+:root[data-layout='desk'][data-look='journal'] .nebula-terminal input[type='range'] { accent-color: var(--accent); }
+
+/* ── The poster: a big date sticker – day and month in Gaegu, a flower and a star stuck beside them ──────────── */
+:root[data-layout='desk'][data-look='journal'] .nebula-poster { padding: 16px 20px 18px; background-color: color-mix(in srgb, var(--violet) 18%, var(--tint-base, var(--surface))); overflow: visible; rotate: -.6deg;
+  --surface: var(--tint-base); --ink: var(--ink-fixed); --text: var(--ink-fixed); --strong: var(--ink-fixed); --muted: color-mix(in srgb, var(--ink-fixed) 72%, transparent); --placeholder: color-mix(in srgb, var(--ink-fixed) 50%, transparent); --ink-soft: color-mix(in srgb, var(--ink-fixed) 45%, transparent); }
+:root[data-layout='desk'][data-look='journal'] .nebula-poster::before, :root[data-layout='desk'][data-look='journal'] .nebula-poster::after, :root[data-layout='desk'][data-look='journal'] .nebula-bar { display: none; }
+:root[data-layout='desk'][data-look='journal'] .nebula-poster-figure { margin-top: 0; color: var(--ink); font: 700 clamp(84px, 8vw, 118px)/.9 var(--hand); letter-spacing: -.02em; text-shadow: 4px 4px 0 var(--pink); }
+:root[data-layout='desk'][data-look='journal'] .nebula-poster hr { border-top: 1.5px dashed var(--ink-soft); }
+:root[data-layout='desk'][data-look='journal'] .nebula-date { color: var(--ink); font: 700 17px var(--hand); letter-spacing: .02em; text-transform: none; }
+:root[data-layout='desk'][data-look='journal'] .nebula-date:hover { color: var(--accent); }
+:root[data-layout='desk'][data-look='journal'] .nebula-poster-title { font: 700 20px/1.2 var(--hand); color: var(--strong); }
+:root[data-layout='desk'][data-look='journal'] .nebula-poster-prose { font: 13px/1.55 var(--write); color: var(--muted); }
+:root[data-layout='desk'][data-look='journal'] .nebula-day-nav { gap: 8px; }
+:root[data-layout='desk'][data-look='journal'] .nebula-day-nav button { height: 28px; border: 0; border-radius: var(--wobble); background: var(--surface); color: var(--ink); box-shadow: var(--sticker-flat); }
+:root[data-layout='desk'][data-look='journal'] .nebula-day-nav button + button { margin-left: 0; }
+:root[data-layout='desk'][data-look='journal'] .nebula-step { width: 28px; border-radius: 50% !important; }
+:root[data-layout='desk'][data-look='journal'] .nebula-today { padding: 0 12px; font: 700 15px var(--hand); letter-spacing: 0; text-transform: none; background: color-mix(in srgb, var(--pink) 34%, var(--tint-base, var(--surface))) !important; }
+:root[data-layout='desk'][data-look='journal'] .nebula-day-nav button:hover:not(:disabled) { background: color-mix(in srgb, var(--mint) 45%, var(--tint-base, var(--surface))); color: var(--ink-fixed); transform: rotate(-4deg); }
+:root[data-layout='desk'][data-look='journal'] .nebula-day-nav button:disabled { opacity: .5; }
+:root[data-layout='desk'][data-look='journal'] .nebula-poster-tags .tag-filter-button { border: 0; color: var(--ink); font: 700 15px var(--hand); }
+:root[data-layout='desk'][data-look='journal'] .nebula-poster :focus-visible { outline: 2px solid var(--accent); }
+.desk-poster-stickers { position: absolute; top: -18px; right: -14px; width: 104px; height: 104px; overflow: visible; pointer-events: none; rotate: 8deg; }
+.desk-sticker-cut :is(circle, path) { fill: var(--sticker-edge, #fff); stroke: var(--sticker-edge, #fff); stroke-width: 9; stroke-linejoin: round; filter: drop-shadow(2px 3px 0 var(--sticker-shade, #0002)); }
+.desk-flower circle { fill: var(--pink, #e48aa8); stroke: var(--sticker-line, #2b2140); stroke-width: 2; }
+.desk-flower .desk-flower-heart { fill: #ffd98a; }
+.desk-star { fill: var(--mint, #7cc7b2); stroke: var(--sticker-line, #2b2140); stroke-width: 2; stroke-linejoin: round; }
+
+/* ── The overview's calendar ──────────────────────────────────────────────────────────────────────────────────── */
+:root[data-layout='desk'][data-look='journal'] .nebula-cal-views { align-self: center; gap: 4px; }
+:root[data-layout='desk'][data-look='journal'] .nebula-cal-views button { height: 24px; padding: 0 9px; border: 0; border-radius: var(--wobble); color: var(--muted); font: 700 15px var(--hand); letter-spacing: 0; text-transform: none; }
+:root[data-layout='desk'][data-look='journal'] .nebula-cal-views button:hover { background: color-mix(in srgb, var(--violet) 16%, transparent); color: var(--ink); }
+:root[data-layout='desk'][data-look='journal'] .nebula-cal-views button[aria-selected='true'] { background: color-mix(in srgb, var(--violet) 30%, var(--tint-base, var(--surface))); color: var(--ink-fixed); box-shadow: var(--sticker-flat); }
+:root[data-layout='desk'][data-look='journal'] .nebula-cal-panel .nebula-calendar-toggle { margin-left: 6px; }
+:root[data-layout='desk'][data-look='journal'] .nebula-cal-head strong { color: var(--strong); font: 700 20px var(--hand); }
+:root[data-layout='desk'][data-look='journal'] .nebula-cal-step { border: 0; border-radius: 50%; background: var(--surface); box-shadow: var(--sticker-flat); }
+:root[data-layout='desk'][data-look='journal'] .nebula-cal-panel .cal-compact-day { font: 13px var(--write); }
+:root[data-layout='desk'][data-look='journal'] .nebula-cal-panel .cal-compact-day.is-today { border-radius: 50% 44% 52% 46% / 46% 52% 44% 50%; box-shadow: inset 0 0 0 1.5px var(--now); }
+:root[data-layout='desk'][data-look='journal'] .nebula-cal-panel .cal-compact-weekdays span { font: 700 13px var(--hand); }
+:root[data-layout='desk'][data-look='journal'] .nebula-cal-strip { gap: 4px; }
+:root[data-layout='desk'][data-look='journal'] .nebula-cal-strip button { margin-left: 0; border: 0; border-radius: var(--wobble); font: 13px var(--write); box-shadow: inset 0 0 0 1.5px var(--ink-soft); }
+:root[data-layout='desk'][data-look='journal'] .nebula-cal-strip small { font: 700 12px var(--hand); text-transform: none; }
+:root[data-layout='desk'][data-look='journal'] .nebula-cal-strip button[aria-pressed='true'] { border: 0; background: var(--pink); color: var(--ink-fixed); box-shadow: var(--sticker-flat); }
+:root[data-layout='desk'][data-look='journal'] :is(.nebula-calendar, .nebula-notebook) .nebula-terminal-head { padding-right: 6px; }
+:root[data-layout='desk'][data-look='journal'] :is(.nebula-calendar, .nebula-notebook).is-floating .nebula-grip.is-se::after { background: linear-gradient(135deg, transparent 0 50%, var(--ink-soft) 50% 62%, transparent 62% 75%, var(--ink-soft) 75% 87%, transparent 87%); }
+:root[data-layout='desk'][data-look='journal'] .cal { background: transparent; }
+
+/* ── Appointments: tickets become label stickers in the kind's colour ─────────────────────────────────────────── */
+:root[data-layout='desk'][data-look='journal'] .nebula-label { color: var(--ink); font: 700 20px var(--hand); letter-spacing: 0; text-transform: none; }
+:root[data-layout='desk'][data-look='journal'] .nebula-label span { display: none; }
+:root[data-layout='desk'][data-look='journal'] .nebula-empty { color: var(--muted); font: 700 16px var(--hand); }
+:root[data-layout='desk'][data-look='journal'] .nebula-ticket-row { gap: 22px; padding: 6px; }
+:root[data-layout='desk'][data-look='journal'] .nebula-ticket { --tint: var(--violet); aspect-ratio: auto; min-height: 92px; border-radius: var(--wobble-lg) !important; overflow: visible;
+  background: color-mix(in srgb, var(--tint) 34%, var(--tint-base)); background-image: var(--paper-grain); -webkit-mask: none; mask: none; color: var(--ink-fixed); --ink-soft: color-mix(in srgb, var(--ink-fixed) 45%, transparent); box-shadow: var(--sticker-sm); }
+:root[data-layout='desk'][data-look='journal'] .nebula-ticket:nth-child(2n) { rotate: 1.5deg; }
+:root[data-layout='desk'][data-look='journal'] .nebula-ticket:nth-child(2n+1) { rotate: -1.2deg; }
+:root[data-layout='desk'][data-look='journal'] .nebula-ticket.foil-delivery { --tint: #f2b386; }
+:root[data-layout='desk'][data-look='journal'] .nebula-ticket.foil-payment { --tint: var(--mint); }
+:root[data-layout='desk'][data-look='journal'] .nebula-ticket.foil-appointment { --tint: var(--violet); }
+:root[data-layout='desk'][data-look='journal'] .nebula-ticket.foil-event { --tint: var(--pink); }
+:root[data-layout='desk'][data-look='journal'] .nebula-ticket:hover { box-shadow: var(--sticker); filter: none; }
+:root[data-layout='desk'][data-look='journal'] :is(.nebula-ticket-band, .nebula-ticket-bar) { display: none; }
+:root[data-layout='desk'][data-look='journal'] .nebula-ticket :is(.nebula-ticket-top, .nebula-ticket-text, .nebula-ticket-bottom) { left: 14px; right: 64px; }
+:root[data-layout='desk'][data-look='journal'] .nebula-ticket-top { font: 700 14px var(--hand); letter-spacing: .02em; }
+:root[data-layout='desk'][data-look='journal'] .nebula-ticket-text { font: 700 15px/1.2 var(--write); letter-spacing: 0; text-transform: none; }
+:root[data-layout='desk'][data-look='journal'] .nebula-ticket-bottom { border-top: 1.5px dashed var(--ink-soft); font: 700 14px var(--hand); letter-spacing: .02em; }
+:root[data-layout='desk'][data-look='journal'] .nebula-ticket-mark { top: 50%; right: 10px; width: 46px; height: 46px; margin-top: -23px; display: grid; place-items: center; border-radius: 50%;
+  background: var(--tint-base); box-shadow: var(--sticker-flat); color: var(--ink-fixed); font: 700 15px var(--hand); letter-spacing: 0; rotate: 8deg; }
+
+/* ── Hints, layout reset, focus ───────────────────────────────────────────────────────────────────────────────── */
+:root[data-layout='desk'][data-look='journal'] .nebula-layout-reset { padding: 3px 12px; border: 0; border-radius: var(--wobble); background: var(--surface); color: var(--ink); box-shadow: var(--sticker-flat); font: 700 15px var(--hand); }
+:root[data-layout='desk'][data-look='journal'] .nebula-layout-reset:hover { background: color-mix(in srgb, var(--mint) 45%, var(--tint-base, var(--surface))); color: var(--ink-fixed); transform: rotate(-2deg); }
+:root[data-layout='desk'][data-look='journal'] :is(.nebula-dock-hint, .nebula-detach-hint) { border-radius: var(--wobble); background: var(--surface); color: var(--ink); box-shadow: var(--sticker-sm); font: 700 15px var(--hand); }
+:root[data-layout='desk'][data-look='journal'] .nebula-dim { background: color-mix(in srgb, var(--background) 62%, transparent); -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); }
+:root[data-layout='desk'][data-look='journal'] .nebula-stage.is-focus .is-dimmed::after { background: color-mix(in srgb, var(--background) 62%, transparent); border-radius: inherit; }
+:root[data-layout='desk'][data-look='journal'] .nebula-stage.is-focus .is-focused, :root[data-layout='desk'][data-look='journal'] :is(.nebula-calendar, .nebula-notebook).is-focused {
+  box-shadow: inset 0 0 0 2px var(--accent), 0 0 0 5px var(--sticker-edge), 0 0 0 6px var(--accent), 0 20px 50px -14px color-mix(in srgb, var(--accent) 60%, transparent) !important; }
+:root[data-layout='desk'][data-look='journal'] .nebula-stage.is-calendar-open.is-notebook-open .nebula-calendar:not(.is-floating) { box-shadow: var(--sticker); }
+
+/* A window pulled out of the journal: the same paper card in its own window. */
+:root[data-look='journal'] .nebula-detached { background: var(--background); background-image: var(--paper-grain); padding: 8px; inset: 0; }
+:root[data-look='journal'] .nebula-panel.is-detached { flex: 1; border: 0; border-radius: var(--wobble-lg); background-color: var(--surface); background-image: var(--paper-grain); box-shadow: inset 0 0 0 2px var(--ink); }
+:root[data-look='journal'] .nebula-panel.is-detached .nebula-terminal-head { min-height: 38px; padding: 6px 6px 0 14px; border: 0; background: transparent; color: var(--ink); }
+:root[data-look='journal'] .nebula-panel.is-detached .desk-label { margin-top: 0; }
+:root[data-look='journal'] .nebula-panel.is-detached .nebula-window-tools { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+:root[data-look='journal'] .nebula-panel.is-detached .nebula-window-tools button { display: grid; place-items: center; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 50%; background: var(--surface); color: var(--ink); box-shadow: var(--sticker-flat); }
+:root[data-look='journal'] .nebula-panel.is-detached .nebula-window-tools button .icon { width: 13px; height: 13px; }
+
+/* Pixel look: the labels and tools square, no tilt. */
+:root[data-layout='desk'][data-look='journal'][data-pixel] :is(.nebula-grid > *, .nebula-poster, .nebula-ticket, .desk-label) { rotate: none; transform: none; }

@@ -287,11 +287,11 @@
 /* ── Narrower windows ─────────────────────────────────────────────────────────────────────────────────────────── */
 /* A little narrower: the overview column too. */
 @container journal (max-width: 1120px) {
-  :root[data-look='nebula'] { --nb-poster-w: 260px; }
+  .nebula-stage { --nb-poster-w: 260px; --nb-rail-w: 260px; }
 }
 /* One column: poster and calendar side by side on top, the windows below. */
 @container journal (max-width: 900px) {
-  :root[data-look='nebula'] { --nb-gap: 14px; }
+  .nebula-stage { --nb-gap: 14px; }
   .nebula-desk { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'side' 'center'; padding-top: 12px; }
   .nebula-side { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
   .nebula-terminal-body { padding: 16px 16px 18px 30px; }

@@ -166,11 +166,11 @@
 :root[data-look='journal'] .notebook { --nbk-side: clamp(260px, 36%, 360px); background: var(--book-paper, var(--surface)); font-family: var(--serif); }
 :root[data-look='journal'] .notebook-head { min-height: 54px; padding: 4px 12px 0 22px; border-bottom: 1px solid color-mix(in srgb, var(--strong) 18%, transparent); }
 :root[data-look='journal'] .notebook-head h2 { font: 600 22px var(--display); letter-spacing: -.01em; }
-:root[data-look='journal'] .notebook-head h2 .icon { color: #a8322c; }
+:root[data-look='journal'] .notebook-head h2 .icon { color: var(--accent); }
 :root[data-look='journal'] .notebook-head-count { font: italic 13px var(--serif); }
-:root[data-look='journal'] .notebook-new { border-radius: 3px; background: var(--leather, #6b3a24); color: #fbeee0; box-shadow: 0 1px 2px #1d0f0655; }
+:root[data-look='journal'] .notebook-new { border-radius: var(--wobble); background: var(--accent); color: var(--on-accent); box-shadow: var(--sticker-sm); font-family: var(--hand); font-weight: 700; }
 :root[data-look='journal'] .notebook-side { background: color-mix(in srgb, var(--book-paper, var(--surface)) 92%, var(--leather, #6b3a24)); border-right: 1px solid color-mix(in srgb, var(--strong) 14%, transparent);
-  box-shadow: inset -10px 0 14px -12px #2a1a0c55; }
+  box-shadow: inset -10px 0 14px -12px color-mix(in srgb, var(--ink, #2a1a0c) 33%, transparent); }
 :root[data-look='journal'] .notebook-tree-head { font: italic 600 12px var(--display); letter-spacing: .02em; text-transform: none; color: color-mix(in srgb, var(--strong) 70%, transparent); }
 :root[data-look='journal'] .notebook-search { border-radius: 3px; background: color-mix(in srgb, var(--book-paper, var(--surface)) 70%, #fff); }
 :root[data-look='journal'] .notebook-folder-name { font: 14px var(--serif) !important; border-radius: 3px; }
@@ -178,13 +178,13 @@
 :root[data-look='journal'] .notebook-folder-name > span:not(.notebook-branch, .notebook-twisty) { flex: 0 1 auto; }
 :root[data-look='journal'] .notebook-folder-name small { flex: 1; min-width: 14px; text-align: right; font: italic 12px var(--serif);
   background: radial-gradient(circle, color-mix(in srgb, var(--strong) 35%, transparent) .8px, transparent 1.2px) 0 calc(100% - 4px) / 5px 4px repeat-x; padding-left: 4px; }
-:root[data-look='journal'] .notebook-folder.is-current .notebook-folder-name { background: color-mix(in srgb, #a8322c 12%, transparent); color: var(--strong); }
-:root[data-look='journal'] .notebook-folder.is-current .notebook-folder-name .icon { color: #a8322c; }
+:root[data-look='journal'] .notebook-folder.is-current .notebook-folder-name { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--strong); }
+:root[data-look='journal'] .notebook-folder.is-current .notebook-folder-name .icon { color: var(--accent); }
 :root[data-look='journal'] .notebook-note { border-radius: 2px; box-shadow: inset 3px 0 0 var(--paper), 0 1px 0 color-mix(in srgb, var(--strong) 8%, transparent); }
 :root[data-look='journal'] .notebook-note strong { font: 600 13.5px var(--display); }
 :root[data-look='journal'] .notebook-note small { font: italic 12px var(--serif); }
 :root[data-look='journal'] .notebook-page { --rule: 26px; padding: 16px 26px 14px 46px;
-  background: linear-gradient(90deg, transparent 33px, color-mix(in srgb, #a8322c 45%, transparent) 33px 34px, transparent 34px),
+  background: linear-gradient(90deg, transparent 33px, color-mix(in srgb, var(--accent) 45%, transparent) 33px 34px, transparent 34px),
     repeating-linear-gradient(to bottom, transparent 0 calc(var(--rule) - 1px), color-mix(in srgb, #5a7fa8 22%, transparent) calc(var(--rule) - 1px) var(--rule)) 0 12px / 100% var(--rule),
     var(--book-paper, var(--surface)); background-attachment: local; }
 :root[data-look='journal'] .notebook-title { font: 600 26px var(--display); letter-spacing: -.01em; }
@@ -193,15 +193,15 @@
 :root[data-look='journal'] .notebook-attachments { border-top: 1px dashed color-mix(in srgb, var(--strong) 25%, transparent); }
 :root[data-look='journal'] .notebook-attachments h3 { font: italic 600 14px var(--display); }
 /* Attachments as polaroids and index cards clipped to the page. */
-:root[data-look='journal'] .notebook-attachment { border-radius: 2px; background: #fbf7ee; color: #2c2714; box-shadow: 0 1px 1px #0004, 0 8px 16px -8px #2a1a0c99; }
+:root[data-look='journal'] .notebook-attachment { border-radius: 4px 8px 5px 9px / 9px 5px 8px 4px; background: #fdfcff; color: #2b2140; box-shadow: 0 1px 1px #0004, 0 8px 16px -8px color-mix(in srgb, var(--ink, #2a1a0c) 60%, transparent); }
 :root[data-look='journal'] .notebook-attachment.is-image { padding: 7px 7px 0; }
 :root[data-look='journal'] .notebook-attachment:nth-child(odd) { transform: rotate(-1deg); }
 :root[data-look='journal'] .notebook-attachment:nth-child(even) { transform: rotate(.8deg); }
-:root[data-look='journal'] .notebook-attachment :is(strong, span, small) { color: #2c2714; }
+:root[data-look='journal'] .notebook-attachment :is(strong, span, small) { color: #2b2140; }
 :root[data-look='journal'] .notebook-attachment-foot { border-top: 0; font-style: italic; }
 :root[data-look='journal'] .notebook-pager { background: color-mix(in srgb, var(--book-paper, var(--surface)) 92%, transparent); border-top: 1px solid color-mix(in srgb, var(--strong) 14%, transparent); }
 :root[data-look='journal'] .notebook-page-number { font: italic 13px var(--serif); }
-:root[data-look='journal'] .notebook-dots button[aria-current] { background: #a8322c; }
+:root[data-look='journal'] .notebook-dots button[aria-current] { background: var(--accent); }
 :root[data-look='journal'] .notebook-close { color: var(--muted); }
 
 /* ── Nebula: a terminal. The tree is `tree` output, notes a listing; the current row is inverted. ─────────────── */

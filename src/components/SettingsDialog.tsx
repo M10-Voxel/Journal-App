@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent, ReactNode } from 'react';
 import { pixelActive, swipeAvailable, withDesign, withLayout, withLook } from '../settings';
 import type { PopupStyle, Settings } from '../settings';
-import { layouts as layoutIds, looks as lookIds, presetOf, presets, takesPixel } from '../designs';
+import { layouts as layoutIds, looks as lookIds, popupVariants, presetOf, presets, takesPixel } from '../designs';
 import type { Layout, Look, Preset } from '../designs';
 import type { ActionLayout } from './EntryActionDock';
 import type { BookView } from './JournalBook';
@@ -48,10 +48,11 @@ const actionLayouts = (): { value: ActionLayout; title: string; text: string }[]
 const layoutNames = (): Record<Layout, string> => ({ classic: t('Normal'), book: t('Buch'), desk: t('Desk') });
 const lookNames = (): Record<Look, string> => ({ classic: t('Normal'), journal: 'Journal', nebula: 'Nebula' });
 
-/** The two variants of the popups in each look (popup-styles.css). */
+/** The variants of the popups in each look (popup-styles.css; designs.ts `popupVariants`). */
 const popupStyles = (look: Look): { value: PopupStyle; title: string; text: string }[] => ({
   classic: [{ value: 'a' as const, title: t('Karte'), text: t('Fest, mit weichem Schatten') }, { value: 'b' as const, title: t('Glas'), text: t('Durchscheinend und hell umrandet') }],
-  journal: [{ value: 'a' as const, title: t('Karteikarte'), text: t('Papier mit rotem Rand') }, { value: 'b' as const, title: t('Notizblock'), text: t('Gelbes Blatt mit Ringbindung') }],
+  journal: [{ value: 'a' as const, title: t('Karteikarte'), text: t('Papier mit rotem Rand') }, { value: 'b' as const, title: t('Sticker'), text: t('Ausgeschnitten, weißer Rand') },
+    { value: 'c' as const, title: t('Sticker-Bogen'), text: t('Jede Aktion ein eigener Sticker') }, { value: 'd' as const, title: t('Papierschnipsel'), text: t('Gerissenes Papier mit Washi-Tape') }],
   nebula: [{ value: 'a' as const, title: 'Terminal', text: t('Schwarzes Fenster mit Prompt') }, { value: 'b' as const, title: t('Holo-Papier'), text: t('Graues Papier, violetter Balken') }],
 })[look];
 
@@ -161,8 +162,8 @@ export function SettingsDialog({ settings, onChange, onClose, onImport, mailStat
       </SettingRow>
       <h3 id="settings-popups" className="settings-subhead">{t('Popups')}</h3>
       <p className="settings-hint">{t('Planer, Kalendereinträge und Auswahlen')}</p>
-      <div className="popup-style-options" role="radiogroup" aria-labelledby="settings-popups" onKeyDown={event => {
-        const next = arrowStep(event, ['a', 'b'] as const, settings.popupStyle);
+      <div className={`popup-style-options${popupVariants(settings.look).length > 2 ? ' is-four' : ''}`} role="radiogroup" aria-labelledby="settings-popups" onKeyDown={event => {
+        const next = arrowStep(event, popupVariants(settings.look), settings.popupStyle);
         if (next === null) return;
         onChange({ ...settings, popupStyle: next });
         requestAnimationFrame(() => dialogRef.current?.querySelector<HTMLElement>(`[data-popup-style="${next}"]`)?.focus());

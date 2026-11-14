@@ -15,6 +15,7 @@ import { createRefreshQueue } from '../refreshQueue';
 import { useEffect } from 'react';
 import type { Entry } from '../journal';
 import type { ParsedQuery } from '../search';
+import { useLook } from '../popupLook';
 import { Icon } from './Icon';
 import { kindOfTag, kindOrder, tagKindLabel, useTagKindOrder } from '../tagKinds';
 import { useActivityTagIds } from '../tagGroups';
@@ -103,8 +104,12 @@ function Marked({ text, words }: { text: string; words: string[] }) {
   return <>{parts}</>;
 }
 
-export function SearchBox({ variant, onOpen, autoFocus = false, onClose }: { variant: SearchVariant; onOpen: (result: SearchResult) => void; autoFocus?: boolean; onClose?: () => void }) {
+export function SearchBox({ variant: place, onOpen, autoFocus = false, onClose }: { variant: SearchVariant; onOpen: (result: SearchResult) => void; autoFocus?: boolean; onClose?: () => void }) {
   const english = useLanguage() === 'en';
+  // The place is the layout's (the bar, the book's card, the desk's bar), the style the look's: on the desk the grep
+  // prompt belongs to the Nebula look; with another look the desk's bar holds the plain field in that look's style.
+  const look = useLook();
+  const variant: SearchVariant = place === 'nebula' && look !== 'nebula' ? 'classic' : place;
   const tags = useTags();
   const [query, setQuery] = useState('');
   const [cursor, setCursor] = useState(0);
@@ -152,7 +157,7 @@ export function SearchBox({ variant, onOpen, autoFocus = false, onClose }: { var
       if (query) { setQuery(''); setCursor(0); } else { input.current?.blur(); setFocused(false); onClose?.(); }
     }
   };
-  const placeholder = variant === 'nebula' ? t('grep …  @typ  \\tag') : variant === 'journal' ? t('Wonach suchst du? @Aufgabe, \\Tag …') : t('Suchen …  @Typ  \\Tag');
+  const placeholder = variant === 'nebula' ? t('grep …  @typ  \\tag') : variant === 'journal' || look === 'journal' ? t('Wonach suchst du? @Aufgabe, \\Tag …') : t('Suchen …  @Typ  \\Tag');
   const panelOpen = focused && (query.trim().length > 0 || suggestions.length > 0);
   const dateLabel = (date: string | null) => date ? variant === 'nebula' ? date : formatShortDate(date) : '';
 
@@ -204,7 +209,7 @@ export function SearchBox({ variant, onOpen, autoFocus = false, onClose }: { var
     <label className="search-prompt"><b>journal</b>@desk:~$ {!focused && !query && <span className="nebula-cursor search-cursor" aria-hidden="true">▍</span>}{field}</label>
     {panel}
   </div>;
-  return <div className={`search is-${variant}${focused ? ' is-focused' : ''}`}>
+  return <div className={`search is-${variant}${place !== variant ? ` is-on-${place}` : ''}${focused ? ' is-focused' : ''}`}>
     <label className="search-field"><Icon name="search" />{field}{variant === 'classic' && !focused && !query && <span className="search-keys" aria-hidden="true"><kbd>{t('Strg')}</kbd><kbd>F</kbd></span>}</label>
     {panel}
   </div>;

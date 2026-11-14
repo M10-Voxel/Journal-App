@@ -348,7 +348,7 @@
 .board-library-path .icon { width: 10px; height: 10px; }
 :root[data-look='classic'] .bulletin-board { --thread: var(--accent); }
 :root[data-look='journal'] .bulletin-board { --thread: #a8322c; }
-:root[data-look='journal'] .board-thread { --thread-w: 2.2px; stroke-dasharray: 7 1.2; filter: drop-shadow(0 2px 1px #2a1a0c66); }
+:root[data-look='journal'] .board-thread { --thread-w: 2.2px; stroke-dasharray: 7 1.2; filter: drop-shadow(0 2px 1px color-mix(in srgb, var(--ink, #2a1a0c) 40%, transparent)); }
 :root[data-look='nebula'] .bulletin-board { --thread: #a66cf0; }
 :root[data-look='nebula'] .board-thread { --thread-w: 2px; stroke-dasharray: 6 4; stroke-linecap: butt; filter: drop-shadow(2px 2px 0 #000); }
 :root[data-pixel] .board-thread { --thread-w: 2px; stroke-linecap: square; stroke-linejoin: miter; shape-rendering: crispEdges; filter: drop-shadow(2px 2px 0 #0009); transition: none; }

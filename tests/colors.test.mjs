@@ -52,3 +52,15 @@ test('applying a palette updates existing inherited styles and derives readable 
     assert.equal(properties.get('--surface'),'#292929');
   } finally {globalThis.document=previous;}
 });
+
+test('the journal look\'s lavender palettes: light and dark, readable, among the journal palettes (lavender first)', async () => {
+  const { journalColorThemes, isLightPalette } = await import('../src/colors.ts');
+  const lavender = colorThemes.find(theme => theme.id === 'lavender'), night = colorThemes.find(theme => theme.id === 'lavender-night');
+  assert(lavender && night);
+  assert.equal(journalColorThemes[0], 'lavender');
+  assert(journalColorThemes.includes('lavender-night') && journalColorThemes.includes('paper') && journalColorThemes.includes('candle'));
+  assert.equal(isLightPalette(lavender.colors), true);
+  assert.equal(isLightPalette(night.colors), false);
+  assert.equal(lavender.colors.background, '#e9e4f5');
+  assert.equal(normalizeColorSettings({ colorTheme:'lavender-night' }).colorTheme, 'lavender-night');
+});

@@ -8,6 +8,8 @@ import { Calendar } from './CalendarWindow';
 import { openInJournal, useJournalDate } from './calendarShared';
 import { Notebook } from './Notebook';
 import { windowGrips } from './useFloatingWindow';
+import { Icon } from './Icon';
+import { useLook } from '../popupLook';
 import { requestCalendarCreate, requestCalendarMove } from '../calendarRequests';
 import type { BoardPeriod } from '../boardPlacement';
 
@@ -25,6 +27,7 @@ const directions: Record<string, ResizeDirection> = { n: 'North', s: 'South', w:
  */
 export function DetachedPanel({ kind }: { kind: DetachedKind }) {
   useLanguage();
+  const sticker = useLook() === 'journal';
   const window = getCurrentWindow();
   const date = useJournalDate() ?? localDate();
   const [boardContext, setBoardContext] = useState<{ date: string; period: BoardPeriod } | null>(null);
@@ -45,12 +48,13 @@ export function DetachedPanel({ kind }: { kind: DetachedKind }) {
         event.preventDefault();
         void (event.detail === 2 ? window.toggleMaximize() : window.startDragging());
       }}>
-        <span className="nebula-prompt" aria-hidden="true"><b>[journal@~]$</b> {command}</span>
+        {sticker ? <span className="desk-label" aria-hidden="true"><b>{label}</b>{boardContext && kind === 'board' && <small>{boardContext.date.slice(8)}.{boardContext.date.slice(5, 7)}.</small>}</span>
+          : <span className="nebula-prompt" aria-hidden="true"><b>[journal@~]$</b> {command}</span>}
         <span className="visually-hidden">{label}</span>
         <span className="nebula-window-tools">
-          <button type="button" className="nebula-panel-return" aria-label={t('{0} zurück in die App', label)} title={t('Zurück in die App')} onClick={() => void back()}>⇲</button>
-          <button type="button" className="nebula-panel-minimize" aria-label={t('{0} minimieren', label)} title={t('Minimieren')} onClick={() => void window.minimize()}>_</button>
-          <button type="button" className="nebula-calendar-close" aria-label={t('{0} schließen', label)} title={t('Schließen')} onClick={() => void window.close()}>×</button>
+          <button type="button" className="nebula-panel-return" aria-label={t('{0} zurück in die App', label)} title={t('Zurück in die App')} onClick={() => void back()}>{sticker ? <Icon name="jump" /> : '⇲'}</button>
+          <button type="button" className="nebula-panel-minimize" aria-label={t('{0} minimieren', label)} title={t('Minimieren')} onClick={() => void window.minimize()}>{sticker ? <Icon name="down" /> : '_'}</button>
+          <button type="button" className="nebula-calendar-close" aria-label={t('{0} schließen', label)} title={t('Schließen')} onClick={() => void window.close()}>{sticker ? <Icon name="done" /> : '×'}</button>
         </span>
       </header>
       <div className="nebula-terminal-body nebula-panel-body nebula-detached-body">

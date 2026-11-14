@@ -52,3 +52,10 @@ test('device and widget preferences never enter the cloud, including legacy snap
  assert.deepEqual(next.preferences,{theme:'nebula',pixel:false});
  assert.equal(prefs.widgets[0].x,100);
 });
+
+test('mixed layouts, sticker popup variants and ink preference are shared with their palette',()=>{
+ const prefs={theme:'nebula',layout:'desk',look:'journal',popupStyle:'d',inkPressure:false,colorTheme:'lavender-night',widgets:[],windowLayout:{x:100}};
+ const expected={theme:'nebula',layout:'desk',look:'journal',popupStyle:'d',inkPressure:false,colorTheme:'lavender-night'};
+ assert.deepEqual(syncPreferences(prefs),expected);
+ assert.deepEqual(upgradeSnapshot({schema:13,tables:{},preferences:prefs}).preferences,expected);
+});
