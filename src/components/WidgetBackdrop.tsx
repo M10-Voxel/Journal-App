@@ -18,6 +18,7 @@ interface Wallpapers { position: Position; monitors: Monitor[] }
 interface Rect { left: number; top: number; width: number; height: number }
 
 let info: Wallpapers | null = null, checking: Promise<void> | null = null;
+let users=0, cacheEpoch=0;
 // What the widgets read: replaced on every change (a new picture as well), so React notices it.
 let snapshot: { info: Wallpapers | null; pictures: number } = { info: null, pictures: 0 };
 const pictures = new Map<string, Promise<string | null>>(), urls = new Map<string, string>();
@@ -29,9 +30,11 @@ const kind = (bytes: Uint8Array) => bytes[0] === 0x89 && bytes[1] === 0x50 ? 'im
   : bytes[0] === 0x42 && bytes[1] === 0x4d ? 'image/bmp' : bytes[0] === 0x3c ? 'image/svg+xml' : bytes[0] === 0x52 && bytes[8] === 0x57 ? 'image/webp' : '';
 
 function check() {
+  const epoch=cacheEpoch;
   return checking ??= (async () => {
     try {
       const next = await invoke<Wallpapers>('desktop_wallpaper_info');
+      if(epoch!==cacheEpoch || !users)return;
       if (JSON.stringify(next) === JSON.stringify(info)) return;
       const keys = new Set(next.monitors.map((monitor, index) => keyOf(index, monitor)));
       currentKeys = keys;
@@ -40,31 +43,45 @@ function check() {
       for (const key of pictures.keys()) if (!keys.has(key)) pictures.delete(key);
       info = next;
       notify();
-    } catch { if (info !== null) { info = null; notify(); } }
-    finally { checking = null; }
+    } catch { if (epoch===cacheEpoch && info !== null) { info = null; notify(); } }
+    finally { if(epoch===cacheEpoch)checking = null; }
   })();
 }
 /** The picture of one monitor, loaded once per change. */
 function picture(index: number, monitor: Monitor) {
   const key = keyOf(index, monitor);
+  const epoch=cacheEpoch;
   if (!pictures.has(key)) pictures.set(key, (async () => {
     try {
       const bytes = new Uint8Array(await invoke<ArrayBuffer>('desktop_wallpaper', { monitor: index }));
-      if (!currentKeys.has(key)) return null;
+      if (epoch!==cacheEpoch || !currentKeys.has(key)) return null;
       const url = URL.createObjectURL(new Blob([bytes], { type: kind(bytes) }));
       urls.set(key, url); notify(); return url;
-    } catch { pictures.delete(key); return null; }
+    } catch { if(epoch===cacheEpoch)pictures.delete(key); return null; }
   })());
   return urls.get(key) ?? null;
 }
 function useWallpapers(active: boolean) {
   useEffect(() => {
     if (!active) return;
+    users++;
     void check();
     const timer = globalThis.setInterval(() => void check(), 5000);
     // Also when the canvas changes (moved to another monitor, monitors added or rearranged).
-    globalThis.addEventListener('focus', check); globalThis.addEventListener('widget:popup-geometry', check);
-    return () => { globalThis.clearInterval(timer); globalThis.removeEventListener('focus', check); globalThis.removeEventListener('widget:popup-geometry', check); };
+    let monitorKey=JSON.stringify([getWidgetSurface()?.bounds,getWidgetSurface()?.scale]);
+    const moved=()=>{
+      const surface=getWidgetSurface(), key=JSON.stringify([surface?.bounds,surface?.scale]);
+      if(key!==monitorKey){monitorKey=key;void check();}
+    };
+    globalThis.addEventListener('focus', check); globalThis.addEventListener('widget:popup-geometry', moved);
+    return () => {
+      globalThis.clearInterval(timer); globalThis.removeEventListener('focus', check); globalThis.removeEventListener('widget:popup-geometry', moved);
+      if(--users===0){
+        cacheEpoch++;checking=null;info=null;currentKeys.clear();pictures.clear();
+        for(const url of urls.values())URL.revokeObjectURL(url);
+        urls.clear();notify();
+      }
+    };
   }, [active]);
   return useSyncExternalStore(listener => { listeners.add(listener); return () => { listeners.delete(listener); }; }, () => snapshot).info;
 }
@@ -77,8 +94,13 @@ function useOrigin(active: boolean) {
     let stopped = false;
     const read = () => void getCurrentWindow().outerPosition().then(position => { if (!stopped) setOrigin(position ? { x: position.x, y: position.y } : { x: 0, y: 0 }); }, () => { if (!stopped) setOrigin({ x: 0, y: 0 }); });
     read();
-    window.addEventListener('widget:popup-geometry', read);
-    return () => { stopped = true; window.removeEventListener('widget:popup-geometry', read); };
+    let monitorKey=JSON.stringify([getWidgetSurface()?.bounds,getWidgetSurface()?.scale]);
+    const moved=()=>{
+      const surface=getWidgetSurface(), key=JSON.stringify([surface?.bounds,surface?.scale]);
+      if(key!==monitorKey){monitorKey=key;read();}
+    };
+    window.addEventListener('widget:popup-geometry', moved);
+    return () => { stopped = true; window.removeEventListener('widget:popup-geometry', moved); };
   }, [active]);
   return origin;
 }

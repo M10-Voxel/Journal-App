@@ -334,7 +334,7 @@ const bootstrap = `
     // The native popup surface: remember what the widget asked for (its popups' rectangles), no geometry of its own.
     if (command === 'desktop_widget_surface') { window.__uiTest.surface = payload; return null; }
     if(command==='desktop_widget_live_blur'){invoked.push([command,payload]);if(payload.enabled && localStorage.getItem('test.liveBlurFail'))throw Error('Live Blur unavailable');return null;}
-    if (command === 'desktop_wallpaper_info') return { position:localStorage.getItem('test.wallPosition') ?? 'fill', monitors:wallMonitors().map(({svg,...monitor})=>({...monitor, revision:localStorage.getItem('test.wallRevision') ?? svg, modified:Number(localStorage.getItem('test.wallModified') ?? 1)})) };
+    if (command === 'desktop_wallpaper_info') {invoked.push([command,payload]);return { position:localStorage.getItem('test.wallPosition') ?? 'fill', monitors:wallMonitors().map(({svg,...monitor})=>({...monitor, revision:localStorage.getItem('test.wallRevision') ?? svg, modified:Number(localStorage.getItem('test.wallModified') ?? 1)})) };}
     if (command === 'desktop_wallpaper') { const monitor = wallMonitors()[payload.monitor]; if (!monitor) throw new Error('Kein Hintergrundbild für diesen Bildschirm.'); return new TextEncoder().encode(monitor.svg).buffer; }
     if (command === 'open_window' || command === 'show_day' || command === 'show_note' || command === 'desktop_widget_open_settings' || command === 'panel_detach' || command.startsWith('plugin:window|')) { invoked.push([command, payload]); return null; }
     if (command === 'load_linked') {
@@ -537,9 +537,19 @@ async function checkJournalSticker() {
   };
   if (!only || only === 'layouts') for (const layout of ['classic', 'book', 'desk']) for (const palette of ['lavender', 'lavender-night']) for (const pixel of [false,true]) {
     await open(layout, palette, 'a', pixel);
-    // Type and palette: Gaegu for headings, Nunito for writing.
+    // Type and palette: Mali for headings, Nunito for writing.
     assert.match(await evaluate("getComputedStyle(document.querySelector('.entry-text')).fontFamily"), pixel ? /VT323/ : /Nunito/, `Writing font (${layout}, ${palette}, pixel=${pixel}).`);
-    assert.match(await evaluate("getComputedStyle(document.querySelector('.title-input, h1')).fontFamily"), pixel ? /Pixelify/ : /Gaegu/, `Heading font (${layout}, ${palette}, pixel=${pixel}).`);
+    assert.match(await evaluate("getComputedStyle(document.querySelector('.title-input, h1')).fontFamily"), pixel ? /Pixelify/ : /Mali/, `Heading font (${layout}, ${palette}, pixel=${pixel}).`);
+    if(layout==='desk') {
+      const keys=await evaluate(`(()=>{const buttons=[...document.querySelectorAll('.nebula-tab, .nebula-notebook-toggle, .nebula-calendar-toggle, .nebula-day-nav button, .nebula-panel.is-entries .nebula-window-tools button')];
+        const sample=color=>{const c=document.createElement('canvas'),ctx=c.getContext('2d');ctx.fillStyle=color;ctx.fillRect(0,0,1,1);return [...ctx.getImageData(0,0,1,1).data].slice(0,3);};
+        const surface=getComputedStyle(document.documentElement).getPropertyValue('--surface');
+        return {backdrops:buttons.map(b=>sample(getComputedStyle(b).getPropertyValue('--key-edge'))),
+          face:sample(getComputedStyle(document.querySelector('.board-actions button')).backgroundColor),surface:sample(surface)};})()`);
+      assert.equal(new Set(keys.backdrops.map(c=>JSON.stringify(c))).size,1,`Every desk key has the same backing (${palette}, pixel=${pixel})`);
+      assert(keys.backdrops[0].every((v,i)=>v>keys.surface[i]),`Only the backing is lightened against window paper (${palette}, pixel=${pixel})`);
+      if(palette==='lavender') assert.deepEqual(keys.face,[241,236,249],'The original inner key face is preserved');
+    }
     await screenshot(`sticker-${layout}-${palette}${pixel?'-pixel':''}.png`);
   }
   if (!only || only === 'popups') for (const style of ['a', 'b', 'c', 'd']) for (const palette of ['lavender','lavender-night']) {
@@ -1662,14 +1672,14 @@ async function checkJournalTheme() {
   await until("(document.documentElement.dataset.look==='journal'&&document.documentElement.dataset.layout==='book') && document.documentElement.dataset.colorTheme==='lavender'");
   assert.equal(await evaluate("getComputedStyle(document.documentElement).getPropertyValue('--background').trim()"), '#e9e4f5');
   assert.equal(await evaluate("getComputedStyle(document.documentElement).colorScheme"), 'light');
-  await evaluate("Promise.all([document.fonts.load('400 15px Nunito'),document.fonts.load('700 30px Gaegu')])");
+  await evaluate("Promise.all([document.fonts.load('400 15px Nunito'),document.fonts.load('700 30px Mali')])");
   await pause(250); await screenshot('journal-settings.png');
   await key('Escape');
   await until("!document.querySelector('.settings') && document.querySelectorAll('.book-page').length===2");
   assert.equal(await evaluate("document.querySelector('.sidebar')"), null, 'The book has no sidebar; the calendar comes down from its ribbon.');
   assert.equal(await evaluate(pagesNow), `entries:${today},data:${today}`);
   assert.match(await evaluate("getComputedStyle(document.querySelector('.book-page .entry-edit')).fontFamily"), /Nunito/);
-  assert.match(await evaluate("getComputedStyle(document.querySelector('.book-page h1')).fontFamily"), /Gaegu/);
+  assert.match(await evaluate("getComputedStyle(document.querySelector('.book-page h1')).fontFamily"), /Mali/);
   // The register on the outer page: all kinds of page at fixed heights, the right page's own tab is current.
   assert.deepEqual(await evaluate("[...document.querySelectorAll('.book-cut-tab')].map(b => b.dataset.page)"), ['entries', 'data', 'board']);
   assert.equal(await evaluate("document.querySelector('.book-cut-tab[aria-current=page]').dataset.page"), 'data');
@@ -3358,6 +3368,18 @@ try {
     const updatedWallpaper=await evaluate("document.querySelector('.desktop-widget-backdrop > i').style.backgroundImage");
     await evaluate("window.dispatchEvent(new Event('focus'))");await pause(150);
     assert.equal(await evaluate("document.querySelector('.desktop-widget-backdrop > i').style.backgroundImage"),updatedWallpaper,'Unchanged wallpaper keeps its cached image');
+    const geometryReads=await evaluate("window.__uiTest.invoked.filter(c=>c[0]==='desktop_wallpaper_info'||c[0]==='plugin:window|outer_position').length");
+    await evaluate("for(let n=0;n<100;n++)window.dispatchEvent(new Event('widget:popup-geometry'))");await pause(100);
+    const geometryReadsAfter=await evaluate("window.__uiTest.invoked.filter(c=>c[0]==='desktop_wallpaper_info'||c[0]==='plugin:window|outer_position').length");
+    assert(geometryReadsAfter-geometryReads<=1,'Geometry bursts on the same monitor do not trigger repeated native reads');
+    console.log(`Widget metadata reads for 100 unchanged geometry events: ${geometryReadsAfter-geometryReads}`);
+    await evaluate("window.__releasedWallpapers=[];window.__revokeWallpaper=URL.revokeObjectURL.bind(URL);URL.revokeObjectURL=url=>{window.__releasedWallpapers.push(url);window.__revokeWallpaper(url)}");
+    await chrome({glass:true,glassBlur:0,glassRadius:20});
+    await until("!document.querySelector('.desktop-widget-backdrop') && window.__releasedWallpapers.length>0");
+    assert(await evaluate(`window.__releasedWallpapers.some(url=>${JSON.stringify(updatedWallpaper)}.includes(url))`),'Turning blur off releases the loaded wallpaper blob');
+    await chrome({glass:true,glassBlur:24,glassRadius:20});
+    await until("!!document.querySelector('.desktop-widget-backdrop > i')");
+    assert.notEqual(await evaluate("document.querySelector('.desktop-widget-backdrop > i').style.backgroundImage"),updatedWallpaper,'Re-enabling blur loads a valid new image');
     assert.equal(await evaluate("getComputedStyle(document.querySelector('.desktop-widget-open')).borderRadius"),'20px','Rounding follows the slider');
     // A settings broadcast from the app does not bring its design back while the widget is transparent.
     await evaluate("window.__uiTest.emit('journal:theme',{layout:'book',look:'journal',pixel:false,popupStyle:'a'})");await pause(100);
@@ -3394,6 +3416,102 @@ try {
     await until("JSON.parse(localStorage.getItem('journal.widget-chrome')).entries.liveBlur===false && !!document.querySelector('[data-widget-setting=blur]')");
     await pause(200);await screenshot('widgets-manager-glass.png');
     assert.deepEqual(errors,[]);console.log('Widget glass passed: per widget, own palette and base independent of the app design, header without fills or layers, no outline on focus, blur and rounding sliders, glass popups, light/dark type, settings.');
+  } else if (process.env.JOURNAL_UI_SCOPE === 'journal-board') {
+    // The board in the journal look: paper notes as stickers in the look's colours, ink threads, sticker buttons.
+    await command('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
+    await evaluate(`(()=>{const d=window.__uiTest.date;const note=(id,title,paper,boardX,y,extra={})=>({id,kind:'note',title,text:'Ein **Zettel** mit etwas Text, der umbricht.',dates:[d],order:1,paper,boardX,y,created:d,...extra});
+      sessionStorage.setItem('boardCards',JSON.stringify([note('n1','Einkauf','yellow',30,40,{links:['n2']}),note('n2','Ideen','blue',330,70,{links:['n1']}),note('n3','Urlaub','green',640,30),note('n4','Geburtstag','pink',900,90),
+        {id:'l1',kind:'link',title:'Rezept',url:'https://example.com/rezept',text:'Ein Rezept für Kuchen',dates:[d],order:5,boardX:60,y:330,created:d}]));})()`);
+    for (const theme of ['lavender','lavender-night']) {
+      await evaluate(`localStorage.setItem('journal.settings',JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'),layout:'classic',look:'journal',pixel:false,colorTheme:'${theme}'}))`);
+      await command('Page.reload');await until("document.documentElement.dataset.look==='journal' && document.querySelectorAll('.board-card').length===5");
+      await evaluate("document.querySelector('.bulletin-board').scrollIntoView({block:'start'})");await evaluate('document.fonts.ready.then(()=>true)');await pause(600);
+      await screenshot(`journal-board-${theme}.png`);
+    }
+    // The settings and the desk's calendar: the sticker's ink line must run all the way round (outside the edge).
+    await evaluate(`localStorage.setItem('journal.settings',JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'),layout:'desk',look:'journal',colorTheme:'lavender'}))`);
+    await command('Page.reload');await until("document.documentElement.dataset.layout==='desk' && document.querySelectorAll('.entry').length>0");
+    await evaluate('document.fonts.ready.then(()=>true)');await pause(500);
+    await screenshot('journal-desk.png');
+    // Buttons are keys (the face's light inside, no ink ring); icons are drawn by hand (a wobble filter).
+    assert.match(await evaluate("getComputedStyle(document.querySelector('.nebula-panel.is-entries .nebula-window-tools button')).boxShadow"),/inset/,'Tools are keys with light and shade');
+    assert.equal(await evaluate("getComputedStyle(document.querySelector('.nebula-panel.is-entries .nebula-window-tools button')).backgroundColor"),'rgb(241, 236, 249)','Tools retain their original key face');
+    assert.match(await evaluate("getComputedStyle(document.querySelector('.nebula-panel.is-entries .nebula-window-tools .icon')).filter"),/journal-hand/,'Icons are drawn by hand');
+    // The upcoming tickets, to look at.
+    if (await evaluate("!!document.querySelector('.nebula-ticket')")) {
+      await evaluate("document.querySelector('.nebula-tickets').scrollIntoView({block:'center'})");await pause(300);
+      const r = await evaluate("(()=>{const b=document.querySelector('.nebula-tickets').getBoundingClientRect();return {x:Math.max(0,b.left-10),y:Math.max(0,b.top-10),width:Math.min(b.width+20,900),height:b.height+20};})()");
+      const shot = await command('Page.captureScreenshot',{format:'png',clip:{...r,scale:2}}); await writeFile(join(artifacts,'journal-closeup-tickets.png'), Buffer.from(shot.data,'base64'));
+      await evaluate("(()=>{for(let e=document.querySelector('.nebula-tickets');e;e=e.parentElement)if(e.scrollTop)e.scrollTop=0;document.scrollingElement.scrollTop=0;})()");await pause(200);
+    }
+    // A popup's frayed edge and keys, to look at (the poster's date picker).
+    await evaluate("document.querySelector('.nebula-date').click()");await until("!!document.querySelector('.mini-picker-panel')");await pause(450);
+    { const r = await evaluate("(()=>{const b=document.querySelector('.mini-picker-panel').getBoundingClientRect();return {x:Math.max(0,b.left-14),y:Math.max(0,b.top-14),width:b.width+28,height:b.height+28};})()");
+      const shot = await command('Page.captureScreenshot',{format:'png',clip:{...r,scale:2}}); await writeFile(join(artifacts,'journal-closeup-popup.png'), Buffer.from(shot.data,'base64')); }
+    await key('Escape','Escape');await until("!document.querySelector('.mini-picker-panel')");
+    // Close-ups (3×) of the keys and the hand-drawn icons, to look at.
+    for (const [name, selector] of [['journal-closeup-tools','.nebula-panel.is-entries .nebula-terminal-head'],['journal-closeup-poster','.nebula-poster']]) {
+      const r = await evaluate(`(()=>{const b=document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();return {x:Math.max(0,b.left-12),y:Math.max(0,b.top-12),width:Math.min(b.width+24,520),height:Math.min(b.height+24,260)};})()`);
+      const shot = await command('Page.captureScreenshot',{format:'png',clip:{...r,scale:3}});
+      await writeFile(join(artifacts, name + '.png'), Buffer.from(shot.data, 'base64'));
+    }
+    // The calendar card's head: its buttons and view tabs on one middle line.
+    const heads = await evaluate("[...document.querySelector('.nebula-cal-panel > .nebula-terminal-head').children].filter(e=>!e.classList.contains('desk-label')).map(e=>{const r=e.getBoundingClientRect();return Math.round(r.top+r.height/2);})");
+    assert(Math.max(...heads)-Math.min(...heads)<=1,`Calendar head on one line (${heads})`);
+    assert(await evaluate("(()=>{const b=document.querySelector('.nebula-cal-panel .desk-label b');return b.scrollWidth<=b.clientWidth+1;})()"),'The calendar label is not cut');
+    // Focus: the focused card's ring lies outside its edge; dimmed cards show neither edge nor label; the cards of the
+    // tilted column (rating, day values, activities) can still be focused while another card is.
+    await evaluate("document.querySelector('.nebula-panel.is-entries .nebula-window-focus').click()");
+    await until("document.querySelector('.nebula-panel.is-entries').classList.contains('is-focused')");await pause(300);
+    assert(!/inset/.test(await evaluate("getComputedStyle(document.querySelector('.nebula-panel.is-entries')).boxShadow")),'The focus ring is not inset');
+    assert.equal(await evaluate("getComputedStyle(document.querySelector('.nebula-panel.is-rating')).boxShadow"),'none','A dimmed card has no edge');
+    assert.equal(await evaluate("getComputedStyle(document.querySelector('.nebula-panel.is-rating .desk-label')).opacity"),'0','A dimmed card hides its label');
+    await screenshot('journal-desk-focus.png');
+    for (const id of ['rating','scales','activities']) {
+      const hit = await evaluate(`(()=>{const b=document.querySelector('.nebula-panel.is-${id} .nebula-window-focus'),r=b.getBoundingClientRect();return document.elementFromPoint(r.left+r.width/2,r.top+r.height/2)?.closest('.nebula-window-focus')===b;})()`);
+      assert(hit,`The focus button of ${id} is reachable while another card is focused`);
+    }
+    await evaluate("document.querySelector('.nebula-panel.is-rating .nebula-window-focus').click()");
+    await until("document.querySelector('.nebula-panel.is-rating').classList.contains('is-focused')");
+    await evaluate("document.querySelector('.nebula-cal-panel .nebula-window-focus').click()");
+    await until("document.querySelector('.nebula-cal-panel').classList.contains('is-focused')");await pause(300);
+    assert(!/inset/.test(await evaluate("getComputedStyle(document.querySelector('.nebula-cal-panel')).boxShadow")),'The focused calendar\'s ring is not inset');
+    await screenshot('journal-desk-focus-calendar.png');
+    await key('Escape','Escape');await evaluate("document.querySelectorAll('.nebula-window-focus[aria-pressed=true]').forEach(b=>b.click())");
+    await until("!document.querySelector('.nebula-stage.is-focus')");
+    // The search in the desk's bar keeps its place and width when clicked (it used to shrink to the right).
+    const field="(()=>{const r=document.querySelector('.nebula-window-bar .search-field').getBoundingClientRect();return [Math.round(r.left),Math.round(r.right)];})()";
+    const rest=await evaluate(field);
+    const at=await evaluate("(()=>{const r=document.querySelector('.nebula-window-bar .search-field').getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};})()");
+    await command('Input.dispatchMouseEvent',{type:'mouseMoved',x:at.x,y:at.y});await command('Input.dispatchMouseEvent',{type:'mousePressed',x:at.x,y:at.y,button:'left',buttons:1,clickCount:1});await command('Input.dispatchMouseEvent',{type:'mouseReleased',x:at.x,y:at.y,button:'left',buttons:0,clickCount:1});
+    await until("document.querySelector('.nebula-window-bar .search').classList.contains('is-focused')");await pause(250);
+    assert.deepEqual(await evaluate(field),rest,'The desk search keeps its place when clicked');
+    const gap = await evaluate("(()=>{const f=document.querySelector('.nebula-window-bar .search-field').getBoundingClientRect(),t=document.querySelector('.nebula-tabs').getBoundingClientRect();return [Math.round(f.width),Math.round(t.left-f.right)];})()");
+    assert(gap[0]<=380 && gap[1]>=16,`Search not too wide and apart from the tabs (${gap})`);
+    await command('Input.insertText',{text:'@'});await until("!!document.querySelector('.nebula-window-bar .search-panel')");
+    const panel = await evaluate("(()=>{const f=document.querySelector('.nebula-window-bar .search-field').getBoundingClientRect(),p=document.querySelector('.nebula-window-bar .search-panel').getBoundingClientRect();return [Math.round(p.left-f.left),Math.round(p.width-f.width)];})()");
+    assert(Math.abs(panel[0])<=1 && panel[1]>=-1,`Results start at the field's left and are at least as wide (${panel})`);
+    await screenshot('journal-desk-search.png');
+    await key('Escape','Escape');
+    assert.equal(await evaluate("getComputedStyle(document.documentElement).getPropertyValue('--sticker').includes('inset')"),false,'The sticker line is not inset');
+    await key(',','Comma',2);await until("!!document.querySelector('.settings')");await pause(500);
+    await screenshot('journal-settings.png');
+    assert.deepEqual(errors,[]);console.log('Journal board passed: pastel sticker notes, sticker pins, dotted ink threads, sticker buttons; ink line all round dialogs and desk cards; desk search keeps its place.');
+  } else if (process.env.JOURNAL_UI_SCOPE === 'journal-type') {
+    // The journal look's handwriting must draw German letters itself: a letter the face lacks would come from the next
+    // font in the list (another size and shape). Measured against two different fallbacks: equal widths = own glyph.
+    const missing = await evaluate(`(async()=>{const out={};for(const face of ['Mali','Nunito']){for(const weight of [500,700]){await document.fonts.load(weight+' 40px '+face,'aäöüÄÖÜß');const c=document.createElement('canvas').getContext('2d');const width=(stack,ch)=>{c.font=weight+' 40px '+stack;return c.measureText(ch).width;};
+      out[face+' '+weight]=[...'äöüÄÖÜß'].filter(ch=>Math.abs(width('"'+face+'", serif',ch)-width('"'+face+'", monospace',ch))>0.5);}}return out;})()`);
+    assert.deepEqual(Object.values(missing).flat(),[],'The journal faces draw ä ö ü ß themselves');
+    // The handwriting follows the language: Mali for German (it has ä ö ü ß), Gaegu for English (the look's own).
+    await evaluate(`localStorage.setItem('journal.settings',JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'),look:'journal',colorTheme:'lavender'}))`);
+    await command('Page.reload');await until("document.documentElement.dataset.look==='journal'");
+    for (const [lang, face] of [['de','Mali'],['en','Gaegu']]) {
+      await evaluate(`document.documentElement.lang='${lang}'`);
+      assert.match(await evaluate("getComputedStyle(document.documentElement).getPropertyValue('--hand')"), new RegExp('^\\W*'+face+'\\b'), `${lang}: ${face}`);
+    }
+    await evaluate("document.documentElement.lang='de'");
+    console.log('Journal type passed: Mali and Nunito draw ä ö ü Ä Ö Ü ß themselves; handwriting Mali in German, Gaegu in English.');
   } else if (process.env.JOURNAL_UI_SCOPE === 'sorting') {
     // Sorting by dragging (sortable.ts): the held row follows the pointer, the others slide aside; on letting go it takes
     // its place. Entries keep their arrows (and stay within their kind); the settings lists only drag (or ↑ ↓ on the grip).
@@ -5131,7 +5249,7 @@ try {
       await command('Input.dispatchMouseEvent', { type: 'mouseMoved', ...hoverPoint, buttons: 0 }); await pause(250);
       const look = await evaluate("(() => {const c=document.querySelector('.ink-canvas'),t=document.querySelector('.ink-toolbar');return {ink:getComputedStyle(c).color,toolbar:getComputedStyle(t).opacity,crisp:getComputedStyle(document.querySelector('.ink-strokes')).shapeRendering};})()");
       assert.equal(look.toolbar, '1', `The ink strip shows on pointing (${name}).`);
-      if (name === 'journal') assert.equal(look.ink, 'rgb(31, 61, 143)', 'Fountain-pen blue in the journal.');
+      if (name === 'journal') assert.equal(look.ink, 'rgb(58, 42, 122)', 'Violet ink in the journal (stickers on lavender paper).');
       if (name === 'nebula') assert.equal(look.ink, 'rgb(90, 24, 154)', 'Violet ink in Nebula.');
       if (name === 'pixel') assert.equal(look.crisp, 'crispedges', 'Crisp strokes in the pixel look.');
       const grain = await evaluate("(() => {const f=document.querySelector(document.querySelector('.ink-inks path.is-pencil').getAttribute('filter').slice(4,-1));return {steps:!!f.querySelector('feComponentTransfer'),grid:!!document.querySelector('.ink-paper.is-grid')};})()");

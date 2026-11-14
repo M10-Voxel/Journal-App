@@ -64,3 +64,12 @@ test('the journal look\'s lavender palettes: light and dark, readable, among the
   assert.equal(lavender.colors.background, '#e9e4f5');
   assert.equal(normalizeColorSettings({ colorTheme:'lavender-night' }).colorTheme, 'lavender-night');
 });
+
+test('the stickers\' white edge and ink line are palette colours, so they can be changed per palette', () => {
+  for (const theme of colorThemes) for (const token of ['sticker-edge', 'sticker-line']) assert.match(theme.colors[token], /^#[\da-f]{6}$/i, `${theme.id} ${token}`);
+  const settings = normalizeColorSettings({ colorTheme:'lavender', customColors:{ lavender:{ 'sticker-edge':'#FFE4F0', 'sticker-line':'#123456' } } });
+  assert.equal(resolvePalette(settings)['sticker-edge'], '#ffe4f0');
+  assert.equal(resolvePalette(settings)['sticker-line'], '#123456');
+  // Another palette keeps its own edge.
+  assert.equal(resolvePalette({ ...settings, colorTheme:'lavender-night' })['sticker-edge'], colorThemes.find(theme => theme.id === 'lavender-night').colors['sticker-edge']);
+});

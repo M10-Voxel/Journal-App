@@ -116,3 +116,6 @@
 
 .search-input-wrap { position: relative; display: flex; flex: 1; min-width: 0; max-width: 520px; }
 .search-input-wrap .search-cursor { position: absolute; left: 0; top: 50%; transform: translateY(-50%); margin: 0; pointer-events: none; }
+/* In the desk's bar (another look than Nebula) the field already has its full width: clicking it keeps it in place
+   instead of the head's narrow field growing to the left over the bar. */
+.search.is-on-nebula.is-focused .search-field, .search.is-on-nebula:has(.search-input:not(:placeholder-shown)) .search-field { position: relative; right: auto; top: auto; width: 100%; transform: none; }

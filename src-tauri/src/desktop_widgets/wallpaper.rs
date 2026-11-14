@@ -62,11 +62,14 @@ unsafe fn text(value:windows::core::PWSTR)->String{
 }
 #[cfg(windows)]
 fn per_monitor()->Result<Wallpapers,String>{
-    use windows::Win32::System::Com::{CoCreateInstance,CoInitializeEx,CoTaskMemFree,CLSCTX_ALL,COINIT_MULTITHREADED};
+    use windows::Win32::System::Com::{CoCreateInstance,CoInitializeEx,CoUninitialize,CoTaskMemFree,CLSCTX_ALL,COINIT_MULTITHREADED};
     use windows::Win32::UI::Shell::{DesktopWallpaper,IDesktopWallpaper};
     use windows::core::PCWSTR;
     unsafe{
-        let _=CoInitializeEx(None,COINIT_MULTITHREADED);
+        struct ComGuard(bool);
+        impl Drop for ComGuard{fn drop(&mut self){if self.0{unsafe{CoUninitialize();}}}}
+        // Both S_OK and S_FALSE increment COM's per-thread initialization count.
+        let _com=ComGuard(CoInitializeEx(None,COINIT_MULTITHREADED).is_ok());
         let wallpaper:IDesktopWallpaper=CoCreateInstance(&DesktopWallpaper,None,CLSCTX_ALL).map_err(|e|e.to_string())?;
         let position=match wallpaper.GetPosition().map(|p|p.0).unwrap_or(4){0=>"center",1=>"tile",2=>"stretch",3=>"fit",5=>"span",_=>"fill"}.to_string();
         let count=wallpaper.GetMonitorDevicePathCount().map_err(|e|e.to_string())?;

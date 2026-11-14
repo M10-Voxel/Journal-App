@@ -13,6 +13,7 @@ pub async fn widget_smoke_cdp(app:tauri::AppHandle,label:String,method:String,pa
             return Ok(serde_json::json!(order));
         }
         if method=="Journal.window"{return Ok(serde_json::json!({"hwnd":window.hwnd().map_err(|e|e.to_string())?.0 as usize,"position":window.outer_position().map_err(|e|e.to_string())?,"size":window.inner_size().map_err(|e|e.to_string())?}));}
+        if method=="Journal.liveBlur"{return Ok(serde_json::json!(super::live_blur::snapshot(window.hwnd().map_err(|e|e.to_string())?.0 as isize)));}
         if method=="Journal.disableInput"{
             #[link(name="user32")] unsafe extern "system"{fn EnableWindow(hwnd:isize,enable:i32)->i32;}
             unsafe{EnableWindow(window.hwnd().map_err(|e|e.to_string())?.0 as isize,0);}

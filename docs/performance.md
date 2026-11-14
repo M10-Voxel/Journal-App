@@ -4,6 +4,14 @@ Die App verwendet ein Rust-Backend und WebViews. Unter Windows übernimmt WebVie
 
 ## Implementierte Maßnahmen
 
+- Notizblock und Pinnwand behalten abgeleitete Ordnerbäume, Buchgruppen, Verbindungsrichtungen und Kartenlayouts, solange deren Eingabedaten gleich bleiben. Lokale Auswahl-, Popup- und Pan-/Drag-Änderungen bauen diese Strukturen nicht erneut auf. Ordnerzähler werden gesammelt statt pro Ordner durch die Kartenliste ermittelt.
+- Der Ordnerbaum verwendet einen Index nach Elternordner; eingeklappte Bereiche werden in einem Durchlauf ermittelt. Sortierung, verwaiste Ordner und zyklische Altbestände behalten ihr bisheriges Verhalten.
+- Gleichzeitig geöffnete Bildansichten (Pinnwand, Notizblock, Großansicht) teilen pro Bilddatei dieselbe Ladeanfrage und denselben Datenstring. Nach Schließen des letzten Nutzers wird der gemeinsame Eintrag freigegeben; es entsteht kein unbegrenzter Bildcache.
+
+- Bild-Blur-Widgets geben Bild-Blobs und zugehörige Lade-Caches beim Ausschalten, beim Wechsel zu Live Blur und beim Entfernen der letzten Bild-Blur-Fläche frei. Verspätete Bildantworten aus einem älteren Cache-Zustand werden verworfen.
+- Widget-Bewegungen auf demselben Bildschirm lösen keine erneuten Hintergrund-/Fensterpositionsabfragen pro Frame aus. Bildschirmwechsel und die fünfsekündige Hintergrundprüfung bleiben erhalten. Die native Widget-Wartung liest die gemeinsame Bildschirmkonfiguration einmal pro Durchlauf statt erneut pro Widget; ihr Intervall bleibt unverändert.
+- Jede erfolgreiche COM-Initialisierung beim Lesen der Windows-Hintergründe wird nach Freigabe der COM-Objekte wieder ausgeglichen, auch bei Fehlern.
+
 - Tagesänderungen aktualisieren nur tatsächlich veränderte Eintragszeilen. Entfernte Einträge werden gezielt gelöscht; unveränderte Einträge werden nicht mehr gelöscht und erneut angelegt. Das reduziert Schreibarbeit, WAL-Daten und Eintragskopien in der Rückgängig-Historie.
 - Aktivitätsauswertungen erhalten Minuten pro Tag und Tag-ID aus Rust/SQLite. Mail-HTML, Beschreibung und übrige Kalenderdaten werden dafür nicht mehr in die WebView übertragen. Gezählt werden dieselben Zeitspannen wie zuvor, einschließlich mehrtägiger Endzeiten; abgebrochene Einträge und Planungsspuren zählen weiterhin nicht mit.
 - Ein zusätzlicher partieller SQLite-Index unterstützt diese Zeitabfrage. Er ergänzt die vorhandene Datenbank, ohne Inhaltszeilen, Tabellenformat, Journal-Schema 12 oder Drive-Format 13 umzuschreiben. Das Wiederöffnen bestehender Datenbanken samt Undo/Redo wird getestet.

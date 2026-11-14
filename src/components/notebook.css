@@ -168,7 +168,7 @@
 :root[data-look='journal'] .notebook-head h2 { font: 600 22px var(--display); letter-spacing: -.01em; }
 :root[data-look='journal'] .notebook-head h2 .icon { color: var(--accent); }
 :root[data-look='journal'] .notebook-head-count { font: italic 13px var(--serif); }
-:root[data-look='journal'] .notebook-new { border-radius: var(--wobble); background: var(--accent); color: var(--on-accent); box-shadow: var(--sticker-sm); font-family: var(--hand); font-weight: 700; }
+:root[data-look='journal'] .notebook-new { border-radius: var(--wobble); background: var(--accent); color: var(--on-accent); box-shadow: var(--key); font-family: var(--hand); font-weight: 700; }
 :root[data-look='journal'] .notebook-side { background: color-mix(in srgb, var(--book-paper, var(--surface)) 92%, var(--leather, #6b3a24)); border-right: 1px solid color-mix(in srgb, var(--strong) 14%, transparent);
   box-shadow: inset -10px 0 14px -12px color-mix(in srgb, var(--ink, #2a1a0c) 33%, transparent); }
 :root[data-look='journal'] .notebook-tree-head { font: italic 600 12px var(--display); letter-spacing: .02em; text-transform: none; color: color-mix(in srgb, var(--strong) 70%, transparent); }

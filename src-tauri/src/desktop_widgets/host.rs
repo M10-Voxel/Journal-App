@@ -46,7 +46,7 @@ mod windows {
     }}
     /// Windows' composition blur samples the live desktop behind this window,
     /// including video wallpapers. Its strength is controlled by Windows.
-    pub fn live_blur(hwnd:isize,enabled:bool)->Result<(),String>{unsafe{
+    pub fn composition_blur(hwnd:isize,enabled:bool)->Result<(),String>{unsafe{
         #[repr(C)] struct Accent {state:i32,flags:u32,color:u32,animation:u32}
         #[repr(C)] struct Data {attribute:i32,data:*const c_void,size:usize}
         #[link(name="kernel32")] unsafe extern "system" {
@@ -58,7 +58,9 @@ mod windows {
         let address=if module!=0{GetProcAddress(module,b"SetWindowCompositionAttribute\0".as_ptr())}else{std::ptr::null()};
         if address.is_null(){return if enabled{Err("Windows unterstützt Live Blur nicht.".into())}else{Ok(())};}
         let set:unsafe extern "system" fn(isize,*const Data)->i32=std::mem::transmute(address);
-        let accent=Accent{state:if enabled{3}else{0},flags:0,color:0,animation:0};
+        // Acrylic with a nonzero, near-transparent tint avoids the opaque black
+        // fallback produced by the legacy blur policy on newer Windows builds.
+        let accent=Accent{state:if enabled{4}else{0},flags:0,color:0x01000000,animation:0};
         let data=Data{attribute:19,data:&accent as *const _ as *const c_void,size:std::mem::size_of::<Accent>()};
         if set(hwnd,&data)==0{return Err("Windows konnte Live Blur nicht aktivieren.".into());}
         Ok(())
@@ -92,7 +94,8 @@ mod windows {
             // WM_WINDOWPOSCHANGING: focusing an editor must not lift its desktop surface.
             (*(lparam as *mut WindowPos)).flags |= 0x0004;
         }
-        if msg == 0x0082 { RemoveWindowSubclass(hwnd,subclass,SUBCLASS_ID); }
+        if msg == 0x0082 { super::super::live_blur::disable(hwnd);RemoveWindowSubclass(hwnd,subclass,SUBCLASS_ID); }
+        if msg == 0x0018 && wparam==0 {super::super::live_blur::hide(hwnd);}
         DefSubclassProc(hwnd,msg,wparam,lparam)
     }
     pub fn configure(hwnd:isize)->Result<(),String> { unsafe {
@@ -156,8 +159,10 @@ mod windows {
         }
         let present:Vec<isize>=band.iter().copied().filter(|hwnd|order.contains(hwnd)).collect();
         let wanted:Vec<isize>=order.iter().copied().filter(|hwnd|present.contains(hwnd)).collect();
-        if present==wanted{return;}
-        for &hwnd in order { if IsWindow(hwnd)!=0 { place(hwnd,true); } }
+        if present!=wanted {
+            for &hwnd in order { if IsWindow(hwnd)!=0 { place(hwnd,true); } }
+        }
+        for &hwnd in order {super::super::live_blur::maintain(hwnd);}
     }}
     /// Called on the GUI thread; no input hooks, injection, or foreground activation.
     pub fn maintain(hwnd:isize) { unsafe {
@@ -170,7 +175,8 @@ mod windows {
         if frame!=frameless(frame){SetWindowLongPtrW(hwnd,-16,frameless(frame) as i32 as isize);SetWindowPos(hwnd,0,0,0,0,0,0x0001|0x0002|0x0004|0x0010|0x0020);}
         place(hwnd,false);
         if IsWindowVisible(hwnd)==0 || IsIconic(hwnd)!=0 { ShowWindow(hwnd,4); place(hwnd,false); }
+        super::super::live_blur::maintain(hwnd);
     }}
 }
 #[cfg(windows)]
-pub use windows::{configure,maintain,region,restack,live_blur};
+pub use windows::{configure,maintain,region,restack,composition_blur};

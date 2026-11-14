@@ -8,6 +8,17 @@ const apply = (cards, patches) => cards.map(value => patches[value.id] ? { ...va
 
 const folders = [folder('top', 'Projekte'), folder('garden', 'Garten', 'top', 2), folder('beds', 'Beete', 'garden'), folder('shop', 'Einkauf', 'top', 1), folder('home', 'Zuhause', null, 2)];
 
+test('large folder trees index ancestry once instead of rescanning all folders per node',()=>{
+ let reads=0;const count=800;
+ const many=Array.from({length:count},(_,i)=>({id:`folder-${i}`,name:`Folder ${i}`,order:i,get parent(){reads++;return i%10===0?null:`folder-${Math.floor(i/10)*10}`;}}));
+ const rows=flatTree(many);
+ assert.equal(rows.length,count);assert.equal(new Set(rows.map(row=>row.folder.id)).size,count);
+ assert(reads<count*5,`Expected linear parent reads, got ${reads}`);
+ console.log(`Folder tree: ${count} folders, ${reads} parent reads (previous full-scan traversal at least ${count*(count+1)}).`);
+ const visible=visibleTree(many,new Set(['folder-0']));
+ assert.equal(visible.length,count-9);assert.equal(visible[1].folder.id,'folder-10');
+});
+
 test('main notes own their subpages in the list, folder counts and child-text search', () => {
   const notes = [card('main','note',{primary:true,folder:'garden',links:['sub']}),card('sub','note',{folder:'beds',text:'Unique child content',links:['last']}),card('last','note',{links:['sub']}),card('alone','note')];
   assert.equal(noteOwners(notes).get('last'),'main');

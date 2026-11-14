@@ -40,6 +40,7 @@ impl Surface {
             let state=window.state::<DesktopWidgets>();let (_,runtime)=state.from_window(window)?;
             let radius=runtime.live_blur.lock().map_err(|e|e.to_string())?.map_or(0,|r|(r*self.units).round() as i32);
             super::host::region(window.hwnd().map_err(|e|e.to_string())?.0 as isize,Some(&regions),radius)?;
+            super::live_blur::update(window.hwnd().map_err(|e|e.to_string())?.0 as isize,(self.position.x,self.position.y,self.size.width as i32,self.size.height as i32),radius)?;
         }
         Ok(())
     }
@@ -52,9 +53,14 @@ pub fn desktop_widget_live_blur(window:tauri::WebviewWindow,enabled:bool,radius:
     if !radius.is_finite() || !(0.0..=24.0).contains(&radius){return Err("Ungültige Rundung.".into());}
     let state=window.state::<DesktopWidgets>();let (_,runtime)=state.from_window(&window)?;
     #[cfg(windows)] {
-        super::host::live_blur(window.hwnd().map_err(|e|e.to_string())?.0 as isize,enabled)?;
-        *runtime.live_blur.lock().map_err(|e|e.to_string())?=if enabled{Some(radius+4.0)}else{None};
+        let hwnd=window.hwnd().map_err(|e|e.to_string())?.0 as isize;
         let surface=runtime.surface.lock().map_err(|e|e.to_string())?.clone();
+        if enabled {
+            let surface=surface.as_ref().ok_or("Widget-Fläche ist noch nicht bereit.")?;
+            super::live_blur::enable(hwnd)?;
+            if let Err(error)=super::live_blur::update(hwnd,(surface.position.x,surface.position.y,surface.size.width as i32,surface.size.height as i32),((radius+4.0)*surface.units).round() as i32){super::live_blur::disable(hwnd);return Err(error);}
+        }else{super::live_blur::disable(hwnd);}
+        *runtime.live_blur.lock().map_err(|e|e.to_string())?=if enabled{Some(radius+4.0)}else{None};
         if let Some(surface)=surface{surface.region(&window,&[])?;}
         window.emit("widget:surface-changed",()).map_err(|e|e.to_string())?;
         return Ok(());

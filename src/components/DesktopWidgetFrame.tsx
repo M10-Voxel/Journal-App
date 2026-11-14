@@ -6,7 +6,7 @@ import type { DesktopWidgetInstance, DesktopWidgetState } from '../desktopWidget
 import { useLanguage, t } from '../i18n';
 import { usePopupLook } from '../popupLook';
 import { useWidgetChrome } from '../widgetChrome';
-import { startWidgetGesture } from '../widgetSurface';
+import { ensureWidgetSurface, startWidgetGesture } from '../widgetSurface';
 import { WidgetPopupSurface } from './WidgetPopupSurface';
 import { WidgetBackdrop } from './WidgetBackdrop';
 import { windowGrips } from './useFloatingWindow';
@@ -38,7 +38,11 @@ export function DesktopWidgetFrame({ widget, registry, date, nav, navRef, toolsR
   useEffect(() => {
     let current=true;
     const enabled=chrome.glass && chrome.liveBlur;
-    void invoke('desktop_widget_live_blur',{enabled,radius:chrome.glassRadius}).then(() => {
+    const apply = async () => {
+      if(enabled) await ensureWidgetSurface();
+      if(current) await invoke('desktop_widget_live_blur',{enabled,radius:chrome.glassRadius});
+    };
+    void apply().then(() => {
       if(current){setLiveBlur(enabled);setBlurError('');}
     }, reason => {if(current){setLiveBlur(false);setBlurError(enabled?String(reason):'');}});
     return () => {current=false;};

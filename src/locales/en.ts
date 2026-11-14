@@ -1104,6 +1104,9 @@ const english: Record<string, string> = {
   "Das Widget konnte nicht angezeigt werden.": "The widget could not be shown.",
   "Neu laden": "Reload",
   "{0} verschieben (ziehen oder ↑ ↓)": "Move {0} (drag or ↑ ↓)",
-  "Ziehen zum Verschieben · ↑ ↓": "Drag to move · ↑ ↓"
+  "Ziehen zum Verschieben · ↑ ↓": "Drag to move · ↑ ↓",
+  "Sticker (Journal-Optik)": "Stickers (journal look)",
+  "Weißer Rand der Sticker": "White edge of the stickers",
+  "Tintenlinie um die Sticker": "Ink line around the stickers"
 };
 export default english;

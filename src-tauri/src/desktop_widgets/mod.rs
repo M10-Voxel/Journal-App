@@ -1,4 +1,5 @@
 pub mod host;
+pub mod live_blur;
 mod config;
 mod geometry;
 pub mod smoke;
@@ -273,7 +274,7 @@ pub fn start(app:tauri::AppHandle){
         loop{
             std::thread::sleep(Duration::from_millis(250));let state=app.state::<DesktopWidgets>();
             if !state.ready.load(Ordering::Relaxed)||state.updating.load(Ordering::Relaxed){continue;}
-            let widgets=state.config.lock().map(|c|c.widgets.clone()).unwrap_or_default();let mut next_key=None;
+            let widgets=state.config.lock().map(|c|c.widgets.clone()).unwrap_or_default();let mut next_key=None;let mut topology_checked=false;
             pending.retain(|id,_|widgets.iter().any(|w|w.id==*id));
             for widget in widgets.into_iter().filter(|w|w.enabled&&w.kind.available()){
                 let Ok(runtime)=state.runtime(&widget.id)else{continue;};
@@ -282,11 +283,13 @@ pub fn start(app:tauri::AppHandle){
                     #[cfg(windows)] if let Ok(hwnd)=window.hwnd(){let raw=hwnd.0 as isize;let _=window.run_on_main_thread(move||host::maintain(raw));}
                     let current=runtime.changed.load(Ordering::Relaxed);let entry=pending.entry(widget.id.clone()).or_insert((0,Instant::now()));
                     if entry.0!=current{*entry=(current,Instant::now());}else if current!=0&&entry.1.elapsed()>Duration::from_millis(750){let _=remember(&app,&widget.id);let _=runtime.changed.compare_exchange(current,0,Ordering::Relaxed,Ordering::Relaxed);entry.0=0;}
-                    if let Ok((screens,_primary))=screens(&window){
-                        let key=screens.iter().map(|s|format!("{}:{}:{}:{}:{}:{}",s.name,s.x,s.y,s.width,s.height,s.scale)).collect::<Vec<_>>().join(";");
-                        if !geometry_key.is_empty()&&key!=geometry_key{let _=window.emit("widget:popups-dismiss",());let _=place(&window,false);}
-                        next_key=Some(key);
+                    // All widgets share the desktop topology. Enumerate monitors
+                    // once per sweep, preserving the existing detection latency.
+                    if !topology_checked{
+                        topology_checked=true;
+                        if let Ok((screens,_))=screens(&window){next_key=Some(screens.iter().map(|s|format!("{}:{}:{}:{}:{}:{}",s.name,s.x,s.y,s.width,s.height,s.scale)).collect::<Vec<_>>().join(";"));}
                     }
+                    if next_key.as_ref().is_some_and(|key|!geometry_key.is_empty()&&*key!=geometry_key){let _=window.emit("widget:popups-dismiss",());let _=place(&window,false);}
                 }else if !runtime.opening.load(Ordering::Relaxed)&&runtime.last_attempt.lock().map(|t|t.elapsed()>Duration::from_secs(2)).unwrap_or(false){
                     let app=app.clone();let id=widget.id;tauri::async_runtime::spawn(async move{open_report(app,id).await;});
                 }

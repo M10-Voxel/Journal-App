@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, DragEvent, KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { isShown, tagOf } from '../tags';
@@ -62,7 +62,7 @@ export function Notebook({ onClose, onOpenDay, tagScope = 'journal', widget }: {
   const upload = useRef<HTMLInputElement>(null), titleRef = useRef<HTMLInputElement>(null), focusTitle = useRef(false);
   const today = localDate();
 
-  const known = new Set(folders.map(folder => folder.id));
+  const known = useMemo(()=>new Set(folders.map(folder => folder.id)),[folders]);
   const shownChoice: Choice = choice === 'all' || choice === 'none' || known.has(choice) ? choice : 'all';
   const setChoice = (value: Choice) => { setChoiceState(value); if (!compact) write(choiceKey, value); };
   const select = (id: string | null) => { setSelectedState(id); setPageIndex(0); write(noteKey, id ?? ''); };
@@ -74,19 +74,25 @@ export function Notebook({ onClose, onOpenDay, tagScope = 'journal', widget }: {
   }, []);
   // Notes whose tag is hidden in the journal's tag filter stay out of the list, like on the board.
   const [hiddenTags] = useHiddenTags(tagScope);
-  const notes = sortNotes(notesIn(cards, folders, shownChoice, query), sort).filter(note => !note.tag || isShown(hiddenTags, note.tag));
-  const books=notebookGroups(cards),bookPages=new Map(books.map(group=>[group[0].id,group]));
-  const owners = new Map(books.flatMap(group=>group.map(card=>[card.id,group[0].id] as const)));
+  const notes = useMemo(()=>sortNotes(notesIn(cards, folders, shownChoice, query), sort).filter(note => !note.tag || isShown(hiddenTags, note.tag)),[cards,folders,shownChoice,query,sort,hiddenTags]);
+  const books=useMemo(()=>notebookGroups(cards),[cards]);
+  const bookPages=useMemo(()=>new Map(books.map(group=>[group[0].id,group])),[books]);
+  const owners = useMemo(()=>new Map(books.flatMap(group=>group.map(card=>[card.id,group[0].id] as const))),[books]);
   const current = notes.find(card => card.id === (owners.get(selected ?? '') ?? selected)) ?? notes[0] ?? null;
   const currentId = current?.id ?? null;
   const pages = current ? bookPages.get(current.id)??[current] : [];
   const index = Math.min(pageIndex, Math.max(0, pages.length - 1));
   const page = pages[index] ?? null;
-  const attachments = page ? attachmentsOf(cards, page) : [];
-  const tree = flatTree(folders);
-  const visibleRows = visibleTree(folders, collapsed);
-  const listed = new Set(notesIn(cards,folders,'all').map(card=>card.id));
-  const counts = (id: string) => cards.filter(card => listed.has(card.id) && card.folder === id).length;
+  const attachments = useMemo(()=>page ? attachmentsOf(cards, page) : [],[cards,page]);
+  const tree = useMemo(()=>flatTree(folders),[folders]);
+  const visibleRows = useMemo(()=>visibleTree(folders, collapsed),[folders,collapsed]);
+  const listed = useMemo(()=>new Set(notesIn(cards,folders,'all').map(card=>card.id)),[cards,folders]);
+  const folderCounts=useMemo(()=>{
+    const counts=new Map<string|null,number>();
+    for(const card of cards)if(listed.has(card.id)){const folder=card.folder&&known.has(card.folder)?card.folder:null;counts.set(folder,(counts.get(folder)??0)+1);}
+    return counts;
+  },[cards,listed,known]);
+  const counts = (id: string) => folderCounts.get(id)??0;
 
   useEffect(() => { if (focusTitle.current && page) { focusTitle.current = false; titleRef.current?.focus(); titleRef.current?.select(); } }, [page?.id]);
   useEffect(() => {
@@ -313,7 +319,7 @@ export function Notebook({ onClose, onOpenDay, tagScope = 'journal', widget }: {
               <button type="button" className="notebook-folder-name" onClick={() => setChoice('all')}><span className="notebook-branch" aria-hidden="true">.</span><Icon name="journal" /><span>{t('Alle Zettel')}</span><small>{listed.size}</small></button>
             </li>
             <li role="treeitem" aria-selected={shownChoice === 'none'} className={`notebook-folder is-none${shownChoice === 'none' ? ' is-current' : ''}${dropOn === 'none' ? ' is-drop' : ''}`} data-folder="none" {...dropHandlers(null)} onContextMenu={specialMenu('none')}>
-              <button type="button" className="notebook-folder-name" onClick={() => setChoice('none')}><span className="notebook-branch" aria-hidden="true">{tree.length ? '├── ' : '└── '}</span><Icon name="note" /><span>{t('Ohne Ordner')}</span><small>{cards.filter(card => listed.has(card.id) && (!card.folder || !known.has(card.folder))).length}</small></button>
+              <button type="button" className="notebook-folder-name" onClick={() => setChoice('none')}><span className="notebook-branch" aria-hidden="true">{tree.length ? '├── ' : '└── '}</span><Icon name="note" /><span>{t('Ohne Ordner')}</span><small>{folderCounts.get(null)??0}</small></button>
             </li>
             {visibleRows.map(({ folder, depth, last, lines }) => {
               const hasChildren = folders.some(f => f.parent === folder.id), open = !collapsed.has(folder.id);

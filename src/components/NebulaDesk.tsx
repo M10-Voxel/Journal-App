@@ -163,7 +163,7 @@ function NebulaCalendarPanel({ mode, date, today, onPick, dayCalendar, calendarO
       <div className="nebula-cal-views" role="tablist" aria-label={t('Kalenderansicht')}>
         {(['month', 'day'] as const).map(value => <button key={value} type="button" role="tab" aria-selected={view === value} data-cal-view={value} onClick={() => choose(value)}>{value === 'month' ? t('Monat') : t('Tag')}</button>)}
       </div>
-      <button type="button" className="nebula-window-focus" aria-pressed={focused} aria-label={t('{0}: Fokus', t('Kalender'))} title={focused ? t('Fokus beenden') : t('Fokus: Hintergrund abdunkeln')} onClick={onFocus}>{tool(sticker, '◐', 'search')}</button>
+      <button type="button" className="nebula-window-focus" aria-pressed={focused} aria-label={t('{0}: Fokus', t('Kalender'))} title={focused ? t('Fokus beenden') : t('Fokus: Hintergrund abdunkeln')} onClick={onFocus}>{tool(sticker, '◐', 'focus')}</button>
     </header>
     {view === 'month' ? <div className="nebula-cal-body">
       <div className="nebula-cal-head">
@@ -219,7 +219,7 @@ function DeskWindow({ id, stage, open, front, focused, dimmed = false, command, 
     onKeyDown={event => { if (onClose && event.key === 'Escape' && !event.defaultPrevented && !(event.target as Element).closest('input, textarea, select, [contenteditable="true"], [role="dialog"]')) { event.preventDefault(); onClose(); } }}>
     <header className="nebula-terminal-head nebula-window-head" onPointerDown={place.startMove} onDoubleClick={event => { if (!(event.target as Element).closest('button')) place.dock(); }}
       onContextMenu={contextMenu(() => ({ title: label, command: command.replace(/^\.\//, '').replace(/\.sh.*$/, '') || 'window', items: [
-        { id: 'focus', command: 'focus', label: focused ? t('Fokus beenden') : t('Fokus: Hintergrund abdunkeln'), icon: 'search', checked: focused, run: onFocus },
+        { id: 'focus', command: 'focus', label: focused ? t('Fokus beenden') : t('Fokus: Hintergrund abdunkeln'), icon: 'focus', checked: focused, run: onFocus },
         ...(place.floating ? [{ id: 'home', command: 'mv --home', label: t('Ausgangsposition'), icon: 'undo', run: place.dock } as MenuItem] : []),
         { id: 'grid', command: 'dock', label: t('Ins Raster andocken'), icon: 'layout', run: onDock },
         ...(onClose && closeLabel ? ['-' as const, { id: 'close', command: 'exit', label: closeLabel, icon: 'done', keys: 'Esc', run: onClose } as MenuItem] : []),
@@ -229,7 +229,7 @@ function DeskWindow({ id, stage, open, front, focused, dimmed = false, command, 
       <span className="nebula-window-tools">
         {place.floating && <button type="button" className="nebula-window-dock" aria-label={t('{0}: Ausgangsposition', label)} title={t('Ausgangsposition · Doppelklick auf die Leiste')} onClick={place.dock}>{tool(sticker, '⊡', 'undo')}</button>}
         <button type="button" className="nebula-window-grid" aria-label={t('{0} ins Raster andocken', label)} title={t('Ins Raster andocken')} onClick={onDock}>{tool(sticker, '⊞', 'layout')}</button>
-        <button type="button" className="nebula-window-focus" aria-pressed={focused} aria-label={t('{0}: Fokus', label)} title={focused ? t('Fokus beenden') : t('Fokus: Hintergrund abdunkeln')} onClick={onFocus}>{tool(sticker, '◐', 'search')}</button>
+        <button type="button" className="nebula-window-focus" aria-pressed={focused} aria-label={t('{0}: Fokus', label)} title={focused ? t('Fokus beenden') : t('Fokus: Hintergrund abdunkeln')} onClick={onFocus}>{tool(sticker, '◐', 'focus')}</button>
         {onClose && closeLabel && <button type="button" className="nebula-calendar-close" aria-label={closeLabel} title={`${closeLabel} · Esc`} onClick={onClose}>{tool(sticker, '×', 'done')}</button>}
       </span>
     </header>
@@ -318,7 +318,7 @@ function Panel({ id, command, label, note, minimized, span, shownSpan = span, up
     data-panel={id} data-span={shownSpan} aria-label={label} style={{ '--span': shownSpan, ...pull ? { '--pull-left': Math.max(0, pull[0]), '--pull-right': Math.max(0, pull[1]) } : {}, ...held ? { transform: `translate(${held.dx}px, ${held.dy}px) rotate(-.6deg)` } : {} } as CSSProperties}>
     <header className="nebula-terminal-head nebula-panel-head" onPointerDown={onGrab} onDoubleClick={event => { if (!(event.target as Element).closest('button')) onMinimize(); }}
       onContextMenu={contextMenu(() => ({ title: label, command: command.replace(/^\.\//, '').replace(/\.sh.*$/, '') || 'window', items: [
-        ...(!minimized && onFocus ? [{ id: 'focus', command: 'focus', label: focused ? t('Fokus beenden') : t('Fokus: Hintergrund abdunkeln'), icon: 'search', checked: focused, run: onFocus } as MenuItem] : []),
+        ...(!minimized && onFocus ? [{ id: 'focus', command: 'focus', label: focused ? t('Fokus beenden') : t('Fokus: Hintergrund abdunkeln'), icon: 'focus', checked: focused, run: onFocus } as MenuItem] : []),
         { id: 'minimize', command: minimized ? 'restore' : 'minimize', label: minimized ? t('Wiederherstellen') : t('Minimieren'), icon: minimized ? 'up' : 'down', run: onMinimize },
         ...(!upright ? [{ id: 'half', command: 'resize --half', label: t('Halbe Breite'), icon: 'layout', checked: span === columns / 2, run: onHalf } as MenuItem] : []),
         ...(height ? [{ id: 'height', command: 'resize --auto', label: t('Höhe automatisch'), icon: 'transfer', run: () => onHeight(null) } as MenuItem] : []),
@@ -330,7 +330,7 @@ function Panel({ id, command, label, note, minimized, span, shownSpan = span, up
       <span className="visually-hidden">{label}</span>
       {minimized && <span className="nebula-panel-state" aria-hidden="true">{sticker ? t('minimiert') : `[ ${t('minimiert')} ]`}</span>}
       <span className="nebula-window-tools">
-        {!minimized && onFocus && <button type="button" className="nebula-window-focus" aria-pressed={focused} aria-label={t('{0}: Fokus', label)} title={focused ? t('Fokus beenden') : t('Fokus: Hintergrund abdunkeln')} onClick={onFocus}>{tool(sticker, '◐', 'search')}</button>}
+        {!minimized && onFocus && <button type="button" className="nebula-window-focus" aria-pressed={focused} aria-label={t('{0}: Fokus', label)} title={focused ? t('Fokus beenden') : t('Fokus: Hintergrund abdunkeln')} onClick={onFocus}>{tool(sticker, '◐', 'focus')}</button>}
         {!upright && <button type="button" className="nebula-panel-half" aria-pressed={span === columns / 2} aria-label={t('{0}: halbe Breite', label)} title={span === columns / 2 ? t('Ganze Breite') : t('Halbe Breite')} onClick={onHalf}>{tool(sticker, span === columns / 2 ? '▭' : '◫', 'transfer')}</button>}
         <button type="button" className="nebula-panel-minimize" aria-expanded={!minimized} aria-label={minimized ? t('{0} wiederherstellen', label) : t('{0} minimieren', label)}
           title={minimized ? t('Wiederherstellen') : t('Minimieren')} onClick={onMinimize}>{sticker ? <Icon name={minimized ? 'up' : 'down'} /> : minimized ? '▢' : '_'}</button>

@@ -58,9 +58,16 @@ export function parentOf(folders: Folder[], folder: Folder): string | null {
 /** The tree in reading order with each folder's depth and whether it is the last of its siblings (for `tree` lines). */
 export function flatTree(folders: Folder[]): { folder: Folder; depth: number; last: boolean; lines: boolean[] }[] {
   const rows: { folder: Folder; depth: number; last: boolean; lines: boolean[] }[] = [];
+  const known=new Set(folders.map(folder=>folder.id));
+  const childrenByParent=new Map<string|null,Folder[]>();
+  for(const folder of folders){
+    const parent=folder.parent && known.has(folder.parent)?folder.parent:null;
+    const children=childrenByParent.get(parent)??[];children.push(folder);childrenByParent.set(parent,children);
+  }
+  for(const children of childrenByParent.values())children.sort(byOrder);
   const seen = new Set<string>();
   const walk = (parent: string | null, depth: number, lines: boolean[]) => {
-    const children = folders.filter(folder => parentOf(folders, folder) === parent).sort(byOrder);
+    const children = childrenByParent.get(parent)??[];
     children.forEach((folder, index) => {
       if (seen.has(folder.id)) return;
       seen.add(folder.id);
@@ -82,13 +89,11 @@ export function flatTree(folders: Folder[]): { folder: Folder; depth: number; la
 /** Follow only the displayed ancestry: even a cyclic state from a merge must remain navigable. */
 export function visibleTree(folders: Folder[], collapsed: Set<string>): ReturnType<typeof flatTree> {
   const rows = flatTree(folders);
-  return rows.filter((row, index) => {
-    for (let at = index - 1, depth = row.depth; at >= 0 && depth > 0; at--) {
-      if (rows[at].depth < depth) {
-        if (collapsed.has(rows[at].folder.id)) return false;
-        depth = rows[at].depth;
-      }
-    }
+  let hiddenBelow:number|null=null;
+  return rows.filter(row => {
+    if(hiddenBelow!==null && row.depth<=hiddenBelow)hiddenBelow=null;
+    if(hiddenBelow!==null)return false;
+    if(collapsed.has(row.folder.id))hiddenBelow=row.depth;
     return true;
   });
 }

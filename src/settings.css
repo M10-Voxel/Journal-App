@@ -48,7 +48,7 @@
 .theme-sample i:nth-of-type(2) { background: var(--priority); }
 .theme-sample i:nth-of-type(3) { background: var(--success); }
 .theme-sample.is-journal { padding: 0 6px; border-radius: 6px; background: #e9e4f5; }
-.theme-sample.is-journal > span { color: #2b2140; font-family: 'Gaegu', cursive; font-weight: 700; font-size: 26px; }
+.theme-sample.is-journal > span { color: #2b2140; font-family: 'Mali', cursive; font-weight: 700; font-size: 26px; }
 .theme-sample.is-journal i { border-radius: 50% 45% 55% 40%; background: #9b84e0; box-shadow: inset 0 0 0 1.5px #2b2140, 0 0 0 2px #fff; }
 .theme-sample.is-journal i:nth-of-type(2) { background: #e48aa8; }
 .theme-sample.is-journal i:nth-of-type(3) { background: #7cc7b2; }

@@ -1,5 +1,5 @@
 /* The journal look (`data-look='journal'`) in every layout: stickers on lavender paper. Paper with a light grain,
-   cut-out stickers with a white die-cut edge and a dark ink line, round handwriting (Gaegu) for headings, buttons and
+   cut-out stickers with a white die-cut edge and a dark ink line, round handwriting (Mali: full German letters, unlike Gaegu) for headings, buttons and
    labels, a round readable face (Nunito) for what is written. Violet with pink and mint accents (palettes `lavender`
    and `lavender-night` in colors.ts; `paper` and `candle` stay choosable and take the same shapes).
    The book's own structure is in journal-theme.css, the desk's sticker board in journal-desk.css. This file is loaded
@@ -8,8 +8,8 @@
 /* ── Building blocks ──────────────────────────────────────────────────────────────────────────────────────────────
    --ink           the ink of text and drawn lines (dark violet on light paper, pale lilac on dark paper)
    --ink-fixed     dark ink whatever the paper: for text on the bright sticker colours and on the light paper scrap
-   --sticker-line  the dark line around a sticker (dark on light and on dark paper)
-   --sticker-edge  the white die-cut edge around a sticker
+   --sticker-line  the dark line around a sticker (dark on light and on dark paper)  ┐ colours of the palette
+   --sticker-edge  the white die-cut edge around a sticker                             ┘ (colors.ts, adjustable)
    --sticker       a sticker: ink line, white edge, a faint rim and a soft offset shadow (box-shadow chain)
    --sticker-sm    the same for small parts (buttons, tags)
    --paper-grain   the paper's grain (an SVG noise tile, `img-src data:` is allowed by the CSP)
@@ -24,9 +24,25 @@
   --sticker-edge: #ffffff;
   --sticker-rim: color-mix(in srgb, var(--ink) 16%, transparent);
   --sticker-shade: color-mix(in srgb, var(--ink) 20%, transparent);
-  --sticker: inset 0 0 0 2px var(--sticker-line), 0 0 0 5px var(--sticker-edge), 0 0 0 6px var(--sticker-rim), 3px 5px 0 6px var(--sticker-shade);
-  --sticker-sm: inset 0 0 0 1.5px var(--sticker-line), 0 0 0 3px var(--sticker-edge), 0 0 0 3.5px var(--sticker-rim), 1.5px 2.5px 0 3.5px var(--sticker-shade);
-  --sticker-flat: inset 0 0 0 1.5px var(--sticker-line), 0 0 0 3px var(--sticker-edge), 0 0 0 3.5px var(--sticker-rim);
+  /* The ink line lies just outside the sticker's edge (not inset): an inset line is painted below the backgrounds of
+     what is inside, so a dialog's or a sheet's own parts would cover it in places. */
+  --sticker: 0 0 0 2px var(--sticker-line), 0 0 0 7px var(--sticker-edge), 0 0 0 8px var(--sticker-rim), 3px 5px 0 8px var(--sticker-shade);
+  --sticker-sm: 0 0 0 1.5px var(--sticker-line), 0 0 0 4.5px var(--sticker-edge), 0 0 0 5px var(--sticker-rim), 1.5px 2.5px 0 5px var(--sticker-shade);
+  --sticker-flat: 0 0 0 1.5px var(--sticker-line), 0 0 0 4.5px var(--sticker-edge), 0 0 0 5px var(--sticker-rim);
+  /* A button: no ink line – a soft key in the white die-cut edge, its face lighter at the top and darker at the bottom
+     (light from above), pressed it sinks in. */
+  --key-light: color-mix(in srgb, #ffffff 34%, transparent);
+  --key-dark: color-mix(in srgb, var(--ink) 26%, transparent);
+  /* The original key face; only its surrounding backing is lightened. */
+  --key-bg: color-mix(in srgb, var(--surface) 97%, var(--accent));
+  --key-backdrop: color-mix(in srgb, var(--surface) 48%, #ffffff);
+  --key: 0 0 0 4.5px var(--sticker-edge), 0 0 0 5px var(--sticker-rim), 1px 3px 0 5px var(--sticker-shade), inset 0 3px 0 var(--key-light), inset 0 -4px 0 var(--key-dark);
+  --key-pressed: 0 0 0 4.5px var(--sticker-edge), 0 0 0 5px var(--sticker-rim), inset 0 3px 0 var(--key-dark), inset 0 -1.5px 0 var(--key-light);
+  --key-face: none;
+  /* A sunken tray (switch track, choice strips, a key that cannot be pressed now) and a key without the white edge. */
+  --key-tray: color-mix(in srgb, var(--ink) 6%, transparent);
+  --key-sunk: inset 0 2.5px 0 var(--key-dark), inset 0 -1.5px 0 var(--key-light);
+  --key-flat: 0 1px 0 var(--sticker-rim), inset 0 3px 0 var(--key-light), inset 0 -4px 0 var(--key-dark);
   --pink: #e48aa8;
   --mint: #7cc7b2;
   --violet: #9b84e0;
@@ -35,7 +51,7 @@
   --blots: radial-gradient(closest-side at 50% 50%, color-mix(in srgb, var(--violet) 30%, transparent) 0 62%, color-mix(in srgb, var(--violet) 18%, transparent) 62% 78%, color-mix(in srgb, var(--violet) 8%, transparent) 78% 92%, transparent 92%);
   --wobble: 14px 7px 13px 6px / 6px 13px 7px 14px;
   --wobble-lg: 20px 9px 18px 8px / 8px 18px 9px 20px;
-  --hand: 'Gaegu', 'Comic Sans MS', 'Segoe Print', cursive;
+  --hand: 'Mali', 'Comic Sans MS', 'Segoe Print', cursive;
   --write: 'Nunito', 'Segoe UI', system-ui, sans-serif;
   --serif: 'Nunito', 'Segoe UI', system-ui, sans-serif;
   --display: var(--hand);
@@ -59,12 +75,48 @@
   --violet: #6b4fd0;
   --ink-soft: color-mix(in srgb, var(--text) 40%, transparent);
   --ink-shadow: #00000055;
+  --key-light: color-mix(in srgb, #ffffff 12%, transparent);
+  --key-dark: #00000066;
+  --key-bg: color-mix(in srgb, var(--surface) 90%, #ffffff);
+  --key-backdrop: color-mix(in srgb, var(--surface) 82%, #ffffff);
 }
+:root[data-look='journal'][data-color-theme='lavender'] { --key-bg: #f1ecf9; }
 :root[data-look='journal'][data-color-theme='paper'] { --ink: #3b2a1a; --ink-fixed: #3b2a1a; --violet: #c9a46a; }
 :root[data-look='journal'][data-color-theme='candle'] { --violet: #9a6a2a; }
 :root[data-look='journal'] .font-warmup { font-family: 'Nunito'; }
+/* English: Gaegu, the handwriting the look was drawn with. It lacks German letters (ä ö ü ß would come from another
+   face of another size), so German text takes Mali, a round handwriting with them (`lang` on <html>, i18n.ts). */
+:root[data-look='journal'][lang='en'] { --hand: 'Gaegu', 'Mali', 'Comic Sans MS', cursive; }
 :root[data-look='journal'], :root[data-look='journal'] * { scrollbar-color: var(--scrollbar) transparent; }
 :root[data-look='journal'] ::selection { background: color-mix(in srgb, var(--pink) 45%, transparent); }
+
+/* ── Drawn by hand: icons and drawn stickers get slightly uneven, jagged lines (HandDrawn.tsx), not perfect vectors.
+   Not with the pixel look, whose icons are pixel drawings. ─────────────────────────────────────────────────────── */
+:root[data-look='journal']:not([data-pixel]) :is(svg.icon, svg.entry-icon, .entry-symbol svg) { filter: url(#journal-hand); }
+/* A little more ink, so the wobble makes the lines uneven without breaking them. */
+:root[data-look='journal']:not([data-pixel]) svg.icon { stroke-width: 1.65; }
+:root[data-look='journal']:not([data-pixel]) :is(.desk-poster-stickers, .board-pin) { filter: url(#journal-hand-lg); }
+/* Edges: a pseudo-element redraws the ink line and the white die-cut edge over the crisp ones, through a wobble filter,
+   so the outline bulges and frays a little (the element's own text stays sharp). Big stickers, small stickers, keys. */
+:root[data-look='journal']:not([data-pixel]) :is(.nebula-panel:not([class*='is-drop']), .nebula-cal-panel, .nebula-poster, .nebula-calendar, .nebula-notebook, .nebula-ticket, .board-card, .popover, .planner, .cal-composer:not(.has-tag), .mini-picker-panel)::before {
+  content: ''; display: block; position: absolute; inset: 0; z-index: auto; border-radius: inherit; pointer-events: none; background: none; width: auto; height: auto;
+  box-shadow: 0 0 0 2px var(--sticker-line); outline: 3.5px solid var(--sticker-edge); outline-offset: 4px; filter: url(#journal-edge); }
+:root[data-look='journal']:not([data-pixel]) :is(.board-card, .nebula-ticket)::before { box-shadow: 0 0 0 1.5px var(--sticker-line); outline-width: 2.5px; outline-offset: 2.5px; }
+:root[data-look='journal']:not([data-pixel]) .desk-label { overflow: visible; }
+:root[data-look='journal']:not([data-pixel]) :is(.desk-label, .entry-tag, .board-group-name:not(:placeholder-shown), .board-copy-sync)::before {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  box-shadow: 0 0 0 1.5px var(--sticker-line); outline: 2.5px solid var(--sticker-edge); outline-offset: 2.5px; filter: url(#journal-edge); }
+:root[data-look='journal']:not([data-pixel]) :is(.desk-label, .entry-tag) { position: relative; }
+/* Every key has the same lighter backing, independent of its own face or state.
+   Resolve it on the root so even poster cards with local paper colours share it. */
+:root[data-look='journal'] :is(button, kbd, .cal-views-indicator) {
+  --key-edge: var(--key-backdrop);
+  --key: 0 0 0 3px var(--key-edge), 0 0 0 3.5px var(--sticker-rim), 1px 2.5px 0 3.5px var(--sticker-shade), inset 0 3px 0 var(--key-light), inset 0 -4px 0 var(--key-dark);
+  --key-pressed: 0 0 0 3px var(--key-edge), 0 0 0 3.5px var(--sticker-rim), inset 0 3px 0 var(--key-dark), inset 0 -1.5px 0 var(--key-light); }
+/* Keys: only the edge frays (they have no ink line). */
+:root[data-look='journal']:not([data-pixel]) :is(.nav-cluster .nav-step, .nav-cluster .nav-today:not(.is-current), .board-actions button, .nebula-window-tools button, .nebula-cal-panel > .nebula-terminal-head > :is(.nebula-window-focus, .nebula-calendar-toggle), .nebula-day-nav button, .nebula-cal-step, .nebula-layout-reset, .planner-confirm, .cal-composer-create, .chrome-actions button.chrome-submit, .notebook-new, .segmented button[aria-checked='true'], .settings-tabs > button[aria-selected='true'], .journal-tab[aria-current=page], .nebula-tab[aria-current='page'], .nebula-window-bar :is(.nebula-calendar-toggle, .nebula-notebook-toggle)) { position: relative; }
+:root[data-look='journal']:not([data-pixel]) :is(.nav-cluster .nav-step, .nav-cluster .nav-today:not(.is-current), .board-actions button, .nebula-window-tools button, .nebula-cal-panel > .nebula-terminal-head > :is(.nebula-window-focus, .nebula-calendar-toggle), .nebula-day-nav button, .nebula-cal-step, .nebula-layout-reset, .planner-confirm, .cal-composer-create, .chrome-actions button.chrome-submit, .notebook-new, .segmented button[aria-checked='true'], .settings-tabs > button[aria-selected='true'], .journal-tab[aria-current=page], .nebula-tab[aria-current='page'], .nebula-window-bar :is(.nebula-calendar-toggle, .nebula-notebook-toggle))::before {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; outline: 2px solid var(--key-edge, var(--sticker-edge)); outline-offset: 1px; filter: url(#journal-edge); }
 
 /* ── Type: handwriting for headings and labels, Nunito for writing ───────────────────────────────────────────── */
 :root[data-look='journal'] h1 { font-family: var(--hand); font-weight: 700; letter-spacing: 0; color: var(--strong); }
@@ -88,47 +140,52 @@
 :root[data-look='journal'] :is(.icon-button, .today-button, .cal-icon-button, .date-picker-button, .tag-filter-button, .kind-picker button, .titlebar-button, .scale-slider button, .system-actions button) {
   font-family: var(--hand); font-weight: 700; font-size: 15px; border-radius: var(--wobble); transition: transform 160ms var(--spring), box-shadow var(--fast) ease, background-color var(--fast) ease, color var(--fast) ease; }
 :root[data-look='journal'] :is(.icon-button, .today-button, .cal-icon-button, .date-picker-button, .tag-filter-button, .kind-picker button, .scale-slider button, .system-actions button):is(:hover, [aria-expanded='true']):not(:disabled) {
-  background: var(--surface); color: var(--strong); box-shadow: var(--sticker-sm); transform: rotate(-2deg); }
+  background: var(--surface); color: var(--strong); box-shadow: var(--key); transform: rotate(-2deg); }
 :root[data-look='journal'] :is(.icon-button, .today-button, .cal-icon-button, .date-picker-button, .tag-filter-button, .kind-picker button):active:not(:disabled) { transform: rotate(-2deg) scale(.94); }
 :root[data-look='journal'] .toolbar .date-picker-button { font: 700 17px var(--hand); color: var(--text); }
-:root[data-look='journal'] .tag-filter-button.is-filtering { color: var(--accent); background: color-mix(in srgb, var(--pink) 22%, var(--tint-base, var(--surface))); box-shadow: var(--sticker-sm); }
+:root[data-look='journal'] .tag-filter-button.is-filtering { color: var(--accent); background: color-mix(in srgb, var(--pink) 22%, var(--tint-base, var(--surface))); box-shadow: var(--key); }
 :root[data-look='journal'] .kind-picker button > .icon { color: var(--accent); }
 /* The day's turning: a row of two round stickers with the today label between them. */
 :root[data-look='journal'] .nav-cluster { gap: 6px; padding: 0; box-shadow: none; }
-:root[data-look='journal'] .nav-cluster .nav-step { width: 28px; height: 28px; background: var(--surface); color: var(--ink); box-shadow: var(--sticker-sm); transition: transform 180ms var(--spring); }
+:root[data-look='journal'] .nav-cluster .nav-step { width: 28px; height: 28px; background: var(--surface); color: var(--ink); box-shadow: var(--key); transition: transform 180ms var(--spring); }
 :root[data-look='journal'] .nav-cluster .nav-step:hover { background: color-mix(in srgb, var(--mint) 40%, var(--tint-base, var(--surface))); color: var(--ink-fixed); transform: rotate(-6deg); }
-:root[data-look='journal'] .nav-cluster .nav-today { height: 28px; padding: 0 12px; border-radius: var(--wobble); background: color-mix(in srgb, var(--pink) 30%, var(--tint-base, var(--surface))); color: var(--ink-fixed); box-shadow: var(--sticker-sm); font: 700 15px var(--hand); }
-:root[data-look='journal'] .nav-cluster .nav-today.is-current { background: transparent; color: var(--muted); box-shadow: inset 0 0 0 1.5px var(--ink-soft); }
+:root[data-look='journal'] .nav-cluster .nav-today { height: 28px; padding: 0 12px; border-radius: var(--wobble); background: color-mix(in srgb, var(--pink) 30%, var(--tint-base, var(--surface))); color: var(--ink-fixed); box-shadow: var(--key); font: 700 15px var(--hand); }
+:root[data-look='journal'] .nav-cluster .nav-today.is-current { background: transparent; color: var(--muted); box-shadow: var(--key-sunk); }
 :root[data-look='journal'] .nav-cluster .nav-today:hover:not(:disabled) { background: color-mix(in srgb, var(--pink) 45%, var(--tint-base, var(--surface))); color: var(--ink-fixed); }
+/* Keys: a light lavender-grey face with its light (lighter at the top), pressed they sink in. */
+:root[data-look='journal'] :is(.nav-cluster .nav-step, .board-actions button, .settings-tabs > button[aria-selected='true'], .chrome-actions button:not(.chrome-submit)) { background-color: var(--key-bg); }
+:root[data-look='journal'] :is(.icon-button, .today-button, .cal-icon-button, .date-picker-button, .tag-filter-button:not(.is-filtering), .kind-picker button, .scale-slider button, .system-actions button):is(:hover, [aria-expanded='true']):not(:disabled) { background-color: var(--key-bg); }
+:root[data-look='journal'] :is(.nav-cluster .nav-step, .nav-cluster .nav-today:not(.is-current), .planner-confirm, .cal-composer-create, .board-actions button, .segmented button[aria-checked='true'], .cal-views-indicator, .journal-tab[aria-current=page], .settings-tabs > button[aria-selected='true'], .notebook-new, .chrome-actions button.chrome-submit) { background-image: var(--key-face); }
+:root[data-look='journal'] :is(.nav-cluster .nav-step, .nav-cluster .nav-today, .planner-confirm, .cal-composer-create, .board-actions button, .notebook-new, .chrome-actions button, .icon-button, .today-button, .cal-icon-button, .date-picker-button, .tag-filter-button, .kind-picker button, .segmented button, .cal-views button, .journal-tab):active:not(:disabled) { box-shadow: var(--key-pressed) !important; transform: translateY(1px) !important; }
 /* Primary buttons: a filled violet sticker. */
-:root[data-look='journal'] :is(.planner-confirm, .cal-composer-create, .board-link-form button:first-of-type, .mail-import-toast .notice-action) { border-radius: var(--wobble); background: var(--accent); color: var(--on-accent); box-shadow: var(--sticker-sm); font: 700 15px var(--hand); }
+:root[data-look='journal'] :is(.planner-confirm, .cal-composer-create, .board-link-form button:first-of-type, .mail-import-toast .notice-action) { border-radius: var(--wobble); background: var(--accent); color: var(--on-accent); box-shadow: var(--key); font: 700 15px var(--hand); }
 /* The window's own controls stay plain (they belong to the window, not to the page), in handwriting colours. */
 :root[data-look='journal'] .window-controls button { border-radius: 0; box-shadow: none; transform: none; }
 
 /* Choices side by side: sticker tabs on a dashed strip. */
-:root[data-look='journal'] .segmented { gap: 6px; padding: 4px; border-radius: var(--wobble-lg); background: transparent; box-shadow: inset 0 0 0 1.5px var(--ink-soft); }
+:root[data-look='journal'] .segmented { gap: 6px; padding: 4px; border-radius: var(--wobble-lg); background: var(--key-tray); box-shadow: var(--key-sunk); }
 :root[data-look='journal'] .segmented button { border-radius: var(--wobble); font: 700 15px var(--hand); color: var(--muted); }
-:root[data-look='journal'] .segmented button[aria-checked='true'] { background: color-mix(in srgb, var(--violet) 26%, var(--tint-base, var(--surface))); color: var(--ink-fixed); box-shadow: var(--sticker-flat); transform: rotate(-1.5deg); }
+:root[data-look='journal'] .segmented button[aria-checked='true'] { background: color-mix(in srgb, var(--violet) 26%, var(--tint-base, var(--surface))); color: var(--ink-fixed); box-shadow: var(--key); transform: rotate(-1.5deg); }
 /* The calendar's views: the same. */
-:root[data-look='journal'] .cal-views { gap: 4px; padding: 3px; border-radius: var(--wobble-lg); background: transparent; box-shadow: inset 0 0 0 1.5px var(--ink-soft); }
-:root[data-look='journal'] .cal-views-indicator { border-radius: var(--wobble); background: color-mix(in srgb, var(--violet) 26%, var(--tint-base, var(--surface))); box-shadow: var(--sticker-flat); }
+:root[data-look='journal'] .cal-views { gap: 4px; padding: 3px; border-radius: var(--wobble-lg); background: var(--key-tray); box-shadow: var(--key-sunk); }
+:root[data-look='journal'] .cal-views-indicator { border-radius: var(--wobble); background: color-mix(in srgb, var(--violet) 26%, var(--tint-base, var(--surface))); box-shadow: var(--key); }
 :root[data-look='journal'] .cal-views button { font: 700 15px var(--hand); }
 /* On / off: a pill with an ink rim, the knob a round sticker. */
-:root[data-look='journal'] .switch { background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--ink); }
-:root[data-look='journal'] .switch > span { background: var(--ink-soft); box-shadow: 0 0 0 1.5px var(--sticker-edge); }
+:root[data-look='journal'] .switch { background: var(--key-tray); box-shadow: var(--key-sunk); }
+:root[data-look='journal'] .switch > span { background: var(--surface); background-image: var(--key-face); box-shadow: 0 1px 2px var(--sticker-shade), inset 0 2px 1px -1px var(--key-light), inset 0 -2px 1px -1px var(--key-dark); }
 :root[data-look='journal'] .switch[aria-checked='true'] { background: var(--mint); }
-:root[data-look='journal'] .switch[aria-checked='true'] > span { background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--ink), 0 0 0 1.5px var(--sticker-edge); }
+:root[data-look='journal'] .switch[aria-checked='true'] { box-shadow: var(--key-sunk); }
 /* The big choices (designs, popup variants, palettes) as stickers on the page. */
-:root[data-look='journal'] :is(.theme-options, .popup-style-options) > button { border-radius: var(--wobble-lg); background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--ink-soft); transition: transform 180ms var(--spring), box-shadow var(--fast) ease; }
+:root[data-look='journal'] :is(.theme-options, .popup-style-options) > button { border-radius: var(--wobble-lg); background: var(--surface); box-shadow: var(--key-flat); transition: transform 180ms var(--spring), box-shadow var(--fast) ease; }
 :root[data-look='journal'] :is(.theme-options, .popup-style-options) > button:hover { transform: rotate(-1deg); }
-:root[data-look='journal'] :is(.theme-options, .popup-style-options) > button[aria-checked='true'] { background: color-mix(in srgb, var(--violet) 14%, var(--tint-base, var(--surface))); box-shadow: var(--sticker-sm); transform: rotate(-1deg); }
+:root[data-look='journal'] :is(.theme-options, .popup-style-options) > button[aria-checked='true'] { background: color-mix(in srgb, var(--violet) 14%, var(--tint-base, var(--surface))); box-shadow: var(--key); transform: rotate(-1deg); }
 :root[data-look='journal'] :is(.theme-options, .popup-style-options) strong { font: 700 17px var(--hand); }
 :root[data-look='journal'] :is(.theme-options, .popup-style-options) > button[aria-checked='true'] strong { color: var(--accent); }
 /* The settings' tabs: labels in handwriting, the open one a sticker. */
 :root[data-look='journal'] .settings-tabs { background: transparent; }
 :root[data-look='journal'] .dialog-panes .settings-tabs { background: color-mix(in srgb, var(--background) 60%, var(--surface)); background-image: var(--paper-grain); border-right: 1.5px dashed var(--ink-soft); }
 :root[data-look='journal'] .settings-tabs > button { border-radius: var(--wobble); font: 700 16px var(--hand); }
-:root[data-look='journal'] .settings-tabs > button[aria-selected='true'] { background: var(--surface); color: var(--ink); box-shadow: var(--sticker-sm); transform: rotate(-1deg); }
+:root[data-look='journal'] .settings-tabs > button[aria-selected='true'] { background: var(--surface); color: var(--ink); box-shadow: var(--key); transform: rotate(-1deg); }
 :root[data-look='journal'] .dialog-panes .settings-tabs > button[aria-selected='true'] { margin: 4px 6px; }
 
 /* ── Tags: sticker labels – the word large, the tag's colour as a small dot on the edge ──────────────────────── */
@@ -150,21 +207,73 @@
 :root[data-look='journal'] :is(.shortcuts) { border-radius: var(--wobble-lg); background-color: var(--surface); background-image: var(--paper-grain); box-shadow: var(--sticker); }
 :root[data-look='journal'] .shortcut-backdrop { background: color-mix(in srgb, var(--ink) 30%, transparent); }
 :root[data-look='journal'] .shortcuts h3 { font: 700 15px var(--hand); letter-spacing: .03em; text-transform: none; color: var(--accent); }
-:root[data-look='journal'] :is(.shortcuts kbd, .help-button kbd) { border-radius: 5px 3px 6px 3px; background: var(--surface); color: var(--ink); box-shadow: var(--sticker-flat); font-family: var(--hand); font-weight: 700; }
+:root[data-look='journal'] :is(.shortcuts kbd, .help-button kbd) { border-radius: 5px 3px 6px 3px; background: var(--surface); color: var(--ink); box-shadow: var(--key); font-family: var(--hand); font-weight: 700; }
 
 /* ── Popups in general (the variants are in popup-styles.css): sticker paper ────────────────────────────────── */
 :root[data-look='journal'] :is(.format-menu, .mini-picker-panel, .cal-transfer-panel, .repeat-suggest) { border-radius: var(--wobble-lg); background-color: var(--surface); box-shadow: var(--sticker); }
 
-/* ── Board: paper cards with a sticker edge and washi tape (bulletinBoard.css has the cork and pins) ─────────── */
+/* ── Board: the notes are stickers on lavender paper ─────────────────────────────────────────────────────────────
+   Pastel sticker papers in the look's colours (butter, lavender, mint, pink) instead of the strong note colours, each
+   with the die-cut edge, an ink line and a strip of washi tape. The pin (which also draws threads) is a small round
+   sticker dot; threads are dotted ink lines like the reference's arrows; titles in handwriting; the add strip, groups
+   and labels are stickers too. */
+:root[data-look='journal'] .bulletin-board { --thread: var(--ink); }
 :root[data-look='journal'] .board-surface { border-radius: var(--wobble-lg); background-color: color-mix(in srgb, var(--background) 70%, var(--surface)); box-shadow: inset 0 0 0 1.5px var(--ink-soft);
   background-image: radial-gradient(color-mix(in srgb, var(--accent) 22%, transparent) 1px, transparent 1.5px), var(--paper-grain); background-size: 22px 22px, auto; }
-:root[data-look='journal'] .board-card { border-radius: 4px 8px 5px 9px / 9px 5px 8px 4px; box-shadow: var(--sticker-sm); }
+:root[data-look='journal'] .board-card { --paper-ink: var(--ink-fixed); border-radius: 4px 8px 5px 9px / 9px 5px 8px 4px; box-shadow: var(--sticker-sm); }
 :root[data-look='journal'] .board-card:hover { box-shadow: var(--sticker); }
+:root[data-look='journal'] :is(.board-card, .floating-note).paper-yellow { --paper: #f6eab0; --pin: var(--violet); }
+:root[data-look='journal'] :is(.board-card, .floating-note).paper-blue { --paper: #ddd2f7; --pin: var(--pink); }
+:root[data-look='journal'] :is(.board-card, .floating-note).paper-green { --paper: #c9ecdf; --pin: var(--pink); }
+:root[data-look='journal'] :is(.board-card, .floating-note).paper-pink { --paper: #f7d0dd; --pin: var(--mint); }
+:root[data-look='journal'] .board-card.is-image { --paper: var(--sticker-edge); --pin: var(--mint); }
+:root[data-look='journal'] .board-card.is-link { --paper: #f4f0fb; --pin: var(--violet); background: linear-gradient(color-mix(in srgb, var(--violet) 60%, transparent), color-mix(in srgb, var(--violet) 60%, transparent)) 0 34px / 100% 1.5px no-repeat, var(--paper); }
+:root[data-look='journal'] .board-link strong { color: #4a33a0; font: 700 15px var(--hand); }
+/* The pin: a round sticker dot with an ink line and the white edge (still the handle that draws a thread). */
+:root[data-look='journal'] .board-pin { width: 14px; height: 14px; margin-left: -7px; top: -8px; background: var(--pin, var(--pink));
+  box-shadow: 0 0 0 1.5px var(--sticker-line), 0 0 0 3.5px var(--sticker-edge), 1px 2px 0 3.5px var(--sticker-shade); }
+/* Washi tape across the top corner, in the note's own accent. */
 :root[data-look='journal'] .board-card::after { content: ''; position: absolute; top: -10px; right: 14px; width: 56px; height: 18px; transform: rotate(7deg); pointer-events: none;
   background: repeating-linear-gradient(-45deg, color-mix(in srgb, var(--pink) 70%, transparent) 0 6px, color-mix(in srgb, var(--pink) 50%, transparent) 6px 12px);
   -webkit-mask-image: linear-gradient(90deg, transparent 0 2px, #000 2px calc(100% - 2px), transparent calc(100% - 2px)); opacity: .85; }
 :root[data-look='journal'] .board-card:nth-child(3n+2)::after { background: repeating-linear-gradient(-45deg, color-mix(in srgb, var(--mint) 75%, transparent) 0 6px, color-mix(in srgb, var(--mint) 55%, transparent) 6px 12px); transform: rotate(-6deg); right: auto; left: 16px; }
 :root[data-look='journal'] .board-card:nth-child(3n)::after { background: repeating-linear-gradient(-45deg, color-mix(in srgb, var(--violet) 60%, transparent) 0 6px, color-mix(in srgb, var(--violet) 40%, transparent) 6px 12px); }
+/* Titles in handwriting; the writing in the round face. */
+:root[data-look='journal'] :is(.board-card, .floating-note) header input { font: 700 16px var(--hand); }
+:root[data-look='journal'] .board-note .entry-edit, :root[data-look='journal'] .board-note .cm-content { font-family: var(--write); }
+:root[data-look='journal'] .board-tools button { border-radius: 50% 44% 52% 46% / 46% 52% 44% 50%; }
+:root[data-look='journal'] .board-caption { font: 700 12px var(--hand); }
+/* Threads: dotted ink, round dots, a small ink knot at each pin. */
+:root[data-look='journal'] .board-thread { --thread-w: 2.4px; stroke-dasharray: .1 7; stroke-linecap: round; filter: none; }
+:root[data-look='journal'] .board-thread.is-drawing { stroke-dasharray: .1 6; }
+:root[data-look='journal'] .board-thread-direction { stroke-width: 2.4px; }
+/* The add strip: small stickers in handwriting. */
+:root[data-look='journal'] .bulletin-board { --board-ground: var(--surface); }
+:root[data-look='journal'] .board-actions { gap: 10px; padding: 0 4px; border-radius: 0; background: transparent; box-shadow: none; }
+:root[data-look='journal'] .board-actions button { height: 28px; padding: 0 11px; border-radius: var(--wobble); background: var(--surface); color: var(--ink); box-shadow: var(--key); font: 700 15px var(--hand);
+  transition: transform 160ms var(--spring), background-color var(--fast) ease; }
+:root[data-look='journal'] .board-actions button .icon { color: var(--accent); }
+:root[data-look='journal'] .board-actions button:is(:hover, :focus-visible, [aria-expanded='true']):not(:disabled) { background: color-mix(in srgb, var(--mint) 38%, var(--tint-base, var(--surface))); color: var(--ink-fixed); outline: 0; transform: rotate(-3deg); }
+:root[data-look='journal'] .board-actions button.is-create:nth-child(2n):is(:hover, :focus-visible):not(:disabled) { background: color-mix(in srgb, var(--pink) 34%, var(--tint-base, var(--surface))); transform: rotate(2deg); }
+:root[data-look='journal'] .board-actions button:active:not(:disabled) { transform: rotate(-3deg) scale(.94); }
+/* The link form and the library of notes: sticker paper. */
+:root[data-look='journal'] :is(.board-link-form, .board-library) { border-radius: var(--wobble-lg); background-color: var(--surface); background-image: var(--paper-grain); box-shadow: var(--sticker); }
+:root[data-look='journal'] :is(.board-link-form input, .board-library > input) { border-radius: var(--wobble); background: var(--inset); box-shadow: inset 0 0 0 1.5px var(--ink-soft); font: 15px var(--write); }
+:root[data-look='journal'] :is(.board-link-form input, .board-library > input):focus { box-shadow: inset 0 0 0 1.5px var(--accent); }
+:root[data-look='journal'] .board-link-form button { border-radius: var(--wobble); font: 700 15px var(--hand); }
+/* Groups: a dashed ink line round them, the name a sticker label on it. */
+:root[data-look='journal'] .board-group-frame { --frame: var(--ink-soft); border-style: dashed; border-width: 1.5px; border-radius: var(--wobble-lg); background: transparent; }
+:root[data-look='journal'] .board-group-frame:is(:hover, :focus-within) { --frame: var(--ink); }
+:root[data-look='journal'] .board-group-name { top: -12px; height: 22px; padding: 0 8px; border-radius: var(--wobble); background: color-mix(in srgb, var(--violet) 22%, var(--tint-base, var(--surface))); color: var(--ink-fixed); box-shadow: var(--sticker-flat); font: 700 14px var(--hand); transform: rotate(-2deg); }
+:root[data-look='journal'] .board-group-name:placeholder-shown:not(:focus) { background: transparent; box-shadow: none; }
+:root[data-look='journal'] .board-group-name:focus { box-shadow: 0 0 0 1.5px var(--accent), 0 0 0 4.5px var(--sticker-edge); }
+:root[data-look='journal'] :is(.board-group-actions, .board-group-remove) { border-radius: var(--wobble); }
+:root[data-look='journal'] .board-copy-sync { height: 18px; border-radius: var(--wobble); background: var(--surface); color: var(--ink); box-shadow: var(--sticker-flat); font: 700 12px var(--hand); }
+:root[data-look='journal'] .board-group-actions .board-copy-sync { background: transparent; box-shadow: none; }
+:root[data-look='journal'] .board-card > .board-copy-sync { right: auto; left: 8px; transform: rotate(-2deg); }
+/* The ink notes' tools: small round stickers. */
+:root[data-look='journal'] .ink-toolbar button { border-radius: var(--wobble); }
+:root[data-look='journal'] .ink-toolbar button:is([aria-pressed='true'], [aria-expanded='true']) { background: color-mix(in srgb, var(--violet) 26%, transparent); box-shadow: inset 0 0 0 1.5px var(--ink); }
 
 /* ── The calendar on squared paper, in lavender ──────────────────────────────────────────────────────────────── */
 :root[data-look='journal'] .cal.is-embedded, :root[data-look='journal'] body > #root > .cal { background-color: var(--surface); background-image: none; }
@@ -208,7 +317,7 @@
 :root[data-layout='classic'][data-look='journal'] .journal-tabs { gap: 8px; padding: 0 10px; }
 :root[data-layout='classic'][data-look='journal'] .journal-tab { align-self: center; height: 28px; padding: 0 12px; border: 0; border-radius: var(--wobble); color: var(--muted); font: 700 16px var(--hand); transition: transform 180ms var(--spring), background-color var(--fast) ease; }
 :root[data-layout='classic'][data-look='journal'] .journal-tab:hover { background: color-mix(in srgb, var(--violet) 14%, transparent); color: var(--ink); transform: rotate(-2deg); }
-:root[data-layout='classic'][data-look='journal'] .journal-tab[aria-current=page] { background: color-mix(in srgb, var(--violet) 28%, var(--tint-base, var(--surface))); color: var(--ink-fixed); box-shadow: var(--sticker-sm); transform: rotate(-2deg); }
+:root[data-layout='classic'][data-look='journal'] .journal-tab[aria-current=page] { background: color-mix(in srgb, var(--violet) 28%, var(--tint-base, var(--surface))); color: var(--ink-fixed); box-shadow: var(--key); transform: rotate(-2deg); }
 :root[data-layout='classic'][data-look='journal'] .journal-tab:nth-child(2n)[aria-current=page] { background: color-mix(in srgb, var(--pink) 34%, var(--tint-base, var(--surface))); transform: rotate(1.5deg); }
 :root[data-layout='classic'][data-look='journal'] .journal-tab:nth-child(3n)[aria-current=page] { background: color-mix(in srgb, var(--mint) 40%, var(--tint-base, var(--surface))); }
 :root[data-layout='classic'][data-look='journal'] .journal-tab[aria-current=page]::after { display: none; }

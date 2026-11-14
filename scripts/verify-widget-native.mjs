@@ -79,16 +79,32 @@ try {
   await main.until("!!document.querySelector('.title-input')");
   await widget.until("!!document.querySelector('.title-input')");
   if (process.env.JOURNAL_WIDGET_SCOPE === 'live-blur') {
+    console.log('Live Blur: native WebViews ready.');
+    const blur=()=>main.invoke('widget_smoke_cdp',{label:'widget-entries',method:'Journal.liveBlur',params:'{}'});
+    const viewport=()=>widget.eval('({active:false,viewport:{width:innerWidth,height:innerHeight,scale:devicePixelRatio},rects:[]})');
+    const windowInfo=await main.invoke('widget_smoke_cdp',{label:'widget-entries',method:'Journal.window',params:'{}'});
+    let geometry=await widget.invoke('desktop_widget_surface',await viewport());
+    console.log('Live Blur: surface ready; enabling native layer.');
     await widget.invoke('desktop_widget_live_blur',{enabled:true,radius:12});
+    console.log('Live Blur: native layer enabled.');
     await widget.eval("localStorage.setItem('journal.widget-chrome',JSON.stringify({entries:{glass:true,liveBlur:true,glassBlur:16,glassRadius:12}}));window.dispatchEvent(new StorageEvent('storage',{key:'journal.widget-chrome'}))");
     await widget.until("document.documentElement.dataset.glass==='light' && !document.querySelector('.desktop-widget-backdrop') && !document.querySelector('.widget-message')");
+    const checkBlur=async()=>{
+      const layer=await blur(),r=geometry.widget,s=geometry.scale;
+      assert.deepEqual(layer.rect,[windowInfo.position.x+Math.round(r.left*s),windowInfo.position.y+Math.round(r.top*s),Math.round(r.width*s),Math.round(r.height*s)],'Native blur covers only the widget, never the desktop canvas');
+      assert(layer.visible&&layer.belowWidget,'Blur remains directly beneath its widget');
+    };
+    await checkBlur();
+    geometry=await widget.invoke('desktop_widget_surface',{...await viewport(),widget:{...geometry.widget,left:geometry.widget.left+30,top:geometry.widget.top+20,width:geometry.minWidth+40,height:geometry.minHeight+50},finish:true});
+    await checkBlur();
     await widget.invoke('desktop_widget_live_blur',{enabled:true,radius:0});
     await widget.invoke('desktop_widget_live_blur',{enabled:false,radius:12});
+    assert.equal(await blur(),null,'Disabling Live Blur destroys its native surface');
     await widget.eval("localStorage.setItem('journal.widget-chrome',JSON.stringify({entries:{glass:true,liveBlur:false,glassBlur:16,glassRadius:12}}));window.dispatchEvent(new StorageEvent('storage',{key:'journal.widget-chrome'}))");
     await widget.until("!!document.querySelector('.desktop-widget-backdrop')");
     await assert.rejects(()=>main.invoke('desktop_widget_live_blur',{enabled:true,radius:12}));
     assert.deepEqual(errors,[]);
-    console.log('PASS: native Live Blur enable/disable, rounded region and static wallpaper restore.');
+    console.log('PASS: native Live Blur limited to widget bounds, move/resize, stacking, cleanup and static wallpaper restore.');
   } else if (process.env.JOURNAL_WIDGET_SCOPE === 'calendar') {
     await main.invoke('widget_smoke_cdp',{label:'main',method:'Journal.disableInput',params:'{}'});
     await main.invoke('widget_smoke_cdp',{label:'widget-entries',method:'Journal.disableInput',params:'{}'});

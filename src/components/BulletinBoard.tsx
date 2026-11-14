@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { invoke } from '@tauri-apps/api/core';
@@ -163,7 +163,7 @@ export function BulletinBoard({ date, period = 'day', tagScope = 'journal', tool
   const upload = useRef<HTMLInputElement>(null), boardRef = useRef<HTMLDivElement>(null);
   // A note whose tag is hidden in the journal (its tag filter) is left off the board, with its threads.
   const [hiddenTags] = useHiddenTags(tagScope);
-  const laidOut = layoutBoard(cards, key, width);
+  const laidOut = useMemo(()=>layoutBoard(cards, key, width),[cards,key,width]);
   const layout = laidOut.filter(item => !item.card.tag || isShown(hiddenTags, item.card.tag));
   const hiddenByTag = laidOut.length - layout.length;
   const visible = layout.map(item => item.card);
@@ -263,8 +263,9 @@ export function BulletinBoard({ date, period = 'day', tagScope = 'journal', tool
     return { x: at.x + w / 2 + h / 2 * Math.sin(tilt), y: at.y + h / 2 - h / 2 * Math.cos(tilt) + 1 };
   };
   const shown = new Set(visible.map(c => c.id));
-  const boardThreads = threads(cards).filter(([a, b]) => shown.has(a) && shown.has(b));
-  const directed=new Map(pageDirections(cards).map(edge=>[[...edge].sort().join(':'),edge]));
+  const allThreads=useMemo(()=>threads(cards),[cards]);
+  const boardThreads = allThreads.filter(([a, b]) => shown.has(a) && shown.has(b));
+  const directed=useMemo(()=>new Map(pageDirections(cards).map(edge=>[[...edge].sort().join(':'),edge])),[cards]);
   const titleOf = (card?: Card) => card?.title || (card?.kind === 'note' ? tr('Ohne Titel', 'Untitled') : card?.kind === 'image' ? tr('Bild', 'Image') : 'Link');
   /** Ties two cards and says what came of it (an attachment or another page in the notebook). */
   function tie(a: string, b: string) {
@@ -491,7 +492,9 @@ export function BulletinBoard({ date, period = 'day', tagScope = 'journal', tool
     const rotatedW = Math.abs(w * Math.cos(angle)) + Math.abs(h * Math.sin(angle)), rotatedH = Math.abs(h * Math.cos(angle)) + Math.abs(w * Math.sin(angle));
     return [card.id, { left: x + (w - rotatedW) / 2, top: y + (h - rotatedH) / 2, width: rotatedW, height: rotatedH }];
   }));
-  const connectedGroups = cardGroups(cards);
+  const connectedGroups = useMemo(()=>cardGroups(cards),[cards]);
+  const groupByCard=useMemo(()=>new Map(connectedGroups.flatMap(group=>group.map(id=>[id,group] as const))),[connectedGroups]);
+  const cardsById=useMemo(()=>new Map(cards.map(card=>[card.id,card])),[cards]);
   const groups = groupFrames(connectedGroups, boxes);
   const membersOf = (ids: string[]) => connectedGroups.find(group => group.includes(ids[0])) ?? ids;
   const takeDownGroup = (ids: string[]) => void run(() => removeCards(membersOf(ids)), true);
@@ -531,7 +534,7 @@ export function BulletinBoard({ date, period = 'day', tagScope = 'journal', tool
       {libraryNotes(cards, key, query).map(c => {
         // Notes of the notebook carry their folder's path.
         const path = folderPath(folders, c.folder);
-        const group = (cardGroups(cards).find(ids => ids.includes(c.id)) ?? [c.id]).filter(id => { const other = cards.find(card => card.id === id); return other && copyableCard(other); });
+        const group = (groupByCard.get(c.id) ?? [c.id]).filter(id => { const other = cardsById.get(id); return other && copyableCard(other); });
         // Clicking the note makes an independent copy; the one extra action copies its whole group.
         return <div key={c.id} className={`board-library-row paper-${c.paper ?? 'yellow'}`}>
           <button type="button" className="board-library-pick" title={tr('Als eigene Kopie anpinnen', 'Pin as a copy of its own')} onClick={() => { void run(() => copyHere([c.id])); setPicker(false); }}>

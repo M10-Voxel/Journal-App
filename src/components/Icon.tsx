@@ -2,7 +2,7 @@ import type { Entry, EntryKind } from '../journal';
 import { PixelIcon } from './PixelIcon';
 
 export type IconName = 'play' | 'pause' | 'stop' | 'week' | 'quarter' | 'year' | 'journal' | 'calendar' | 'plan-tomorrow' | 'plan-days' | 'date-range' | 'left' | 'right' | 'up' | 'down' | 'grip' | 'offline' | 'save' | 'task' | 'note' | 'event' | 'done' | 'cancel' | 'trash' | 'tomorrow' | 'priority' | 'priority-event' | 'priority-note'
-  | 'migrated' | 'migrated-event' | 'scheduled' | 'scheduled-event' | 'scheduled-multi' | 'scheduled-multi-event' | 'clock' | 'bell' | 'check' | 'undo' | 'jump' | 'settings' | 'search' | 'pin' | 'month' | 'transfer' | 'repeat' | 'mail' | 'layout' | 'pencil' | 'tag' | 'pipette' | 'details' | 'copy' | 'icon';
+  | 'migrated' | 'migrated-event' | 'scheduled' | 'scheduled-event' | 'scheduled-multi' | 'scheduled-multi-event' | 'clock' | 'bell' | 'check' | 'undo' | 'jump' | 'settings' | 'search' | 'pin' | 'month' | 'transfer' | 'repeat' | 'mail' | 'layout' | 'pencil' | 'tag' | 'pipette' | 'details' | 'copy' | 'icon' | 'focus';
 
 export const priorityIcon = (kind: EntryKind): IconName => kind === 'event' ? 'priority-event' : kind === 'note' ? 'priority-note' : 'priority';
 
@@ -74,6 +74,8 @@ export function Icon({ name, className = '' }: { name: IconName; className?: str
     {name === 'mail' && <><rect x="2" y="3.5" width="12" height="9" rx="1.5" /><path d="m2.5 4.5 5.5 4.5 5.5-4.5" /></>}
     {name === 'layout' && <><rect x="2" y="2.5" width="12" height="11" rx="1.5" /><path d="M6 2.5v11M6 6.5h8" /></>}
     {name === 'search' && <><circle cx="7" cy="7" r="4.2" /><path d="m10.2 10.2 3.3 3.3" /></>}
+    {/* Focus: a viewfinder – corner brackets round a dot. */}
+    {name === 'focus' && <><path d="M2.5 5.5v-2a1 1 0 0 1 1-1h2M10.5 2.5h2a1 1 0 0 1 1 1v2M13.5 10.5v2a1 1 0 0 1-1 1h-2M5.5 13.5h-2a1 1 0 0 1-1-1v-2" /><circle cx="8" cy="8" r="1.8" /></>}
     {name === 'month' && <><rect x="2.5" y="2.5" width="11" height="11" rx="2" /><g fill="currentColor" stroke="none">{[5.5, 8, 10.5].flatMap(y => [5.5, 8, 10.5].map(x => <circle key={`${x}-${y}`} cx={x} cy={y} r=".8" />))}</g></>}
     {name === 'pin' && <><path d="m9.5 2.5 4 4-2 1-2.5 2.5.5 2.5-1 1-6-6 1-1 2.5.5L8.5 4.5Z" /><path d="m2.5 13.5 3.5-3.5" /></>}
     {name === 'trash' && <><path d="M2.5 4.5h11M6 4.5v-2h4v2M4 4.5l.5 9h7l.5-9M6.5 7v4M9.5 7v4" /></>}

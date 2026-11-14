@@ -12,6 +12,7 @@ import { connectPatches, disconnectPatches, removalIds } from './notebook';
 import type { Card, Folder, Patches } from './notebook';
 import { encodeBase64 } from './base64';
 import { syncPatches } from './boardSync';
+import { createSharedLoads } from './sharedLoads';
 export type { Card, Folder, Paper } from './notebook';
 
 // What the pinboard and the notebook share: the cards (one store per window, so a board and a notebook open side by side
@@ -132,9 +133,16 @@ export function Note({ card, patch, label }: { card: Card; patch: (id: string, v
 
 /** Pixelated images are drawn small (48 cells on the long edge) and stretched in hard pixels. */
 export const pixelCells = 48;
+const imageLoads=createSharedLoads(id=>invoke<string>('board_image_load',{id}));
 function useImageUrl(card: Card) {
   const [url, setUrl] = useState(''), [failed, setFailed] = useState(false);
-  useEffect(() => { let active = true; setFailed(false); if (card.asset) void invoke<string>('board_image_load', { id: card.asset }).then(src => { if (active) setUrl(src); }).catch(() => { if (active) setFailed(true); }); else setUrl(card.image ?? ''); return () => { active = false; }; }, [card.asset, card.image]);
+  useEffect(() => {
+    let active=true;setFailed(false);setUrl('');
+    const resource=card.asset?imageLoads.acquire(card.asset):null;
+    if(resource)void resource.promise.then(src=>{if(active)setUrl(src);},()=>{if(active)setFailed(true);});
+    else setUrl(card.image??'');
+    return ()=>{active=false;resource?.release();};
+  },[card.asset,card.image]);
   return { url, failed, setFailed };
 }
 export function Pixelated({ url, label, cells = pixelCells }: { url: string; label: string; cells?: number }) {

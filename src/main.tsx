@@ -60,6 +60,7 @@ import { SearchBox, SearchTab } from './components/Search';
 import { ContextMenuHost } from './components/ContextMenu';
 import type { SearchResult } from './search';
 import { DetachedPanel, detachable } from './components/DetachedPanel';
+import { HandDrawnFilters } from './components/HandDrawn';
 import type { DetachedKind } from './components/DetachedPanel';
 import type { BookPage } from './book';
 import { NebulaDesk } from './components/NebulaDesk';
@@ -96,6 +97,9 @@ import '@fontsource/instrument-serif/400.css';
 import '@fontsource/instrument-serif/400-italic.css';
 import '@fontsource/gaegu/400.css';
 import '@fontsource/gaegu/700.css';
+import '@fontsource/mali/500.css';
+import '@fontsource/mali/600.css';
+import '@fontsource/mali/700.css';
 import '@fontsource/nunito/400.css';
 import '@fontsource/nunito/400-italic.css';
 import '@fontsource/nunito/600.css';
@@ -918,4 +922,4 @@ if (windowLabel === 'reminder') document.documentElement.classList.add('is-popup
 // A window of Nebula's desk pulled out of the journal draws its own frame on a transparent window.
 if (isDesktopWidgetLabel(windowLabel)) document.documentElement.classList.add('is-desktop-widget');
 if (windowLabel.startsWith('panel-')) document.documentElement.classList.add('is-panel-window');
-createRoot(document.getElementById('root')!).render(<><WindowActivity /><ThemeSync /><UndoShortcuts /><ContextMenuHost />{isDesktopWidgetLabel(windowLabel) ? <DesktopWidgetWindow /> : windowLabel.startsWith('board-') ? <FloatingNote /> : windowLabel.startsWith('panel-') && detachable.includes(windowLabel.slice(6) as DetachedKind) ? <DetachedPanel kind={windowLabel.slice(6) as DetachedKind} /> : windowLabel === 'calendar' ? <CalendarWindow /> : windowLabel === 'mini' ? <MiniCalendar /> : windowLabel === 'reminder' ? <ReminderPopup /> : <App />}{(windowLabel === 'calendar' || windowLabel.startsWith('panel-')) && <MailImportToast />}</>);
+createRoot(document.getElementById('root')!).render(<><WindowActivity /><ThemeSync /><UndoShortcuts /><ContextMenuHost /><HandDrawnFilters />{isDesktopWidgetLabel(windowLabel) ? <DesktopWidgetWindow /> : windowLabel.startsWith('board-') ? <FloatingNote /> : windowLabel.startsWith('panel-') && detachable.includes(windowLabel.slice(6) as DetachedKind) ? <DetachedPanel kind={windowLabel.slice(6) as DetachedKind} /> : windowLabel === 'calendar' ? <CalendarWindow /> : windowLabel === 'mini' ? <MiniCalendar /> : windowLabel === 'reminder' ? <ReminderPopup /> : <App />}{(windowLabel === 'calendar' || windowLabel.startsWith('panel-')) && <MailImportToast />}</>);

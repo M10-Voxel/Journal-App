@@ -27,6 +27,9 @@ export const colorGroups = [
   { id: 'book', label: 'Buch (Journal-Stil)', colors: [
     ['cover', 'Einband und Hintergrund'], ['spine', 'Buchfalz (Schatten in der Mitte)'],
   ] },
+  { id: 'sticker', label: 'Sticker (Journal-Optik)', colors: [
+    ['sticker-edge', 'Weißer Rand der Sticker'], ['sticker-line', 'Tintenlinie um die Sticker'],
+  ] },
 ] as const;
 export type ColorToken = typeof colorGroups[number]['colors'][number][0];
 export type Palette = Record<ColorToken, string>;
@@ -46,7 +49,7 @@ const original: Palette = {
   'md-red': '#df6262', 'md-orange': '#e6a85c', 'md-yellow': '#e2d7b7', 'md-green': '#76d982',
   'md-cyan': '#c2dce9', 'md-blue': '#569eff', 'md-purple': '#c69bff', 'md-pink': '#ad4075',
   'md-highlight-background': '#e6a85c2e', 'md-highlight-text': '#e2d7b7',
-  cover: '#2a2b30', spine: '#000000',
+  cover: '#2a2b30', spine: '#000000', 'sticker-edge': '#e8e8ec', 'sticker-line': '#0d0d0f',
 };
 const green: Palette = {
   background: '#0a120c', surface: '#202e22', inset: '#141f16', hover: '#2c4028', selected: '#3c542d', focus: '#405431',
@@ -58,7 +61,7 @@ const green: Palette = {
   'md-red': '#eca390', 'md-orange': '#dbc18a', 'md-yellow': '#dce8a0', 'md-green': '#aeff00',
   'md-cyan': '#9bd4bc', 'md-blue': '#a1c8dc', 'md-purple': '#c2bbce', 'md-pink': '#d6aaba',
   'md-highlight-background': '#aeff002e', 'md-highlight-text': '#e3ffb0',
-  cover: '#2c4027', spine: '#000000',
+  cover: '#2c4027', spine: '#000000', 'sticker-edge': '#e3eedb', 'sticker-line': '#0a120c',
 };
 // Summer sky, shaded stone, foliage and the warm red railings in the reference image.
 const summer: Palette = {
@@ -71,7 +74,7 @@ const summer: Palette = {
   'md-red': '#ff9f93', 'md-orange': '#f2bd80', 'md-yellow': '#f3de9d', 'md-green': '#b9df8a',
   'md-cyan': '#78e0de', 'md-blue': '#78cfff', 'md-purple': '#bdbdf2', 'md-pink': '#edb5c9',
   'md-highlight-background': '#f1ce8533', 'md-highlight-text': '#ffebba',
-  cover: '#1d3d50', spine: '#000000',
+  cover: '#1d3d50', spine: '#000000', 'sticker-edge': '#e6f2f6', 'sticker-line': '#0a1820',
 };
 // Light paper and ink for the journal style: cream pages, dark brown ink and blue ink as the accent.
 const paper: Palette = {
@@ -84,7 +87,7 @@ const paper: Palette = {
   'md-red': '#b03a2e', 'md-orange': '#8f4c12', 'md-yellow': '#6e560a', 'md-green': '#33652f',
   'md-cyan': '#225c5c', 'md-blue': '#2f5d9e', 'md-purple': '#6a4a9a', 'md-pink': '#a4426e',
   'md-highlight-background': '#f2d36b66', 'md-highlight-text': '#2b2620',
-  cover: '#6a4129', spine: '#3b2a1a',
+  cover: '#6a4129', spine: '#3b2a1a', 'sticker-edge': '#ffffff', 'sticker-line': '#3b2a1a',
 };
 // The journal style at night: dark brown pages, warm cream ink and candle gold as the accent.
 const candle: Palette = {
@@ -97,7 +100,7 @@ const candle: Palette = {
   'md-red': '#f0958a', 'md-orange': '#eba86d', 'md-yellow': '#e9d08a', 'md-green': '#abd08b',
   'md-cyan': '#93d0c5', 'md-blue': '#9db9e6', 'md-purple': '#c6abe1', 'md-pink': '#e9a6c1',
   'md-highlight-background': '#e3ab5233', 'md-highlight-text': '#f8e2b0',
-  cover: '#5a3020', spine: '#000000',
+  cover: '#5a3020', spine: '#000000', 'sticker-edge': '#f3e6d0', 'sticker-line': '#120c08',
 };
 // The journal look's own: lavender paper with violet ink, pink and mint stickers (the reference sheet „purpl“).
 const lavender: Palette = {
@@ -110,7 +113,7 @@ const lavender: Palette = {
   'md-red': '#a8334f', 'md-orange': '#8c4a1c', 'md-yellow': '#6b580b', 'md-green': '#24684f', 'md-cyan': '#22686e',
   'md-blue': '#4750b0', 'md-purple': '#6246b8', 'md-pink': '#9b3672',
   'md-highlight-background': '#e48aa855', 'md-highlight-text': '#2b2140',
-  cover: '#cbbfe9', spine: '#5a4a86',
+  cover: '#cbbfe9', spine: '#5a4a86', 'sticker-edge': '#ffffff', 'sticker-line': '#2b2140',
 };
 // The same sheet at night: deep violet paper, pale lilac ink, the stickers glowing a little.
 const lavenderNight: Palette = {
@@ -123,7 +126,7 @@ const lavenderNight: Palette = {
   'md-red': '#f592a9', 'md-orange': '#f2b386', 'md-yellow': '#efd98f', 'md-green': '#8fdcc5', 'md-cyan': '#8fd6dc',
   'md-blue': '#a5b4ff', 'md-purple': '#c8b0ff', 'md-pink': '#f2a4d2',
   'md-highlight-background': '#b3a0ff40', 'md-highlight-text': '#f7f3ff',
-  cover: '#2e2349', spine: '#000000',
+  cover: '#2e2349', spine: '#000000', 'sticker-edge': '#ece6fb', 'sticker-line': '#120c1e',
 };
 /** The palettes made for the journal look (lavender first: the look brings it, see settings.ts withLook). */
 export const journalColorThemes: readonly ColorTheme[] = ['lavender', 'lavender-night', 'paper', 'candle'];
