@@ -333,9 +333,15 @@ const bootstrap = `
     const wallMonitors = () => JSON.parse(localStorage.getItem('test.monitors') ?? 'null') ?? [{ x:0, y:0, width:Math.round(innerWidth*devicePixelRatio), height:Math.round(innerHeight*devicePixelRatio), svg:localStorage.getItem('test.wallpaper') ?? '<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900"><rect width="1600" height="900" fill="#203a43"/><circle cx="380" cy="260" r="260" fill="#3a8fd6"/><circle cx="1180" cy="620" r="300" fill="#c2304f"/><path d="M0 700 L1600 300" stroke="#ffd166" stroke-width="60"/></svg>' }];
     // The native popup surface: remember what the widget asked for (its popups' rectangles), no geometry of its own.
     if (command === 'desktop_widget_surface') { window.__uiTest.surface = payload; return null; }
-    if(command==='desktop_widget_live_blur'){invoked.push([command,payload]);if(payload.enabled && localStorage.getItem('test.liveBlurFail'))throw Error('Live Blur unavailable');return null;}
-    if (command === 'desktop_wallpaper_info') {invoked.push([command,payload]);return { position:localStorage.getItem('test.wallPosition') ?? 'fill', monitors:wallMonitors().map(({svg,...monitor})=>({...monitor, revision:localStorage.getItem('test.wallRevision') ?? svg, modified:Number(localStorage.getItem('test.wallModified') ?? 1)})) };}
-    if (command === 'desktop_wallpaper') { const monitor = wallMonitors()[payload.monitor]; if (!monitor) throw new Error('Kein Hintergrundbild für diesen Bildschirm.'); return new TextEncoder().encode(monitor.svg).buffer; }
+    if(command==='desktop_widget_live_blur'){invoked.push([command,payload]);if(payload.enabled && localStorage.getItem('test.liveBlurFail'))throw Error('Live Blur unavailable');return payload.enabled&&localStorage.getItem('test.liveCapture')==='1'?'capture':null;}
+    if(command==='desktop_widget_live_frame'){
+      invoked.push([command,payload]);if(localStorage.getItem('test.liveFrameFail'))throw Error('GPU source unavailable');if(localStorage.getItem('test.liveNoFrame'))return new ArrayBuffer(0);
+      const bytes=new Uint8Array(58),view=new DataView(bytes.buffer);
+      bytes.set([66,77]);view.setUint32(2,58,true);view.setUint32(10,54,true);view.setUint32(14,40,true);view.setInt32(18,1,true);view.setInt32(22,-1,true);view.setUint16(26,1,true);view.setUint16(28,32,true);
+      const rgb=JSON.parse(localStorage.getItem('test.liveColor')??'[220,30,40]');bytes.set([rgb[2],rgb[1],rgb[0],255],54);return bytes.buffer;
+    }
+    if (command === 'desktop_wallpaper_info') {invoked.push([command,payload]);return { position:localStorage.getItem('test.wallPosition') ?? 'fill', color:localStorage.getItem('test.wallColor') ?? '#000000', monitors:wallMonitors().map(({svg,...monitor})=>({...monitor, image:localStorage.getItem('test.wallSolid')!=='1', revision:localStorage.getItem('test.wallRevision') ?? svg, modified:Number(localStorage.getItem('test.wallModified') ?? 1)})) };}
+    if (command === 'desktop_wallpaper') { invoked.push([command,payload]); const monitor = wallMonitors()[payload.monitor]; if (!monitor) throw new Error('Kein Hintergrundbild für diesen Bildschirm.'); return new TextEncoder().encode(monitor.svg).buffer; }
     if (command === 'open_window' || command === 'show_day' || command === 'show_note' || command === 'desktop_widget_open_settings' || command === 'panel_detach' || command.startsWith('plugin:window|')) { invoked.push([command, payload]); return null; }
     if (command === 'load_linked') {
       const where = id => { for (const [day, value] of days) { const found = value.entries.find(entry => entry.id === id); if (found) return [day, found]; } };
@@ -3281,7 +3287,7 @@ try {
     for (const [glass,wall] of Object.entries(walls)) for (const blur of [0,14]) for (const [kind,[w,h]] of Object.entries(sizes)) {
       if (blur && !['entries','calendar','notebook'].includes(kind)) continue;
       await command('Emulation.setDeviceMetricsOverride',{width:w,height:h,deviceScaleFactor:1,mobile:false});
-      await evaluate(`localStorage.setItem('test.wallpaper',${JSON.stringify(wall)});localStorage.setItem('journal.widget-chrome',JSON.stringify({${JSON.stringify(kind)}:{glass:true,glassText:${JSON.stringify(glass)},glassBlur:${blur},glassRadius:12}}))`);
+      await evaluate(`localStorage.setItem('test.wallpaper',${JSON.stringify(wall)});localStorage.setItem('journal.widget-chrome',JSON.stringify({${JSON.stringify(kind)}:{glass:true,glassText:${JSON.stringify(glass)},glassBlur:${blur},glassRadius:12${process.env.JOURNAL_GLASS_KEEP?',glassAppPopups:true':''}}}));${process.env.JOURNAL_GLASS_KEEP?`localStorage.setItem('journal.settings',JSON.stringify({look:'${process.env.JOURNAL_GLASS_KEEP}',colorTheme:'lavender',actionLayout:'orbit'}))`:''}`);
       await command('Page.navigate',{url:`http://127.0.0.1:${server.address().port}/?window=widget-${kind}`});
       await until(`!!document.querySelector('.desktop-widget') && !document.querySelector('.desktop-widget .loading') && document.documentElement.dataset.glass===${JSON.stringify(glass)}${blur?" && !!document.querySelector('.desktop-widget-backdrop')":''}`);
       await evaluate(`document.documentElement.style.background='center / cover no-repeat url("data:image/svg+xml,'+encodeURIComponent(${JSON.stringify(wall)})+'")'`);
@@ -3352,8 +3358,36 @@ try {
     assert.equal(await evaluate("document.querySelector('.desktop-widget-backdrop feGaussianBlur').getAttribute('stdDeviation')"),'24','Wallpaper blur follows the slider');
     await chrome({glass:true,liveBlur:true,glassBlur:24,glassRadius:20});
     await until("!document.querySelector('.desktop-widget-backdrop') && window.__uiTest.invoked.some(c=>c[0]==='desktop_widget_live_blur' && c[1].enabled)");
+    await evaluate("localStorage.setItem('test.liveCapture','1')");
+    await until("!!document.querySelector('[data-live-capture=true] > i')");
+    await until("document.querySelector('#widget-live-backdrop-blur feGaussianBlur')?.getAttribute('stdDeviation')==='24'");
+    await evaluate("localStorage.setItem('test.liveNoFrame','1')");await pause(100);
+    const heldFrame=await evaluate("document.querySelector('[data-live-capture] > i').style.backgroundImage");
+    for(const strength of [8,40]){
+      await chrome({glass:true,liveBlur:true,glassBlur:strength,glassRadius:20});
+      await until(`document.querySelector('#widget-live-backdrop-blur feGaussianBlur')?.getAttribute('stdDeviation')==='${strength}'`);
+      assert.equal(await evaluate("document.querySelector('[data-live-capture] > i').style.backgroundImage"),heldFrame,'Strength changes apply even without a new wallpaper frame');
+    }
+    await chrome({glass:true,liveBlur:true,glassBlur:0,glassRadius:20});
+    await until("!document.querySelector('.desktop-widget-backdrop') && window.__uiTest.invoked.filter(c=>c[0]==='desktop_widget_live_blur').at(-1)?.[1].enabled===false");
+    const zeroFrames=await evaluate("window.__uiTest.invoked.filter(c=>c[0]==='desktop_widget_live_frame').length");await pause(150);
+    assert.equal(await evaluate("window.__uiTest.invoked.filter(c=>c[0]==='desktop_widget_live_frame').length"),zeroFrames,'Blur 0 stops the live frame loop');
+    await evaluate("localStorage.removeItem('test.liveNoFrame')");
+    await chrome({glass:true,liveBlur:true,glassBlur:24,glassRadius:20});
+    await until("!!document.querySelector('[data-live-capture=true] > i') && document.querySelector('#widget-live-backdrop-blur feGaussianBlur')?.getAttribute('stdDeviation')==='24'");
+    const liveColor="(async()=>{const el=document.querySelector('[data-live-capture=true] > i');if(!el)return '';const image=new Image();image.src=el.style.backgroundImage.slice(5,-2);await image.decode();const canvas=document.createElement('canvas');canvas.width=canvas.height=1;const context=canvas.getContext('2d');context.drawImage(image,0,0);return [...context.getImageData(0,0,1,1).data].slice(0,3).join(',')})()";
+    assert.equal(await evaluate(liveColor),'220,30,40','Captured bitmap appears behind the widget');
+    await evaluate("localStorage.setItem('test.liveColor','[25,180,70]')");
+    await until(`(${liveColor}).then(color=>color==='25,180,70')`);
+    await evaluate("localStorage.setItem('test.liveFrameFail','1')");
+    await until("!!document.querySelector('.widget-message') && !document.querySelector('[data-live-capture]') && !!document.querySelector('.desktop-widget-backdrop > i')");
+    await evaluate("localStorage.removeItem('test.liveFrameFail')");
+    await until("!!document.querySelector('[data-live-capture=true] > i') && !document.querySelector('.widget-message')");
+    await evaluate("localStorage.removeItem('test.liveCapture')");
     await chrome({glass:true,liveBlur:false,glassBlur:24,glassRadius:20});
-    await until("!!document.querySelector('.desktop-widget-backdrop')");
+    await until("!!document.querySelector('.desktop-widget-backdrop') && !document.querySelector('[data-live-capture]')");
+    const stoppedFrames=await evaluate("window.__uiTest.invoked.filter(c=>c[0]==='desktop_widget_live_frame').length");await pause(200);
+    assert.equal(await evaluate("window.__uiTest.invoked.filter(c=>c[0]==='desktop_widget_live_frame').length"),stoppedFrames,'Switching Live Blur off stops the frame loop');
     await evaluate("localStorage.setItem('test.liveBlurFail','1')");
     await chrome({glass:true,liveBlur:true,glassBlur:24,glassRadius:20});
     await until("!!document.querySelector('.desktop-widget [role=status]') && !!document.querySelector('.desktop-widget-backdrop')");
@@ -3368,6 +3402,17 @@ try {
     const updatedWallpaper=await evaluate("document.querySelector('.desktop-widget-backdrop > i').style.backgroundImage");
     await evaluate("window.dispatchEvent(new Event('focus'))");await pause(150);
     assert.equal(await evaluate("document.querySelector('.desktop-widget-backdrop > i').style.backgroundImage"),updatedWallpaper,'Unchanged wallpaper keeps its cached image');
+    // An empty Windows wallpaper is an intentional solid color, never a reason
+    // to reuse TranscodedWallpaper or the previous image blob.
+    await evaluate("localStorage.setItem('test.wallSolid','1');localStorage.setItem('test.wallColor','#123456');window.__uiTest.emit('widget:wallpaper-check')");
+    await until("document.querySelector('.desktop-widget-backdrop > i')?.style.backgroundColor==='rgb(18, 52, 86)' && !document.querySelector('.desktop-widget-backdrop > i').style.backgroundImage");
+    const solidReads=await evaluate("window.__uiTest.invoked.filter(c=>c[0]==='desktop_wallpaper').length");
+    await evaluate("localStorage.setItem('test.wallColor','#abcdef');window.__uiTest.emit('widget:wallpaper-check')");
+    await until("document.querySelector('.desktop-widget-backdrop > i')?.style.backgroundColor==='rgb(171, 205, 239)'");
+    assert.equal(await evaluate("window.__uiTest.invoked.filter(c=>c[0]==='desktop_wallpaper').length"),solidReads,'Solid colors never request a cached image');
+    await evaluate("localStorage.removeItem('test.wallSolid');window.__uiTest.emit('widget:wallpaper-check')");
+    await until("!!document.querySelector('.desktop-widget-backdrop > i')?.style.backgroundImage");
+    const restoredWallpaper=await evaluate("document.querySelector('.desktop-widget-backdrop > i').style.backgroundImage");
     const geometryReads=await evaluate("window.__uiTest.invoked.filter(c=>c[0]==='desktop_wallpaper_info'||c[0]==='plugin:window|outer_position').length");
     await evaluate("for(let n=0;n<100;n++)window.dispatchEvent(new Event('widget:popup-geometry'))");await pause(100);
     const geometryReadsAfter=await evaluate("window.__uiTest.invoked.filter(c=>c[0]==='desktop_wallpaper_info'||c[0]==='plugin:window|outer_position').length");
@@ -3376,7 +3421,7 @@ try {
     await evaluate("window.__releasedWallpapers=[];window.__revokeWallpaper=URL.revokeObjectURL.bind(URL);URL.revokeObjectURL=url=>{window.__releasedWallpapers.push(url);window.__revokeWallpaper(url)}");
     await chrome({glass:true,glassBlur:0,glassRadius:20});
     await until("!document.querySelector('.desktop-widget-backdrop') && window.__releasedWallpapers.length>0");
-    assert(await evaluate(`window.__releasedWallpapers.some(url=>${JSON.stringify(updatedWallpaper)}.includes(url))`),'Turning blur off releases the loaded wallpaper blob');
+    assert(await evaluate(`window.__releasedWallpapers.some(url=>${JSON.stringify(restoredWallpaper)}.includes(url))`),'Turning blur off releases the loaded wallpaper blob');
     await chrome({glass:true,glassBlur:24,glassRadius:20});
     await until("!!document.querySelector('.desktop-widget-backdrop > i')");
     assert.notEqual(await evaluate("document.querySelector('.desktop-widget-backdrop > i').style.backgroundImage"),updatedWallpaper,'Re-enabling blur loads a valid new image');
@@ -3410,8 +3455,12 @@ try {
       await evaluate(`(()=>{const input=document.querySelector('.widgets-details [data-widget-setting=${setting}]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'${value}');input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
       await until(`JSON.parse(localStorage.getItem('journal.widget-chrome')).entries.${field}===${value}`);
     }
+    assert(await evaluate("(()=>{const toggle=document.querySelector('[data-widget-setting=live-blur]'),slider=document.querySelector('[data-widget-setting=blur]');return toggle.closest('.widgets-glass-slider')===slider.closest('.widgets-glass-slider') && !!(toggle.compareDocumentPosition(slider)&Node.DOCUMENT_POSITION_FOLLOWING)})()"),'Live toggle appears before the shared slider in the same setting');
     await evaluate("document.querySelector('[data-widget-setting=live-blur]').click()");
-    await until("JSON.parse(localStorage.getItem('journal.widget-chrome')).entries.liveBlur===true && !document.querySelector('[data-widget-setting=blur]')");
+    await until("JSON.parse(localStorage.getItem('journal.widget-chrome')).entries.liveBlur===true && !!document.querySelector('[data-widget-setting=blur]')");
+    await evaluate("(()=>{const input=document.querySelector('[data-widget-setting=blur]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'19');input.dispatchEvent(new Event('input',{bubbles:true}))})()");
+    await until("JSON.parse(localStorage.getItem('journal.widget-chrome')).entries.glassBlur===19 && document.querySelector('[data-widget-setting=blur]').value==='19'");
+
     await evaluate("document.querySelector('[data-widget-setting=live-blur]').click()");
     await until("JSON.parse(localStorage.getItem('journal.widget-chrome')).entries.liveBlur===false && !!document.querySelector('[data-widget-setting=blur]')");
     await pause(200);await screenshot('widgets-manager-glass.png');
@@ -5602,6 +5651,27 @@ try {
     await screenshot('activity-timer-saved.png');
     assert.deepEqual(errors,[]);
     console.log('Timer UI checks passed: checkbox, reorder, pause/resume, calendar import and retry without duplicate minutes or events.');
+  } else if (process.env.JOURNAL_UI_SCOPE === 'period-navigation') {
+    await command('Emulation.setFocusEmulationEnabled',{enabled:true});
+    await command('Emulation.setDeviceMetricsOverride',{width:1600,height:1000,deviceScaleFactor:1,mobile:false});
+    for(const theme of ['classic','journal','nebula']) for(const language of ['de','en']){
+      await evaluate(`localStorage.setItem('journal.settings',JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'),theme:${JSON.stringify(theme)},language:${JSON.stringify(language)},pixel:false,bookPaging:'spread'}));localStorage.setItem('journal.calendarDrawer','0');localStorage.setItem('journal.notebookDrawer','0');localStorage.removeItem('journal.nebulaLayout.v1')`);
+      await command('Page.reload');
+      await until("!!document.querySelector('.entry') && document.documentElement.lang==="+JSON.stringify(language));
+      const tab=mode=>theme==='classic'?`.journal-tab:nth-child(${['day','week','month','quarter','year'].indexOf(mode)+1})`:`[data-period-mode=${mode}]`;
+      for(const mode of ['week','month','quarter','year','day','month','day']){
+        const startErrors=errors.length;
+        await evaluate(`document.querySelector(${JSON.stringify(tab(mode))}).click()`);
+        await pause(80);
+        assert.deepEqual(errors.slice(startErrors),[],`${theme}/${language}/${mode}: no render exception`);
+        await until(`document.querySelector(${JSON.stringify(tab(mode))})?.getAttribute('aria-current')==='page' && !!document.querySelector('.period-section')`);
+        if(mode==='day')await until("!!document.querySelector('#daily-rating')");
+        else await until("!!document.querySelector('.period-note textarea')");
+        assert((await evaluate("document.querySelector('#root').childElementCount"))>0,`${theme}/${language}/${mode}: application remains visible`);
+      }
+      console.log(`Period navigation passed: ${theme}/${language}, all periods and return to day.`);
+    }
+    assert.deepEqual(errors,[]);
   } else if (process.env.JOURNAL_UI_SCOPE === 'periods') {
     await until("Boolean(document.querySelector('#daily-rating'))");
     assert.equal(await evaluate("document.querySelectorAll('.journal-tab .icon').length"),6,'Five views and the notebook.');

@@ -49,23 +49,51 @@ impl Surface {
 /// Only widget WebViews may change their own compositor background. Disabling
 /// also restores the ordinary input region; the setting stays device-local.
 #[tauri::command]
-pub fn desktop_widget_live_blur(window:tauri::WebviewWindow,enabled:bool,radius:f64)->Result<(),String>{
+pub fn desktop_widget_live_blur(window:tauri::WebviewWindow,enabled:bool,radius:f64)->Result<&'static str,String>{
     if !radius.is_finite() || !(0.0..=24.0).contains(&radius){return Err("Ungültige Rundung.".into());}
     let state=window.state::<DesktopWidgets>();let (_,runtime)=state.from_window(&window)?;
     #[cfg(windows)] {
         let hwnd=window.hwnd().map_err(|e|e.to_string())?.0 as isize;
         let surface=runtime.surface.lock().map_err(|e|e.to_string())?.clone();
+        let mut backend="disabled";
         if enabled {
             let surface=surface.as_ref().ok_or("Widget-Fläche ist noch nicht bereit.")?;
-            super::live_blur::enable(hwnd)?;
-            if let Err(error)=super::live_blur::update(hwnd,(surface.position.x,surface.position.y,surface.size.width as i32,surface.size.height as i32),((radius+4.0)*surface.units).round() as i32){super::live_blur::disable(hwnd);return Err(error);}
-        }else{super::live_blur::disable(hwnd);}
-        *runtime.live_blur.lock().map_err(|e|e.to_string())?=if enabled{Some(radius+4.0)}else{None};
-        if let Some(surface)=surface{surface.region(&window,&[])?;}
-        window.emit("widget:surface-changed",()).map_err(|e|e.to_string())?;
-        return Ok(());
+            let rect=(surface.position.x,surface.position.y,surface.size.width as i32,surface.size.height as i32);
+            match super::capture::enable(hwnd,rect){
+                Ok(true)=>{super::live_blur::disable(hwnd);backend="capture";},
+                Ok(false)=>{
+                    super::live_blur::enable(hwnd)?;
+                    if let Err(error)=super::live_blur::update(hwnd,rect,((radius+4.0)*surface.units).round() as i32){super::live_blur::disable(hwnd);return Err(error);}
+                    backend="native";
+                },
+                Err(error)=>{super::live_blur::disable(hwnd);super::capture::disable(hwnd);return Err(error);},
+            }
+        }else{super::live_blur::disable(hwnd);super::capture::disable(hwnd);}
+        let next=if enabled{Some(radius+4.0)}else{None};
+        let changed={let mut blur=runtime.live_blur.lock().map_err(|e|e.to_string())?;let changed=*blur!=next;*blur=next;changed};
+        let backend_changed={let mut mode=runtime.live_backend.lock().map_err(|e|e.to_string())?;let changed=*mode!=backend;*mode=backend;changed};
+        // Source polling must not erase a currently open popup's input region.
+        if changed||backend_changed{
+            if let Some(surface)=surface{surface.region(&window,&[])?;}
+            window.emit("widget:surface-changed",()).map_err(|e|e.to_string())?;
+        }
+        return Ok(backend);
     }
-    #[cfg(not(windows))] {let _=runtime;if enabled{Err("Live Blur ist nur unter Windows verfügbar.".into())}else{Ok(())}}
+    #[cfg(not(windows))] {let _=runtime;if enabled{Err("Live Blur ist nur unter Windows verfügbar.".into())}else{Ok("disabled")}}
+}
+
+/// Cropped wallpaper-host frames; never a screenshot of the user's applications.
+#[tauri::command]
+pub async fn desktop_widget_live_frame(window:tauri::WebviewWindow)->Result<tauri::ipc::Response,String>{
+    let state=window.state::<DesktopWidgets>();let (_,runtime)=state.from_window(&window)?;
+    let surface=runtime.surface.lock().map_err(|e|e.to_string())?.clone().ok_or("Widget-Fläche ist noch nicht bereit.")?;
+    #[cfg(windows)] {
+        let hwnd=window.hwnd().map_err(|e|e.to_string())?.0 as isize;
+        let rect=(surface.position.x,surface.position.y,surface.size.width as i32,surface.size.height as i32);
+        let bytes=tauri::async_runtime::spawn_blocking(move||super::capture::picture(hwnd,rect)).await.map_err(|e|e.to_string())??;
+        Ok(tauri::ipc::Response::new(bytes))
+    }
+    #[cfg(not(windows))] {let _=surface;Err("Live Blur ist nur unter Windows verfügbar.".into())}
 }
 
 /// Placement and monitor topology can change independently of popup visibility.

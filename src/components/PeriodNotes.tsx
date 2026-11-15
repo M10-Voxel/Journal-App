@@ -9,7 +9,7 @@ import { getActivityTimer, useActivityTimers } from '../activityTimerStore';
 import { withCalendarMinutes } from '../activityCalendar';
 import { useCalendarMinutes } from './useCalendarMinutes';
 import type { CalendarImport } from '../journal';
-import { getLanguage } from '../i18n';
+import { t, useLanguage } from '../i18n';
 import { periodBounds, periodDates } from '../periods';
 import type { PeriodMode } from '../periods';
 import { Icon } from './Icon';
@@ -21,17 +21,15 @@ import './scaleInput.css';
 
 export type Mode = PeriodMode;
 // The checklist has its own controls; the journal's action layout (orbit, inline, swipe) does not change it.
-/** The heading of an overview: "Mai 2026", "Quartal 2 · 2026", "4. Mai – 10. Mai 2026". */
+/** Pure formatting helpers: callers subscribe to language changes in their components.
+ * The heading of an overview: "Mai 2026", "Quartal 2 · 2026", "4. Mai – 10. Mai 2026". */
 export function periodTitle(date: string, mode: Mode): string {
-  const en = getLanguage() === 'en';
-  const tr = (de: string, english: string) => en ? english : de;
   const [start, end] = periodBounds(date, mode);
-  const dateLabel = (value: string) => new Intl.DateTimeFormat(en ? 'en-GB' : 'de-DE', { day: 'numeric', month: 'short' }).format(new Date(`${value}T12:00:00`));
-  return mode === 'year' ? start.slice(0, 4) : mode === 'quarter' ? `${tr('Quartal','Quarter')} ${Math.floor((Number(start.slice(5,7))-1)/3)+1} · ${start.slice(0,4)}` : mode === 'month' ? new Intl.DateTimeFormat(en ? 'en-GB' : 'de-DE', { month: 'long', year: 'numeric' }).format(new Date(`${start}T12:00:00`)) : `${dateLabel(start)} – ${dateLabel(end)} ${end.slice(0,4)}`;
+  const dateLabel = (value: string) => new Intl.DateTimeFormat(t("de-DE"), { day: 'numeric', month: 'short' }).format(new Date(`${value}T12:00:00`));
+  return mode === 'year' ? start.slice(0, 4) : mode === 'quarter' ? `${t("Quartal")} ${Math.floor((Number(start.slice(5,7))-1)/3)+1} · ${start.slice(0,4)}` : mode === 'month' ? new Intl.DateTimeFormat(t("de-DE"), { month: 'long', year: 'numeric' }).format(new Date(`${start}T12:00:00`)) : `${dateLabel(start)} – ${dateLabel(end)} ${end.slice(0,4)}`;
 }
 export const periodEyebrow = (mode: Exclude<Mode, 'day'>) => {
-  const en = getLanguage() === 'en';
-  return ({ week: en ? 'Weekly overview' : 'Wochenübersicht', month: en ? 'Monthly overview' : 'Monatsübersicht', quarter: en ? 'Quarterly overview' : 'Quartalsübersicht', year: en ? 'Yearly overview' : 'Jahresübersicht' })[mode];
+  return ({ week: t("Wochenübersicht"), month: t("Monatsübersicht"), quarter: t("Quartalsübersicht"), year: t("Jahresübersicht") })[mode];
 };
 
 /**
@@ -45,14 +43,13 @@ export type ManageTab = 'activities' | 'scales';
 /** `bare`: only the values themselves (a desktop widget): no headings, hints or "manage" buttons; with nothing set up yet,
  *  the hint itself opens the settings. */
 export function PeriodNotes({ date, mode, onManage, onImport, part, bare = false }: { date: string; mode: Mode; onManage: (tab?: ManageTab) => void; onImport: (entries: CalendarImport[]) => Promise<void>; part?: PeriodPart; bare?: boolean }) {
-  const en = getLanguage() === 'en';
-  const tr = (de: string, english: string) => en ? english : de;
+  useLanguage();
   useActivityTimers();
   const { data, error } = usePeriodData();
   const change = changePeriodData;
   const [start, end] = periodBounds(date, mode);
   const calendar = useCalendarMinutes(start, end, data?.definitions);
-  if (!data) return <section className="period-section">{error || tr('Wird geladen …', 'Loading …')}</section>;
+  if (!data) return <section className="period-section">{error || t("Wird geladen …")}</section>;
   // Analytics count the calendar time too; the stored minutes are only what was typed in the checklist.
   const shown = withCalendarMinutes(data, calendar);
   const dates = periodDates(start, end);
@@ -71,45 +68,45 @@ export function PeriodNotes({ date, mode, onManage, onImport, part, bare = false
     const { scales: _unused, ...rest } = current;
     return Object.keys(values).length ? { ...rest, scales: values } : rest;
   });
-  const manageScales = <button type="button" className="checklist-manage is-scales" onClick={() => onManage('scales')}><Icon name="settings" />{tr('Tageswerte','Day values')}</button>;
+  const manageScales = <button type="button" className="checklist-manage is-scales" onClick={() => onManage('scales')}><Icon name="settings" />{t("Tageswerte")}</button>;
   const series: ChartSeries[] = [
-    { key: 'rating', label: tr('Tagesbewertung','Daily rating'), color: ratingColor, min: rating.min, max: rating.max, values: seriesOf(dates, data.days, 'rating', rating) },
-    ...scales.filter(item => item.active || dates.some(d => data.days[d]?.scales?.[item.id] != null)).map(item => ({ key: item.id, label: item.name || tr('Ohne Namen','Unnamed'), color: item.color, min: item.min, max: item.max, values: seriesOf(dates, data.days, item.id, item) })),
+    { key: 'rating', label: t("Tagesbewertung"), color: ratingColor, min: rating.min, max: rating.max, values: seriesOf(dates, data.days, 'rating', rating) },
+    ...scales.filter(item => item.active || dates.some(d => data.days[d]?.scales?.[item.id] != null)).map(item => ({ key: item.id, label: item.name || t("Ohne Namen"), color: item.color, min: item.min, max: item.max, values: seriesOf(dates, data.days, item.id, item) })),
   ];
-  const heading = mode === 'day' ? part === 'scales' ? tr('Tageswerte','Day values') : has('rating') ? tr('Tagesbewertung', 'Daily rating') : null
-    : has('note', 'notes') ? tr('Notiz & Auswertung', 'Note & analytics') : null;
+  const heading = mode === 'day' ? part === 'scales' ? t("Tageswerte") : has('rating') ? t("Tagesbewertung") : null
+    : has('note', 'notes') ? t("Notiz & Auswertung") : null;
   const empty = (text: string, tab: ManageTab) => bare ? <button type="button" className="checklist-empty is-action" onClick={() => onManage(tab)}><Icon name="settings" />{text}</button> : <p className="checklist-empty">{text}</p>;
-  return <section className={`period-section${bare ? ' is-bare' : ''}`} data-part={part} aria-label={tr('Checkliste und Auswertung', 'Checklist and analytics')}>
+  return <section className={`period-section${bare ? ' is-bare' : ''}`} data-part={part} aria-label={t("Checkliste und Auswertung")}>
     {mode !== 'day' && !part && <div className="document-header"><div className="eyebrow">{periodEyebrow(mode)}</div><h1>{periodTitle(date, mode)}</h1></div>}
     {heading && !bare && <div className="section-heading"><div className="section-title"><h2>{heading}</h2></div>{part === 'scales' && manageScales}</div>}
-    {error && <div className="error" role="alert">{tr('Speichern fehlgeschlagen: ', 'Save failed: ')}{error}</div>}
+    {error && <div className="error" role="alert">{t("Speichern fehlgeschlagen: ")}{error}</div>}
     {mode === 'day' ? <>
       {has('rating') && <div className="period-rating">
-        <div className="rating-heading"><span id="daily-rating-label">{tr('Tagesbewertung', 'Daily rating')}</span></div>
-        <ScaleInput id="daily-rating" label={tr('Tagesbewertung', 'Daily rating')} value={day.rating} min={rating.min} max={rating.max} color={ratingColor} onChange={value => changeDay(current => ({ ...current, rating: value }))} />
-        <div className="rating-scale"><span>{rating.min} · {tr('Schwierig','Difficult')}</span><button type="button" disabled={day.rating == null} onClick={() => changeDay(current => ({ ...current, rating: undefined }))}>{tr('Zurücksetzen','Reset')}</button><span>{rating.max} · {tr('Großartig','Great')}</span></div>
+        <div className="rating-heading"><span id="daily-rating-label">{t("Tagesbewertung")}</span></div>
+        <ScaleInput id="daily-rating" label={t("Tagesbewertung")} value={day.rating} min={rating.min} max={rating.max} color={ratingColor} onChange={value => changeDay(current => ({ ...current, rating: value }))} />
+        <div className="rating-scale"><span>{rating.min} · {t("Schwierig")}</span><button type="button" disabled={day.rating == null} onClick={() => changeDay(current => ({ ...current, rating: undefined }))}>{t("Zurücksetzen")}</button><span>{rating.max} · {t("Großartig")}</span></div>
       </div>}
       {has('scales') && <div className="period-scales">
-        {part !== 'scales' && <div className="checklist-section-heading"><div><h3>{tr('Tageswerte','Day values')}</h3><p className="page-hint">{tr('Deine eigenen Werte für diesen Tag.','Your own values for this day.')}</p></div>{manageScales}</div>}
-        {!scales.some(item => item.active) ? empty(tr('Lege Tageswerte wie Stress oder Schlaf in den Einstellungen fest.','Set up day values such as stress or sleep in settings.'), 'scales')
+        {part !== 'scales' && <div className="checklist-section-heading"><div><h3>{t("Tageswerte")}</h3><p className="page-hint">{t("Deine eigenen Werte für diesen Tag.")}</p></div>{manageScales}</div>}
+        {!scales.some(item => item.active) ? empty(t("Lege Tageswerte wie Stress oder Schlaf in den Einstellungen fest."), 'scales')
           : <div className="scale-list">{scales.filter(item => item.active).map(item => { const value = day.scales?.[item.id]; return <div className="scale-row" data-scale-id={item.id} key={item.id} style={{ '--scale-color': item.color } as CSSProperties}>
-            <span className="scale-name">{item.name || tr('Ohne Namen','Unnamed')}</span>
-            <ScaleInput label={item.name || tr('Tageswert','Day value')} value={value} min={item.min} max={item.max} color={item.color} onChange={next => setScale(item.id, next)} />
-            <button type="button" className="scale-clear" disabled={value == null} aria-label={`${item.name}: ${tr('Zurücksetzen','Reset')}`} title={tr('Zurücksetzen','Reset')} onClick={() => setScale(item.id, undefined)}>×</button>
+            <span className="scale-name">{item.name || t("Ohne Namen")}</span>
+            <ScaleInput label={item.name || t("Tageswert")} value={value} min={item.min} max={item.max} color={item.color} onChange={next => setScale(item.id, next)} />
+            <button type="button" className="scale-clear" disabled={value == null} aria-label={`${item.name}: ${t("Zurücksetzen")}`} title={t("Zurücksetzen")} onClick={() => setScale(item.id, undefined)}>×</button>
           </div>; })}</div>}
       </div>}
       {has('activities') && <>
-      {!bare && <div className="checklist-section-heading"><div><h3>{tr('Checkliste','Checklist')}</h3><p className="page-hint">{tr('Deine Aktivitäten für diesen Tag.','Your activities for this day.')}</p></div><button type="button" className="checklist-manage" onClick={() => onManage('activities')}><Icon name="settings" />{tr('Aktivitäten','Activities')}</button></div>}
-      {!data.definitions.some(item => item.active) && empty(tr('Lege deine Aktivitäten in den Einstellungen fest.','Set up your activities in settings.'), 'activities')}
+      {!bare && <div className="checklist-section-heading"><div><h3>{t("Checkliste")}</h3><p className="page-hint">{t("Deine Aktivitäten für diesen Tag.")}</p></div><button type="button" className="checklist-manage" onClick={() => onManage('activities')}><Icon name="settings" />{t("Aktivitäten")}</button></div>}
+      {!data.definitions.some(item => item.active) && empty(t("Lege deine Aktivitäten in den Einstellungen fest."), 'activities')}
       {/* One line per activity, like a journal entry: check box in the symbol slot, name, optional note and time. Turning
           the note or time off leaves the row's height unchanged, so the rows below never move. */}
       {/* Time from the calendar (entries with the activity's tag, e.g. from the timer) is added to the typed minutes;
           the field shows the sum, and typing changes only the typed part. Calendar time also checks the activity. */}
       <div className="period-list">{active.map(item => { const record = day.items[item.id] ?? { done: false }; const timed = calendar[date]?.[item.id] ?? 0; const done = record.done || timed > 0; return <div className="period-item" data-activity-id={item.id} data-done={done || undefined} style={{ '--activity-color': item.color } as CSSProperties} key={item.id}>
-        <label className="activity-label" title={timed ? tr(`${timed} min im Kalender`, `${timed} min in the calendar`) : undefined}><span className="activity-checkbox"><input type="checkbox" checked={done} aria-disabled={timed > 0 || undefined} onChange={e => { if (timed) return; const done = e.target.checked; changeDay(current => ({ ...current, items: { ...current.items, [item.id]: { ...current.items[item.id], done } } })); }} /><Icon name="check" className="activity-check-mark" /></span><span className="activity-name">{item.name}</span></label>
+        <label className="activity-label" title={timed ? t("{0} min im Kalender", timed) : undefined}><span className="activity-checkbox"><input type="checkbox" checked={done} aria-disabled={timed > 0 || undefined} onChange={e => { if (timed) return; const done = e.target.checked; changeDay(current => ({ ...current, items: { ...current.items, [item.id]: { ...current.items[item.id], done } } })); }} /><Icon name="check" className="activity-check-mark" /></span><span className="activity-name">{item.name}</span></label>
         <div className="activity-entry-fields">
-          {item.textField && <input className="activity-note-input" type="text" aria-label={`${item.name} ${tr('Notiz','note')}`} placeholder={tr('Notiz …','Note …')} value={record.text ?? ''} onChange={e => { const text = e.target.value; changeDay(current => ({ ...current, items: { ...current.items, [item.id]: { ...current.items[item.id], done: current.items[item.id]?.done ?? false, text } } })); }} />}
-          {item.trackTime && <MinutesField label={`${item.name} ${tr('Minuten','minutes')}`} typed={record.minutes} timed={timed} disabled={!!getActivityTimer(date,item.id)} onChange={minutes => changeDay(current => ({ ...current, items: { ...current.items, [item.id]: { ...current.items[item.id], done: current.items[item.id]?.done || (minutes ?? 0)>0, minutes } } }))} />}
+          {item.textField && <input className="activity-note-input" type="text" aria-label={`${item.name} ${t("Notiz")}`} placeholder={t("Notiz …")} value={record.text ?? ''} onChange={e => { const text = e.target.value; changeDay(current => ({ ...current, items: { ...current.items, [item.id]: { ...current.items[item.id], done: current.items[item.id]?.done ?? false, text } } })); }} />}
+          {item.trackTime && <MinutesField label={`${item.name} ${t("Minuten")}`} typed={record.minutes} timed={timed} disabled={!!getActivityTimer(date,item.id)} onChange={minutes => changeDay(current => ({ ...current, items: { ...current.items, [item.id]: { ...current.items[item.id], done: current.items[item.id]?.done || (minutes ?? 0)>0, minutes } } }))} />}
         </div>
         <ActivityTimer date={date} activity={item} text={record.text ?? ''} onImport={onImport} />
       </div>; })}</div>
@@ -117,15 +114,15 @@ export function PeriodNotes({ date, mode, onManage, onImport, part, bare = false
     </> : <>
       {has('note', 'notes') && <>
       <p className="period-range">{start} – {end}</p>
-      <label className="period-note">{tr('Notiz','Note')}<textarea value={data.notes[key] ?? ''} onChange={e => { const text = e.target.value; change(current => ({ ...current, notes: { ...current.notes, [key]: text } })); }} placeholder={tr('Gedanken zu diesem Zeitraum …','Thoughts about this period …')} /></label>
+      <label className="period-note">{t("Notiz")}<textarea value={data.notes[key] ?? ''} onChange={e => { const text = e.target.value; change(current => ({ ...current, notes: { ...current.notes, [key]: text } })); }} placeholder={t("Gedanken zu diesem Zeitraum …")} /></label>
       </>}
       {has('ratings', 'notes') && <div className="period-ratings">
-        <div className="checklist-section-heading"><div><h3>{tr('Bewertungen','Ratings')}</h3><p className="page-hint">{tr('Tagesbewertung und Tageswerte im Verlauf.','Daily rating and day values over time.')}</p></div>{manageScales}</div>
+        <div className="checklist-section-heading"><div><h3>{t("Bewertungen")}</h3><p className="page-hint">{t("Tagesbewertung und Tageswerte im Verlauf.")}</p></div>{manageScales}</div>
         <ValueChart dates={dates} series={series} monthly={mode === 'quarter' || mode === 'year'} />
       </div>}
       {has('activities') && <>
-      <div className="checklist-section-heading"><div><h3>{tr('Aktivitäten im Überblick','Activity overview')}</h3><p className="page-hint">{tr('Erfasste Zeit und Aktivitätstage im gewählten Zeitraum.','Recorded time and activity days in this period.')}</p></div><button type="button" className="checklist-manage" onClick={() => onManage('activities')}><Icon name="settings" />{tr('Aktivitäten','Activities')}</button></div>
-      {!data.definitions.length && <p className="checklist-empty">{tr('Lege deine Aktivitäten in den Einstellungen fest.','Set up your activities in settings.')}</p>}
+      <div className="checklist-section-heading"><div><h3>{t("Aktivitäten im Überblick")}</h3><p className="page-hint">{t("Erfasste Zeit und Aktivitätstage im gewählten Zeitraum.")}</p></div><button type="button" className="checklist-manage" onClick={() => onManage('activities')}><Icon name="settings" />{t("Aktivitäten")}</button></div>
+      {!data.definitions.length && <p className="checklist-empty">{t("Lege deine Aktivitäten in den Einstellungen fest.")}</p>}
       <div className={`activity-summary-grid is-${mode}`}>{data.definitions.filter(item => item.active || dates.some(d => shown.days[d]?.items?.[item.id])).map(item => <ActivitySummary key={item.id} activity={item} dates={dates} data={shown} mode={mode} />)}</div>
       </>}
     </>}

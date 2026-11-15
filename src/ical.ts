@@ -93,32 +93,32 @@ function localTime(time: InstanceType<typeof ICAL.Time>, component: InstanceType
     if (actual === desired) return new Date(instant);
     instant += desired - actual;
   }
-  throw new Error(`Ungültige Uhrzeit in Zeitzone ${tzid}.`);
+  throw new Error(t("Ungültige Uhrzeit in Zeitzone {0}.", tzid));
 }
 
 /** Preview first; occurrences remain linked to their original recurrence rule. */
 export function importCalendar(content: string, year = new Date().getFullYear()): CalendarPreview {
-  if (new TextEncoder().encode(content).length > 5_000_000) throw new Error('Die ICS-Datei ist zu groß (höchstens 5 MB).');
+  if (new TextEncoder().encode(content).length > 5_000_000) throw new Error(t("Die ICS-Datei ist zu groß (höchstens 5 MB)."));
   const calendar = new ICAL.Component(ICAL.parse(content.replace(/^\uFEFF/, '')));
-  if (calendar.name !== 'vcalendar' || calendar.getFirstPropertyValue('version') !== '2.0') throw new Error('Keine gültige iCalendar-2.0-Datei.');
+  if (calendar.name !== 'vcalendar' || calendar.getFirstPropertyValue('version') !== '2.0') throw new Error(t("Keine gültige iCalendar-2.0-Datei."));
   const entries: CalendarImport[] = [], notices = new Set<string>(), identities = new Set<string>();
   const components = [...calendar.getAllSubcomponents('vevent'), ...calendar.getAllSubcomponents('vtodo')];
-  if (!components.length) throw new Error('Die Datei enthält keine Ereignisse oder Aufgaben.');
+  if (!components.length) throw new Error(t("Die Datei enthält keine Ereignisse oder Aufgaben."));
   const from = `${year - 1}-01-01`, until = `${year + 3}-01-01`;
   let steps = 0;
   for (const component of components) {
     if (component.hasProperty('recurrence-id') && components.some(c => c !== component && !c.hasProperty('recurrence-id') && c.getFirstPropertyValue('uid') === component.getFirstPropertyValue('uid'))) continue;
     const task = component.name === 'vtodo' || component.getFirstPropertyValue('x-journal-kind') === 'task';
     if (!component.hasProperty('dtstart') && component.hasProperty('due')) component.updatePropertyWithValue('dtstart', component.getFirstPropertyValue('due'));
-    if (!component.hasProperty('dtstart')) throw new Error('Ein Eintrag hat kein Datum. Es wurde nichts importiert.');
+    if (!component.hasProperty('dtstart')) throw new Error(t("Ein Eintrag hat kein Datum. Es wurde nichts importiert."));
     const uid = String(component.getFirstPropertyValue('uid') || '');
-    if (!uid) throw new Error('Ein Eintrag hat keine UID. Es wurde nichts importiert.');
+    if (!uid) throw new Error(t("Ein Eintrag hat keine UID. Es wurde nichts importiert."));
     const event = new ICAL.Event(component);
     const recurring = event.isRecurring();
     if (recurring) {
       for (const rule of component.getAllProperties('rrule')) {
         const value = rule.getFirstValue() as InstanceType<typeof ICAL.Recur>;
-        if (!['DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY'].includes(value.freq)) throw new Error('Serien mit stündlichen oder kürzeren Abständen werden nicht unterstützt.');
+        if (!['DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY'].includes(value.freq)) throw new Error(t("Serien mit stündlichen oder kürzeren Abständen werden nicht unterstützt."));
       }
       notices.add(`Serientermine von ${year - 1} bis ${year + 2} werden als verknüpfte Wiederholung importiert und bei Bedarf fortgesetzt.`);
     }
@@ -132,12 +132,12 @@ export function importCalendar(content: string, year = new Date().getFullYear())
         const prop=new ICAL.Property('exdate');prop.setValue(exception.getFirstPropertyValue('recurrence-id'));master.addProperty(prop);
       }
       repeatRule={start:localDate(localTime(event.startDate,component,'dtstart')),unit:({DAILY:'day',WEEKLY:'week',MONTHLY:'month',YEARLY:'year'} as const)[rule?.freq as 'DAILY'] ?? 'day',every:rule?.interval || 1,ics:master.toString(),icsUid:uid,...(rule?.count ? {end:{count:rule.count}} : rule?.until ? {end:{until:rule.until.toString().slice(0,10)}} : {})};
-      if(repeatRule.ics!.length>3000)throw new Error('Die Wiederholungsregel enthält zu viele Ausnahmen.');
+      if(repeatRule.ics!.length>3000)throw new Error(t("Die Wiederholungsregel enthält zu viele Ausnahmen."));
     }
     const iterator = recurring ? event.iterator() : null;
     let occurrence: InstanceType<typeof ICAL.Time> | null = iterator ? iterator.next() : event.startDate;
     while (occurrence) {
-      if (++steps > 20000) throw new Error('Die Serie ist zu groß für den Import. Bitte einen kürzeren Kalenderzeitraum exportieren.');
+      if (++steps > 20000) throw new Error(t("Die Serie ist zu groß für den Import. Bitte einen kürzeren Kalenderzeitraum exportieren."));
       const details = recurring ? event.getOccurrenceDetails(occurrence) : { item: event, startDate: event.startDate, endDate: event.endDate };
       const source = details.item.component;
       if (!task && source.getFirstPropertyValue('status') === 'CANCELLED') { notices.add('Abgesagte Ereignisse werden nicht importiert.'); occurrence = iterator?.next() ?? null; continue; }
@@ -146,7 +146,7 @@ export function importCalendar(content: string, year = new Date().getFullYear())
       const end = allDay ? new Date(`${details.endDate.toString()}T00:00:00`) : localTime(details.endDate, source, 'dtend');
       const first = allDay ? details.startDate.toString() : localDate(start);
       if (recurring && first >= until) break;
-      if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end < start || !/^\d{4}-\d{2}-\d{2}$/.test(first)) throw new Error('Ein Termin enthält ein ungültiges Datum oder Ende.');
+      if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end < start || !/^\d{4}-\d{2}-\d{2}$/.test(first)) throw new Error(t("Ein Termin enthält ein ungültiges Datum oder Ende."));
       const last = end > start ? localDate(new Date(end.getTime() - 1)) : first;
       const summary = String(source.getFirstPropertyValue('summary') || t("Ohne Titel"));
       const description = String(source.getFirstPropertyValue('description') || '');
@@ -160,9 +160,9 @@ export function importCalendar(content: string, year = new Date().getFullYear())
       for (let date = first; date <= last; date = shiftDate(date, 1)) {
         if(longSpan && date!==first)continue;
         if (recurring && (date < from || date >= until)) continue;
-        if (entries.length >= 5000) throw new Error('Zu viele Kalendereinträge (höchstens 5000 pro Import).');
+        if (entries.length >= 5000) throw new Error(t("Zu viele Kalendereinträge (höchstens 5000 pro Import)."));
         const identity = `${uid}${recurring ? `#${occurrence.toString()}` : ''}`;
-        if (identities.has(identity)) throw new Error('Die Datei enthält doppelte Kalender-UIDs.');
+        if (identities.has(identity)) throw new Error(t("Die Datei enthält doppelte Kalender-UIDs."));
         identities.add(identity);
         const time = allDay ? (first!==last ? '00:00' : null) : clock(start);
         const finish = longSpan ? `${String(endDayOffset*24+(allDay?0:end.getHours())).padStart(2,'0')}:${String(allDay?0:end.getMinutes()).padStart(2,'0')}` : allDay || end.getTime() === start.getTime() ? null : date === localDate(end) ? clock(end) : '24:00';
@@ -189,6 +189,6 @@ export function importCalendar(content: string, year = new Date().getFullYear())
       occurrence = iterator?.next() ?? null;
     }
   }
-  if (!entries.length) throw new Error('Keine Termine im unterstützten Serienzeitraum gefunden.');
+  if (!entries.length) throw new Error(t("Keine Termine im unterstützten Serienzeitraum gefunden."));
   return { entries, notices: [...notices] };
 }

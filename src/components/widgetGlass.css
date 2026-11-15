@@ -11,7 +11,7 @@
      frosted background, 0 = none) and the rounding of every curve. */
   --glass-blur: 0px; --glass-radius: 12px;
 }
-:root[data-glass='light'] {
+:root[data-glass='light']:not([data-glass-popups]), :root[data-glass='light'][data-glass-popups] .desktop-widget {
   --background: transparent !important; --surface: transparent !important; --inset: #ffffff14 !important; --hover: #ffffff24 !important;
   --selected: #ffffff33 !important; --focus: #ffffff3d !important; --border: #ffffff1f !important; --divider: #ffffff2e !important;
   --edge: #ffffff40 !important; --line: #ffffff26 !important; --scrollbar: #ffffff4d !important;
@@ -22,7 +22,7 @@
   --glass-panel: #17171cdb; --glass-panel-edge: #ffffff26; --glass-tint: #0000001f; --glass-quiet: #ffffff8c;
   color-scheme: dark !important;
 }
-:root[data-glass='dark'] {
+:root[data-glass='dark']:not([data-glass-popups]), :root[data-glass='dark'][data-glass-popups] .desktop-widget {
   --background: transparent !important; --surface: transparent !important; --inset: #0000000f !important; --hover: #0000001a !important;
   --selected: #00000024 !important; --focus: #0000002e !important; --border: #00000014 !important; --divider: #00000026 !important;
   --edge: #00000038 !important; --line: #0000001f !important; --scrollbar: #0000004d !important;
@@ -85,31 +85,49 @@
 
 /* Popups (planner, pickers, menus, the entry's actions …): small panels of tinted glass with their own solid palette,
    without the type shadow. They lie outside the widget (the popup canvas), so they set their colours themselves. */
-:root[data-glass] :is(.popover, .planner, .cal-composer, .ctx-menu, .mini-picker-panel, .format-menu, .tag-filter-list, .color-picker-panel, .cal-transfer-panel, .repeat-suggest, .sheet, .reminder, .widget-floating-popup .entry-dock) {
+:root[data-glass]:not([data-glass-popups]) :is(.popover, .planner, .cal-composer, .ctx-menu, .mini-picker-panel, .format-menu, .tag-filter-list, .color-picker-panel, .cal-transfer-panel, .repeat-suggest, .sheet, .reminder, .widget-floating-popup:not(.is-orbit) .entry-dock) {
   --surface: var(--glass-panel) !important; --background: transparent !important; text-shadow: none;
-  border: 0 !important; border-radius: calc(var(--glass-radius) + 2px) !important; background: var(--glass-panel) !important; background-image: none !important;
-  box-shadow: 0 0 0 1px var(--glass-panel-edge), 0 18px 40px -12px #00000080 !important;
-  -webkit-backdrop-filter: blur(18px) saturate(1.4); backdrop-filter: blur(18px) saturate(1.4);
+  border: 0 !important; border-radius: var(--glass-radius) !important; background: var(--glass-panel) !important; background-image: none !important;
+  box-shadow: 0 0 0 1px var(--glass-panel-edge), 0 12px 28px -10px #00000099 !important;
+  -webkit-backdrop-filter: blur(14px) saturate(1.2); backdrop-filter: blur(14px) saturate(1.2);
 }
-:root[data-glass='light'] :is(.popover, .planner, .cal-composer, .ctx-menu, .mini-picker-panel, .format-menu, .tag-filter-list, .color-picker-panel, .cal-transfer-panel, .repeat-suggest, .sheet, .reminder, .widget-floating-popup .entry-dock) {
+:root[data-glass='light']:not([data-glass-popups]) :is(.popover, .planner, .cal-composer, .ctx-menu, .mini-picker-panel, .format-menu, .tag-filter-list, .color-picker-panel, .cal-transfer-panel, .repeat-suggest, .sheet, .reminder, .widget-floating-popup:not(.is-orbit) .entry-dock) {
   --inset: #ffffff12 !important; --hover: #ffffff1f !important; --selected: #ffffff2e !important; --divider: #ffffff1f !important; --edge: #ffffff26 !important;
 }
-:root[data-glass='dark'] :is(.popover, .planner, .cal-composer, .ctx-menu, .mini-picker-panel, .format-menu, .tag-filter-list, .color-picker-panel, .cal-transfer-panel, .repeat-suggest, .sheet, .reminder, .widget-floating-popup .entry-dock) {
+:root[data-glass='dark']:not([data-glass-popups]) :is(.popover, .planner, .cal-composer, .ctx-menu, .mini-picker-panel, .format-menu, .tag-filter-list, .color-picker-panel, .cal-transfer-panel, .repeat-suggest, .sheet, .reminder, .widget-floating-popup:not(.is-orbit) .entry-dock) {
   --inset: #0000000d !important; --hover: #00000014 !important; --selected: #00000021 !important; --divider: #0000001a !important; --edge: #00000021 !important;
 }
-:root[data-glass] .widget-floating-popup .sheet .sheet-group { background: transparent; }
-:root[data-glass] :is(.planner, .cal-composer)::before { display: none; }
-:root[data-glass] .ctx-menu .ctx-item:is(:hover, :focus-visible, [data-active]) { background: var(--hover); }
-:root[data-glass] .popover :is(input, textarea), :root[data-glass] .cal-composer :is(input, textarea) { background: var(--inset); }
+:root[data-glass]:not([data-glass-popups]) .widget-floating-popup .sheet .sheet-group { background: transparent; }
+:root[data-glass]:not([data-glass-popups]) :is(.planner, .cal-composer)::before { display: none; }
+:root[data-glass]:not([data-glass-popups]) .ctx-menu .ctx-item:is(:hover, :focus-visible, [data-active]) { background: var(--hover); }
+:root[data-glass]:not([data-glass-popups]) .popover :is(input, textarea), :root[data-glass]:not([data-glass-popups]) .cal-composer :is(input, textarea) { background: var(--inset); }
 
-/* Rounding: every curve follows the setting (0 = square corners), round marks (dots, pins, the clock) stay round. */
-:root[data-glass] :is(button, input, textarea, select, .nav-cluster, .segmented, .widget-date, .cal-item, .cal-month-day, .cal-time-event, .cal-views,
-  .board-card, .board-link, .board-image, .notebook-attachment, .notebook-link, .entry-tag, .kind-picker, .activity-time, .activity-note-input, .scale-input,
-  .tag-filter-button, .ctx-item, .sheet-action, .sheet-group, .planner-day, .cal-compact-day, .time-option, .field-trigger, .note-switch-option, .notebook-search,
-  .widget-recovery > button, .board-link-form, .board-library):not(.tag-dot, .board-pin, .clock-face, .clock-knob, .clock-pivot, .scale-cell) {
-  border-radius: var(--glass-radius) !important;
-}
+/* Rounding: every curve of the widget follows the setting (0 = square corners). Only round marks stay round: dots, pins,
+   bullets, the clock, colour swatches and slider thumbs. */
+:root[data-glass] .desktop-widget *:not(.tag-dot, .board-pin, .clock-face, .clock-knob, .clock-pivot, .scale-cell, .status-dot, .unsaved-dot, .desktop-widget-save, .cal-dots i, .cal-now, .cal-year-mark, .md-bullet, .tag-filter-dots i, .tag-row-sample i, .ink-color i, .ink-width i, .ink-size i, .ink-swatch, .color-picker-thumb, .value-legend i, .activity-summary-card h4 i, .board-paper i, .widgets-select small > i, .activity-checkbox),
+:root[data-glass] .desktop-widget *:not(.tag-dot, .board-pin, .clock-face, .clock-knob, .clock-pivot, .scale-cell, .status-dot, .unsaved-dot, .desktop-widget-save, .cal-dots i, .cal-now, .cal-year-mark, .md-bullet, .tag-filter-dots i, .tag-row-sample i, .ink-color i, .ink-width i, .ink-size i, .ink-swatch, .color-picker-thumb, .value-legend i, .activity-summary-card h4 i, .board-paper i, .widgets-select small > i, .activity-checkbox)::before,
+:root[data-glass] .desktop-widget *:not(.tag-dot, .board-pin, .clock-face, .clock-knob, .clock-pivot, .scale-cell, .status-dot, .unsaved-dot, .desktop-widget-save, .cal-dots i, .cal-now, .cal-year-mark, .md-bullet, .tag-filter-dots i, .tag-row-sample i, .ink-color i, .ink-width i, .ink-size i, .ink-swatch, .color-picker-thumb, .value-legend i, .activity-summary-card h4 i, .board-paper i, .widgets-select small > i, .activity-checkbox)::after { border-radius: var(--glass-radius) !important; }
 :root[data-glass] .activity-checkbox { border-radius: calc(var(--glass-radius) / 2.5) !important; }
-:root[data-glass] .ctx-menu { border-radius: calc(var(--glass-radius) + 2px) !important; }
+/* The glass popups follow it too (popups in the app's style keep their own shapes). */
+:root[data-glass]:not([data-glass-popups]) :is(.popover, .planner, .cal-composer, .ctx-menu, .mini-picker-panel, .format-menu, .tag-filter-list, .color-picker-panel, .cal-transfer-panel, .repeat-suggest, .sheet, .reminder, .widget-floating-popup:not(.is-orbit) .entry-dock) *:not(.tag-dot, .clock-face, .clock-knob, .clock-pivot, .ctx-swatch, .color-picker-thumb, .ink-swatch, .field-clear),
+:root[data-glass]:not([data-glass-popups]) :is(.popover, .planner, .cal-composer, .ctx-menu, .mini-picker-panel, .format-menu, .tag-filter-list, .color-picker-panel, .cal-transfer-panel, .repeat-suggest, .sheet, .reminder, .widget-floating-popup:not(.is-orbit) .entry-dock) *:not(.tag-dot, .clock-face, .clock-knob, .clock-pivot, .ctx-swatch, .color-picker-thumb, .ink-swatch, .field-clear)::before,
+:root[data-glass]:not([data-glass-popups]) :is(.popover, .planner, .cal-composer, .ctx-menu, .mini-picker-panel, .format-menu, .tag-filter-list, .color-picker-panel, .cal-transfer-panel, .repeat-suggest, .sheet, .reminder, .widget-floating-popup:not(.is-orbit) .entry-dock) *:not(.tag-dot, .clock-face, .clock-knob, .clock-pivot, .ctx-swatch, .color-picker-thumb, .ink-swatch, .field-clear)::after { border-radius: var(--glass-radius) !important; }
 /* The chosen view keeps a straight underline. */
 :root[data-glass] .desktop-widget-head .cal-views button[aria-selected='true'] { border-radius: 0 !important; }
+
+/* No glow anywhere: no shadows around type or icons, no halo under the selected strokes. */
+:root[data-glass] .desktop-widget *, :root[data-glass] .desktop-widget *::before, :root[data-glass] .desktop-widget *::after { text-shadow: none !important; }
+:root[data-glass] .desktop-widget :is(.board-thread, .ink-strokes, .cal-item-icon, .entry-icon, .tag-icon, .icon) { filter: none !important; }
+:root[data-glass] .ink-glow { display: none; }
+
+/* Popups in the app's style: the body is still the plain transparent widget, whatever the app's look draws on its parts
+   (paper grain, stickers, terminal bars) is left off. */
+:root[data-glass-popups] .desktop-widget, :root[data-glass-popups] .desktop-widget-body { background-image: none !important; outline: 0 !important; }
+:root[data-glass-popups] .desktop-widget :is(.desktop-widget-head, .nav-cluster, .nav-cluster *, .desktop-widget-open, .cal-views, .cal-views button, .widget-date) { background-image: none !important; box-shadow: none !important; }
+:root[data-glass-popups] .desktop-widget :is(.desktop-widget-head, .nav-cluster, .cal-views) :is(button, a)::before { display: none; }
+
+/* Popups in the app's style: the header's keys stay as quiet as in the plain transparent widget. */
+:root[data-glass-popups] .desktop-widget-head :is(.nav-step, .nav-today, .nav-cluster, .desktop-widget-open, .cal-views button) { background: transparent !important; background-image: none !important; box-shadow: none !important; transform: none !important; }
+:root[data-glass-popups] .desktop-widget-head :is(.nav-step, .nav-today, .desktop-widget-open, .cal-views button) { color: var(--muted) !important; }
+:root[data-glass-popups] .desktop-widget-head .nav-today:disabled { color: color-mix(in srgb, var(--glass-quiet) 55%, transparent) !important; }
+:root[data-glass-popups] .desktop-widget-head :is(.nav-step, .nav-today, .desktop-widget-open):hover:not(:disabled) { background: var(--hover) !important; color: var(--strong) !important; }

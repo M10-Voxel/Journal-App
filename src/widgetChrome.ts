@@ -7,12 +7,13 @@ import { useCallback, useSyncExternalStore } from 'react';
  */
 /** `glass`: the transparent look (see widgetGlass.css), `glassText` its type: light for dark wallpapers, dark for light ones. */
 export type GlassText = 'light' | 'dark';
-export interface WidgetChrome { openButton: boolean; glass: boolean; glassText: GlassText; glassBlur: number; glassRadius: number; liveBlur: boolean }
+export interface WidgetChrome { openButton: boolean; glass: boolean; glassText: GlassText; glassBlur: number; glassRadius: number; liveBlur: boolean;
+  /** Popups keep the app's design (look, popup style, palette) while the rest of the widget is transparent. */ glassAppPopups: boolean }
 /** The sliders' ranges in px: how strongly the wallpaper behind the widget is blurred (0: none, fully clear), the rounding of every curve. */
 export const glassBlurRange = [0, 40] as const, glassRadiusRange = [0, 24] as const;
 const clamp = (value: unknown, [min, max]: readonly [number, number], fallback: number) => typeof value === 'number' && Number.isFinite(value) ? Math.min(max, Math.max(min, Math.round(value))) : fallback;
 const key = 'journal.widget-chrome';
-const defaults: WidgetChrome = { openButton: true, glass: false, glassText: 'light', glassBlur: 0, glassRadius: 12, liveBlur:false };
+const defaults: WidgetChrome = { openButton: true, glass: false, glassText: 'light', glassBlur: 0, glassRadius: 12, liveBlur:false, glassAppPopups: false };
 
 function readAll(): Record<string, Partial<WidgetChrome>> {
   try { const stored = JSON.parse(localStorage.getItem(key) ?? '{}'); return stored && typeof stored === 'object' ? stored : {}; }
@@ -22,7 +23,7 @@ const cache = new Map<string, WidgetChrome>();
 export function widgetChrome(id: string): WidgetChrome {
   let value = cache.get(id);
   if (!value) { const stored = readAll()[id] ?? {}; value = { openButton: stored.openButton !== false, glass: stored.glass === true, glassText: stored.glassText === 'dark' ? 'dark' : 'light',
-    liveBlur:stored.liveBlur===true, glassBlur: clamp(stored.glassBlur, glassBlurRange, defaults.glassBlur), glassRadius: clamp(stored.glassRadius, glassRadiusRange, defaults.glassRadius) }; cache.set(id, value); }
+    liveBlur:stored.liveBlur===true, glassAppPopups: stored.glassAppPopups === true, glassBlur: clamp(stored.glassBlur, glassBlurRange, defaults.glassBlur), glassRadius: clamp(stored.glassRadius, glassRadiusRange, defaults.glassRadius) }; cache.set(id, value); }
   return value;
 }
 const listeners = new Set<() => void>();

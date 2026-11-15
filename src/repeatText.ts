@@ -316,7 +316,7 @@ const roles: [RegExp, string][] = [
   [/^monatsende$/i, 'letzter Tag im Monat'], [/^(mal|times)$/i, 'Ende nach n-mal'], [/^(bis|until)$/i, 'Ende an einem Datum'], [/^(für|for)$/i, 'Dauer: für n Wochen …'],
   [/^(nur|only|von|from)$/i, 'nur in Monaten'], [/^(pause|an|aus|on|off)$/i, 'Pause: n an, n aus'], [/^(geburtstag|birthday)$/i, 'jedes Jahr am Datum'],
 ];
-const holidayRole = (word: string) => { const offset = find(easterWords, word.toLowerCase()); return offset === undefined ? undefined : `${getLanguage() === 'en' ? 'Holiday · Easter' : 'Feiertag · Ostern'} ${offset === 0 ? '' : offset > 0 ? `+${offset}` : `−${-offset}`}`.trim(); };
+const holidayRole = (word: string) => { const offset = find(easterWords, word.toLowerCase()); return offset === undefined ? undefined : `${t("Feiertag · Ostern")} ${offset === 0 ? '' : offset > 0 ? `+${offset}` : `−${-offset}`}`.trim(); };
 const roleOf = (word: string) => roles.find(([pattern]) => pattern.test(word))?.[1] ?? holidayRole(word) ?? '';
 
 export interface Suggestion { word: string; description: string; matches: number[]; prefix: boolean }

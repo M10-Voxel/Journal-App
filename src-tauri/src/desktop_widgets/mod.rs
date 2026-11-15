@@ -1,5 +1,6 @@
 pub mod host;
 pub mod live_blur;
+#[cfg(windows)] mod capture;
 mod config;
 mod geometry;
 pub mod smoke;
@@ -15,9 +16,10 @@ use tauri::{Emitter,Manager};
 pub struct WidgetRuntime {
     content_ready:AtomicBool,opening:AtomicBool,changed:AtomicU64,
     live_blur:Mutex<Option<f64>>,
+    live_backend:Mutex<&'static str>,
     error:Mutex<Option<String>>,surface:Mutex<Option<surface::Surface>>,last_attempt:Mutex<Instant>,copy_from:Mutex<Option<String>>,
 }
-impl Default for WidgetRuntime{fn default()->Self{Self{live_blur:Mutex::new(None),content_ready:AtomicBool::new(false),opening:AtomicBool::new(false),changed:AtomicU64::new(0),error:Mutex::new(None),surface:Mutex::new(None),last_attempt:Mutex::new(Instant::now()-Duration::from_secs(3)),copy_from:Mutex::new(None)}}}
+impl Default for WidgetRuntime{fn default()->Self{Self{live_blur:Mutex::new(None),live_backend:Mutex::new("disabled"),content_ready:AtomicBool::new(false),opening:AtomicBool::new(false),changed:AtomicU64::new(0),error:Mutex::new(None),surface:Mutex::new(None),last_attempt:Mutex::new(Instant::now()-Duration::from_secs(3)),copy_from:Mutex::new(None)}}}
 pub struct DesktopWidgets {
     path:PathBuf,config:Mutex<Config>,ready:AtomicBool,updating:AtomicBool,legacy:AtomicBool,
     error:Mutex<Option<String>>,runtimes:Mutex<HashMap<String,Arc<WidgetRuntime>>>,
@@ -271,9 +273,18 @@ pub fn window_event(window:&tauri::Window,event:&tauri::WindowEvent){
 pub fn start(app:tauri::AppHandle){
     std::thread::spawn(move||{
         let mut pending=HashMap::<String,(u64,Instant)>::new();let mut geometry_key=String::new();
+        let mut wallpaper_poll=Instant::now();
+        #[cfg(windows)] let mut wallpaper_generation=host::wallpaper_generation();
         loop{
             std::thread::sleep(Duration::from_millis(250));let state=app.state::<DesktopWidgets>();
             if !state.ready.load(Ordering::Relaxed)||state.updating.load(Ordering::Relaxed){continue;}
+            let mut refresh_wallpaper=wallpaper_poll.elapsed()>=Duration::from_secs(5);
+            #[cfg(windows)] {
+                let generation=host::wallpaper_generation();
+                refresh_wallpaper|=generation!=wallpaper_generation;
+                wallpaper_generation=generation;
+            }
+            if refresh_wallpaper{wallpaper_poll=Instant::now();}
             let widgets=state.config.lock().map(|c|c.widgets.clone()).unwrap_or_default();let mut next_key=None;let mut topology_checked=false;
             pending.retain(|id,_|widgets.iter().any(|w|w.id==*id));
             for widget in widgets.into_iter().filter(|w|w.enabled&&w.kind.available()){
@@ -281,6 +292,9 @@ pub fn start(app:tauri::AppHandle){
                 if let Some(window)=app.get_webview_window(&window_label(&widget.id)){
                     if !runtime.content_ready.load(Ordering::Relaxed){continue;}
                     #[cfg(windows)] if let Ok(hwnd)=window.hwnd(){let raw=hwnd.0 as isize;let _=window.run_on_main_thread(move||host::maintain(raw));}
+                    // Native events also wake background WebViews whose JS
+                    // interval is throttled while another application has focus.
+                    if refresh_wallpaper{let _=window.emit("widget:wallpaper-check",());}
                     let current=runtime.changed.load(Ordering::Relaxed);let entry=pending.entry(widget.id.clone()).or_insert((0,Instant::now()));
                     if entry.0!=current{*entry=(current,Instant::now());}else if current!=0&&entry.1.elapsed()>Duration::from_millis(750){let _=remember(&app,&widget.id);let _=runtime.changed.compare_exchange(current,0,Ordering::Relaxed,Ordering::Relaxed);entry.0=0;}
                     // All widgets share the desktop topology. Enumerate monitors

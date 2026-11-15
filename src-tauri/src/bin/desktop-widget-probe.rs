@@ -6,6 +6,9 @@ mod host;
 #[path="../desktop_widgets/live_blur.rs"]
 mod live_blur;
 #[cfg(windows)]
+#[path="../desktop_widgets/capture.rs"]
+mod capture;
+#[cfg(windows)]
 fn main() {
     use std::ffi::c_void;
     use std::sync::atomic::{AtomicIsize,Ordering};

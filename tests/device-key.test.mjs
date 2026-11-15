@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseDeviceKey } from '../src/sync/deviceKey.ts';
+import { setLanguage } from '../src/i18n.ts';
 
 const bytes=Uint8Array.from({length:32},(_,i)=>(i*7+135)%256);
 const key=btoa(String.fromCharCode(...bytes));
@@ -13,7 +14,8 @@ test('the generated key keeps exactly the same bytes and vault hash after paste 
 });
 test('passwords, truncated keys and invalid encodings have an actionable error instead of atob',()=>{
   for(const value of ['', 'my password', 'Google.apps.googleusercontent.com',key.slice(0,40),key+'=', 'A'.repeat(42)+'B=',key.slice(0,12)+'!'+key.slice(13),'🔑'.repeat(22)]){
-    assert.throws(()=>parseDeviceKey(value),/Ungültiger Geräteschlüssel/);
-    assert.throws(()=>parseDeviceKey(value,true),/Invalid device key/);
+    setLanguage('de');assert.throws(()=>parseDeviceKey(value),/Ungültiger Geräteschlüssel/);
+    setLanguage('en');assert.throws(()=>parseDeviceKey(value),/Invalid device key/);
+    setLanguage('de');
   }
 });

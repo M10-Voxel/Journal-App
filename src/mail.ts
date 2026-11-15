@@ -111,7 +111,7 @@ export async function recognizeMail({ account, message }: MailPending, today = l
   const event = (text: string, time: string | null, end: string | null): Entry => ({ id: '', kind: 'event', text, time, end: time && end && end > time ? end : null, done: false, cancelled: false, priority: false, reminder: false, plan: null });
   const content = message.text || mailText(message.html);
   if ((!analyzer && /\b(?:abgesagt|storniert|cancelled|canceled)\b/i.test(message.subject)) || message.calendars.some(ics => /(?:METHOD:CANCEL|STATUS:CANCELLED)/i.test(ics))) {
-    return { candidates, notice: 'Mögliche Absage erkannt. Vorhandenen Termin bitte im Kalender prüfen; es wurde kein neuer Eintrag angelegt.' };
+    return { candidates, notice: t("Mögliche Absage erkannt. Vorhandenen Termin bitte im Kalender prüfen; es wurde kein neuer Eintrag angelegt.") };
   }
   for (const calendar of message.calendars) {
     try {
@@ -119,8 +119,8 @@ export async function recognizeMail({ account, message }: MailPending, today = l
       const preview = importCalendar(calendar, Number(today.slice(0, 4)));
       for (const item of preview.entries) await add(item, `ics:${item.entry.calendarUid}`, `Kalenderanhang · ${message.subject}`, true);
       notices.push(...preview.notices);
-      if (preview.entries.length > 200) notices.push('Der Kalenderanhang enthält viele Termine. Es werden höchstens 200 zukünftige Termine pro Mail vorgeschlagen.');
-    } catch { notices.push('Ein Kalenderanhang konnte nicht ausgewertet werden.'); }
+      if (preview.entries.length > 200) notices.push(t("Der Kalenderanhang enthält viele Termine. Es werden höchstens 200 zukünftige Termine pro Mail vorgeschlagen."));
+    } catch { notices.push(t("Ein Kalenderanhang konnte nicht ausgewertet werden.")); }
   }
   // JSON-LD parcel/event data is preferable to interpreting dates in free text.
   function objects(value: unknown, depth = 0): Record<string, unknown>[] {
@@ -143,7 +143,7 @@ export async function recognizeMail({ account, message }: MailPending, today = l
         await add({ date: from.date, entry: event(name, to && to.date>from.date ? from.time ?? '00:00' : from.time, to && to.date>from.date ? `${String(Math.round((Date.parse(to.date)-Date.parse(from.date))/86400000)*24+Number((to.time ?? '23:59').split(':')[0])).padStart(2,'0')}:${(to.time ?? '23:59').split(':')[1]}` : to?.time ?? null) },
           track ? `parcel:${track}` : `structured:${message.key}:${start}`, `Strukturierte ${type === 'ParcelDelivery' ? 'Lieferankündigung' : 'Terminangabe'} · ${start}${finish ? ` – ${finish}` : ''}`, true);
       }
-    } catch { notices.push('Strukturierte Maildaten konnten nicht vollständig gelesen werden.'); }
+    } catch { notices.push(t("Strukturierte Maildaten konnten nicht vollständig gelesen werden.")); }
   }
   if (candidates.length) return { candidates, notice: [...new Set(notices)].join(' ').slice(0, 2000) };
   const workdays=deliveryWorkdayWindow(message.subject,content,message.sentAt);
@@ -153,13 +153,13 @@ export async function recognizeMail({ account, message }: MailPending, today = l
     const prepared = prepareMailText(message.subject, content);
     if (!prepared.trim()) return { candidates, notice: '' };
     const analysis = await analyzer(prepared);
-    if (analysis.text !== prepared) throw new Error('Die Modellantwort gehört nicht zu diesem Mailtext.');
+    if (analysis.text !== prepared) throw new Error(t("Die Modellantwort gehört nicht zu diesem Mailtext."));
     const result = extractModelEvents(analysis, message.subject, message.sentAt, today);
     for (const item of result.events) await add({ date:item.date, entry:event(item.text,item.time,item.end) },`ml:${message.key}:${item.identity}`,item.evidence,false);
     return { candidates, notice: [...notices,result.notice].filter(Boolean).join(' ').slice(0,2000) };
   }
   if (!content.trim() && !message.subject.trim()) return { candidates, notice: '' };
-  throw new Error('Die kontextbezogene Mailauswertung benötigt das lokale ML-Modell. Bitte die Modelleinrichtung öffnen.');
+  throw new Error(t("Die kontextbezogene Mailauswertung benötigt das lokale ML-Modell. Bitte die Modelleinrichtung öffnen."));
 }
 
 /** Only the newest announcement of an identical external event is presented. */

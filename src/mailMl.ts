@@ -1,3 +1,4 @@
+import { t } from './i18n.ts';
 import { de, en } from 'chrono-node';
 import { localDate } from './dates.ts';
 import { calendarContextThreshold } from './mailContext.ts';
@@ -119,13 +120,13 @@ export function extractModelEvents(analysis: ModelAnalysis, subject: string, sen
       const identity=`${date.date}:${time?.time??''}:${time?.finish??''}`;
       if(events.some(e=>e.identity===identity))continue;
       if(!time&&local.some(m=>m.field==='time') || !time&&next?.text.includes('Uhrzeit'))unclear=true;
-      events.push({date:date.date,time:time?.time??null,end:time?.finish??null,text,identity,subject:sentence.subject,evidence:`Kontextbezogener ML-Vorschlag · bitte prüfen\n${sentence.text}${continuation?'\n'+continuation.text:''}`});
+      events.push({date:date.date,time:time?.time??null,end:time?.finish??null,text,identity,subject:sentence.subject,evidence:`${t("Kontextbezogener ML-Vorschlag · bitte prüfen")}\n${sentence.text}${continuation?'\n'+continuation.text:''}`});
     }
   }
   const bodyEvents=events.filter(e=>!e.subject);
   const first=[...analysis.classifications].filter(c=>Number.isFinite(c.score)).sort((a,b)=>b.score-a.score)[0];
   const cancellation=first&&first.score>=.5&&/cancelled|past event/i.test(first.label);
   const selected=bodyEvents.length?bodyEvents:cancellation?[]:events;
-  const notice=!selected.length&&cancellation?'Das lokale Modell stuft den Inhalt als mögliche Absage oder rückblickende Nachricht ein. Es wurde kein neuer Termin angelegt.':unclear?'Nicht alle erkannten Angaben konnten eindeutig in ein Datum oder eine Uhrzeit umgerechnet werden. Bitte den Originaltext prüfen.':'';
+  const notice=!selected.length&&cancellation?t("Das lokale Modell stuft den Inhalt als mögliche Absage oder rückblickende Nachricht ein. Es wurde kein neuer Termin angelegt."):unclear?t("Nicht alle erkannten Angaben konnten eindeutig in ein Datum oder eine Uhrzeit umgerechnet werden. Bitte den Originaltext prüfen."):'';
   return {events:selected.map(({subject:_,...event})=>event),notice};
 }

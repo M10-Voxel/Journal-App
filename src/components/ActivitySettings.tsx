@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { CSSProperties } from 'react';
-import { useLanguage } from '../i18n';
+import { useLanguage, t } from '../i18n';
 import { changePeriodData, ensureActivityTags, usePeriodData } from '../periodStore';
 import type { ActivityDefinition } from '../periodData';
 import { saveTags } from '../tagStore';
@@ -13,8 +13,7 @@ import { ActivityPalette } from './ActivityPalette';
 import { activityRange, maxRangeMinutes } from '../activityColors';
 
 export function ActivitySettings() {
-  const en = useLanguage() === 'en';
-  const tr = (de: string, english: string) => en ? english : de;
+  useLanguage();
   const { data, error } = usePeriodData();
   const [name, setName] = useState('');
   const [tagError,setTagError] = useState('');
@@ -39,26 +38,26 @@ export function ActivitySettings() {
   const reorder = (from: number, to: number) => changePeriodData(current => ({ ...current, definitions: moveTo(current.definitions, from, to) }));
   const drag = useSortRows(reorder);
   return <div className="activity-settings">
-    <h3>{tr('Aktivitäten', 'Activities')}</h3>
-    <p className="settings-hint">{tr('Lege deine tägliche Checkliste fest. Farbe, Zeiterfassung und Notizfeld gelten für alle Tage. Jede Aktivität hat ein eigenes Tag: Kalender-Einträge mit diesem Tag zählen als ihre Zeit. Deaktivierte Aktivitäten bleiben in vergangenen Auswertungen erhalten.', 'Set up your daily checklist. Color, time tracking and notes apply to every day. Each activity has its own tag: calendar entries with that tag count as its time. Inactive activities remain in past analytics.')}</p>
+    <h3>{t("Aktivitäten")}</h3>
+    <p className="settings-hint">{t("Lege deine tägliche Checkliste fest. Farbe, Zeiterfassung und Notizfeld gelten für alle Tage. Jede Aktivität hat ein eigenes Tag: Kalender-Einträge mit diesem Tag zählen als ihre Zeit. Deaktivierte Aktivitäten bleiben in vergangenen Auswertungen erhalten.")}</p>
     {(error || tagError) && <p className="error" role="alert">{error || tagError}</p>}
-    {!data ? <p>{tr('Wird geladen …','Loading …')}</p> : <>
+    {!data ? <p>{t("Wird geladen …")}</p> : <>
       <div className="activity-settings-list">{data.definitions.map((item,index) => <div className={`activity-settings-row${item.active ? '' : ' is-inactive'}`} style={{ '--activity-color': item.color } as CSSProperties} key={item.id} data-sort-item={item.id} onPointerDown={drag}>
-        <div className="activity-settings-name"><SortHandle name={item.name} index={index} count={data.definitions.length} onMove={reorder} /><ColorButton value={item.color} label={item.name} swatches={tagSwatches} onChange={color => edit(item.id, { color })} /><input aria-label={tr('Name der Aktivität','Activity name')} maxLength={80} value={item.name} onChange={e => edit(item.id, { name: e.target.value })} onBlur={() => renameTag(item)} /></div>
+        <div className="activity-settings-name"><SortHandle name={item.name} index={index} count={data.definitions.length} onMove={reorder} /><ColorButton value={item.color} label={item.name} swatches={tagSwatches} onChange={color => edit(item.id, { color })} /><input aria-label={t("Name der Aktivität")} maxLength={80} value={item.name} onChange={e => edit(item.id, { name: e.target.value })} onBlur={() => renameTag(item)} /></div>
         <ActivityPalette color={item.color} trackTime={item.trackTime} range={activityRange(item)} preview />
-        {item.trackTime && <div className="activity-range" role="group" aria-label={tr('Zeitspanne der Farbstufen','Time span of the shades')}>
-          <label>{tr('Hellste Stufe ab','Lightest shade from')}<input type="number" inputMode="numeric" min={0} max={maxRangeMinutes - 6} step={5} value={activityRange(item).min} onChange={e => edit(item.id, rangeChange(item, 'minMinutes', e.target.value))} /><span>min</span></label>
-          <label>{tr('Dunkelste Stufe ab','Darkest shade from')}<input type="number" inputMode="numeric" min={6} max={maxRangeMinutes} step={5} value={activityRange(item).max} onChange={e => edit(item.id, rangeChange(item, 'maxMinutes', e.target.value))} /><span>min</span></label>
-          {(item.minMinutes !== undefined || item.maxMinutes !== undefined) && <button type="button" onClick={() => edit(item.id, { minMinutes: undefined, maxMinutes: undefined })}>{tr('Zurücksetzen','Reset')}</button>}
+        {item.trackTime && <div className="activity-range" role="group" aria-label={t("Zeitspanne der Farbstufen")}>
+          <label>{t("Hellste Stufe ab")}<input type="number" inputMode="numeric" min={0} max={maxRangeMinutes - 6} step={5} value={activityRange(item).min} onChange={e => edit(item.id, rangeChange(item, 'minMinutes', e.target.value))} /><span>min</span></label>
+          <label>{t("Dunkelste Stufe ab")}<input type="number" inputMode="numeric" min={6} max={maxRangeMinutes} step={5} value={activityRange(item).max} onChange={e => edit(item.id, rangeChange(item, 'maxMinutes', e.target.value))} /><span>min</span></label>
+          {(item.minMinutes !== undefined || item.maxMinutes !== undefined) && <button type="button" onClick={() => edit(item.id, { minMinutes: undefined, maxMinutes: undefined })}>{t("Zurücksetzen")}</button>}
         </div>}
         <div className="activity-options">
-          <label><span className="activity-checkbox"><input type="checkbox" checked={item.active} onChange={e => edit(item.id, { active: e.target.checked })} /><Icon name="check" className="activity-check-mark" /></span>{tr('Aktiv','Active')}</label>
-          <label><span className="activity-checkbox"><input type="checkbox" checked={item.trackTime} onChange={e => edit(item.id, { trackTime: e.target.checked })} /><Icon name="check" className="activity-check-mark" /></span><Icon name="clock" />{tr('Zeit erfassen','Track time')}</label>
-          <label><span className="activity-checkbox"><input type="checkbox" checked={item.textField} onChange={e => edit(item.id, { textField: e.target.checked })} /><Icon name="check" className="activity-check-mark" /></span><Icon name="note" />{tr('Notizfeld','Notes')}</label>
+          <label><span className="activity-checkbox"><input type="checkbox" checked={item.active} onChange={e => edit(item.id, { active: e.target.checked })} /><Icon name="check" className="activity-check-mark" /></span>{t("Aktiv")}</label>
+          <label><span className="activity-checkbox"><input type="checkbox" checked={item.trackTime} onChange={e => edit(item.id, { trackTime: e.target.checked })} /><Icon name="check" className="activity-check-mark" /></span><Icon name="clock" />{t("Zeit erfassen")}</label>
+          <label><span className="activity-checkbox"><input type="checkbox" checked={item.textField} onChange={e => edit(item.id, { textField: e.target.checked })} /><Icon name="check" className="activity-check-mark" /></span><Icon name="note" />{t("Notizfeld")}</label>
         </div>
       </div>)}</div>
       <form className="activity-settings-add" onSubmit={e => { e.preventDefault(); if (!name.trim()) return; changePeriodData(current => ({ ...current, definitions: [...current.definitions, { id: crypto.randomUUID(), name: name.trim(), color: tagSwatches[current.definitions.length % tagSwatches.length], trackTime: true, textField: false, active: true }] })); setName(''); void ensureActivityTags().then(() => setTagError(''), reason => setTagError(String(reason))); }}>
-        <input aria-label={tr('Neue Aktivität','New activity')} placeholder={tr('Neue Aktivität …','New activity …')} value={name} maxLength={80} onChange={e => setName(e.target.value)} /><button type="submit" disabled={!name.trim()}>{tr('Hinzufügen','Add')}</button>
+        <input aria-label={t("Neue Aktivität")} placeholder={t("Neue Aktivität …")} value={name} maxLength={80} onChange={e => setName(e.target.value)} /><button type="submit" disabled={!name.trim()}>{t("Hinzufügen")}</button>
       </form>
     </>}
   </div>;

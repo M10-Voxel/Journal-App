@@ -1,3 +1,4 @@
+import { t } from './i18n.ts';
 // The search over everything written by hand: entries (tasks, events, notes, calendar entries), day titles, the board's
 // cards and the notebook. A query is words to find plus filters: `@Typ` (also `@Pinnwand/Zettel`) and `\Tag`.
 // Suggestions complete the filter being typed, like the repeat field does (see repeatText.ts).
@@ -77,7 +78,7 @@ export function searchSuggestions(parsed: ParsedQuery, tags: readonly Tag[], eng
   return tags.filter(tag => rank(tag.name) >= 0)
     .sort((a, b) => rank(a.name) - rank(b.name))
     .slice(0, limit)
-    .map(tag => ({ insert: `\\${tagWord(tag.name)}`, label: tag.name, description: english ? 'Tag' : 'Tag', matches: marks(tag.name), color: tag.color, id: tag.id }));
+    .map(tag => ({ insert: `\\${tagWord(tag.name)}`, label: tag.name, description: t("Tag"), matches: marks(tag.name), color: tag.color, id: tag.id }));
 }
 /** The query with the filter at the cursor replaced by a suggestion (and a space after it). */
 export function acceptSuggestion(query: string, parsed: ParsedQuery, suggestion: Suggestion): { query: string; cursor: number } {

@@ -10,8 +10,8 @@
 .cal-composer > .chrome-head { order: -1; }
 
 /* Glas: a grab handle and the title, quiet */
-.chrome-head.is-glass { flex-direction: column; gap: 3px; padding: 6px 12px 0; color: var(--muted); font: 500 10.5px var(--sans); text-align: center; }
-.chrome-head.is-glass i { width: 34px; height: 4px; border-radius: 99px; background: color-mix(in srgb, var(--strong) 22%, transparent); }
+.chrome-head.is-glass { padding: 6px 12px 0; color: var(--muted); font: 500 12px var(--sans); text-align: left; }
+.chrome-head.is-glass i { display: none; }
 /* Karteikarte: the title over the red rule */
 .chrome-head.is-card { height: 34px; padding: 3px 12px 0; border-bottom: 1px solid color-mix(in srgb, var(--error) 45%, transparent); color: var(--strong); font: italic 600 14px var(--display, var(--serif, var(--sans))); }
 /* Sticker: the title on a small label sticker, tilted, over the top edge. */
@@ -43,9 +43,9 @@
 .chrome-tabs { display: flex; gap: 2px; margin: 0 0 8px; }
 .chrome-tabs button { flex: 1; height: 26px; padding: 0 8px; border: 0; background: transparent; color: var(--muted); font: 500 11.5px var(--sans); cursor: pointer; }
 .chrome-tabs button:disabled { opacity: .35; cursor: default; }
-.chrome-tabs.is-classic-b { padding: 2px; border-radius: 999px; background: color-mix(in srgb, var(--strong) 7%, transparent); }
-.chrome-tabs.is-classic-b button { border-radius: 999px; }
-.chrome-tabs.is-classic-b button[aria-selected='true'] { background: color-mix(in srgb, var(--strong) 16%, transparent); color: var(--strong); box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 35%, transparent); }
+.chrome-tabs.is-classic-b { padding: 2px; border-radius: 6px; background: var(--inset); }
+.chrome-tabs.is-classic-b button { border-radius: 4px; }
+.chrome-tabs.is-classic-b button[aria-selected='true'] { background: var(--hover); color: var(--strong); box-shadow: none; }
 .chrome-tabs.is-journal-a { gap: 4px; border-bottom: 1px solid color-mix(in srgb, var(--text) 25%, transparent); }
 .chrome-tabs.is-journal-a button { flex: none; position: relative; top: 1px; border-radius: 5px 5px 0 0; font: 700 16px var(--hand, var(--serif, var(--sans))); color: var(--text); }
 .chrome-tabs.is-journal-a button[aria-selected='true'] { background: var(--surface); box-shadow: inset 1px 1px 0 color-mix(in srgb, var(--text) 25%, transparent), inset -1px 0 0 color-mix(in srgb, var(--text) 25%, transparent); color: var(--accent); }

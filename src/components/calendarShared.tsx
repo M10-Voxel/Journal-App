@@ -199,7 +199,7 @@ export function CalendarItem({ entry, date, variant = 'line', short = false, sty
     {/* Its icon in the tag's colour at the lower right; where the entry is too small for its text, the icon stands for it. */}
     {entry.icon && <EntryIcon name={entry.icon} className="cal-item-icon" />}
     {entry.time && <time className="cal-item-time" aria-hidden="true"><span>{formatSpan(entry.time, entry.end)}</span></time>}
-    {options && <Popover anchor={noteRef.current} label={t("L?schen")} onClose={()=>setOptions(null)}><ScopeChoice action="remove" options={options} onCancel={()=>setOptions(null)} onChoose={option=>{setOptions(null);void remove?.(entry,date,option.others).catch(reason=>setError(String(reason)));}} /></Popover>}
+    {options && <Popover anchor={noteRef.current} label={t("Löschen")} onClose={()=>setOptions(null)}><ScopeChoice action="remove" options={options} onCancel={()=>setOptions(null)} onChoose={option=>{setOptions(null);void remove?.(entry,date,option.others).catch(reason=>setError(String(reason)));}} /></Popover>}
     {error && <Popover anchor={noteRef.current} label={t("Fehler")} onClose={()=>setError('')}><p role="alert">{error}</p></Popover>}
     {details && <Popover anchor={noteRef.current} className={`cal-details${mail ? ' has-mail' : ''}`} label={t("Beschreibung")} onClose={() => setDetails(false)}>
       {/* Clicks in here stay here: the entry around it would otherwise open the journal. */}

@@ -50,7 +50,7 @@ const lookNames = (): Record<Look, string> => ({ classic: t('Normal'), journal: 
 
 /** The variants of the popups in each look (popup-styles.css; designs.ts `popupVariants`). */
 const popupStyles = (look: Look): { value: PopupStyle; title: string; text: string }[] => ({
-  classic: [{ value: 'a' as const, title: t('Karte'), text: t('Fest, mit weichem Schatten') }, { value: 'b' as const, title: t('Glas'), text: t('Durchscheinend und hell umrandet') }],
+  classic: [{ value: 'a' as const, title: t('Karte'), text: t('Fest, mit weichem Schatten') }, { value: 'b' as const, title: t('Glas'), text: t('Schlicht wie ein Zed-Menü') }],
   journal: [{ value: 'a' as const, title: t('Karteikarte'), text: t('Papier mit rotem Rand') }, { value: 'b' as const, title: t('Sticker'), text: t('Ausgeschnitten, weißer Rand') },
     { value: 'c' as const, title: t('Sticker-Bogen'), text: t('Jede Aktion ein eigener Sticker') }, { value: 'd' as const, title: t('Papierschnipsel'), text: t('Gerissenes Papier mit Washi-Tape') }],
   nebula: [{ value: 'a' as const, title: 'Terminal', text: t('Schwarzes Fenster mit Prompt') }, { value: 'b' as const, title: t('Holo-Papier'), text: t('Graues Papier, violetter Balken') }],

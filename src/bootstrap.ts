@@ -1,3 +1,4 @@
+import { t } from './i18n.ts';
 import { invoke } from '@tauri-apps/api/core';
 import { restoreVaultPreferences } from './vaultPreferences';
 
@@ -18,7 +19,7 @@ async function start() {
   } catch (reason) {
     const root = document.getElementById('root')!;
     root.style.cssText = 'padding:32px;color:#ddd;font:16px system-ui;white-space:pre-wrap';
-    root.textContent = `Journal konnte nicht gestartet werden.\n${String(reason)}`;
+    root.textContent = `${t("Journal konnte nicht gestartet werden.")}\n${String(reason)}`;
   }
 }
 

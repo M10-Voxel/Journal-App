@@ -1,3 +1,4 @@
+import { t } from './i18n.ts';
 import { emit, listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import { journal } from './journal';
@@ -141,13 +142,13 @@ export class WidgetEditorClient {
     let timer: number | undefined;
     const response = new Promise<Result>((resolve, reject) => {
       this.replies.set(request.id, { request, resolve, reject });
-      timer = window.setTimeout(() => reject(new Error('Die Haupt-App antwortet nicht. Dein Entwurf bleibt erhalten.')), 30000);
+      timer = window.setTimeout(() => reject(new Error(t("Die Haupt-App antwortet nicht. Dein Entwurf bleibt erhalten."))), 30000);
     });
     try {
       await emit('editor:request', request);
       const result = await response;
       if (result.error) { if (result.conflict) throw new EditConflict(); throw new Error(result.error); }
-      if (!result.snapshot) throw new Error('Der Tageseditor hat keinen Stand zurückgegeben.');
+      if (!result.snapshot) throw new Error(t("Der Tageseditor hat keinen Stand zurückgegeben."));
       if (this.retiredEpochs.has(result.snapshot.epoch)) return await this.request(request);
       return result.snapshot;
     } finally { clearTimeout(timer); this.replies.delete(request.id); }

@@ -16,7 +16,7 @@ import './widgetGlass.css';
 /** The window's look: the transparent one when chosen in the widget's settings, the app's design otherwise. */
 function WidgetLook({ id }: { id: string }) {
   const [chrome] = useWidgetChrome(id);
-  useEffect(() => { setGlassLook(chrome.glass ? chrome.glassText : null); }, [chrome.glass, chrome.glassText]);
+  useEffect(() => { setGlassLook(chrome.glass ? chrome.glassText : null, chrome.glassAppPopups); }, [chrome.glass, chrome.glassText, chrome.glassAppPopups]);
   useEffect(() => {
     const root = document.documentElement.style;
     root.setProperty('--glass-blur', `${chrome.glassBlur}px`); root.setProperty('--glass-radius', `${chrome.glassRadius}px`);

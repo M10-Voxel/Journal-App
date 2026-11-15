@@ -8,6 +8,7 @@ import { usePopupLook } from '../popupLook';
 import { useWidgetChrome } from '../widgetChrome';
 import { ensureWidgetSurface, startWidgetGesture } from '../widgetSurface';
 import { WidgetPopupSurface } from './WidgetPopupSurface';
+import { WidgetLiveBackdrop } from './WidgetLiveBackdrop';
 import { WidgetBackdrop } from './WidgetBackdrop';
 import { windowGrips } from './useFloatingWindow';
 import { contextMenu } from './ContextMenu';
@@ -31,38 +32,50 @@ export function DesktopWidgetFrame({ widget, registry, date, nav, navRef, toolsR
   menu?: MenuEntry[];
   onOpen(): void; onClose(): void; onError(error: string): void;
 }) {
-  const en = useLanguage() === 'en', nebula = usePopupLook().startsWith('nebula-');
+  useLanguage(); const nebula = usePopupLook().startsWith('nebula-');
   const [chrome] = useWidgetChrome(widget.id);
-  const [liveBlur, setLiveBlur] = useState(false);
+  const [liveBlur, setLiveBlur] = useState<'native'|'capture'|false>(false);
   const [blurError,setBlurError] = useState('');
+  const [captureError,setCaptureError] = useState('');
+  const hasBlur=chrome.glassBlur>0;
   useEffect(() => {
     let current=true;
-    const enabled=chrome.glass && chrome.liveBlur;
+    const enabled=chrome.glass && chrome.liveBlur && hasBlur;
+    let applying=false;
     const apply = async () => {
-      if(enabled) await ensureWidgetSurface();
-      if(current) await invoke('desktop_widget_live_blur',{enabled,radius:chrome.glassRadius});
+      if(applying||!current)return;
+      applying=true;
+      try {
+        if(enabled) await ensureWidgetSurface();
+        if(!current)return;
+        const backend=await invoke<string>('desktop_widget_live_blur',{enabled,radius:chrome.glassRadius});
+        if(current){setLiveBlur(enabled?(backend==='capture'?'capture':'native'):false);setBlurError('');if(backend!=='capture')setCaptureError('');}
+      }catch(reason){if(current){setLiveBlur(false);setBlurError(enabled?String(reason):'');}}
+      finally{applying=false;}
     };
-    void apply().then(() => {
-      if(current){setLiveBlur(enabled);setBlurError('');}
-    }, reason => {if(current){setLiveBlur(false);setBlurError(enabled?String(reason):'');}});
-    return () => {current=false;};
-  },[chrome.glass,chrome.liveBlur,chrome.glassRadius]);
-  const name = widgetDisplayName(widget, registry.widgets, en);
+    void apply();
+    // Wallpaper renderers may start/stop or move to a different monitor while
+    // Live Blur is enabled. Re-select the source without changing the setting.
+    const timer=enabled?globalThis.setInterval(()=>void apply(),1000):undefined;
+    return () => {current=false;globalThis.clearInterval(timer);};
+  },[chrome.glass,chrome.liveBlur,chrome.glassRadius,hasBlur]);
+  const name = widgetDisplayName(widget, registry.widgets);
   const report = (work: Promise<unknown>) => void work.catch(reason => onError(String(reason)));
   const saveLabel = save === 'error' ? t('Nicht gespeichert') : save === 'saving' ? t('Wird gespeichert …') : t('Wird gleich gespeichert …');
   return <section className={`desktop-widget${nebula ? ' nebula-terminal' : ''} is-${widget.kind}${widget.kind === 'daily-note' ? ' is-entries' : ''}`} data-widget-id={widget.id} data-date={date} data-locked={widget.locked || undefined} aria-label={name}>
     <WidgetPopupSurface />
-    <WidgetBackdrop active={chrome.glass && !liveBlur && (chrome.glassBlur > 0 || chrome.liveBlur)} blur={chrome.glassBlur || 14} />
-    {blurError && <span className="widget-message" role="status" title={blurError}>{en?'Live Blur unavailable · using wallpaper image':'Live Blur nicht verfügbar · Hintergrundbild wird verwendet'}</span>}
+    <WidgetLiveBackdrop active={liveBlur==='capture' && hasBlur} blur={chrome.glassBlur} onError={setCaptureError} />
+    <WidgetBackdrop active={chrome.glass && (!liveBlur || !!captureError) && hasBlur} blur={chrome.glassBlur} />
+    {(blurError||captureError) && <span className="widget-message" role="status" title={blurError||captureError}>{t("Live Blur nicht verfügbar · Hintergrundbild wird verwendet")}</span>}
     <header className="desktop-widget-head" onPointerDown={event => {
       if (event.button !== 0 || widget.locked || (event.target as Element).closest('button,input,a,[role=button]')) return;
       startWidgetGesture(event);
     }} onContextMenu={contextMenu(() => ({ title: name, command: 'widget', items: [
       ...menu, ...(menu.length ? ['-' as const] : []),
       { id: 'settings', label: t('Einstellungen'), icon: 'settings', keys: t('Strg') + ' ,', run: () => report(invoke('desktop_widget_open_settings', {})) },
-      { id: 'lock', label: widget.locked ? en ? 'Unlock position' : 'Position entsperren' : en ? 'Lock position and size' : 'Position und Größe sperren', icon: 'pin', checked: widget.locked, run: () => report(updateDesktopWidget({ locked: !widget.locked }, widget.id)) },
+      { id: 'lock', label: widget.locked ? t("Position entsperren") : t("Position und Größe sperren"), icon: 'pin', checked: widget.locked, run: () => report(updateDesktopWidget({ locked: !widget.locked }, widget.id)) },
       '-',
-      { id: 'hide', label: en ? 'Hide widget' : 'Widget ausblenden', icon: 'cancel', run: onClose },
+      { id: 'hide', label: t("Widget ausblenden"), icon: 'cancel', run: onClose },
     ] }))}>
       <div className="desktop-widget-nav" ref={navRef}>{nav}</div>
       {toolsRef && <div className="desktop-widget-tools" ref={toolsRef} />}

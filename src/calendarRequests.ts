@@ -1,3 +1,4 @@
+import { t } from './i18n.ts';
 import { emit, listen } from '@tauri-apps/api/event';
 import type { CalendarDay, CalendarImport, Entry } from './journal';
 import type { EntryEdit, NewEntry } from './components/CalendarComposer';
@@ -16,7 +17,7 @@ async function request(action: CalendarAction): Promise<Result> {
   const id=crypto.randomUUID();
   let stop:(()=>void)|undefined, timer:ReturnType<typeof setTimeout>|undefined, finished=false;
   const result=new Promise<Result>((resolve,reject)=>{
-    timer=setTimeout(()=>{finished=true;reject(new Error('Der Kalender konnte die Hauptansicht nicht erreichen.'));},30000);
+    timer=setTimeout(()=>{finished=true;reject(new Error(t("Der Kalender konnte die Hauptansicht nicht erreichen.")));},30000);
     void listen<Result>('calendar:request-result',event=>{
       if(event.payload.id!==id)return;
       event.payload.error ? reject(new Error(event.payload.error)) : resolve(event.payload);
@@ -33,5 +34,5 @@ export const requestCalendarEdit = async(date:string,entryId:string,change:Entry
 export const requestCalendarRemove = async(date:string,entryId:string,others:ScopeOption['others'])=>{await request({kind:'remove',date,entryId,others});};
 export const requestCalendarImport = async(entries:CalendarImport[])=>{await request({kind:'import',entries});};
 export const requestCalendarExport = async():Promise<CalendarDay[]>=>{
-  const result=await request({kind:'export'});if(!result.days)throw new Error('Der Kalenderexport ist unvollständig.');return result.days;
+  const result=await request({kind:'export'});if(!result.days)throw new Error(t("Der Kalenderexport ist unvollständig."));return result.days;
 };

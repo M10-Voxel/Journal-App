@@ -3,13 +3,13 @@ import { getVersion } from '@tauri-apps/api/app';
 import { invoke } from '@tauri-apps/api/core';
 import { check } from '@tauri-apps/plugin-updater';
 import type { Update } from '@tauri-apps/plugin-updater';
-import { useLanguage } from '../i18n';
+import { useLanguage, t } from '../i18n';
 import { readVaultPreferences } from '../vaultPreferences';
 import { startupUpdate } from '../startupUpdate';
 import { Icon } from './Icon';
 
 export function UpdateSettings({ beforeChange, onBusy }: { beforeChange: () => Promise<void>; onBusy: (busy: boolean) => void }) {
-  const en = useLanguage() === 'en';
+  useLanguage();
   const [version, setVersion] = useState(''), [busy, setBusy] = useState(false), [message, setMessage] = useState('');
   const [available, setAvailable] = useState<Update | null>(null), [downloaded, setDownloaded] = useState(false);
   const [progress, setProgress] = useState<{ bytes: number; total?: number } | null>(null);
@@ -29,8 +29,8 @@ export function UpdateSettings({ beforeChange, onBusy }: { beforeChange: () => P
     catch (e) {
       const reason = String(e);
       setMessage(/404|release manifest|update endpoint|release json/i.test(reason)
-        ? (en ? `The update source is unavailable or no update has been published yet. Check the connection and GitHub release files. ${reason}` : `Die Updatequelle ist nicht erreichbar oder es wurde noch kein Update veröffentlicht. Verbindung und GitHub-Release-Dateien prüfen. ${reason}`)
-        : `${en ? 'Update failed: ' : 'Update fehlgeschlagen: '}${reason}`);
+        ? (t("Die Updatequelle ist nicht erreichbar oder es wurde noch kein Update veröffentlicht. Verbindung und GitHub-Release-Dateien prüfen. {0}", reason))
+        : `${t("Update fehlgeschlagen: ")}${reason}`);
     } finally { setBusy(false); onBusy(false); }
   }
   async function find() {
@@ -46,7 +46,7 @@ export function UpdateSettings({ beforeChange, onBusy }: { beforeChange: () => P
     const update = await check({ timeout: 20_000 });
     if (!mounted.current) { await update?.close(); return; }
     resource.current = update; setAvailable(update);
-    if (!update) setMessage(en ? 'You are up to date.' : 'Du verwendest die aktuelle Version.');
+    if (!update) setMessage(t("Du verwendest die aktuelle Version."));
   }
   async function download() {
     const update = resource.current;
@@ -58,7 +58,7 @@ export function UpdateSettings({ beforeChange, onBusy }: { beforeChange: () => P
       setProgress({ bytes, total });
     }, { timeout: 600_000 });
     setDownloaded(true);
-    setMessage(en ? 'Download verified. Ready to install.' : 'Download geprüft. Bereit zur Installation.');
+    setMessage(t("Download geprüft. Bereit zur Installation."));
   }
   async function install() {
     if (!resource.current || !downloaded) return;
@@ -67,19 +67,19 @@ export function UpdateSettings({ beforeChange, onBusy }: { beforeChange: () => P
     await resource.current.install({ restartAfterInstall: true });
   }
   return <section className="settings-section system-settings" aria-busy={busy}>
-    <h3>{en ? 'App updates' : 'App-Updates'}</h3>
-    <p className="settings-hint">{en ? 'Installed version' : 'Installierte Version'}: <strong data-app-version>{version || '…'}</strong></p>
-    <p className="settings-hint">{en ? 'Journal checks once on startup and notifies you when an update is available. Downloading and installing only start when you choose them.' : 'Journal sucht bei jedem Start einmal nach Updates und meldet verfügbare Versionen. Herunterladen und Installieren startest du selbst.'}</p>
-    <p className="settings-hint">{en ? 'Updates are downloaded from this project’s GitHub releases and verified with a cryptographic signature before installation. Your vault and connections are preserved.' : 'Updates werden aus den GitHub-Releases dieses Projekts heruntergeladen und vor der Installation anhand einer kryptografischen Signatur geprüft. Dein Vault und deine Verbindungen bleiben erhalten.'}</p>
-    <div className="system-actions"><button type="button" disabled={busy} data-update-check onClick={() => void run(find)}><Icon name="repeat" />{en ? 'Check for updates' : 'Nach Updates suchen'}</button></div>
+    <h3>{t("App-Updates")}</h3>
+    <p className="settings-hint">{t("Installierte Version")}: <strong data-app-version>{version || '…'}</strong></p>
+    <p className="settings-hint">{t("Journal sucht bei jedem Start einmal nach Updates und meldet verfügbare Versionen. Herunterladen und Installieren startest du selbst.")}</p>
+    <p className="settings-hint">{t("Updates werden aus den GitHub-Releases dieses Projekts heruntergeladen und vor der Installation anhand einer kryptografischen Signatur geprüft. Dein Vault und deine Verbindungen bleiben erhalten.")}</p>
+    <div className="system-actions"><button type="button" disabled={busy} data-update-check onClick={() => void run(find)}><Icon name="repeat" />{t("Nach Updates suchen")}</button></div>
     {available && <div className="system-confirm">
-      <strong data-update-version>{en ? 'Available version' : 'Verfügbare Version'}: {available.version}</strong>
+      <strong data-update-version>{t("Verfügbare Version")}: {available.version}</strong>
       {available.body && <p className="system-release-notes">{available.body}</p>}
       <div className="system-actions">{downloaded
-        ? <button type="button" disabled={busy} data-update-install onClick={() => void run(install)}>{en ? 'Install and restart' : 'Installieren und neu starten'}</button>
-        : <button type="button" disabled={busy} data-update-download onClick={() => void run(download)}><Icon name="down" />{en ? 'Download update' : 'Update herunterladen'}</button>}</div>
+        ? <button type="button" disabled={busy} data-update-install onClick={() => void run(install)}>{t("Installieren und neu starten")}</button>
+        : <button type="button" disabled={busy} data-update-download onClick={() => void run(download)}><Icon name="down" />{t("Update herunterladen")}</button>}</div>
     </div>}
-    {progress && !downloaded && <><progress aria-label={en ? 'Download progress' : 'Download-Fortschritt'} max={progress.total || 1} value={progress.total ? progress.bytes : undefined} /><p className="system-message">{(progress.bytes / 1048576).toFixed(1)} MB{progress.total ? ` / ${(progress.total / 1048576).toFixed(1)} MB` : ''}</p></>}
-    <p role="status" className="system-message">{busy && !progress ? (en ? 'Please wait…' : 'Bitte warten…') : message}</p>
+    {progress && !downloaded && <><progress aria-label={t("Download-Fortschritt")} max={progress.total || 1} value={progress.total ? progress.bytes : undefined} /><p className="system-message">{(progress.bytes / 1048576).toFixed(1)} MB{progress.total ? ` / ${(progress.total / 1048576).toFixed(1)} MB` : ''}</p></>}
+    <p role="status" className="system-message">{busy && !progress ? (t("Bitte warten…")) : message}</p>
   </section>;
 }

@@ -158,11 +158,11 @@ function NebulaCalendarPanel({ mode, date, today, onPick, dayCalendar, calendarO
   return <section className={`nebula-cal-panel is-${view}${focused ? ' is-focused' : ''}${dimmed ? ' is-dimmed' : ''}`} aria-label={t('Kalender')}>
     <header className="nebula-terminal-head">
       <HeadLabel sticker={sticker} prompt={<><b>~$</b> ./cal.sh</>} label={t('Kalender')} />
-      <button type="button" className={`nebula-calendar-toggle${calendarOpen ? ' is-open' : ''}`} aria-expanded={calendarOpen} aria-keyshortcuts="Control+K"
-        aria-label={calendarOpen ? t('Kalender schließen') : t('Kalender öffnen')} title={calendarOpen ? t('Kalender schließen · Strg K') : t('Kalender öffnen · Strg K')} onClick={onCalendarToggle}><Icon name="calendar" /></button>
       <div className="nebula-cal-views" role="tablist" aria-label={t('Kalenderansicht')}>
         {(['month', 'day'] as const).map(value => <button key={value} type="button" role="tab" aria-selected={view === value} data-cal-view={value} onClick={() => choose(value)}>{value === 'month' ? t('Monat') : t('Tag')}</button>)}
       </div>
+      <button type="button" className={`nebula-calendar-toggle${calendarOpen ? ' is-open' : ''}`} aria-expanded={calendarOpen} aria-keyshortcuts="Control+K"
+        aria-label={calendarOpen ? t('Kalender schließen') : t('Kalender öffnen')} title={calendarOpen ? t('Kalender schließen · Strg K') : t('Kalender öffnen · Strg K')} onClick={onCalendarToggle}><Icon name="calendar" /></button>
       <button type="button" className="nebula-window-focus" aria-pressed={focused} aria-label={t('{0}: Fokus', t('Kalender'))} title={focused ? t('Fokus beenden') : t('Fokus: Hintergrund abdunkeln')} onClick={onFocus}>{tool(sticker, '◐', 'focus')}</button>
     </header>
     {view === 'month' ? <div className="nebula-cal-body">
@@ -412,7 +412,7 @@ export function NebulaDesk({ mode, date, today, modes, modeLabels, dirty, title,
   notebook?: ReactNode; notebookOpen?: boolean; onNotebookToggle?: () => void; onNotebookClose?: () => void;
   onOpenDay: (date: string, entry?: string) => void; onNavigate: (date: string) => void; dayCalendar: DayCalendar; scrollRef: React.RefObject<HTMLDivElement | null>; disabled?: boolean;
 }) {
-  const language = useLanguage();
+  useLanguage();
   const look = useLook(), sticker = look !== 'nebula';
   const { data: periodData } = usePeriodData();
   const rating = mode === 'day' ? periodData?.days[date]?.rating : undefined;
@@ -579,7 +579,7 @@ export function NebulaDesk({ mode, date, today, modes, modeLabels, dirty, title,
     setBarSlots(center && end ? { center, end } : null);
   }, []);
   const barViews = <>
-    <nav className="nebula-tabs" aria-label={language === 'en' ? 'Journal views' : 'Journalansichten'}>
+    <nav className="nebula-tabs" aria-label={t("Journalansichten")}>
       {modes.map((value, index) => <button type="button" key={value} className="nebula-tab" data-period-mode={value} aria-current={mode === value ? 'page' : undefined}
         title={`${modeLabels[index]} · ${t('Strg')} ${index + 1}`} onClick={() => onMode(value)}>
         <span className="nebula-tab-long">{modeLabels[index]}</span><span className="nebula-tab-short" aria-hidden="true">{modeLabels[index][0]}</span>
@@ -610,7 +610,7 @@ export function NebulaDesk({ mode, date, today, modes, modeLabels, dirty, title,
         {mode === 'day' ? <input className="nebula-poster-title" aria-label={t('Titel')} disabled={disabled} value={title} placeholder={sticker ? t('Gib deinem Tag einen Namen …') : '[ ' + t('Gib deinem Tag einen Namen …') + ' ]'} onChange={event => onTitleChange(event.target.value)} /> : <p className="nebula-poster-title">{sticker ? title.trim() || periodTitle(date, mode) : `[ ${title.trim() || periodTitle(date, mode)} ]`}</p>}
         <p className="nebula-poster-prose">{prose}</p>
         <div className="nebula-poster-controls">
-          <div className="nebula-day-nav" role="group" aria-label={mode === 'day' ? t('Tagesnavigation') : language === 'en' ? 'Period navigation' : 'Zeitraumnavigation'}>
+          <div className="nebula-day-nav" role="group" aria-label={mode === 'day' ? t('Tagesnavigation') : t("Zeitraumnavigation")}>
             <button type="button" className="nebula-step" aria-label={stepLabels.prev.label} title={stepLabels.prev.tip} onClick={() => onStep(-1)}><Icon name="left" /></button>
             <button type="button" className="nebula-today" disabled={isToday} title={t('Heute · Alt H')} onClick={onToday}>{sticker ? t('Heute') : `[ ${t('Heute')} ]`}</button>
             <button type="button" className="nebula-step" aria-label={stepLabels.next.label} title={stepLabels.next.tip} onClick={() => onStep(1)}><Icon name="right" /></button>

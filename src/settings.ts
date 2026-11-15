@@ -68,6 +68,13 @@ export function applyTheme({ layout, look, pixel, popupStyle }: Design) {
   const root = document.documentElement;
   appDesign = { layout, look, pixel, popupStyle };
   // A transparent desktop widget leaves the app's design: the plain base with glass popups, its own palette (widgetGlass.css).
+  if (glassLook && glassAppPopups) {
+    // Transparent body, the app's own popups: the design stays on the page, only the widget's palette is replaced (widgetGlass.css).
+    root.dataset.layout = 'classic'; root.dataset.look = isLook(look) ? look : 'classic'; root.dataset.popups = popupStyleFor(isLook(look) ? look : 'classic', popupStyle);
+    if (pixelActive({ look, pixel })) root.dataset.pixel = ''; else delete root.dataset.pixel;
+    root.dataset.glass = glassLook; root.dataset.glassPopups = ''; return;
+  }
+  delete root.dataset.glassPopups;
   if (glassLook) { root.dataset.layout = 'classic'; root.dataset.look = 'classic'; root.dataset.popups = 'b'; delete root.dataset.pixel; root.dataset.glass = glassLook; return; }
   delete root.dataset.glass;
   root.dataset.layout = isLayout(layout) ? layout : 'classic';
@@ -75,13 +82,13 @@ export function applyTheme({ layout, look, pixel, popupStyle }: Design) {
   root.dataset.popups = popupStyleFor(isLook(look) ? look : 'classic', popupStyle);
   if (pixelActive({ look, pixel })) root.dataset.pixel = ''; else delete root.dataset.pixel;
 }
-let glassLook: 'light' | 'dark' | null = null;
+let glassLook: 'light' | 'dark' | null = null, glassAppPopups = false;
 // The app's design as last heard, to return to when the transparent look is switched off.
 let appDesign: Design | null = null;
 /** A desktop widget window in the transparent look (null: the app's design again). */
-export function setGlassLook(look: 'light' | 'dark' | null) {
-  if (look === glassLook) return;
-  glassLook = look;
+export function setGlassLook(look: 'light' | 'dark' | null, appPopups = false) {
+  if (look === glassLook && appPopups === glassAppPopups) return;
+  glassLook = look; glassAppPopups = appPopups;
   applyTheme(appDesign ?? loadSettings());
 }
 /** Choosing the layout: only the structure changes. */

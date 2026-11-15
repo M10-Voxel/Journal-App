@@ -3,12 +3,11 @@
    the two time columns (hours | minutes, scrolling like the native picker) and the band a range of days makes in the
    planner take each look's shapes. The fields in a form (.field-trigger) look like the look's other small fields. */
 
-/* Normal · Glas: round, glowing. */
-:root[data-look='classic'][data-popups='b'] :is(.field-picker .cal-compact-day, .field-trigger, .popover .time-option) { border-radius: 999px; }
-:root[data-look='classic'][data-popups='b'] :is(.field-picker .cal-compact-day[aria-selected='true'], .popover .time-option[aria-selected='true']) { box-shadow: 0 0 16px color-mix(in srgb, var(--accent) 65%, transparent); }
-:root[data-look='classic'][data-popups='b'] .time-column { border-radius: 14px; background: color-mix(in srgb, var(--strong) 6%, transparent); }
+/* Normal · Glas: small radii, the choice a plain filled square. */
+:root[data-look='classic'][data-popups='b'] :is(.field-picker .cal-compact-day, .field-trigger, .popover .time-option) { border-radius: 6px; }
+:root[data-look='classic'][data-popups='b'] .time-column { border-radius: 6px; background: var(--inset); }
 :root[data-look='classic'][data-popups='b'] .planner.is-multi .planner-day.in-range { border-radius: 0; }
-:root[data-look='classic'][data-popups='b'] .planner.is-multi .planner-day:is(.range-start, .range-end):not(.is-excluded) { border-radius: 999px; box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 55%, transparent); }
+:root[data-look='classic'][data-popups='b'] .planner.is-multi .planner-day:is(.range-start, .range-end):not(.is-excluded) { border-radius: 6px; box-shadow: none; }
 
 /* Journal · Karteikarte: fields underlined, the choice circled in ink, the range underlined like a line of text. */
 :root[data-look='journal'][data-popups='a'] .field-trigger { border-radius: 0; background: transparent; box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--text) 40%, transparent); font-family: var(--serif); }

@@ -120,7 +120,7 @@ export function occurrences(rule: RepeatRule, from: string, to: string, limit = 
   if(rule.ics){
     const component=new ICAL.Component(ICAL.parse(rule.ics));
     const event=new ICAL.Event(component),iterator=event.iterator();let next=iterator.next(),steps=0;
-    while(next){if(++steps>200000)throw new Error('Wiederholung zu gro?');const date=next.toString().slice(0,10);if(date>to || (rule.end?.until && date>rule.end.until))break;if(date>=from && !result.includes(date))result.push(date);if(result.length>=limit)break;next=iterator.next();}
+    while(next){if(++steps>200000)throw new Error(t("Wiederholung zu groß"));const date=next.toString().slice(0,10);if(date>to || (rule.end?.until && date>rule.end.until))break;if(date>=from && !result.includes(date))result.push(date);if(result.length>=limit)break;next=iterator.next();}
     return result;
   }
   const until = rule.end?.until, count = rule.end?.count;
@@ -148,7 +148,7 @@ const monthShort = () => getLanguage() === 'en' ? ['Jan','Feb','Mar','Apr','May'
 export const unitNames = (): Record<RepeatUnit, [string, string]> => getLanguage() === 'en' ? { day:['day','days'],week:['week','weeks'],month:['month','months'],year:['year','years'] } : { day: ['Tag', 'Tage'], week: ['Woche', 'Wochen'], month: ['Monat', 'Monate'], year: ['Jahr', 'Jahre'] };
 const adverbs: Record<RepeatUnit, string> = { day: 'Täglich', week: 'Wöchentlich', month: 'Monatlich', year: 'Jährlich' };
 const easterNames: Record<number, string> = { [-48]: 'Rosenmontag', [-47]: 'Fastnacht', [-46]: 'Aschermittwoch', [-3]: 'Gründonnerstag', [-2]: 'Karfreitag', [0]: 'Ostersonntag', [1]: 'Ostermontag', [39]: 'Christi Himmelfahrt', [49]: 'Pfingstsonntag', [50]: 'Pfingstmontag', [60]: 'Fronleichnam' };
-export const easterName = (offset: number) => easterNames[offset] ? t(easterNames[offset]) : `${getLanguage() === 'en' ? 'Easter' : 'Ostern'} ${offset > 0 ? '+' : '−'}${Math.abs(offset)}`;
+export const easterName = (offset: number) => easterNames[offset] ? t(easterNames[offset]) : `${t("Ostern")} ${offset > 0 ? '+' : '−'}${Math.abs(offset)}`;
 /** "Mo 2.11." */
 export const formatOccurrence = (date: string) => `${weekdayShort()[weekdayOf(date)]} ${parts(date)[2]}.${parts(date)[1]}.`;
 
@@ -227,7 +227,7 @@ export function describeMonths(months: readonly number[]): string {
 }
 /** The whole rule: "Alle 4 Wochen am Mo, Do, Fr · nur im Mär · 3 Wochen an, 1 Woche aus · 10×". */
 export function describe(rule: RepeatRule): string {
-  if(rule.ics)return getLanguage()==='en' ? 'Imported recurrence' : 'Importierte Wiederholung';
+  if(rule.ics)return t("Importierte Wiederholung");
   if (getLanguage() === 'en') {
     let text = describePattern(rule);
     const months = monthsOf(rule);

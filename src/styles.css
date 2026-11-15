@@ -94,8 +94,6 @@ button:active:not(:disabled) > .icon { transform: scale(.92); }
 .nav-cluster .nav-today { height: 26px; padding: 0 11px; border: 0; border-radius: 999px; background: var(--surface); color: var(--text); font: 500 12px var(--sans);
   transition: color var(--fast) ease, background-color var(--fast) ease, transform 220ms var(--spring); }
 .nav-cluster .nav-today:hover:not(:disabled) { background: var(--hover); }
-.nav-cluster .nav-today.is-current { background: transparent; color: var(--placeholder); }
-.nav-cluster .nav-today.is-current:hover:not(:disabled) { background: var(--hover); color: var(--text); }
 .nav-cluster .nav-today:disabled { cursor: default; }
 /* What a toolbar shows, in both: the day (journal) or the range (calendar) in bold, the detail in grey. */
 .toolbar .date-picker-button { gap: 8px; height: 30px; padding: 0 8px; font: 12px var(--mono); }

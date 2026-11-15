@@ -1,3 +1,4 @@
+import { t } from '../i18n.ts';
 import { decodeBase64, encodeBase64 } from '../base64.ts';
 import type { Json } from './merge';
 
@@ -13,10 +14,10 @@ export async function encrypt(data: Json, key: CryptoKey): Promise<string> {
 
 export async function decrypt(data: string, key: CryptoKey): Promise<Json> {
   const envelope = JSON.parse(data);
-  if (envelope.version !== 1 || typeof envelope.iv !== 'string' || typeof envelope.cipher !== 'string') throw new Error('Unbekanntes Cloud-Format.');
+  if (envelope.version !== 1 || typeof envelope.iv !== 'string' || typeof envelope.cipher !== 'string') throw new Error(t("Unbekanntes Cloud-Format."));
   try {
     return JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: decodeBase64(envelope.iv) }, key, decodeBase64(envelope.cipher))));
   } catch {
-    throw new Error('Cloud-Daten konnten nicht entschlüsselt werden. Geräteschlüssel prüfen.');
+    throw new Error(t("Cloud-Daten konnten nicht entschlüsselt werden. Geräteschlüssel prüfen."));
   }
 }

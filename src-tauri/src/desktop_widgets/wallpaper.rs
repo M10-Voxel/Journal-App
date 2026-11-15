@@ -8,9 +8,11 @@
 use serde::Serialize;
 
 #[derive(Clone, Serialize)]
-pub struct Monitor { x:i32, y:i32, width:u32, height:u32, modified:u64, revision:String, #[serde(skip)] path:String }
+pub struct Monitor { x:i32, y:i32, width:u32, height:u32, modified:u64, revision:String, image:bool, #[serde(skip)] path:String }
 #[derive(Serialize)]
-pub struct Wallpapers { position:String, monitors:Vec<Monitor> }
+pub struct Wallpapers { position:String, color:String, monitors:Vec<Monitor> }
+
+fn color(value:u32)->String{format!("#{:02x}{:02x}{:02x}",value&255,(value>>8)&255,(value>>16)&255)}
 
 fn modified(path:&str)->u64{
     std::fs::metadata(path).and_then(|m|m.modified()).ok().and_then(|t|t.duration_since(std::time::UNIX_EPOCH).ok()).map_or(0,|d|d.as_secs())
@@ -22,6 +24,7 @@ fn revision(path:&str)->String{
     use std::hash::{Hash,Hasher};
     let mut hash=std::collections::hash_map::DefaultHasher::new();
     path.hash(&mut hash);
+    #[cfg(windows)] super::host::wallpaper_generation().hash(&mut hash);
     if let Ok(metadata)=std::fs::metadata(path){
         metadata.len().hash(&mut hash);
         metadata.modified().ok().hash(&mut hash);
@@ -32,6 +35,8 @@ fn revision(path:&str)->String{
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn solid_color_has_no_cached_picture(){assert_eq!(existing(String::new()),"");assert_eq!(color(0x00563412),"#123456");}
     #[test]
     fn different_files_with_identical_timestamps_have_different_revisions(){
         let dir=std::env::temp_dir().join(format!("journal-wallpaper-{}",uuid::Uuid::new_v4()));
@@ -51,7 +56,8 @@ mod tests {
 }
 /// Windows keeps its own copy of the shown picture; the original may have been moved or deleted since.
 fn existing(path:String)->String{
-    if !path.is_empty()&&std::path::Path::new(&path).is_file(){return path;}
+    // Empty means solid color, not a missing/deleted image.
+    if path.is_empty()||std::path::Path::new(&path).is_file(){return path;}
     std::env::var("APPDATA").ok().map(|roaming|std::path::Path::new(&roaming).join("Microsoft\\Windows\\Themes\\TranscodedWallpaper"))
         .filter(|copy|copy.is_file()).map(|copy|copy.to_string_lossy().into_owned()).unwrap_or(path)
 }
@@ -71,6 +77,7 @@ fn per_monitor()->Result<Wallpapers,String>{
         // Both S_OK and S_FALSE increment COM's per-thread initialization count.
         let _com=ComGuard(CoInitializeEx(None,COINIT_MULTITHREADED).is_ok());
         let wallpaper:IDesktopWallpaper=CoCreateInstance(&DesktopWallpaper,None,CLSCTX_ALL).map_err(|e|e.to_string())?;
+        let color=color(wallpaper.GetBackgroundColor().map(|c|c.0).unwrap_or(0));
         let position=match wallpaper.GetPosition().map(|p|p.0).unwrap_or(4){0=>"center",1=>"tile",2=>"stretch",3=>"fit",5=>"span",_=>"fill"}.to_string();
         let count=wallpaper.GetMonitorDevicePathCount().map_err(|e|e.to_string())?;
         let mut monitors=Vec::new();
@@ -84,10 +91,10 @@ fn per_monitor()->Result<Wallpapers,String>{
             let Ok(rect)=rect else {continue};
             if rect.right<=rect.left||rect.bottom<=rect.top{continue;}
             let path=existing(path);
-            monitors.push(Monitor{x:rect.left,y:rect.top,width:(rect.right-rect.left) as u32,height:(rect.bottom-rect.top) as u32,modified:modified(&path),revision:revision(&path),path});
+            monitors.push(Monitor{x:rect.left,y:rect.top,width:(rect.right-rect.left) as u32,height:(rect.bottom-rect.top) as u32,modified:modified(&path),revision:revision(&path),image:!path.is_empty(),path});
         }
         if monitors.is_empty(){return Err("Keine Bildschirme mit Hintergrundbild.".into());}
-        Ok(Wallpapers{position,monitors})
+        Ok(Wallpapers{position,color,monitors})
     }
 }
 /// The registry's single picture on every monitor (older systems, or when the interface is not available).
@@ -99,9 +106,13 @@ fn from_registry(screens:&[(i32,i32,u32,u32)])->Result<Wallpapers,String>{
     let style:String=desktop.get_value("WallpaperStyle").unwrap_or_else(|_|String::from("10"));
     let tile:String=desktop.get_value("TileWallpaper").unwrap_or_else(|_|String::from("0"));
     let position=if tile.trim()=="1"{"tile"}else{match style.trim(){"0"=>"center","2"=>"stretch","6"=>"fit","22"=>"span",_=>"fill"}}.to_string();
+    let colors=RegKey::predef(HKEY_CURRENT_USER).open_subkey("Control Panel\\Colors").map_err(|e|e.to_string())?;
+    let background:String=colors.get_value("Background").unwrap_or_else(|_|"0 0 0".into());
+    let rgb:Vec<u8>=background.split_whitespace().filter_map(|v|v.parse::<u8>().ok()).collect();
+    let color=if rgb.len()==3{color(rgb[0] as u32|((rgb[1] as u32)<<8)|((rgb[2] as u32)<<16))}else{color(0)};
     let changed=modified(&path);
     let revision=revision(&path);
-    Ok(Wallpapers{position,monitors:screens.iter().map(|&(x,y,width,height)|Monitor{x,y,width,height,modified:changed,revision:revision.clone(),path:path.clone()}).collect()})
+    Ok(Wallpapers{position,color,monitors:screens.iter().map(|&(x,y,width,height)|Monitor{x,y,width,height,modified:changed,revision:revision.clone(),image:!path.is_empty(),path:path.clone()}).collect()})
 }
 #[cfg(windows)]
 fn read(screens:Vec<(i32,i32,u32,u32)>)->Result<Wallpapers,String>{per_monitor().or_else(|_|from_registry(&screens))}

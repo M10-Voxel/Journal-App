@@ -12,7 +12,7 @@ export function NavCluster({ label, prev, next, today, atToday, onPrev, onToday,
   useLanguage();
   return <nav className="nav-cluster" aria-label={label}>
     <button type="button" className="nav-step" aria-label={prev.label} title={prev.tip} onClick={onPrev}><Icon name="left" /></button>
-    <button type="button" className={`nav-today${atToday ? ' is-current' : ''}`} title={today.tip} disabled={today.disabled} onClick={onToday}>{t("Heute")}</button>
+    <button type="button" className={`nav-today${atToday ? ' is-current' : ''}`} title={today.tip} disabled={today.disabled ?? atToday} onClick={onToday}>{t("Heute")}</button>
     <button type="button" className="nav-step" aria-label={next.label} title={next.tip} onClick={onNext}><Icon name="right" /></button>
   </nav>;
 }

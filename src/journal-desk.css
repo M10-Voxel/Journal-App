@@ -120,6 +120,7 @@
 :root[data-layout='desk'][data-look='journal'] .nebula-today { padding: 0 12px; font: 700 15px var(--hand); letter-spacing: 0; text-transform: none; background: color-mix(in srgb, var(--pink) 34%, var(--tint-base, var(--surface))) !important; }
 :root[data-layout='desk'][data-look='journal'] .nebula-day-nav button:hover:not(:disabled) { background: color-mix(in srgb, var(--mint) 45%, var(--tint-base, var(--surface))); color: var(--ink-fixed); transform: rotate(-4deg); }
 :root[data-layout='desk'][data-look='journal'] .nebula-day-nav button:disabled { opacity: .5; }
+:root[data-layout='desk'][data-look='journal'] .nebula-day-nav .nebula-today:disabled { opacity: 1; cursor: default; }
 :root[data-layout='desk'][data-look='journal'] .nebula-poster-tags .tag-filter-button { border: 0; color: var(--ink); font: 700 15px var(--hand); }
 :root[data-layout='desk'][data-look='journal'] .nebula-poster :focus-visible { outline: 2px solid var(--accent); }
 .desk-poster-stickers { position: absolute; top: -18px; right: -14px; width: 104px; height: 104px; overflow: visible; pointer-events: none; rotate: 8deg; }
@@ -136,7 +137,7 @@
 :root[data-layout='desk'][data-look='journal'] .nebula-cal-views button { height: 24px; padding: 0 9px; border: 0; border-radius: var(--wobble); color: var(--muted); font: 700 15px var(--hand); letter-spacing: 0; text-transform: none; }
 :root[data-layout='desk'][data-look='journal'] .nebula-cal-views button:hover { background: color-mix(in srgb, var(--violet) 16%, transparent); color: var(--ink); }
 :root[data-layout='desk'][data-look='journal'] .nebula-cal-views button[aria-selected='true'] { background: color-mix(in srgb, var(--violet) 30%, var(--tint-base, var(--surface))); color: var(--ink-fixed); box-shadow: var(--key); }
-:root[data-layout='desk'][data-look='journal'] .nebula-cal-panel .nebula-calendar-toggle { margin-left: 6px; }
+:root[data-layout='desk'][data-look='journal'] .nebula-cal-panel .nebula-calendar-toggle { margin-left: 0; }
 :root[data-layout='desk'][data-look='journal'] .nebula-cal-head strong { color: var(--strong); font: 700 20px var(--hand); }
 :root[data-layout='desk'][data-look='journal'] .nebula-cal-step { border: 0; border-radius: 50%; background: var(--surface); box-shadow: var(--key); }
 :root[data-layout='desk'][data-look='journal'] .nebula-cal-panel .cal-compact-day { font: 13px var(--write); }

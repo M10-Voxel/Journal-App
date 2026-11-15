@@ -29,7 +29,7 @@ function useLatest<A extends unknown[], R>(fn: (...args: A) => R): (...args: A) 
 }
 
 export function DesktopEntriesWidget({ widget, registry }: {widget: DesktopWidgetInstance; registry: DesktopWidgetState}) {
-  const en = useLanguage() === 'en';
+  useLanguage();
   const [client] = useState(() => new WidgetEditorClient());
   const editor = useSyncExternalStore(client.subscribe, client.snapshot);
   const [hostError, setHostError] = useState('');
@@ -122,15 +122,15 @@ export function DesktopEntriesWidget({ widget, registry }: {widget: DesktopWidge
     event.preventDefault();
   });
   useEffect(() => { globalThis.addEventListener('keydown', onKey); return () => globalThis.removeEventListener('keydown', onKey); }, []);
-  const error = editor.conflict ? en ? 'This text changed in another window. Your local draft is retained below.' : 'Dieser Text wurde inzwischen in einem anderen Fenster geändert. Dein lokaler Entwurf bleibt erhalten.' : editor.error || hostError;
+  const error = editor.conflict ? t("Dieser Text wurde inzwischen in einem anderen Fenster geändert. Dein lokaler Entwurf bleibt erhalten.") : editor.error || hostError;
   const save: WidgetSaveState = error ? 'error' : editor.saving ? 'saving' : editor.pending || editor.unsaved ? 'pending' : 'saved';
   // The header holds the day's navigation (back, today, forward, the date with its calendar); nothing else.
   const nav = <WidgetDayNav date={date} today={today} followToday={followToday} picker={picker} onPickerChange={setPicker} onNavigate={(target, follow) => void navigate(target, follow)} dateRef={dateButton} />;
   return <DesktopWidgetFrame widget={widget} registry={registry} date={date} nav={nav} save={save} onError={setHostError} onClose={() => void close()}
     onOpen={() => void client.flush().then(() => invoke('show_day', { date, entry: null })).catch(reason => setHostError(String(reason)))}>
-    {editor.paused && <p className="widget-message" role="status">{en ? 'Applying changes. Editing will resume shortly.' : 'Änderungen werden übernommen. Gleich kannst du weiter bearbeiten.'}</p>}
-    {error && <div className="widget-message is-error" role="alert"><p>{error}</p>{editor.error && <div className="widget-recovery"><button type="button" onClick={() => setRecovery(open => !open)}>{en ? 'Show local draft' : 'Lokalen Entwurf anzeigen'}</button><button type="button" onClick={() => { setHostError(''); void client.reload().catch(() => {}); }}>{en ? 'Discard draft and reload' : 'Entwurf verwerfen und neu laden'}</button></div>}
-      {recovery && <textarea className="widget-draft" readOnly aria-label={en ? 'Local draft (copy before reloading)' : 'Lokaler Entwurf (vor dem Neuladen kopieren)'} value={JSON.stringify(day, null, 2)} onFocus={event => event.target.select()} />}</div>}
+    {editor.paused && <p className="widget-message" role="status">{t("Änderungen werden übernommen. Gleich kannst du weiter bearbeiten.")}</p>}
+    {error && <div className="widget-message is-error" role="alert"><p>{error}</p>{editor.error && <div className="widget-recovery"><button type="button" onClick={() => setRecovery(open => !open)}>{t("Lokalen Entwurf anzeigen")}</button><button type="button" onClick={() => { setHostError(''); void client.reload().catch(() => {}); }}>{t("Entwurf verwerfen und neu laden")}</button></div>}
+      {recovery && <textarea className="widget-draft" readOnly aria-label={t("Lokaler Entwurf (vor dem Neuladen kopieren)")} value={JSON.stringify(day, null, 2)} onFocus={event => event.target.select()} />}</div>}
     <div className={`desktop-widget-body${nebula ? ' nebula-terminal-body' : ''}`} ref={scrollRef} inert={editor.paused || !!editor.error}>
       {day?.date === date ? <DayEditor day={day} entries={visible} tags={tags} layout={layout} hiddenCount={day.entries.filter(entry => entry.showInJournal !== false && !shown(entry)).length} onShowAll={() => setHiddenTags(new Set())}
         savedTraces={new Set(editor.savedTraces)} newEntryId={newEntryId} openEntryId={openEntryId} focusEntryId={focusEntryId} focusMoveEntryId={focusMoveEntryId} entriesRef={entriesRef} drag={drag} announcement={announcement}

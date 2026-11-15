@@ -73,10 +73,10 @@
 .popup-sample i { height: 9px; border-radius: 3px; background: var(--ps-day); }
 .popup-sample i.is-on { background: var(--ps-on); }
 .popup-sample > em { align-self: flex-end; width: 34px; height: 10px; margin-top: auto; border-radius: 5px; background: var(--ps-on); }
-.popup-sample.is-classic-b { --ps-bg: linear-gradient(140deg, #5a6a8a66, #29292999); border-radius: 14px; box-shadow: inset 0 1px 0 #ffffff33, 0 0 0 1px #ffffff2e, 0 10px 22px -8px #000;
-  background: linear-gradient(140deg, #6b7fa855, #3a3a3a99), repeating-linear-gradient(45deg, #ffffff08 0 6px, transparent 6px 12px); }
-.popup-sample.is-classic-b i { border-radius: 50%; }
-.popup-sample.is-classic-b > em { border-radius: 999px; box-shadow: 0 0 10px #569eff99; }
+.popup-sample.is-classic-b { --ps-bg: #2b2b2e; border-radius: 8px; box-shadow: 0 0 0 1px #ffffff1f, 0 10px 22px -8px #000;
+  background: #2b2b2e; }
+.popup-sample.is-classic-b i { border-radius: 2px; }
+.popup-sample.is-classic-b > em { border-radius: 2px; box-shadow: none; }
 .popup-sample:is(.is-journal-a, .is-journal-b, .is-journal-c, .is-journal-d) { --ps-ink: #2b2140; --ps-day: transparent; --ps-on: #6246b8; --ps-head: #2b214055; border-radius: 2px; font-family: 'Nunito', sans-serif; }
 .popup-sample.is-journal-a { background: #f5f2fb; box-shadow: inset 0 2px 0 #b33c5c88, 0 6px 14px -6px #2b214099; }
 .popup-sample.is-journal-a i.is-on { border-radius: 50% 45% 55% 40%; background: transparent; box-shadow: inset 0 0 0 1.5px #6246b8; }

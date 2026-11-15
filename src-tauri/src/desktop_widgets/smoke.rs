@@ -14,6 +14,27 @@ pub async fn widget_smoke_cdp(app:tauri::AppHandle,label:String,method:String,pa
         }
         if method=="Journal.window"{return Ok(serde_json::json!({"hwnd":window.hwnd().map_err(|e|e.to_string())?.0 as usize,"position":window.outer_position().map_err(|e|e.to_string())?,"size":window.inner_size().map_err(|e|e.to_string())?}));}
         if method=="Journal.liveBlur"{return Ok(serde_json::json!(super::live_blur::snapshot(window.hwnd().map_err(|e|e.to_string())?.0 as isize)));}
+        if method=="Journal.captureAttach"{
+            let source:isize=serde_json::from_str(&params).map_err(|e|e.to_string())?;
+            super::capture::test_attach(window.hwnd().map_err(|e|e.to_string())?.0 as isize,source)?;
+            return Ok(serde_json::Value::Null);
+        }
+        if method=="Journal.captureSample"{
+            let rect:(i32,i32,i32,i32)=serde_json::from_str(&params).map_err(|e|e.to_string())?;
+            let bmp=super::capture::picture(window.hwnd().map_err(|e|e.to_string())?.0 as isize,rect)?;
+            if bmp.is_empty(){return Ok(serde_json::Value::Null);}
+            let width=i32::from_le_bytes(bmp[18..22].try_into().unwrap()) as usize;
+            let height=i32::from_le_bytes(bmp[22..26].try_into().unwrap()).unsigned_abs() as usize;
+            let at=54+(height/2*width+width/2)*4;
+            return Ok(serde_json::json!({"width":width,"height":height,"rgb":[bmp[at+2],bmp[at+1],bmp[at]],"bytes":bmp.len()}));
+        }
+        if method=="Journal.wallpaperChanged"{
+            // Exercise the real window subclass without changing the user's
+            // desktop configuration. SPI_SETDESKWALLPAPER notification only.
+            #[link(name="user32")] unsafe extern "system"{fn SendMessageW(hwnd:isize,msg:u32,w:usize,l:isize)->isize;}
+            unsafe{SendMessageW(window.hwnd().map_err(|e|e.to_string())?.0 as isize,0x001a,0x0014,0);}
+            return Ok(serde_json::Value::Null);
+        }
         if method=="Journal.disableInput"{
             #[link(name="user32")] unsafe extern "system"{fn EnableWindow(hwnd:isize,enable:i32)->i32;}
             unsafe{EnableWindow(window.hwnd().map_err(|e|e.to_string())?.0 as isize,0);}

@@ -91,7 +91,7 @@ try {
     await widget.until("document.documentElement.dataset.glass==='light' && !document.querySelector('.desktop-widget-backdrop') && !document.querySelector('.widget-message')");
     await widget.until("window.__TAURI_INTERNALS__.invoke('widget_smoke_cdp',{label:'widget-entries',method:'Journal.liveBlur',params:'{}'}).then(layer=>layer?.painted===true)");
     const initialBlur=await blur();
-    assert(['system-acrylic','accent-blur'].includes(initialBlur.backend),'Native backdrop uses Desktop Acrylic or legacy live blur, never the old acrylic accent');
+    assert.equal(initialBlur.backend,'accent-blur','Inactive desktop surfaces use blur behind without the solid Acrylic fallback');
     console.log('Live Blur backend:',initialBlur.backend,'; transparent client painted:',initialBlur.painted);
     const checkBlur=async()=>{
       const layer=await blur(),r=geometry.widget,s=geometry.scale;
@@ -106,8 +106,43 @@ try {
     assert.equal(await blur(),null,'Disabling Live Blur destroys its native surface');
     await widget.eval("localStorage.setItem('journal.widget-chrome',JSON.stringify({entries:{glass:true,liveBlur:false,glassBlur:16,glassRadius:12}}));window.dispatchEvent(new StorageEvent('storage',{key:'journal.widget-chrome'}))");
     await widget.until("!!document.querySelector('.desktop-widget-backdrop')");
+    await widget.until("!!document.querySelector('.desktop-widget-backdrop > i')");
+    const oldPicture=await widget.eval("document.querySelector('.desktop-widget-backdrop > i').style.backgroundImage");
+    const before=await widget.invoke('desktop_wallpaper_info');
+    await main.invoke('widget_smoke_cdp',{label:'widget-entries',method:'Journal.wallpaperChanged',params:'{}'});
+    await widget.until(`document.querySelector('.desktop-widget-backdrop > i')?.style.backgroundImage && document.querySelector('.desktop-widget-backdrop > i').style.backgroundImage!==${JSON.stringify(oldPicture)}`);
+    const after=await widget.invoke('desktop_wallpaper_info');
+    assert.notDeepEqual(before.monitors.map(m=>m.revision),after.monitors.map(m=>m.revision),'Windows notification invalidates unchanged file metadata');
+    console.log('PASS: native Windows wallpaper notification reloads the image without focus or geometry changes.');
     await assert.rejects(()=>main.invoke('desktop_widget_live_blur',{enabled:true,radius:12}));
     assert.deepEqual(errors,[]);
+    await widget.invoke('desktop_widget_live_blur',{enabled:true,radius:12});
+    const popup={left:geometry.widget.left+geometry.widget.width+8,top:geometry.widget.top+8,width:24,height:24};
+    await widget.invoke('desktop_widget_surface',{...await viewport(),active:true,rects:[popup]});
+    const popupPoint=[[Math.round((popup.left+12)*geometry.scale),Math.round((popup.top+12)*geometry.scale)]];
+    const popupRegion=()=>main.invoke('widget_smoke_cdp',{label:'widget-entries',method:'Journal.region',params:JSON.stringify(popupPoint)});
+    assert.deepEqual((await popupRegion()).inside,[true]);
+    await widget.invoke('desktop_widget_live_blur',{enabled:true,radius:12});
+    assert.deepEqual((await popupRegion()).inside,[true],'Source polling preserves an open popup input region');
+    await widget.invoke('desktop_widget_live_blur',{enabled:false,radius:12});
+    // Real GPU capture of a WebView2 child inside a top-level host. The
+    // generated colors prove content changes; a successful API call is not enough.
+    await main.invoke('show_day',{date:new Date().toISOString().slice(0,10)});
+    await main.eval("(()=>{const el=document.createElement('div');el.id='capture-fixture';el.style.cssText='position:fixed;inset:0;z-index:2147483647;background:rgb(220,30,40)';document.body.append(el)})()");
+    const captureWindow=await main.invoke('widget_smoke_cdp',{label:'main',method:'Journal.window',params:'{}'});
+    const captureRect=[captureWindow.position.x+100,captureWindow.position.y+100,240,180];
+    await main.invoke('widget_smoke_cdp',{label:'widget-entries',method:'Journal.captureAttach',params:JSON.stringify(captureWindow.hwnd)});
+    const sample=()=>main.invoke('widget_smoke_cdp',{label:'widget-entries',method:'Journal.captureSample',params:JSON.stringify(captureRect)});
+    const waitColor=async rgb=>{let last;for(let n=0;n<100;n++){last=await sample();if(JSON.stringify(last?.rgb)===JSON.stringify(rgb))return last;await pause(100);}throw Error(`GPU capture color: wanted ${rgb}, got ${JSON.stringify(last)}`);};
+    const red=await waitColor([220,30,40]);
+    await main.eval("document.querySelector('#capture-fixture').style.background='rgb(25,180,70)'");
+    const green=await waitColor([25,180,70]);
+    assert(red.bytes>54 && green.bytes>54,'GPU child surfaces produce actual bitmap pixels');
+    assert.deepEqual([green.width,green.height],[240,180],'Readback contains only the requested crop');
+    await widget.invoke('desktop_widget_live_blur',{enabled:false,radius:12});
+    await assert.rejects(sample,'Disabling Live Blur releases the GPU capture');
+    await main.eval("document.querySelector('#capture-fixture').remove()");
+    console.log('PASS: real GPU child capture changes from red to green; capture cleanup verified.');
     console.log('PASS: native Live Blur backend, transparent client paint, widget bounds, move/resize, stacking, cleanup and static wallpaper restore.');
   } else if (process.env.JOURNAL_WIDGET_SCOPE === 'calendar') {
     await main.invoke('widget_smoke_cdp',{label:'main',method:'Journal.disableInput',params:'{}'});

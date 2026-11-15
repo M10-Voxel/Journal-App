@@ -51,7 +51,7 @@
   --blots: radial-gradient(closest-side at 50% 50%, color-mix(in srgb, var(--violet) 30%, transparent) 0 62%, color-mix(in srgb, var(--violet) 18%, transparent) 62% 78%, color-mix(in srgb, var(--violet) 8%, transparent) 78% 92%, transparent 92%);
   --wobble: 14px 7px 13px 6px / 6px 13px 7px 14px;
   --wobble-lg: 20px 9px 18px 8px / 8px 18px 9px 20px;
-  --hand: 'Mali', 'Comic Sans MS', 'Segoe Print', cursive;
+  --hand: 'Mali Fit', 'Mali', 'Comic Sans MS', 'Segoe Print', cursive;
   --write: 'Nunito', 'Segoe UI', system-ui, sans-serif;
   --serif: 'Nunito', 'Segoe UI', system-ui, sans-serif;
   --display: var(--hand);
@@ -86,7 +86,7 @@
 :root[data-look='journal'] .font-warmup { font-family: 'Nunito'; }
 /* English: Gaegu, the handwriting the look was drawn with. It lacks German letters (ä ö ü ß would come from another
    face of another size), so German text takes Mali, a round handwriting with them (`lang` on <html>, i18n.ts). */
-:root[data-look='journal'][lang='en'] { --hand: 'Gaegu', 'Mali', 'Comic Sans MS', cursive; }
+:root[data-look='journal'][lang='en'] { --hand: 'Gaegu', 'Mali Fit', 'Mali', 'Comic Sans MS', cursive; }
 :root[data-look='journal'], :root[data-look='journal'] * { scrollbar-color: var(--scrollbar) transparent; }
 :root[data-look='journal'] ::selection { background: color-mix(in srgb, var(--pink) 45%, transparent); }
 
@@ -114,8 +114,8 @@
   --key: 0 0 0 3px var(--key-edge), 0 0 0 3.5px var(--sticker-rim), 1px 2.5px 0 3.5px var(--sticker-shade), inset 0 3px 0 var(--key-light), inset 0 -4px 0 var(--key-dark);
   --key-pressed: 0 0 0 3px var(--key-edge), 0 0 0 3.5px var(--sticker-rim), inset 0 3px 0 var(--key-dark), inset 0 -1.5px 0 var(--key-light); }
 /* Keys: only the edge frays (they have no ink line). */
-:root[data-look='journal']:not([data-pixel]) :is(.nav-cluster .nav-step, .nav-cluster .nav-today:not(.is-current), .board-actions button, .nebula-window-tools button, .nebula-cal-panel > .nebula-terminal-head > :is(.nebula-window-focus, .nebula-calendar-toggle), .nebula-day-nav button, .nebula-cal-step, .nebula-layout-reset, .planner-confirm, .cal-composer-create, .chrome-actions button.chrome-submit, .notebook-new, .segmented button[aria-checked='true'], .settings-tabs > button[aria-selected='true'], .journal-tab[aria-current=page], .nebula-tab[aria-current='page'], .nebula-window-bar :is(.nebula-calendar-toggle, .nebula-notebook-toggle)) { position: relative; }
-:root[data-look='journal']:not([data-pixel]) :is(.nav-cluster .nav-step, .nav-cluster .nav-today:not(.is-current), .board-actions button, .nebula-window-tools button, .nebula-cal-panel > .nebula-terminal-head > :is(.nebula-window-focus, .nebula-calendar-toggle), .nebula-day-nav button, .nebula-cal-step, .nebula-layout-reset, .planner-confirm, .cal-composer-create, .chrome-actions button.chrome-submit, .notebook-new, .segmented button[aria-checked='true'], .settings-tabs > button[aria-selected='true'], .journal-tab[aria-current=page], .nebula-tab[aria-current='page'], .nebula-window-bar :is(.nebula-calendar-toggle, .nebula-notebook-toggle))::before {
+:root[data-look='journal']:not([data-pixel]) :is(.nav-cluster .nav-step, .nav-cluster .nav-today, .board-actions button, .nebula-window-tools button, .nebula-cal-panel > .nebula-terminal-head > :is(.nebula-window-focus, .nebula-calendar-toggle), .nebula-day-nav button, .nebula-cal-step, .nebula-layout-reset, .planner-confirm, .cal-composer-create, .chrome-actions button.chrome-submit, .notebook-new, .segmented button[aria-checked='true'], .settings-tabs > button[aria-selected='true'], .journal-tab[aria-current=page], .nebula-tab[aria-current='page'], .nebula-window-bar :is(.nebula-calendar-toggle, .nebula-notebook-toggle)) { position: relative; }
+:root[data-look='journal']:not([data-pixel]) :is(.nav-cluster .nav-step, .nav-cluster .nav-today, .board-actions button, .nebula-window-tools button, .nebula-cal-panel > .nebula-terminal-head > :is(.nebula-window-focus, .nebula-calendar-toggle), .nebula-day-nav button, .nebula-cal-step, .nebula-layout-reset, .planner-confirm, .cal-composer-create, .chrome-actions button.chrome-submit, .notebook-new, .segmented button[aria-checked='true'], .settings-tabs > button[aria-selected='true'], .journal-tab[aria-current=page], .nebula-tab[aria-current='page'], .nebula-window-bar :is(.nebula-calendar-toggle, .nebula-notebook-toggle))::before {
   content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; outline: 2px solid var(--key-edge, var(--sticker-edge)); outline-offset: 1px; filter: url(#journal-edge); }
 
 /* ── Type: handwriting for headings and labels, Nunito for writing ───────────────────────────────────────────── */
@@ -150,12 +150,12 @@
 :root[data-look='journal'] .nav-cluster .nav-step { width: 28px; height: 28px; background: var(--surface); color: var(--ink); box-shadow: var(--key); transition: transform 180ms var(--spring); }
 :root[data-look='journal'] .nav-cluster .nav-step:hover { background: color-mix(in srgb, var(--mint) 40%, var(--tint-base, var(--surface))); color: var(--ink-fixed); transform: rotate(-6deg); }
 :root[data-look='journal'] .nav-cluster .nav-today { height: 28px; padding: 0 12px; border-radius: var(--wobble); background: color-mix(in srgb, var(--pink) 30%, var(--tint-base, var(--surface))); color: var(--ink-fixed); box-shadow: var(--key); font: 700 15px var(--hand); }
-:root[data-look='journal'] .nav-cluster .nav-today.is-current { background: transparent; color: var(--muted); box-shadow: var(--key-sunk); }
+:root[data-look='journal'] .nav-cluster .nav-today:disabled { cursor: default; opacity: 1; }
 :root[data-look='journal'] .nav-cluster .nav-today:hover:not(:disabled) { background: color-mix(in srgb, var(--pink) 45%, var(--tint-base, var(--surface))); color: var(--ink-fixed); }
 /* Keys: a light lavender-grey face with its light (lighter at the top), pressed they sink in. */
 :root[data-look='journal'] :is(.nav-cluster .nav-step, .board-actions button, .settings-tabs > button[aria-selected='true'], .chrome-actions button:not(.chrome-submit)) { background-color: var(--key-bg); }
 :root[data-look='journal'] :is(.icon-button, .today-button, .cal-icon-button, .date-picker-button, .tag-filter-button:not(.is-filtering), .kind-picker button, .scale-slider button, .system-actions button):is(:hover, [aria-expanded='true']):not(:disabled) { background-color: var(--key-bg); }
-:root[data-look='journal'] :is(.nav-cluster .nav-step, .nav-cluster .nav-today:not(.is-current), .planner-confirm, .cal-composer-create, .board-actions button, .segmented button[aria-checked='true'], .cal-views-indicator, .journal-tab[aria-current=page], .settings-tabs > button[aria-selected='true'], .notebook-new, .chrome-actions button.chrome-submit) { background-image: var(--key-face); }
+:root[data-look='journal'] :is(.nav-cluster .nav-step, .nav-cluster .nav-today, .planner-confirm, .cal-composer-create, .board-actions button, .segmented button[aria-checked='true'], .cal-views-indicator, .journal-tab[aria-current=page], .settings-tabs > button[aria-selected='true'], .notebook-new, .chrome-actions button.chrome-submit) { background-image: var(--key-face); }
 :root[data-look='journal'] :is(.nav-cluster .nav-step, .nav-cluster .nav-today, .planner-confirm, .cal-composer-create, .board-actions button, .notebook-new, .chrome-actions button, .icon-button, .today-button, .cal-icon-button, .date-picker-button, .tag-filter-button, .kind-picker button, .segmented button, .cal-views button, .journal-tab):active:not(:disabled) { box-shadow: var(--key-pressed) !important; transform: translateY(1px) !important; }
 /* Primary buttons: a filled violet sticker. */
 :root[data-look='journal'] :is(.planner-confirm, .cal-composer-create, .board-link-form button:first-of-type, .mail-import-toast .notice-action) { border-radius: var(--wobble); background: var(--accent); color: var(--on-accent); box-shadow: var(--key); font: 700 15px var(--hand); }

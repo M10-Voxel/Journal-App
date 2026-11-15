@@ -9,7 +9,7 @@ interface Imported { id: string; text: string; date: string; time?: string | nul
 
 /** A confirmation after the calendar write succeeds, in journal and calendar windows. */
 export function MailImportToast({ onReview }: { onReview?: () => void }) {
-  const en = useLanguage() === 'en';
+  useLanguage();
   const [items, setItems] = useState<Imported[]>([]);
   const [suggestions, setSuggestions] = useState(0);
   useEffect(() => {
@@ -30,9 +30,9 @@ export function MailImportToast({ onReview }: { onReview?: () => void }) {
   }, [items]);
   return <>
     {suggestions > 0 && <aside className="mail-import-toast mail-suggestions-notice" role="status" aria-live="polite">
-      <Icon name="mail" /><div><strong>{en ? 'New appointment suggestions' : 'Neue Terminvorschläge'}</strong>
-        <p>{en ? `${suggestions} suggestions are waiting for your review.` : `${suggestions} Vorschläge warten auf deine Prüfung.`}</p>
-        <button type="button" className="notice-action" onClick={() => { setSuggestions(0); onReview?.(); }}>{en ? 'Review suggestions' : 'Vorschläge prüfen'}</button>
+      <Icon name="mail" /><div><strong>{t("Neue Terminvorschläge")}</strong>
+        <p>{t("{0} Vorschläge warten auf deine Prüfung.", suggestions)}</p>
+        <button type="button" className="notice-action" onClick={() => { setSuggestions(0); onReview?.(); }}>{t("Vorschläge prüfen")}</button>
       </div>
       <button type="button" aria-label={t('Hinweis schließen')} onClick={() => setSuggestions(0)}><Icon name="done" /></button>
     </aside>}

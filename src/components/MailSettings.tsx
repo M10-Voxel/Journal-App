@@ -12,7 +12,7 @@ import { MailModelSetup } from './MailModelSetup';
 import { MailLearningSettings } from './MailLearningSettings';
 
 export function MailSettings({ onImport, importError }: { onImport: (entries: CalendarImport[]) => Promise<void>; importError: string }) {
-  const en = useLanguage() === 'en';
+  useLanguage();
   const [accounts, setAccounts] = useState<MailAccount[]>([]), [candidates, setCandidates] = useState<MailCandidate[]>([]), [notices, setNotices] = useState<string[]>([]);
   const [adding, setAdding] = useState(false), [draft, setDraft] = useState<MailAccount | null>(null), [password, setPassword] = useState(''), [clientSecret, setClientSecret] = useState('');
   const [busy, setBusy] = useState(''), [error, setError] = useState(''), [message, setMessage] = useState('');
@@ -82,11 +82,11 @@ export function MailSettings({ onImport, importError }: { onImport: (entries: Ca
         <div className="mail-account-summary"><span className={`mail-dot${account.error ? ' is-error' : account.enabled ? ' is-on' : ''}`} /><div><strong>{account.label}</strong><span>{account.email} · {{ gmail: 'Google', microsoft: 'Microsoft', imap: 'IMAP', pop3: 'POP3' }[account.protocol]}</span></div></div>
         <p>{!account.enabled ? t("Abruf pausiert") : account.lastSync ? t("Zuletzt abgerufen: {0}", new Date(account.lastSync * 1000).toLocaleString(locale(), { dateStyle: 'short', timeStyle: 'short' })) : t("Bereit für den ersten Abruf")}</p>
         {account.error && <p className="mail-error">{account.error}</p>}
-        <div className="mail-auto-import"><label htmlFor={`auto-import-${account.id}`}>{en ? 'Add appointments automatically' : 'Termine automatisch hinzufügen'}</label>
+        <div className="mail-auto-import"><label htmlFor={`auto-import-${account.id}`}>{t("Termine automatisch hinzufügen")}</label>
           <button id={`auto-import-${account.id}`} type="button" role="switch" className="switch" data-mail-auto-import aria-checked={account.autoImport === true} disabled={Boolean(busy)} onClick={() => void run(account.id, () => mailApi.autoImport(account.id, account.autoImport !== true))}><span /></button>
           <small>{account.autoImport
-            ? (en ? 'New and pending suggestions are added automatically.' : 'Neue und wartende Vorschläge werden automatisch übernommen.')
-            : (en ? 'When off, review suggestions below before adding them.' : 'Wenn ausgeschaltet, prüfst du Vorschläge unten vor der Übernahme.')}</small>
+            ? (t("Neue und wartende Vorschläge werden automatisch übernommen."))
+            : (t("Wenn ausgeschaltet, prüfst du Vorschläge unten vor der Übernahme."))}</small>
         </div>
         <div className="mail-actions"><button type="button" className="mail-button" disabled={Boolean(busy)} onClick={() => void run(account.id, async () => { await mailApi.sync(account.id); setMessage(t("Postfach abgerufen. Termine werden ausgewertet.")); })}><Icon name="repeat" />{t("Abrufen")}</button>
           <button type="button" className="mail-button" disabled={Boolean(busy)} onClick={() => open(account)}>{t("Bearbeiten")}</button>
@@ -142,8 +142,8 @@ export function MailSettings({ onImport, importError }: { onImport: (entries: Ca
           <label>{t("Betreff enthält, optional")}<input value={draft.subjectFilter} placeholder={t("z. B. Lieferung")} onChange={event => patch({ subjectFilter: event.target.value })} /></label>
           <label>{t("Zeitraum in Tagen")}<input type="number" min={1} max={90} required value={draft.days} onChange={event => patch({ days: Number(event.target.value) })} /></label>
           <label className="mail-check"><input type="checkbox" checked={draft.enabled} onChange={event => patch({ enabled: event.target.checked })} />{t("Regelmäßig abrufen")}</label>
-          <label className="mail-check"><input type="checkbox" checked={draft.autoImport === true} onChange={event => patch({ autoImport: event.target.checked })} />{en ? 'Add appointments automatically' : 'Termine automatisch hinzufügen'}</label>
-          <p>{en ? 'Off by default: new suggestions are announced and can be accepted, edited or rejected below. Analysis runs locally.' : 'Standardmäßig aus: Neue Vorschläge werden gemeldet und können unten übernommen, bearbeitet oder abgelehnt werden. Die Auswertung läuft lokal.'}</p>
+          <label className="mail-check"><input type="checkbox" checked={draft.autoImport === true} onChange={event => patch({ autoImport: event.target.checked })} />{t("Termine automatisch hinzufügen")}</label>
+          <p>{t("Standardmäßig aus: Neue Vorschläge werden gemeldet und können unten übernommen, bearbeitet oder abgelehnt werden. Die Auswertung läuft lokal.")}</p>
         </details>
       </fieldset>
       <p className="mail-storage">{t("Zugangsdaten werden mit dem Windows-Benutzerschutz verschlüsselt gespeichert. Mails werden weder gelöscht noch als gelesen markiert.")}</p>
@@ -153,11 +153,11 @@ export function MailSettings({ onImport, importError }: { onImport: (entries: Ca
     </form>}
     {!draft && !adding && <>
       <div className="mail-section-head"><h3>{t("Ausstehende Übernahmen ")}<span>{suggestions.length}</span></h3></div>
-      {!suggestions.length && <p className="mail-empty">{en ? 'No pending suggestions. Unless automatic adding is enabled for the account, new appointments appear here for review.' : 'Keine offenen Vorschläge. Solange die automatische Übernahme für das Konto aus ist, erscheinen neue Termine hier zur Prüfung.'}</p>}
+      {!suggestions.length && <p className="mail-empty">{t("Keine offenen Vorschläge. Solange die automatische Übernahme für das Konto aus ist, erscheinen neue Termine hier zur Prüfung.")}</p>}
       <div className="mail-suggestions">{suggestions.map(item => <article className="mail-suggestion" key={item.id}>
         <div><strong>{item.entry.text}</strong><p className="mail-when">{formatDate(item.date)}{item.entry.time ? ` · ${item.entry.time}${item.entry.end ? `–${item.entry.end}` : ''}` : t(" · ganztägig")}</p></div>
         <p className="mail-source">{accounts.find(a => a.id === item.accountId)?.label} · {item.sender}</p><blockquote>{item.evidence}</blockquote>
-        {typeof item.relevance === 'number' && <p className="mail-storage">{item.relevance < 0.35 ? (en ? 'Personal model: low relevance — review manually.' : 'Persönliches Modell: eher unerwünscht – bitte selbst prüfen.') : (en ? 'Personal model: likely relevant.' : 'Persönliches Modell: eher relevant.')}</p>}
+        {typeof item.relevance === 'number' && <p className="mail-storage">{item.relevance < 0.35 ? (t("Persönliches Modell: eher unerwünscht – bitte selbst prüfen.")) : (t("Persönliches Modell: eher relevant."))}</p>}
         {editing?.id === item.id && <div className="mail-proposal-edit">
           <label>{t("Titel")}<input value={editing.entry.text} onChange={event => setEditing({ ...editing, entry: { ...editing.entry, text: event.target.value } })} /></label>
           <div className="mail-fields"><span className="mail-field">{t("Datum")}<DateField label={t("Datum")} value={editing.date} onChange={date => setEditing({ ...editing, date })} /></span>
@@ -166,7 +166,7 @@ export function MailSettings({ onImport, importError }: { onImport: (entries: Ca
         </div>}
         <div className="mail-actions"><button type="button" className="mail-button is-primary" disabled={Boolean(busy)} onClick={() => void run(item.id, () => accept(editing?.id === item.id ? editing : item))}><Icon name="check" />{t("Übernehmen")}</button>
           <button type="button" className="mail-button" disabled={Boolean(busy)} onClick={() => setEditing(editing?.id === item.id ? null : { ...item, entry: { ...item.entry } })}>{editing?.id === item.id ? t("Bearbeitung schließen") : t("Bearbeiten")}</button>
-          <button type="button" className="mail-button" disabled={Boolean(busy)} onClick={() => void run(item.id, () => mailApi.resolve(candidates.filter(candidate => candidate.entry.calendarUid === item.entry.calendarUid).map(candidate => candidate.id), false))}>{en ? 'Reject and learn' : 'Ablehnen und lernen'}</button></div>
+          <button type="button" className="mail-button" disabled={Boolean(busy)} onClick={() => void run(item.id, () => mailApi.resolve(candidates.filter(candidate => candidate.entry.calendarUid === item.entry.calendarUid).map(candidate => candidate.id), false))}>{t("Ablehnen und lernen")}</button></div>
       </article>)}</div>
       {suggestions.length > 0 && <p className="mail-storage">{t("Ein bereits vorhandener Eintrag mit derselben Kalenderkennung wird beim Übernehmen aktualisiert.")}</p>}
       {notices.length > 0 && <details className="mail-notices"><summary>{t("Hinweise zur Auswertung")}</summary>{[...new Set(notices)].map((notice, index) => <p key={index}>{notice}</p>)}</details>}

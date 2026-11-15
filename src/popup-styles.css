@@ -6,26 +6,22 @@
    Arrows: the small pointer (`::before`) is hidden where the sheet has an edge of its own (binding, head bar); the
    composer's tag strip (`.has-tag::before`) is kept where it fits. */
 
-/* ── Normal · B · Glas: translucent, blurred, a bright rim, round fields and a glowing choice ───────────────────── */
+/* ── Normal · B · Glas: flat and quiet like Zed – a slightly translucent panel, a hairline rim, small radii, no glow ── */
 :root[data-look='classic'][data-popups='b'] :is(.planner, .cal-composer, .popover, .repeat-suggest) {
-  --background: color-mix(in srgb, var(--strong) 7%, transparent);
-  --border: color-mix(in srgb, var(--strong) 8%, transparent);
-  --hover: color-mix(in srgb, var(--strong) 12%, transparent);
-  --inset: color-mix(in srgb, var(--strong) 6%, transparent);
-  background: color-mix(in srgb, var(--surface) 62%, transparent);
-  -webkit-backdrop-filter: blur(22px) saturate(1.6); backdrop-filter: blur(22px) saturate(1.6);
-  border-radius: 18px;
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--strong) 22%, transparent), inset 0 0 0 1px color-mix(in srgb, var(--strong) 12%, transparent), 0 30px 60px -22px #000000f2, 0 0 0 1px #00000055;
+  --hover: color-mix(in srgb, var(--strong) 9%, transparent);
+  --inset: color-mix(in srgb, var(--strong) 5%, transparent);
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2); backdrop-filter: blur(14px) saturate(1.2);
+  border-radius: 8px;
+  box-shadow: 0 0 0 1px var(--edge), 0 12px 28px -10px #000000a6;
 }
 :root[data-look='classic'][data-popups='b'] .planner::before, :root[data-look='classic'][data-popups='b'] .cal-composer:not(.has-tag)::before { display: none; }
-:root[data-look='classic'][data-popups='b'] :is(.cal-composer-text, .cal-composer-when, .planner-time, .planner-reminder, .planner-confirm, .tag-picker-search, .repeat-chip, .cal-satellite) { border-radius: 999px; }
-:root[data-look='classic'][data-popups='b'] .cal-composer-description { border-radius: 14px; }
-:root[data-look='classic'][data-popups='b'] :is(.cal-composer-text, .cal-composer-description) { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--strong) 10%, transparent); }
-:root[data-look='classic'][data-popups='b'] .planner-day, :root[data-look='classic'][data-popups='b'] .cal-composer .cal-compact-day { border-radius: 999px; }
-:root[data-look='classic'][data-popups='b'] :is(.planner:not(.is-multi) .planner-day[aria-selected='true'], .cal-composer .cal-compact-day[aria-selected='true']) { box-shadow: 0 0 16px color-mix(in srgb, var(--accent) 65%, transparent); }
-:root[data-look='classic'][data-popups='b'] :is(.cal-composer-create, .planner-confirm:hover) { box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 60%, transparent); }
-:root[data-look='classic'][data-popups='b'] .planner-foot { border-top-color: color-mix(in srgb, var(--strong) 10%, transparent); }
-:root[data-look='classic'][data-popups='b'] .tag-option { border-radius: 999px; }
+:root[data-look='classic'][data-popups='b'] :is(.cal-composer-text, .cal-composer-when, .planner-time, .planner-reminder, .planner-confirm, .tag-picker-search, .repeat-chip, .cal-satellite, .cal-composer-description) { border-radius: 6px; }
+:root[data-look='classic'][data-popups='b'] :is(.cal-composer-text, .cal-composer-description) { box-shadow: inset 0 0 0 1px var(--edge); }
+:root[data-look='classic'][data-popups='b'] .planner-day, :root[data-look='classic'][data-popups='b'] .cal-composer .cal-compact-day { border-radius: 6px; }
+:root[data-look='classic'][data-popups='b'] :is(.cal-composer-create, .planner-confirm:hover) { box-shadow: none; }
+:root[data-look='classic'][data-popups='b'] .planner-foot { border-top-color: var(--divider); }
+:root[data-look='classic'][data-popups='b'] .tag-option { border-radius: 4px; }
 
 /* ── Journal · A · Karteikarte: plain paper, a red rule on top, underlined fields, circled days ──────────────────── */
 :root[data-look='journal'][data-popups='a'] :is(.planner, .cal-composer, .popover) {

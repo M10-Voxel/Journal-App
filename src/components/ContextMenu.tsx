@@ -201,7 +201,6 @@ function MenuPanel({ look, spec, x, y, depth, byKey, onBack, side, onHold }: {
   }
 
   const head = depth > 0 ? null
-    : look === 'classic-b' ? <div className="ctx-head is-glass">{spec.title}</div>
     : look === 'journal-a' ? <div className="ctx-head is-card">{spec.title}</div>
     : look === 'journal-b' ? <div className="ctx-head is-sticker"><span className="ctx-tab">{spec.title}</span></div>
     : look === 'journal-c' ? <div className="ctx-head is-sheet"><span className="ctx-tab">{spec.title}<small>{spec.command}</small></span></div>

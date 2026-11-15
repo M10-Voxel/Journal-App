@@ -78,7 +78,9 @@
 .widgets-kinds button .icon { width: 13px; height: 13px; }
 .widgets-kinds button[aria-pressed='true'] { border-color: color-mix(in srgb, var(--accent) 60%, var(--edge)); background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--strong); }
 :root[data-look='nebula'] .widgets-kinds button, :root[data-pixel] .widgets-kinds button { border-radius: 0; }
-.widgets-glass-slider .setting-control { display: flex; align-items: center; gap: 10px; }
+.widgets-glass-slider .setting-control { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.widgets-live-blur { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; color: var(--muted); font: 12px var(--sans); }
+.widgets-live-blur .switch { flex-shrink: 0; }
 .widgets-glass-slider input[type=range] { appearance: none; -webkit-appearance: none; width: 160px; height: 18px; margin: 0; background: transparent; cursor: pointer; }
 .widgets-glass-slider input[type=range]::-webkit-slider-runnable-track { height: 4px; border-radius: 4px; background: linear-gradient(90deg, var(--accent) var(--fill), var(--focus) var(--fill)); }
 .widgets-glass-slider input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; margin-top: -5px; border-radius: 50%; border: 2px solid var(--background); background: var(--accent); box-shadow: 0 0 0 1px var(--accent); }

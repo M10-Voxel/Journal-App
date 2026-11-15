@@ -501,3 +501,6 @@
   .nebula-window-bar .search.is-nebula { width: calc(50% - 120px); }
   .nebula-tab { padding: 0 5px; }
 }
+
+/* The calendar's view tabs sit with its icons at the right end of the head. */
+.nebula-cal-panel > .nebula-terminal-head > .nebula-cal-views { margin-left: auto; }

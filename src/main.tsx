@@ -100,6 +100,7 @@ import '@fontsource/gaegu/700.css';
 import '@fontsource/mali/500.css';
 import '@fontsource/mali/600.css';
 import '@fontsource/mali/700.css';
+import './mali-fit.css';
 import '@fontsource/nunito/400.css';
 import '@fontsource/nunito/400-italic.css';
 import '@fontsource/nunito/600.css';
@@ -452,7 +453,7 @@ function App() {
     }
   });
   const replaceFromWidget = useStableCallback((next: Day) => {
-    if (next.date !== date || !ready) throw new Error('Der angefragte Tag ist nicht mehr geöffnet.');
+    if (next.date !== date || !ready) throw new Error(t("Der angefragte Tag ist nicht mehr geöffnet."));
     flushSync(() => { update(() => next); });
   });
   const refreshFromWidget = useStableCallback((before: Day, refreshed: Day) => {
@@ -773,8 +774,8 @@ function App() {
     : page.page === 'board' ? <BulletinBoard key={`${boardPeriod}:${page.date}`} date={page.date} period={boardPeriod} />
     : <PeriodNotes date={page.date} mode={page.page === 'data' ? 'day' : periodMode} part={page.page === 'data' ? undefined : page.page} onManage={manageData} onImport={importFromCalendar} />;
   const stepLabels = {
-    prev: { label: periodMode === 'day' ? t("Vorheriger Tag") : language === 'en' ? 'Previous period' : 'Vorheriger Zeitraum', tip: periodMode === 'day' ? t("Vorheriger Tag · Alt ←") : language === 'en' ? 'Previous period' : 'Vorheriger Zeitraum' },
-    next: { label: periodMode === 'day' ? t("Nächster Tag") : language === 'en' ? 'Next period' : 'Nächster Zeitraum', tip: periodMode === 'day' ? t("Nächster Tag · Alt →") : language === 'en' ? 'Next period' : 'Nächster Zeitraum' },
+    prev: { label: periodMode === 'day' ? t("Vorheriger Tag") : t("Vorheriger Zeitraum"), tip: periodMode === 'day' ? t("Vorheriger Tag · Alt ←") : t("Vorheriger Zeitraum") },
+    next: { label: periodMode === 'day' ? t("Nächster Tag") : t("Nächster Zeitraum"), tip: periodMode === 'day' ? t("Nächster Tag · Alt →") : t("Nächster Zeitraum") },
   };
   // The book turns days on its page: the page's title opens the mini calendar, the arrows beside it step a day (or
   // period); today is the ribbon (JournalBook).
@@ -784,14 +785,14 @@ function App() {
     <button type="button" className="book-nav-step" aria-label={stepLabels.next.label} title={stepLabels.next.tip} onClick={() => stepPeriod(1)}><Icon name="right" /></button>
   </div>;
   const toolbarItems = <>
-    <NavCluster label={periodMode === 'day' ? t("Tagesnavigation") : language === 'en' ? 'Period navigation' : 'Zeitraumnavigation'} prev={stepLabels.prev} next={stepLabels.next}
+    <NavCluster label={periodMode === 'day' ? t("Tagesnavigation") : t("Zeitraumnavigation")} prev={stepLabels.prev} next={stepLabels.next}
       today={{ tip: t("Heute · Alt H"), disabled: date === today }} atToday={date === today} onPrev={() => stepPeriod(-1)} onToday={() => navigate(today)} onNext={() => stepPeriod(1)} />
     <MiniCalendarPicker date={date} open={datePickerOpen} onOpenChange={setDatePickerOpen} onPick={navigate} buttonRef={datePickerButtonRef} />
     <div className="toolbar-end">{!bookMode && periodMode === 'day' && <TagFilter label={t("Tags im Journal")} hidden={hiddenTags} onChange={next => { setNewEntryId(null); setHiddenTags(next); }} />}</div>
   </>;
-  const periodLabels = language === 'en' ? ['Day', 'Week', 'Month', 'Quarter', 'Year'] : ['Tag', 'Woche', 'Monat', 'Quartal', 'Jahr'];
+  const periodLabels = [t('Tag'), t('Woche'), t('Monat'), t('Quartal'), t('Jahr')];
   // The book's views as register tabs on its top edge (Ctrl+1–5).
-  const register = <nav className="book-register" aria-label={language === 'en' ? 'Journal views' : 'Journalansichten'}>
+  const register = <nav className="book-register" aria-label={t("Journalansichten")}>
     {periodMode === 'day' && <div className="book-tag-register"><TagFilter label={t("Tags im Journal")} hidden={hiddenTags} onChange={next=>{setNewEntryId(null);setHiddenTags(next);}}/></div>}
 
     {periodModes.map((mode, index) => <button type="button" key={mode} className="book-register-tab" data-period-mode={mode} aria-current={periodMode === mode ? 'page' : undefined}
@@ -868,7 +869,7 @@ function App() {
         <button type="button" className="titlebar-button settings-button" data-mail-count={mailStatus.count || undefined} aria-label={t("Einstellungen")} aria-keyshortcuts="Control+," title={t("Einstellungen · Strg ,")} onClick={() => openSettings()}><Icon name="settings" /></button>
         <WindowControls onError={setError} />
       </div> : <header className="topbar" onMouseDown={dragWindow}>
-        <nav className="journal-tabs" aria-label={language === 'en' ? 'Journal views' : 'Journalansichten'}>{periodModes.map((mode, index) => <button type="button" key={mode} className="journal-tab" aria-current={!notebookView && periodMode === mode ? 'page' : undefined} onClick={() => choosePeriod(mode)}><Icon name={({ day: 'journal', week: 'week', month: 'month', quarter: 'quarter', year: 'year' } as const)[mode]} /><span>{(language === 'en' ? ['Day', 'Week', 'Month', 'Quarter', 'Year'] : ['Tag', 'Woche', 'Monat', 'Quartal', 'Jahr'])[index]}</span>{index === 0 && dirty && <span className="unsaved-dot" aria-label={t("Ungespeicherte Änderungen")} />}</button>)}
+        <nav className="journal-tabs" aria-label={t("Journalansichten")}>{periodModes.map((mode, index) => <button type="button" key={mode} className="journal-tab" aria-current={!notebookView && periodMode === mode ? 'page' : undefined} onClick={() => choosePeriod(mode)}><Icon name={({ day: 'journal', week: 'week', month: 'month', quarter: 'quarter', year: 'year' } as const)[mode]} /><span>{(language === 'en' ? ['Day', 'Week', 'Month', 'Quarter', 'Year'] : ['Tag', 'Woche', 'Monat', 'Quartal', 'Jahr'])[index]}</span>{index === 0 && dirty && <span className="unsaved-dot" aria-label={t("Ungespeicherte Änderungen")} />}</button>)}
           <button type="button" className="journal-tab is-notebook" aria-current={notebookView ? 'page' : undefined} aria-keyshortcuts="Control+Shift+N" title={t('Notizen · Strg ⇧ N')} onClick={() => toggleNotebook()}><Icon name="note" /><span>{t('Notizen')}</span></button></nav>
         <SearchBox variant="classic" onOpen={openResult} />
         <div className="titlebar-space" />
@@ -913,7 +914,7 @@ function App() {
       onOpen={reminder => { dismissReminder(reminder); showFromCalendar(reminder.date, reminder.id); }} onDismiss={dismissReminder} />
     {help && <ShortcutHelp onClose={() => setHelp(false)} />}
     <div className="app-notices"><UpdateNotice onOpen={() => openSettings('updates')} /><MailImportToast onReview={() => openSettings('mail')} /></div>
-    {settingsOpen && <SettingsDialog key={settingsTab} bookView={bookView} onBookView={setBookView} initialTab={settingsTab} initialWidgetId={settingsWidgetId} beforeSync={async () => { if (!await save()) throw new Error("Lokale Änderungen konnten nicht gespeichert werden."); await flushHistoryWindows(); }} onDriveBusy={value => { driveWorking.current = value; setDriveBusy(value); void emit('editor:paused', value); }} settings={settings} mailStatus={mailStatus} onImport={importFromCalendar} onClose={() => { if (!driveWorking.current) setSettingsOpen(false); }} onChange={next => { setSettings(next); saveSettings(next); }} />}
+    {settingsOpen && <SettingsDialog key={settingsTab} bookView={bookView} onBookView={setBookView} initialTab={settingsTab} initialWidgetId={settingsWidgetId} beforeSync={async () => { if (!await save()) throw new Error(t("Lokale Änderungen konnten nicht gespeichert werden.")); await flushHistoryWindows(); }} onDriveBusy={value => { driveWorking.current = value; setDriveBusy(value); void emit('editor:paused', value); }} settings={settings} mailStatus={mailStatus} onImport={importFromCalendar} onClose={() => { if (!driveWorking.current) setSettingsOpen(false); }} onChange={next => { setSettings(next); saveSettings(next); }} />}
   </div>;
 }
 

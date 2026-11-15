@@ -3,7 +3,7 @@
 #[cfg(windows)]
 mod windows {
     use std::ffi::c_void;
-    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
     type Hwnd = isize;
     #[repr(C)]
     struct WindowPos { hwnd: Hwnd, after: Hwnd, x: i32, y: i32, cx: i32, cy: i32, flags: u32 }
@@ -47,11 +47,9 @@ mod windows {
     /// Windows' composition blur samples the live desktop behind this window,
     /// including video wallpapers. Its strength is controlled by Windows.
     pub fn composition_blur(hwnd:isize,enabled:bool)->Result<&'static str,String>{unsafe{
-        // DWMWA_SYSTEMBACKDROP_TYPE (Windows 11 22621+): transient windows use
-        // Desktop Acrylic, which includes windows behind the backdrop. Mica
-        // would only sample the wallpaper image and is unsuitable for animation.
-        let backdrop=if enabled{3i32}else{1i32};
-        if DwmSetWindowAttribute(hwnd,38,&backdrop as *const _ as *const c_void,4)>=0{return Ok("system-acrylic");}
+        // Desktop Acrylic falls back to a solid tint when this NOACTIVATE
+        // surface is inactive. Use the compositor's blur-behind policy on
+        // Windows 10 and 11 alike; it samples content without an acrylic tint.
         #[repr(C)] struct Accent {state:i32,flags:u32,color:u32,animation:u32}
         #[repr(C)] struct Data {attribute:i32,data:*const c_void,size:usize}
         #[link(name="kernel32")] unsafe extern "system" {
@@ -63,8 +61,7 @@ mod windows {
         let address=if module!=0{GetProcAddress(module,b"SetWindowCompositionAttribute\0".as_ptr())}else{std::ptr::null()};
         if address.is_null(){return if enabled{Err("Windows unterstützt Live Blur nicht.".into())}else{Ok("disabled")};}
         let set:unsafe extern "system" fn(isize,*const Data)->i32=std::mem::transmute(address);
-        // Compatibility path for older Windows: live blur-behind rather than
-        // the undocumented acrylic policy with a near-black tint.
+        // ACCENT_ENABLE_BLURBEHIND; no tint or focus-dependent acrylic fallback.
         let accent=Accent{state:if enabled{3}else{0},flags:0,color:0,animation:0};
         let data=Data{attribute:19,data:&accent as *const _ as *const c_void,size:std::mem::size_of::<Accent>()};
         if set(hwnd,&data)==0{return Err("Windows konnte Live Blur nicht aktivieren.".into());}
@@ -79,12 +76,20 @@ mod windows {
     }
     #[link(name="dwmapi")]
     unsafe extern "system" { fn DwmSetWindowAttribute(hwnd:Hwnd,attribute:u32,value:*const c_void,size:u32)->i32; }
+    static WALLPAPER_GENERATION: AtomicU64 = AtomicU64::new(0);
+    pub fn wallpaper_generation()->u64{WALLPAPER_GENERATION.load(Ordering::Relaxed)}
     static PLACING: AtomicBool = AtomicBool::new(false);
     /// The canvas is a plain popup without any frame: no caption or sizing border (WS_CAPTION, WS_THICKFRAME). Otherwise
     /// Windows can paint its white caption strip where a widget lies at the top of the screen.
     fn frameless(style:u32)->u32{(style|0x8000_0000)&!(0x00C0_0000|0x0004_0000)}
     const SUBCLASS_ID: usize = 0x4a4457;
     unsafe extern "system" fn subclass(hwnd:Hwnd,msg:u32,wparam:usize,lparam:isize,_id:usize,_data:usize)->isize {
+        // Windows broadcasts settings changes even when widgets have no focus.
+        // A theme/slideshow can overwrite its cached image without changing
+        // the source path or its timestamp. Invalidate that image explicitly.
+        if msg==0x001a || msg==0x031a {
+            WALLPAPER_GENERATION.fetch_add(1,Ordering::Relaxed);
+        }
         if msg==0x007c && wparam as isize == -20 && lparam!=0 {
             let style=&mut *(lparam as *mut Style);
             style.new=(style.new|0x80)&!0x40000&!0x08000000;
@@ -99,7 +104,7 @@ mod windows {
             // WM_WINDOWPOSCHANGING: focusing an editor must not lift its desktop surface.
             (*(lparam as *mut WindowPos)).flags |= 0x0004;
         }
-        if msg == 0x0082 { super::super::live_blur::disable(hwnd);RemoveWindowSubclass(hwnd,subclass,SUBCLASS_ID); }
+        if msg == 0x0082 { super::super::capture::disable(hwnd);super::super::live_blur::disable(hwnd);RemoveWindowSubclass(hwnd,subclass,SUBCLASS_ID); }
         if msg == 0x0018 && wparam==0 {super::super::live_blur::hide(hwnd);}
         DefSubclassProc(hwnd,msg,wparam,lparam)
     }
@@ -184,4 +189,4 @@ mod windows {
     }}
 }
 #[cfg(windows)]
-pub use windows::{configure,maintain,region,restack,composition_blur};
+pub use windows::{configure,maintain,region,restack,composition_blur,wallpaper_generation};

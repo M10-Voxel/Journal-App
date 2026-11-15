@@ -1,3 +1,4 @@
+import { t } from '../i18n.ts';
 import { useEffect } from 'react';
 import { emit, listen } from '@tauri-apps/api/event';
 import { getAllWindows, getCurrentWindow } from '@tauri-apps/api/window';
@@ -18,7 +19,7 @@ export async function flushHistoryWindows(labels?: ReadonlySet<string>) {
     pending.delete(e.payload.window);
     if (!pending.size) finish();
   });
-  const timeout = window.setTimeout(() => fail(new Error('Ein Fenster konnte seine Änderungen nicht rechtzeitig speichern.')), 5000);
+  const timeout = window.setTimeout(() => fail(new Error(t("Ein Fenster konnte seine Änderungen nicht rechtzeitig speichern."))), 5000);
   try { await emit('history:flush', { id }); await done; }
   finally { clearTimeout(timeout); stop(); }
 }

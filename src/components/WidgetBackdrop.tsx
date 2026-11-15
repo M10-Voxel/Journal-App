@@ -1,5 +1,6 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import type { CSSProperties } from 'react';
+import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { getWidgetSurface, subscribeWidgetSurface } from '../widgetSurface';
@@ -13,8 +14,8 @@ import { getWidgetSurface, subscribeWidgetSurface } from '../widgetSurface';
  * The pictures are checked again on focus, when the canvas changes and every five seconds.
  */
 type Position = 'fill' | 'fit' | 'stretch' | 'center' | 'tile' | 'span';
-interface Monitor { x: number; y: number; width: number; height: number; modified: number; revision?: string }
-interface Wallpapers { position: Position; monitors: Monitor[] }
+interface Monitor { x: number; y: number; width: number; height: number; modified: number; revision?: string; image?: boolean }
+interface Wallpapers { position: Position; color?: string; monitors: Monitor[] }
 interface Rect { left: number; top: number; width: number; height: number }
 
 let info: Wallpapers | null = null, checking: Promise<void> | null = null;
@@ -25,7 +26,7 @@ const pictures = new Map<string, Promise<string | null>>(), urls = new Map<strin
 let currentKeys = new Set<string>();
 const listeners = new Set<() => void>();
 const notify = () => { snapshot = { info, pictures: urls.size }; listeners.forEach(listener => listener()); };
-const keyOf = (index: number, monitor: Monitor) => `${index}|${monitor.x},${monitor.y},${monitor.width},${monitor.height}|${monitor.revision ?? monitor.modified}`;
+const keyOf = (index: number, monitor: Monitor) => `${index}|${monitor.x},${monitor.y},${monitor.width},${monitor.height}|${monitor.image===false?"color":"image"}|${monitor.revision ?? monitor.modified}`;
 const kind = (bytes: Uint8Array) => bytes[0] === 0x89 && bytes[1] === 0x50 ? 'image/png' : bytes[0] === 0xff && bytes[1] === 0xd8 ? 'image/jpeg'
   : bytes[0] === 0x42 && bytes[1] === 0x4d ? 'image/bmp' : bytes[0] === 0x3c ? 'image/svg+xml' : bytes[0] === 0x52 && bytes[8] === 0x57 ? 'image/webp' : '';
 
@@ -66,6 +67,7 @@ function useWallpapers(active: boolean) {
     if (!active) return;
     users++;
     void check();
+    const unlisten=listen('widget:wallpaper-check', () => void check());
     const timer = globalThis.setInterval(() => void check(), 5000);
     // Also when the canvas changes (moved to another monitor, monitors added or rearranged).
     let monitorKey=JSON.stringify([getWidgetSurface()?.bounds,getWidgetSurface()?.scale]);
@@ -75,6 +77,7 @@ function useWallpapers(active: boolean) {
     };
     globalThis.addEventListener('focus', check); globalThis.addEventListener('widget:popup-geometry', moved);
     return () => {
+      void unlisten.then(stop=>stop());
       globalThis.clearInterval(timer); globalThis.removeEventListener('focus', check); globalThis.removeEventListener('widget:popup-geometry', moved);
       if(--users===0){
         cacheEpoch++;checking=null;info=null;currentKeys.clear();pictures.clear();
@@ -139,14 +142,15 @@ export function WidgetBackdrop({ active, blur }: { active: boolean; blur: number
   const widget: Rect = surface?.widget ?? { left: 0, top: 0, width: innerWidth, height: innerHeight };
   const chosen = wallpaperFor(wallpapers, { x: origin.x + (widget.left + widget.width / 2) * scale, y: origin.y + (widget.top + widget.height / 2) * scale });
   if (!chosen) return null;
-  const url = picture(chosen.index, wallpapers.monitors[chosen.index]);
-  if (!url) return null;
+  const monitor=wallpapers.monitors[chosen.index];
+  const url = monitor.image===false ? null : picture(chosen.index, monitor);
+  if (!url && monitor.image!==false) return null;
   const area = chosen.area;
   // The widget moves within the canvas by --widget-left/--widget-top (also while dragged); the picture stays put.
   // The blur continues the picture's edge pixels (edgeMode duplicate), so a widget at the screen's edge has no dark rim.
   return <span className="desktop-widget-backdrop" aria-hidden="true" data-monitor={chosen.index}>
     <svg width="0" height="0"><filter id="widget-backdrop-blur" x="0" y="0" width="100%" height="100%" colorInterpolationFilters="sRGB"><feGaussianBlur stdDeviation={blur} edgeMode="duplicate" /></filter></svg>
-    <i style={{ ...fit(wallpapers.position), backgroundImage: `url("${url}")`, width: area.width / scale, height: area.height / scale, filter: 'url(#widget-backdrop-blur)',
+    <i style={{ ...fit(wallpapers.position), backgroundColor: wallpapers.color, backgroundImage: url ? `url("${url}")` : undefined, width: area.width / scale, height: area.height / scale, filter: 'url(#widget-backdrop-blur)',
       left: `calc(${(area.x - origin.x) / scale}px - var(--widget-left, 0px))`, top: `calc(${(area.y - origin.y) / scale}px - var(--widget-top, 0px))` }} />
   </span>;
 }

@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { useLanguage } from '../i18n';
+import { useLanguage, t } from '../i18n';
 import { readVaultPreferences } from '../vaultPreferences';
 import { Icon } from './Icon';
 
 export function StorageSettings({ beforeChange, onBusy }: { beforeChange: () => Promise<void>; onBusy: (busy: boolean) => void }) {
-  const en = useLanguage() === 'en';
+  useLanguage();
   const [path, setPath] = useState(''), [busy, setBusy] = useState(false), [message, setMessage] = useState('');
   const [choice, setChoice] = useState<{ path: string; mode: string } | null>(null);
   useEffect(() => { void invoke<{ path: string; error: string | null }>('vault_status').then(status => {
@@ -29,22 +29,22 @@ export function StorageSettings({ beforeChange, onBusy }: { beforeChange: () => 
     } catch (e) { setMessage(String(e)); setBusy(false); onBusy(false); }
   }
   return <section className="settings-section system-settings" aria-busy={busy}>
-    <h3>{en ? 'Journal vault' : 'Journal-Vault'}</h3>
-    <p className="settings-hint">{en ? 'A folder containing your days, calendar, notes, activities, tags, images and mail data.' : 'Ein Ordner für Tage, Kalender, Notizen, Aktivitäten, Tags, Bilder und Mail-Daten.'}</p>
-    <label className="system-path">{en ? 'Current folder' : 'Aktueller Ordner'}<output data-vault-path>{path || '…'}</output></label>
+    <h3>{t("Journal-Vault")}</h3>
+    <p className="settings-hint">{t("Ein Ordner für Tage, Kalender, Notizen, Aktivitäten, Tags, Bilder und Mail-Daten.")}</p>
+    <label className="system-path">{t("Aktueller Ordner")}<output data-vault-path>{path || '…'}</output></label>
     <div className="system-actions">
-      <button type="button" disabled={busy} data-vault-open onClick={() => void choose('open')}><Icon name="journal" />{en ? 'Open vault' : 'Vault öffnen'}</button>
-      <button type="button" disabled={busy} data-vault-copy onClick={() => void choose('copy')}><Icon name="copy" />{en ? 'Copy current data to…' : 'Aktuellen Stand übernehmen…'}</button>
-      <button type="button" disabled={busy} data-vault-empty onClick={() => void choose('empty')}>{en ? 'Create empty vault' : 'Leeren Vault anlegen'}</button>
+      <button type="button" disabled={busy} data-vault-open onClick={() => void choose('open')}><Icon name="journal" />{t("Vault öffnen")}</button>
+      <button type="button" disabled={busy} data-vault-copy onClick={() => void choose('copy')}><Icon name="copy" />{t("Aktuellen Stand übernehmen…")}</button>
+      <button type="button" disabled={busy} data-vault-empty onClick={() => void choose('empty')}>{t("Leeren Vault anlegen")}</button>
     </div>
-    <p className="settings-hint">{en ? 'Use an empty folder for a new vault. Switching restarts Journal; the previous folder is kept. Design, Google Drive login and the mail recognition model stay on this device. Mail credentials copied to another device must be entered again.' : 'Für einen neuen Vault einen leeren Ordner wählen. Beim Wechsel startet Journal neu; der bisherige Ordner bleibt erhalten. Design, Google-Drive-Anmeldung und das Modell zur Mail-Erkennung bleiben auf diesem Gerät. Mail-Zugangsdaten müssen auf einem anderen Gerät erneut eingegeben werden.'}</p>
-    {choice && <div className="system-confirm" role="group" aria-label={en ? 'Confirm vault change' : 'Vault-Wechsel bestätigen'}>
-      <strong>{choice.mode === 'copy' ? (en ? 'Copy data and switch?' : 'Daten übernehmen und wechseln?') : (en ? 'Switch vault?' : 'Vault wechseln?')}</strong>
+    <p className="settings-hint">{t("Für einen neuen Vault einen leeren Ordner wählen. Beim Wechsel startet Journal neu; der bisherige Ordner bleibt erhalten. Design, Google-Drive-Anmeldung und das Modell zur Mail-Erkennung bleiben auf diesem Gerät. Mail-Zugangsdaten müssen auf einem anderen Gerät erneut eingegeben werden.")}</p>
+    {choice && <div className="system-confirm" role="group" aria-label={t("Vault-Wechsel bestätigen")}>
+      <strong>{choice.mode === 'copy' ? (t("Daten übernehmen und wechseln?")) : (t("Vault wechseln?"))}</strong>
       <p className="system-target">{choice.path}</p>
-      <div className="system-actions"><button type="button" disabled={busy} data-vault-confirm onClick={() => void activate()}>{en ? 'Save and restart' : 'Speichern und neu starten'}</button>
-        <button type="button" disabled={busy} onClick={() => setChoice(null)}>{en ? 'Cancel' : 'Abbrechen'}</button></div>
+      <div className="system-actions"><button type="button" disabled={busy} data-vault-confirm onClick={() => void activate()}>{t("Speichern und neu starten")}</button>
+        <button type="button" disabled={busy} onClick={() => setChoice(null)}>{t("Abbrechen")}</button></div>
     </div>}
-    {busy && <p role="status">{en ? 'Preparing vault…' : 'Vault wird vorbereitet…'}</p>}
+    {busy && <p role="status">{t("Vault wird vorbereitet…")}</p>}
     {message && <p role="alert" className="system-message">{message}</p>}
   </section>;
 }

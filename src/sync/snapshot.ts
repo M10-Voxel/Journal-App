@@ -1,3 +1,4 @@
+import { t } from '../i18n.ts';
 import type { Json } from './merge';
 // Explicitly shared presentation settings. Window layouts, widget instances,
 // placements, autostart and future device settings must never enter the cloud.
@@ -7,7 +8,7 @@ export function syncPreferences(value: Json): Record<string,Json> {
   return Object.fromEntries(Object.entries(value).filter(([key]) => preferenceKeys.has(key)));
 }
 export function upgradeSnapshot(value:Json):Record<string,Json>{
-  if(!value||typeof value!=='object'||Array.isArray(value)||![11,12,13].includes(value.schema as number))throw new Error('Unbekanntes Synchronisierungsformat. Beide Geräte aktualisieren.');
+  if(!value||typeof value!=='object'||Array.isArray(value)||![11,12,13].includes(value.schema as number))throw new Error(t("Unbekanntes Synchronisierungsformat. Beide Geräte aktualisieren."));
   const snapshot = {...value,schema:13,settings:value.settings??{},images:value.images??{},mailAccounts:value.mailAccounts??{}};
   // Older clients omit these columns. Give base/local/cloud the same shape
   // before merging, so an omitted optional icon is not interpreted as deletion.
