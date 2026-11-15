@@ -1,5 +1,6 @@
 // Inline Markdown for entry texts: **bold**, *italic* (also _italic_), ***both***, ~~strike~~, ==highlight==,
-// [text]{color} with theme-aware semantic colours, and \-escapes. No code, links or formulas.
+// [text]{color} with theme-aware semantic colours, [text](link) and bare https:// or www. links, and \-escapes.
+// `inline code` (its content is not formatted). No formulas.
 // Every character of the source is kept in the tree: formatted nodes carry their `open`/`close` markers, escapes are
 // `mark` nodes. The editor uses this to hide markers unless the cursor is in or at the formatted part.
 
@@ -8,12 +9,34 @@ export const textColors = [
   { name: 'cyan', value: 'var(--md-cyan, #c2dce9)' }, { name: 'blau', value: 'var(--md-blue, #569eff)' }, { name: 'lila', value: 'var(--md-purple, #c69bff)' }, { name: 'pink', value: 'var(--md-pink, #ad4075)' },
 ] as const;
 export type TextColor = typeof textColors[number]['name'];
-export type Style = 'bold' | 'italic' | 'strike' | 'highlight';
+export type Style = 'bold' | 'italic' | 'strike' | 'highlight' | 'code';
 export type MdNode =
   | { type: 'text'; text: string }
   | { type: 'mark'; text: string }
   | { type: 'style'; styles: Style[]; open: string; close: string; children: MdNode[] }
-  | { type: 'color'; color: TextColor; open: string; close: string; children: MdNode[] };
+  | { type: 'color'; color: TextColor; open: string; close: string; children: MdNode[] }
+  | { type: 'link'; href: string; open: string; close: string; children: MdNode[] };
+
+/** The address a link opens, or null where the text is no web address. Only https is opened (http is upgraded). */
+export function linkHref(target: string): string | null {
+  const text = target.trim();
+  if (!text || /\s/u.test(text)) return null;
+  if (/^https?:\/\//iu.test(text)) { try { const url = new URL(text.replace(/^http:/iu, 'https:')); return url.hostname.includes('.') && !url.username && !url.password ? url.href : null; } catch { return null; } }
+  if (/^[a-z][a-z0-9+.-]*:/iu.test(text) && !/^[\w-]+(\.[\w-]+)+:\d/u.test(text)) return null;
+  return /^[\p{L}\p{N}-]+(\.[\p{L}\p{N}-]+)+([/?#:].*)?$/u.test(text) ? linkHref(`https://${text}`) : null;
+}
+const linkTarget = /\]\(([^\s()]*(?:\([^\s()]*\)[^\s()]*)*)\)/uy;
+const inlineCode = /`([^`\n]+)`/uy;
+const bareLink = /(?:https?:\/\/|www\.)[^\s<>]+/uy;
+/** The closing `]` that matches the `[` at `from`, or -1. */
+function bracketEnd(text: string, from: number): number {
+  for (let index = from + 1, depth = 1; index < text.length; index++) {
+    if (text[index] === '\\') index += 1;
+    else if (text[index] === '[') depth += 1;
+    else if (text[index] === ']' && --depth === 0) return index;
+  }
+  return -1;
+}
 
 const delimiters: { marker: string; styles: Style[] }[] = [
   { marker: '***', styles: ['bold', 'italic'] }, { marker: '**', styles: ['bold'] }, { marker: '__', styles: ['bold'] },
@@ -38,7 +61,7 @@ function findClose(text: string, marker: string, from: number): number {
   return -1;
 }
 
-export function parseInline(text: string): MdNode[] {
+export function parseInline(text: string, links = true): MdNode[] {
   const nodes: MdNode[] = [];
   let plain = '';
   const flush = () => { if (plain) { nodes.push({ type: 'text', text: plain }); plain = ''; } };
@@ -57,10 +80,37 @@ export function parseInline(text: string): MdNode[] {
       const end = colorEnd.exec(text);
       if (end) {
         flush();
-        nodes.push({ type: 'color', color: end[1] as TextColor, open: '[', close: end[0], children: parseInline(text.slice(index + 1, end.index)) });
+        nodes.push({ type: 'color', color: end[1] as TextColor, open: '[', close: end[0], children: parseInline(text.slice(index + 1, end.index), links) });
         index = end.index + end[0].length;
         continue;
       }
+      const close = links ? bracketEnd(text, index) : -1;
+      if (close > index + 1) {
+        linkTarget.lastIndex = close;
+        const target = linkTarget.exec(text), href = target && linkHref(target[1]);
+        if (target && href) {
+          flush();
+          nodes.push({ type: 'link', href, open: '[', close: target[0], children: parseInline(text.slice(index + 1, close), false) });
+          index = close + target[0].length;
+          continue;
+        }
+      }
+    }
+    if (links && (char === 'h' || char === 'w') && !word.test(text[index - 1] ?? '')) {
+      bareLink.lastIndex = index;
+      const found = bareLink.exec(text);
+      if (found) {
+        // Closing punctuation after the address belongs to the sentence (and a closing bracket only if one opened inside).
+        let address = found[0];
+        while (/[.,;:!?'"*_~=\])}]$/u.test(address) && !(address.endsWith(')') && address.split('(').length === address.split(')').length)) address = address.slice(0, -1);
+        const href = linkHref(address);
+        if (href) { flush(); nodes.push({ type: 'link', href, open: '', close: '', children: [{ type: 'text', text: address }] }); index += address.length; continue; }
+      }
+    }
+    if (char === '`') {
+      inlineCode.lastIndex = index;
+      const code = inlineCode.exec(text);
+      if (code) { flush(); nodes.push({ type: 'style', styles: ['code'], open: '`', close: '`', children: [{ type: 'text', text: code[1] }] }); index += code[0].length; continue; }
     }
     for (const { marker, styles } of delimiters) {
       if (!text.startsWith(marker, index)) continue;
@@ -98,12 +148,12 @@ const runAfter = (text: string, index: number, char: string) => { let count = 0;
  * two marker characters; italic when both runs are odd (`*x*` or `***x***`), so italic and bold can be combined.
  * A selection that includes the markers is unwrapped as well.
  */
-const styleMarkers: Record<Style, string> = { bold: '**', italic: '*', strike: '~~', highlight: '==' };
+const styleMarkers: Record<Style, string> = { bold: '**', italic: '*', strike: '~~', highlight: '==', code: '`' };
 function surrounded(text: string, start: number, end: number, style: Style): boolean {
   const char = styleMarkers[style][0];
   const before = runBefore(text, start, char);
   const after = runAfter(text, end, char);
-  return style === 'italic' ? before % 2 === 1 && after % 2 === 1 : before >= 2 && after >= 2;
+  return style === 'italic' || style === 'code' ? before % 2 === 1 && after % 2 === 1 : before >= 2 && after >= 2;
 }
 /** Whether the selection already carries `style` (markers around it or included at its ends). */
 export function hasStyle(text: string, start: number, end: number, style: Style): boolean {
@@ -153,8 +203,8 @@ export function applyEdit(text: string, edit: Edit): string {
   return text.slice(0, edit.from) + edit.insert + text.slice(edit.to);
 }
 
-/** A formatted part with absolute offsets: markers are `from`–`from+open` and `to-close`–`to`. */
-export interface MdSpan { from: number; to: number; open: number; close: number; styles: Style[]; color: TextColor | null }
+/** A formatted part with absolute offsets: markers are `from`–`from+open` and `to-close`–`to`. `link`: the address it opens. */
+export interface MdSpan { from: number; to: number; open: number; close: number; styles: Style[]; color: TextColor | null; link: string | null }
 
 /** All formatted parts and escapes of `text`, outermost first. Escapes are spans with `open` 1 and no closing marker. */
 export function markdownSpans(text: string): MdSpan[] {
@@ -163,8 +213,8 @@ export function markdownSpans(text: string): MdSpan[] {
     let position = start;
     for (const node of nodes) {
       if (node.type === 'text') { position += node.text.length; continue; }
-      if (node.type === 'mark') { spans.push({ from: position, to: position + 2, open: 1, close: 0, styles: [], color: null }); position += node.text.length; continue; }
-      const span: MdSpan = { from: position, to: 0, open: node.open.length, close: node.close.length, styles: node.type === 'style' ? node.styles : [], color: node.type === 'color' ? node.color : null };
+      if (node.type === 'mark') { spans.push({ from: position, to: position + 2, open: 1, close: 0, styles: [], color: null, link: null }); position += node.text.length; continue; }
+      const span: MdSpan = { from: position, to: 0, open: node.open.length, close: node.close.length, styles: node.type === 'style' ? node.styles : [], color: node.type === 'color' ? node.color : null, link: node.type === 'link' ? node.href : null };
       spans.push(span);
       span.to = walk(node.children, position + node.open.length) + node.close.length;
       position = span.to;

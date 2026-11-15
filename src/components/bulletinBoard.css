@@ -250,6 +250,15 @@
 .cm-line.md-code-top { border-radius: 6px 6px 0 0; padding-top: 4px !important; }
 .cm-line.md-code-bottom { border-radius: 0 0 6px 6px; padding-bottom: 4px !important; min-height: 6px; }
 .cm-line.md-code-line.is-editing { color: #f3efe3; }
+/* Quotes: a bar at the left, the text a little softer. */
+.cm-line.md-quote { padding-left: calc(var(--indent, 0) * 18px + 12px) !important; border-left: 3px solid color-mix(in srgb, currentColor 32%, transparent); color: color-mix(in srgb, currentColor 78%, transparent); font-style: italic; }
+.cm-line.md-quote.is-source { padding-left: calc(var(--indent, 0) * 18px + 9px) !important; }
+:root[data-pixel] .cm-line.md-quote { border-left-width: 4px; }
+.cm-line.md-code-line { position: relative; }
+/* Shown, a block has no fence lines: they collapse, and the language and copy button sit in the top right corner. */
+.cm-line.md-code-line.md-code-fence { height: 0; min-height: 0; overflow: hidden; padding: 0 !important; background: none; font-size: 0 !important; line-height: 0 !important; }
+.md-code-head:not(.is-compact) { position: absolute; top: 3px; right: 5px; z-index: 1; width: auto; gap: 8px; opacity: .55; transition: opacity 140ms ease; }
+.cm-line.md-code-line:hover .md-code-head:not(.is-compact), .md-code-head:not(.is-compact):focus-within { opacity: 1; }
 .md-code-head { display: inline-flex; align-items: center; justify-content: space-between; width: 100%; gap: 8px; }
 .md-code-head.is-compact { width: auto; float: right; }
 .md-code-lang { color: #a9a598; font: 10.5px var(--mono); text-transform: lowercase; }

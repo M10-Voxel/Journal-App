@@ -1,21 +1,27 @@
-import { StateEffect, StateField } from '@codemirror/state';
+import { Facet, StateEffect, StateField } from '@codemirror/state';
 import type { EditorState, Extension, Range } from '@codemirror/state';
 import { Decoration, EditorView, WidgetType, keymap } from '@codemirror/view';
 import type { DecorationSet } from '@codemirror/view';
+import { invoke } from '@tauri-apps/api/core';
 import { parseInline } from '../markdown';
 import type { MdNode } from '../markdown';
 import { t } from '../i18n';
 
-// Block Markdown for board notes only (entries stay one-line-ish): # headings, - bullets, - [ ] checkboxes, 1. lists,
-// ``` code blocks with a copy button, and | tables |. Like the inline formatting, it is a live preview: markers show
+// Block Markdown for board notes only (entries stay one-line-ish): # headings, - bullets, - [ ] checkboxes, 1. lists, > quotes,
+// ``` code blocks (the fence lines show only at the cursor; a copy button sits in the corner), and | tables |. Like the inline formatting, it is a live preview: markers show
 // where the cursor is, rendered everywhere else. A table off the cursor is drawn as a real table – a click into a cell
 // edits it there, + at its right and bottom edge (on hover) adds a column or a row; Enter at a row's end adds a row,
 // Tab moves between cells. Lists go on with Enter (an empty item ends them). Tab / Shift+Tab indent any line (or all
 // selected ones) by a level: two spaces, a tab counts as one. Indented lines keep their level when they wrap.
 
+/** Opens a web address in the browser. */
+export const openLink = (href: string) => { void invoke('board_open_link', { url: href }).catch(() => {}); };
+/** Whether the checkboxes of a note that is only shown can be ticked. */
+export const checkable = Facet.define<boolean, boolean>({ combine: values => values.some(Boolean) });
 const heading = /^(#{1,3}) /;
 const task = /^(\s*)([-*+]) \[( |x|X)\] /;
 const bullet = /^(\s*)([-*+]) /;
+const quote = /^(\s*)(>) /;
 const ordered = /^(\s*)(\d+)([.)]) /;
 const indented = /^([ 	]+)\S/;
 /** The level of leading white space: two spaces or one tab each. */
@@ -59,9 +65,10 @@ const touches = (state: EditorState, from: number, to: number) => (focusedState.
 function inlineDom(nodes: MdNode[], parent: HTMLElement) {
   for (const node of nodes) {
     if (node.type === 'text') parent.append(node.text);
-    else if (node.type === 'style' || node.type === 'color') {
+    else if (node.type === 'style' || node.type === 'color' || node.type === 'link') {
       const span = document.createElement('span');
-      span.className = node.type === 'style' ? node.styles.map(style => `md-${style}`).join(' ') : 'md-color';
+      span.className = node.type === 'style' ? node.styles.map(style => `md-${style}`).join(' ') : node.type === 'link' ? 'md-link' : 'md-color';
+      if (node.type === 'link') { span.dataset.href = node.href; span.title = node.href; }
       if (node.type === 'color') span.style.setProperty('--md-color', `var(--md-${({ rot: 'red', orange: 'orange', gelb: 'yellow', 'grün': 'green', cyan: 'cyan', blau: 'blue', lila: 'purple', pink: 'pink' } as Record<string, string>)[node.color]})`);
       inlineDom(node.children, span); parent.append(span);
     }
@@ -86,7 +93,10 @@ class TableWidget extends WidgetType {
         const element = document.createElement(index === 0 ? 'th' : 'td');
         inlineDom(parseInline(cell.trim()), element);
         const position = at + (cell.length - cell.trimStart().length), end = position + cell.trim().length;
-        element.addEventListener('mousedown', event => { event.preventDefault(); view.focus(); view.dispatch({ selection: { anchor: end, head: end } }); });
+        element.addEventListener('mousedown', event => {
+          const link = event.target instanceof Element ? event.target.closest<HTMLElement>('.md-link[data-href]') : null;
+          if (link && (event.ctrlKey || event.metaKey || view.state.readOnly)) { event.preventDefault(); openLink(link.dataset.href!); return; }
+          event.preventDefault(); view.focus(); view.dispatch({ selection: { anchor: end, head: end } }); });
         row.append(element); at += cell.length + 1;
       }
       table.append(row);
@@ -130,7 +140,7 @@ class Checkbox extends WidgetType {
   toDOM(view: EditorView) {
     const box = document.createElement('span'); box.className = `md-checkbox${this.checked ? ' is-checked' : ''}`;
     box.setAttribute('role', 'checkbox'); box.setAttribute('aria-checked', String(this.checked));
-    box.addEventListener('mousedown', event => { event.preventDefault(); event.stopPropagation(); if (view.state.readOnly) return; view.dispatch({ changes: { from: this.at, to: this.at + 1, insert: this.checked ? ' ' : 'x' }, userEvent: 'input.toggle' }); });
+    box.addEventListener('mousedown', event => { event.preventDefault(); event.stopPropagation(); if (view.state.readOnly && !view.state.facet(checkable)) return; view.dispatch({ changes: { from: this.at, to: this.at + 1, insert: this.checked ? ' ' : 'x' }, userEvent: 'input.toggle' }); });
     return box;
   }
   ignoreEvent() { return true; }
@@ -149,16 +159,19 @@ function decorate(state: EditorState): DecorationSet {
       continue;
     }
     const code = doc.sliceString(doc.line(block.fromLine).to + 1, doc.line(block.toLine).from - 1);
-    for (let number = block.fromLine; number <= block.toLine; number++) {
-      const line = doc.line(number);
-      const edge = number === block.fromLine ? ' md-code-top' : number === block.toLine ? ' md-code-bottom' : '';
-      ranges.push(Decoration.line({ class: `md-code-line${edge}${editing ? ' is-editing' : ''}` }).range(line.from));
-    }
     const top = doc.line(block.fromLine), bottom = doc.line(block.toLine);
+    // Shown, a block is only its code: the fence lines collapse and the language and copy button sit in the corner.
+    const first = editing || block.toLine - block.fromLine < 2 ? block.fromLine : block.fromLine + 1, last = editing || block.toLine - block.fromLine < 2 ? block.toLine : block.toLine - 1;
+    for (let number = block.fromLine; number <= block.toLine; number++) {
+      const line = doc.line(number), fence = !editing && block.toLine - block.fromLine >= 2 && (number === block.fromLine || number === block.toLine);
+      const edge = number === first ? ' md-code-top' : number === last ? ' md-code-bottom' : '';
+      ranges.push(Decoration.line({ class: `md-code-line${edge}${number === first && number === last ? ' md-code-bottom' : ''}${editing ? ' is-editing' : ''}${fence ? ' md-code-fence' : ''}` }).range(line.from));
+    }
     if (editing) ranges.push(Decoration.widget({ widget: new CodeHeader(block.lang ?? '', code, true), side: 1 }).range(top.to));
-    else {
-      ranges.push(Decoration.replace({ widget: new CodeHeader(block.lang ?? '', code, false) }).range(top.from, top.to));
+    else if (block.toLine - block.fromLine >= 2) {
+      if (top.to > top.from) ranges.push(Decoration.replace({}).range(top.from, top.to));
       if (bottom.to > bottom.from) ranges.push(Decoration.replace({}).range(bottom.from, bottom.to));
+      ranges.push(Decoration.widget({ widget: new CodeHeader(block.lang ?? '', code, false), side: -1 }).range(doc.line(first).from));
     }
   }
   for (let number = 1; number <= doc.lines; number++) {
@@ -175,6 +188,11 @@ function decorate(state: EditorState): DecorationSet {
       ranges.push(Decoration.line({ class: `md-li md-task${checked ? ' is-done' : ''}${editing ? ' is-source' : ''}`, attributes: { style: `--indent: ${indentLevel(match[1])}` } }).range(line.from));
       // Rendered, the white space is the line's indent (so wrapped lines line up); at the cursor it shows as typed.
       if (!editing) ranges.push(Decoration.replace({ widget: new Checkbox(checked, start + 3) }).range(line.from, end));
+      else ranges.push(Decoration.mark({ class: 'md-mark' }).range(start, end));
+    } else if ((match = quote.exec(text))) {
+      const start = line.from + match[1].length, end = line.from + match[0].length, editing = touches(state, line.from, end - 1);
+      ranges.push(Decoration.line({ class: `md-li md-quote${editing ? ' is-source' : ''}`, attributes: { style: `--indent: ${indentLevel(match[1])}` } }).range(line.from));
+      if (!editing) ranges.push(Decoration.replace({}).range(line.from, end));
       else ranges.push(Decoration.mark({ class: 'md-mark' }).range(start, end));
     } else if ((match = bullet.exec(text))) {
       const start = line.from + match[1].length, end = line.from + match[0].length;
@@ -246,10 +264,10 @@ export function tableAt(state: EditorState) {
 }
 
 /** Inserting a block from the menu: at the start of the current line (a table or code block on lines of their own). */
-export type BlockKind = 'h1' | 'h2' | 'h3' | 'bullets' | 'tasks' | 'numbers' | 'code' | 'table';
+export type BlockKind = 'h1' | 'h2' | 'h3' | 'bullets' | 'tasks' | 'numbers' | 'quote' | 'code' | 'table';
 export function insertBlock(view: EditorView, kind: BlockKind) {
   const state = view.state, { from, to } = state.selection.main, line = state.doc.lineAt(from);
-  const prefixes: Partial<Record<BlockKind, string>> = { h1: '# ', h2: '## ', h3: '### ', bullets: '- ', tasks: '- [ ] ', numbers: '1. ' };
+  const prefixes: Partial<Record<BlockKind, string>> = { h1: '# ', h2: '## ', h3: '### ', bullets: '- ', tasks: '- [ ] ', numbers: '1. ', quote: '> ' };
   const prefix = prefixes[kind];
   if (prefix) {
     // On every selected line; a line that has it already loses it, other markers of a line are replaced.
@@ -257,7 +275,7 @@ export function insertBlock(view: EditorView, kind: BlockKind) {
     let toggled = true;
     for (let number = line.number; number <= last.number; number++) if (!state.doc.line(number).text.startsWith(prefix)) toggled = false;
     for (let number = line.number; number <= last.number; number++) {
-      const current = state.doc.line(number), existing = /^(#{1,3} |\s*[-*+] \[[ xX]\] |\s*[-*+] |\s*\d+[.)] )/.exec(current.text)?.[0] ?? '';
+      const current = state.doc.line(number), existing = /^(#{1,3} |\s*[-*+] \[[ xX]\] |\s*[-*+] |\s*> |\s*\d+[.)] )/.exec(current.text)?.[0] ?? '';
       changes.push({ from: current.from, to: current.from + existing.length, insert: toggled ? '' : prefix });
     }
     view.dispatch({ changes, userEvent: 'input.format' });
@@ -278,7 +296,7 @@ function enter(view: EditorView): boolean {
   const table = tableAt(state);
   if (table && head === line.to) { tableEdit(view, table.block.from, 'add-row', 0, line.number + 1); return true; }
   if (findBlocks(state).some(block => block.kind === 'code' && head > block.from && head <= block.to)) return false;
-  const match = task.exec(line.text) ?? bullet.exec(line.text) ?? ordered.exec(line.text);
+  const match = task.exec(line.text) ?? bullet.exec(line.text) ?? quote.exec(line.text) ?? ordered.exec(line.text);
   if (!match) {
     // An indented paragraph goes on at its level.
     const lead = indented.exec(line.text)?.[1];
@@ -293,7 +311,7 @@ ${lead}` }, selection: { anchor: head + 1 + lead.length }, scrollIntoView: true,
   view.dispatch({ changes: { from: head, insert: `\n${marker}` }, selection: { anchor: head + 1 + marker.length }, scrollIntoView: true, userEvent: 'input' });
   return true;
 }
-function tab(view: EditorView, back: boolean): boolean {
+function tab(view: EditorView, back: boolean, listsOnly = false): boolean {
   const state = view.state, head = state.selection.main.head;
   const table = tableAt(state);
   if (table) {
@@ -312,6 +330,11 @@ function tab(view: EditorView, back: boolean): boolean {
     view.dispatch({ selection: { anchor: start, head: start + text.trim().length } });
     return true;
   }
+  // In a description Tab indents only list items and indented lines; anywhere else it moves on to the next field.
+  if (listsOnly) {
+    const lines = Array.from({ length: state.doc.lineAt(state.selection.main.to).number - state.doc.lineAt(state.selection.main.from).number + 1 }, (_, index) => state.doc.line(state.doc.lineAt(state.selection.main.from).number + index).text);
+    if (!lines.some(text => task.test(text) || bullet.test(text) || ordered.test(text) || indented.test(text))) return false;
+  }
   // Every line of the selection moves a level in or out. Shift+Tab on a line that is not indented leaves the note.
   const { from, to } = state.selection.main, first = state.doc.lineAt(from), last = state.doc.lineAt(to), changes = [];
   for (let number = first.number; number <= last.number; number++) {
@@ -324,9 +347,9 @@ function tab(view: EditorView, back: boolean): boolean {
   return true;
 }
 
-/** `tab: false` leaves Tab to the form around the editor (an entry's description): it moves on to the next field. */
-export const noteBlocks = ({ tab: indents = true }: { tab?: boolean } = {}): Extension => [
+/** `tab: false` leaves Tab to the form around the editor: it moves on to the next field; `'lists'` indents list items only. */
+export const noteBlocks = ({ tab: indents = true }: { tab?: boolean | 'lists' } = {}): Extension => [
   blockField,
   EditorView.focusChangeEffect.of((_, focusing) => focusEffect.of(focusing)),
-  keymap.of([{ key: 'Enter', run: enter }, ...indents ? [{ key: 'Tab', run: (view: EditorView) => tab(view, false), shift: (view: EditorView) => tab(view, true) }] : []]),
+  keymap.of([{ key: 'Enter', run: enter }, ...indents ? [{ key: 'Tab', run: (view: EditorView) => tab(view, false, indents === 'lists'), shift: (view: EditorView) => tab(view, true, indents === 'lists') }] : []]),
 ];

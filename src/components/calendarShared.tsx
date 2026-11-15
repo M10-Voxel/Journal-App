@@ -3,6 +3,7 @@ import type { SpanEntry } from '../calendarSpans';
 import { decodeMailContent } from '../mailContent';
 import { MailContent } from './MailContent';
 import { MarkdownField } from './MarkdownField';
+import type { EntryEdit } from './CalendarComposer';
 import { EntryIcon } from './EntryIcon';
 import { reminderLeadLabel } from './ReminderChoice';
 import { copyCalendarEntry } from '../calendarClipboard';
@@ -83,7 +84,7 @@ export function useNow(): Date {
 export const openInJournal = (date: string, entry?: string) => { void invoke('show_day', { date, entry: entry ?? null }).catch(() => {}); };
 export const OpenInJournal = createContext<(date: string, entry?: string) => void>(openInJournal);
 /** Right-clicking an entry edits it in place (in the sidebar, where the calendar may change the journal). */
-export const EditInCalendar = createContext<{ edit: ((entry: Entry, date: string, element: HTMLElement) => void) | null; editingId: string | null; move?: (entry: Entry, from: string, to: string, time: string | null, end: string | null) => Promise<void>; remove?: (entry: Entry, date: string, others: ScopeOption['others']) => Promise<void> }>({ edit: null, editingId: null });
+export const EditInCalendar = createContext<{ edit: ((entry: Entry, date: string, element: HTMLElement) => void) | null; editingId: string | null; change?: (entry: Entry, date: string, change: EntryEdit) => Promise<void>; move?: (entry: Entry, from: string, to: string, time: string | null, end: string | null) => Promise<void>; remove?: (entry: Entry, date: string, others: ScopeOption['others']) => Promise<void> }>({ edit: null, editingId: null });
 
 export function entrySymbol(entry: Entry): IconName {
   if (entry.done) return 'done';
@@ -120,7 +121,7 @@ export function CalendarItem({ entry, date, variant = 'line', short = false, sty
   const shownDate = night === 'rest' ? shiftDate(date, 1) : date;
   date=(entry as SpanEntry).spanOrigin ?? date;
   const open = useContext(OpenInJournal);
-  const { edit, editingId, remove, move } = useContext(EditInCalendar);
+  const { edit, editingId, remove, move, change } = useContext(EditInCalendar);
   const suppressDragClick = useRef(false);
   const dragCleanup = useRef<(() => void) | null>(null);
   useEffect(() => () => dragCleanup.current?.(), []);
@@ -174,7 +175,10 @@ export function CalendarItem({ entry, date, variant = 'line', short = false, sty
   const mail=decodeMailContent(entry.description);
   const detailTitle=details ? plainText(entry.text) || t("ohne Text") : '';
   const overview=details ? <div className="cal-details-overview">
-    <div className="cal-details-head"><span className="cal-details-kind"><Icon name={entrySymbol(entry)} /></span><strong>{detailTitle}</strong></div>
+    <div className="cal-details-head">{change && entry.kind === 'task'
+      ? <button type="button" className={`cal-details-kind is-toggle${entry.done ? ' is-done' : ''}`} aria-pressed={entry.done} title={entry.done ? t("Als offen markieren") : t("Als erledigt markieren")} aria-label={entry.done ? t("Als offen markieren") : t("Als erledigt markieren")}
+        onClick={() => { change(entry, date, { done: !entry.done, ...!entry.done ? { cancelled: false } : {} }).catch(reason => setError(String(reason))); }}><Icon name={entry.done ? 'check' : entrySymbol(entry)} /></button>
+      : <span className="cal-details-kind"><Icon name={entrySymbol(entry)} /></span>}<strong>{detailTitle}</strong></div>
     <div className="cal-details-meta">
       <span className="cal-details-date"><Icon name="calendar" />{formatShortDate(date)}</span>
       {entry.time && <span className="cal-details-time"><Icon name="clock" />{formatSpan(entry.time,entry.end)}</span>}
@@ -204,7 +208,7 @@ export function CalendarItem({ entry, date, variant = 'line', short = false, sty
     {details && <Popover anchor={noteRef.current} className={`cal-details${mail ? ' has-mail' : ''}`} label={t("Beschreibung")} onClose={() => setDetails(false)}>
       {/* Clicks in here stay here: the entry around it would otherwise open the journal. */}
       <div className="cal-details-body" onClick={event => event.stopPropagation()} onDoubleClick={event => event.stopPropagation()} onContextMenu={event => event.stopPropagation()} style={tag ? { '--tag': tag.color } as CSSProperties : undefined}>
-        {mail ? <MailContent mail={mail} heading={overview} entryTitle={detailTitle}/> : <>{overview}{entry.description && <MarkdownField className="cal-details-text" label={t("Beschreibung")} value={entry.description} />}</>}
+        {mail ? <MailContent mail={mail} heading={overview} entryTitle={detailTitle}/> : <>{overview}{entry.description && <MarkdownField className="cal-details-text" label={t("Beschreibung")} value={entry.description} onCheck={change ? description => { change(entry, date, { description }).catch(reason => setError(String(reason))); } : undefined} />}</>}
         <div className="tag-picker-foot cal-details-actions"><button type="button" onClick={() => copyCalendarEntry(entry)}><Icon name="copy" />{t("Kopieren")}<kbd>{t("Strg")} C</kbd></button><button type="button" onClick={() => {setDetails(false);if(noteRef.current)edit?.(entry,date,noteRef.current);}}><Icon name="pencil" />{t("Bearbeiten")}</button><span className="cal-details-escape"><kbd>Esc</kbd></span><button type="button" onClick={() => { setDetails(false); open(date, entry.id); }}><Icon name="journal" />{t("Im Journal zeigen")}</button></div>
       </div>
     </Popover>}

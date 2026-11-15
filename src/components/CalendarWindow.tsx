@@ -134,7 +134,7 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
   const inGrid = editing?.entry.time && !(editing.entry.end && durationOf({time:editing.entry.time,end:editing.entry.end})>1440) && gridDates.includes(editing.date) ? editing : null;
   const save = async (change: EntryEdit, scope?: ScopeOption) => { if (editing) { await onEdit!(editing.date, editing.entry.id, change, scope); setEditing(null); refocus(); } };
   const remove = async (others: { id: string; date: string }[]) => { if (editing) { await onRemove!(editing.date, editing.entry.id, others); setEditing(null); refocus(); } };
-  const editContext = { move:onMove, remove: onRemove ? (entry:Entry, value:string, others:ScopeOption['others'])=>onRemove(value,entry.id,others) : undefined, edit: onEdit ? (entry: Entry, value: string, element: HTMLElement) => setEditing({ entry, date: value, element }) : null, editingId: editing?.entry.id ?? null };
+  const editContext = { move:onMove, change: onEdit ? (entry:Entry, value:string, change:EntryEdit)=>onEdit(value,entry.id,change) : undefined, remove: onRemove ? (entry:Entry, value:string, others:ScopeOption['others'])=>onRemove(value,entry.id,others) : undefined, edit: onEdit ? (entry: Entry, value: string, element: HTMLElement) => setEditing({ entry, date: value, element }) : null, editingId: editing?.entry.id ?? null };
 
   const setView = (next: CalendarView) => { if (!fixedView) setPrefs(current => ({ ...current, view: next })); };
   // Going somewhere directly shows it in place; stepping slides the next page in from that side.

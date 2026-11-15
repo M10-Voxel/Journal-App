@@ -5,7 +5,7 @@ import type { DecorationSet, ViewUpdate } from '@codemirror/view';
 import { history, historyKeymap } from '@codemirror/commands';
 import { isRevealed, markdownSpans, textColors } from '../markdown';
 import type { TextColor } from '../markdown';
-import { noteBlocks } from './noteBlocks';
+import { checkable, noteBlocks, openLink } from './noteBlocks';
 
 // The editor of an entry: CodeMirror with Obsidian-like live preview. Formatting is always rendered; its markers
 // (`**`, `]{rot}` …) are only shown while the cursor or selection touches that part, and hidden everywhere else.
@@ -24,11 +24,22 @@ function previewDecorations(view: EditorView): DecorationSet {
     const shown = isRevealed(span, selection, focused);
     add(span.from, span.from + span.open, shown ? marker : hidden);
     add(span.to - span.close, span.to, shown ? span.color ? colorMarker(span.color) : marker : hidden);
-    const classes = [...span.styles.map(style => `md-${style}`), ...span.color ? ['md-color'] : []];
-    if (classes.length) add(span.from + span.open, span.to - span.close, Decoration.mark({ class: classes.join(' '), attributes: span.color ? { style: `--md-color: ${colorValue[span.color]}` } : undefined }));
+    const classes = [...span.styles.map(style => `md-${style}`), ...span.color ? ['md-color'] : [], ...span.link ? ['md-link'] : []];
+    const attributes = { ...span.color ? { style: `--md-color: ${colorValue[span.color]}` } : {}, ...span.link ? { 'data-href': span.link, title: span.link } : {} };
+    if (classes.length) add(span.from + span.open, span.to - span.close, Decoration.mark({ class: classes.join(' '), attributes }));
   }
   return Decoration.set(decorations, true);
 }
+
+/** Links open on a click where the text is only shown, and on Ctrl+click where it is edited (a plain click places the cursor). */
+const linkClicks = EditorView.domEventHandlers({
+  mousedown(event, view) {
+    const link = event.target instanceof Element ? event.target.closest<HTMLElement>('.md-link[data-href]') : null;
+    if (!link || event.button !== 0 || !(event.ctrlKey || event.metaKey || view.state.readOnly)) return false;
+    event.preventDefault(); openLink(link.dataset.href!);
+    return true;
+  },
+});
 
 const livePreview = ViewPlugin.fromClass(class {
   decorations: DecorationSet;
@@ -68,11 +79,13 @@ export interface EntryEditor {
   configure(options: { readOnly: boolean; label: string }): void;
 }
 
-export function createEntryEditor({ parent, text, readOnly, label, rich = false, tab = true, fixed = false, placeholder, contentClass = 'entry-text', onChange, onUpdate }: {
+export function createEntryEditor({ parent, text, readOnly, label, rich = false, tab = true, checkboxes = false, fixed = false, placeholder, contentClass = 'entry-text', onChange, onUpdate }: {
   /** Board notes: headings, lists, checkboxes, code blocks and tables as well (noteBlocks.ts). */
   rich?: boolean; parent: HTMLElement; text: string; readOnly: boolean; label: string;
-  /** Whether Tab indents (notes) or moves on to the next field (an entry's description, see MarkdownField). */
-  tab?: boolean;
+  /** Whether Tab indents (notes), moves on to the next field, or does the latter except in lists (a description, see MarkdownField). */
+  tab?: boolean | 'lists';
+  /** Checkboxes (- [ ]) can be ticked although the text is only shown. */
+  checkboxes?: boolean;
   /** Only shown, never edited: it takes no cursor. */
   fixed?: boolean; placeholder?: string;
   /** The class of the content: `entry-text` marks an entry's own text (navigation, entry shortcuts). */
@@ -89,7 +102,7 @@ export function createEntryEditor({ parent, text, readOnly, label, rich = false,
     state: EditorState.create({
       doc: text,
       extensions: [
-        rich ? noteBlocks({ tab }) : [], fixed ? EditorView.editable.of(false) : [], placeholder ? placeholderText(placeholder) : [], history(), keymap.of(historyKeymap), EditorView.lineWrapping, livePreview, theme, settings.of(configuration(readOnly, label)),
+        rich ? noteBlocks({ tab }) : [], checkable.of(checkboxes), linkClicks, fixed ? EditorView.editable.of(false) : [], placeholder ? placeholderText(placeholder) : [], history(), keymap.of(historyKeymap), EditorView.lineWrapping, livePreview, theme, settings.of(configuration(readOnly, label)),
         cspNonce ? EditorView.cspNonce.of(cspNonce) : [],
         EditorView.updateListener.of(update => {
           if (update.docChanged && !update.transactions.every(tr => tr.annotation(external))) onChange(update.state.doc.toString());

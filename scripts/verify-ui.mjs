@@ -1323,10 +1323,16 @@ async function checkDescriptions() {
     await command('Input.insertText', { text:'Erste Zeile' }); await key('Enter', 'Enter'); await command('Input.insertText', { text:'zweite Zeile' });
     assert(await evaluate(`Boolean(${first}.querySelector('.entry-description-box'))`), 'Enter is a new line, the box stays.');
     await pause(200); await screenshot(`description-${name}.png`);
+    // Right-click in the description: the format menu of a note (styles, colours, lists, quote, code); Escape closes only the menu.
+    await evaluate(`${first}.querySelector('.entry-description-field').dispatchEvent(new MouseEvent('contextmenu', { button:2, bubbles:true, cancelable:true, clientX:240, clientY:240 }))`);
+    await until("!!document.querySelector('.format-menu .format-block-quote') && !!document.querySelector('.format-menu .format-code')");
+    await key('Escape');
+    await until("!document.querySelector('.format-menu')");
+    assert(await evaluate(`Boolean(${first}.querySelector('.entry-description-box'))`), 'Escape closes the menu, not the description.');
     await key('Escape');
     await until(`!${first}.querySelector('.entry-description-box') && document.activeElement?.classList.contains('entry-text')`);
     await saveNow(); await until("window.__uiTest.day().entries.find(e => e.id==='10000000-0000-4000-8000-000000000001')?.description==='Erste Zeile\\nzweite Zeile'");
-    assert.equal(await evaluate(`${first}.querySelector('.entry-description').textContent`), 'Erste Zeile\nzweite Zeile');
+    assert.equal(await evaluate(`[...${first}.querySelectorAll('.entry-description .cm-line')].map(line => line.textContent).join('\\n')`), 'Erste Zeile\nzweite Zeile');
     // A click on it edits it; emptied, it is removed.
     await evaluate(`${first}.querySelector('.entry-description').click()`);
     await until(`Boolean(document.activeElement?.closest('.entry-description-field'))`);
@@ -3143,6 +3149,28 @@ try {
     await until("!!document.querySelector('.cal-composer.is-editing')");
     await evaluate("document.querySelector('.cal-composer-remove').click()");
     await until(`!document.querySelector('.cal-composer') && !window.__uiTest.day(window.__uiTest.shift(2)).entries.some(entry=>entry.id==='${made}')`);
+    // The card of a task: its symbol ticks it off, checkboxes of the description can be ticked, links are links and Tab indents.
+    await evaluate("(()=>{const date=window.__uiTest.shift(2),day=window.__uiTest.day(date);day.entries.push({id:'card-task',kind:'task',text:'Karten-Aufgabe',done:false,cancelled:false,priority:false,time:null,reminder:false,plan:null,tag:null,showInJournal:true,description:'- [ ] eins\\n  - [ ] zwei\\n[Link](www.example.com) und https://example.org/x\\n> Zitat mit `Code`\\n```js\\nlet a = 1;\\n```'});day.revision+=1;return window.__uiTest.store(day).then(()=>true);})()");
+    await until("!!document.querySelector('[data-calendar-entry=\"card-task\"]')");
+    await evaluate("document.querySelector('[data-calendar-entry=\"card-task\"]').click()");
+    await until("!!document.querySelector('.cal-details-kind.is-toggle')");
+    await pause(300);
+    assert.equal(await evaluate("document.querySelectorAll('.cal-details-text .md-checkbox').length"),2,'Description checkboxes are drawn');
+    assert.equal(await evaluate("[...document.querySelectorAll('.cal-details-text .md-link')].map(a=>a.dataset.href).join(' ')"),'https://www.example.com/ https://example.org/x','Links are recognised');
+    assert.equal(await evaluate("getComputedStyle(document.querySelectorAll('.cal-details-text .cm-line')[1]).paddingLeft"),'41px','The second level is indented');
+    assert.equal(await evaluate("document.querySelectorAll('.cal-details-text .md-quote').length"),1,'A quote is drawn');
+    assert.equal(await evaluate("document.querySelector('.cal-details-text .md-code')?.textContent"),'Code','Inline code is drawn');
+    assert.equal(await evaluate("document.querySelectorAll('.cal-details-text .md-code-line:not(.md-code-fence)').length"),1,'A code block shows only its code');
+    assert.equal(await evaluate("document.querySelector('.cal-details-text .md-code-fence')?.getBoundingClientRect().height"),0,'The fence lines take no room');
+    await screenshot('calendar-widget-card.png');
+    await evaluate("document.querySelectorAll('.cal-details-text .md-checkbox')[1].dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true}))");
+    await until("window.__uiTest.day(window.__uiTest.shift(2)).entries.find(entry=>entry.id==='card-task').description.includes('  - [x] zwei')");
+    await evaluate("document.querySelector('.cal-details-kind.is-toggle').click()");
+    await until("window.__uiTest.day(window.__uiTest.shift(2)).entries.find(entry=>entry.id==='card-task').done===true");
+    await until("!!document.querySelector('.cal-details-kind.is-toggle.is-done')");
+    await evaluate("document.querySelector('.cal-details-kind.is-toggle').click()");
+    await until("window.__uiTest.day(window.__uiTest.shift(2)).entries.find(entry=>entry.id==='card-task').done===false");
+    await key('Escape');
     // The kinds shown come from the widget's settings (another window: the storage event).
     await evaluate("(()=>{const k='journal.calendar.widget-calendar',p=JSON.parse(localStorage.getItem(k));p.kinds.note=true;localStorage.setItem(k,JSON.stringify(p));window.dispatchEvent(new StorageEvent('storage',{key:k}));})()");
     await pause(100);

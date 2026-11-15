@@ -4,7 +4,7 @@ import { applyEdit, parseInline, plainText, setColor, toggleStyle } from '../src
 
 // Compact notation of the tree: markers in ‹›, styles as b/i/s/h(...), colours as name(...).
 const show = nodes => nodes.map(node => node.type === 'text' ? node.text : node.type === 'mark' ? `‹${node.text}›`
-  : `‹${node.open}›${node.type === 'style' ? node.styles.map(style => style[0]).join('') : node.color}(${show(node.children)})‹${node.close}›`).join('');
+  : `‹${node.open}›${node.type === 'style' ? node.styles.map(style => style[0]).join('') : node.type === 'link' ? 'link' : node.color}(${show(node.children)})‹${node.close}›`).join('');
 const source = nodes => nodes.map(node => node.type === 'text' || node.type === 'mark' ? node.text : node.open + source(node.children) + node.close).join('');
 
 test('parses bold, italic, both, strike and highlight, keeping every character', () => {
@@ -22,7 +22,7 @@ test('parses bold, italic, both, strike and highlight, keeping every character',
   }
 });
 test('leaves things alone that are not formatting', () => {
-  for (const text of ['2 * 3 * 4', 'snake_case_name', '** offen', 'a ** b **', 'kein ~~ende', '5*', '[nur Klammern]', '[x]{magenta}', '`code` bleibt Text', '$x^2$']) {
+  for (const text of ['2 * 3 * 4', 'snake_case_name', '** offen', 'a ** b **', 'kein ~~ende', '5*', '[nur Klammern]', '[x]{magenta}', '`offen', '``', '$x^2$']) {
     const tree = parseInline(text);
     assert.equal(show(tree), text, text);
   }
@@ -82,4 +82,47 @@ test('markers are revealed only for parts the cursor touches, and only while foc
   assert.equal(isRevealed(span, [{ from: 13, to: 13 }], true), false);
   assert.equal(isRevealed(span, [{ from: 0, to: 20 }], true), true, 'A selection over the part.');
   assert.equal(isRevealed(span, [{ from: 8, to: 8 }], false), false, 'Never while not editing.');
+});
+
+test('parses [text](address) and bare addresses as links, keeping every character', () => {
+  const cases = {
+    'siehe [Links](www.youtube.com) hier': 'siehe ‹[›link(Links)‹](www.youtube.com)› hier',
+    '[**fett**](https://example.com/a?b=1)': '‹[›link(‹**›b(fett)‹**›)‹](https://example.com/a?b=1)›',
+    'auf https://example.com/x_y_z. Ende': 'auf ‹›link(https://example.com/x_y_z)‹›. Ende',
+    '(www.example.org)': '(‹›link(www.example.org)‹›)',
+    '[wiki](https://de.wikipedia.org/wiki/A_(B))': '‹[›link(wiki)‹](https://de.wikipedia.org/wiki/A_(B))›',
+  };
+  for (const [text, expected] of Object.entries(cases)) {
+    const tree = parseInline(text);
+    assert.equal(show(tree), expected, text);
+    assert.equal(source(tree), text, `${text} must keep every character`);
+  }
+  assert.equal(plainText('siehe [Links](www.youtube.com)'), 'siehe Links');
+});
+test('only web addresses are links', async () => {
+  const { linkHref } = await import('../src/markdown.ts');
+  for (const text of ['[x](javascript:alert(1))', '[x](mailto:a@b.de)', '[x](file:///c:/a)', '[x]()', '[x](kein link)', 'ohne http://localhost', '[x](intern)', 'wwwx.com']) {
+    assert.equal(show(parseInline(text)), text, text);
+  }
+  assert.equal(linkHref('www.youtube.com'), 'https://www.youtube.com/');
+  assert.equal(linkHref('youtube.com/watch?v=1'), 'https://youtube.com/watch?v=1');
+  assert.equal(linkHref('http://example.com'), 'https://example.com/', 'http is upgraded: only https is opened');
+  assert.equal(linkHref('ftp://example.com'), null);
+  assert.equal(linkHref('https://user:pw@example.com'), null);
+});
+test('link spans report the address and their markers', async () => {
+  const { markdownSpans } = await import('../src/markdown.ts');
+  const text = 'a [b](c.de) https://x.de';
+  const spans = markdownSpans(text);
+  assert.deepEqual(spans.map(span => [text.slice(span.from, span.to), span.open, span.close, span.link]), [['[b](c.de)', 1, 7, 'https://c.de/'], ['https://x.de', 0, 0, 'https://x.de/']]);
+});
+
+test('inline code keeps its content unformatted', async () => {
+  const { toggleStyle: toggle, applyEdit: apply, hasStyle } = await import('../src/markdown.ts');
+  assert.equal(show(parseInline('ein `**kein fett** [x](a.de)` hier')), 'ein ‹`›c(**kein fett** [x](a.de))‹`› hier');
+  assert.equal(plainText('ein `code` hier'), 'ein code hier');
+  assert.equal(show(parseInline('**fett `code`**')), '‹**›b(fett ‹`›c(code)‹`›)‹**›');
+  assert.equal(apply('ein Tag', toggle('ein Tag', 4, 7, 'code')), 'ein `Tag`');
+  assert.equal(apply('ein `Tag`', toggle('ein `Tag`', 5, 8, 'code')), 'ein Tag');
+  assert.equal(hasStyle('ein `Tag`', 5, 8, 'code'), true);
 });

@@ -23,7 +23,7 @@ Ein Klick auf ein Datum im Kalender öffnet den Journaltag und schließt die ge�
 - Der [Notizblock](notebook.md) verwaltet Zettel in Ordnern. Die [Pinnwand](bulletin-board.md) zeigt Zettel, Bilder und Links am jeweiligen Tag. Beide verwenden dieselben Notizen.
 - Aktivitäten besitzen Checklisten und optional Zeiterfassung. Tagesbewertungen und Zeitraum-Notizen ergänzen Tag, Woche, Monat, Quartal und Jahr. Die Übersichten zeigen Häufigkeit beziehungsweise erfasste Zeit; ein Tag im Diagramm liefert Details.
 - Die Suche (`Strg+F`) findet Journalinhalte und Notizen. Tags und Eintragstypen lassen sich über die angebotenen Filter eingrenzen.
-- In Journal-Einträgen stehen Inline-Markdown und Textfarben zur Verfügung. Zettel bieten zusätzlich Überschriften, Listen, Checklisten, Tabellen und Codeblöcke.
+- In Journal-Einträgen stehen Inline-Markdown (auch `Code`), Textfarben und Links (`[Text](www.beispiel.de)` oder eine direkt getippte Adresse) zur Verfügung. Ein Link öffnet sich mit Strg+Klick, in angezeigtem Text mit einem Klick; geöffnet werden nur https-Adressen. Zettel bieten zusätzlich Überschriften, Listen, Checklisten, Zitate (`> `), Tabellen und Codeblöcke (angezeigt ohne die ```-Zeilen). In der Beschreibung eines Eintrags rückt Tab Listenpunkte ein (Umschalt+Tab zurück); in der Kalender-Karte lassen sich Checklisten abhaken, und das Symbol einer Aufgabe hakt sie ab. Beschreibungen werden auch im Journal mit Markdown angezeigt; ein Rechtsklick öffnet dort wie auf einem Zettel das Format-Menü (Strg+E: Code).
 
 ## Darstellung und Bedienung
 

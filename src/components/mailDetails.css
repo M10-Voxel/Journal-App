@@ -71,3 +71,9 @@
   .mail-content-head button.mail-content-remote { justify-self:start; max-width:100%; }
   .mail-content-subject-row.is-secondary { grid-template-columns:minmax(0,1fr); }
 }
+/* The kind symbol of a task in the card ticks it off (and back). */
+button.cal-details-kind.is-toggle { border: 0; padding: 0; cursor: pointer; transition: background-color 140ms ease, transform 160ms var(--spring, ease); }
+button.cal-details-kind.is-toggle:hover { background: color-mix(in srgb, var(--tag, var(--accent)) 26%, transparent); transform: scale(1.06); }
+button.cal-details-kind.is-toggle:active { transform: scale(.94); }
+button.cal-details-kind.is-toggle.is-done { background: var(--tag, var(--accent)); color: var(--on-accent, var(--background)); }
+button.cal-details-kind.is-toggle:focus-visible { outline: 2px solid var(--tag, var(--accent)); outline-offset: 2px; }

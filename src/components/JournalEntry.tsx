@@ -426,7 +426,13 @@ export const JournalEntry = memo(function JournalEntry({ layout, entry, day, tag
       }} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) closeDescription(false); }}>
       <MarkdownField className="entry-description-field" label={t("Beschreibung von {0}", entry.text || t("ohne Text"))} placeholder={t("Beschreibung hinzufügen …")} value={entry.description ?? ''} onChange={text => onChange(entry.id, { description: text })} />
     </div>
-      : description && <p className={`entry-description${canDescribe ? ' is-editable' : ''}`} title={canDescribe ? `${description}\n\n${t("Klicken zum Bearbeiten · Alt B")}` : description} onClick={() => { if (canDescribe && !window.getSelection()?.toString()) openDescription(); }}>{description}</p>}
+      : description && <div className={`entry-description${canDescribe ? ' is-editable' : ''}`} title={canDescribe ? `${description}
+
+${t("Klicken zum Bearbeiten · Alt B")}` : description}
+        onClick={event => { if (canDescribe && !window.getSelection()?.toString() && !(event.target as Element).closest('.md-link, .md-checkbox')) openDescription(); }}>
+        {/* Shown with its Markdown (the first lines); its checkboxes can be ticked and its links opened without editing. */}
+        <MarkdownField label={t("Beschreibung von {0}", entry.text || t("ohne Text"))} value={entry.description ?? ''} onCheck={canDescribe ? text => onChange(entry.id, { description: text }) : undefined} />
+      </div>}
     {scopeAsk && !fromSatellite && scopeChoice()}
     {choosingIcon && <IconPicker anchor={triggerRef.current} value={entry.icon} color={tag?.color} onPick={pickIcon}
       onClose={() => { setChoosingIcon(false); const selection = restoreSelection.current; if (selection) { restoreSelection.current = null; const text = rootRef.current?.querySelector<TextField>('.entry-text'); text?.focus({ preventScroll: true }); text?.setSelectionRange(selection.start, selection.end, selection.direction); } }} />}

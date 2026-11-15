@@ -1469,5 +1469,8 @@ const english: Record<string, string> = {
   "Journal konnte nicht gestartet werden.": "Journal could not be started."
   ,"Popups im App-Stil": "Popups in the app's style"
   ,"Menüs, Planer und Auswahlfenster behalten das Design der App; alles andere bleibt durchsichtig.": "Menus, planner and pickers keep the app's design; everything else stays transparent."
+  ,"Als offen markieren": "Mark as open"
+  ,"Code · Strg E": "Code · Ctrl E"
+  ,"Zitat": "Quote"
 };
 export default english;

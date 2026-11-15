@@ -9,6 +9,7 @@ import type { BlockKind } from './noteBlocks';
 const styles = (): { style: Style; label: string; tip: string }[] => ([
   { style: 'bold', label: t("Fett"), tip: t("Fett · Strg B") },
   { style: 'italic', label: t("Kursiv"), tip: t("Kursiv · Strg I") },
+  { style: 'code', label: t("Code"), tip: t("Code · Strg E") },
   { style: 'strike', label: t("Durchgestrichen"), tip: t("Durchgestrichen · Strg ⇧ X") },
   { style: 'highlight', label: t("Markieren"), tip: t("Markieren · Strg ⇧ H") },
 ]);
@@ -62,7 +63,7 @@ export function FormatMenu({ x, y, active, color, onStyle, onColor, onClose, blo
     onBlur={event => { if (byKey && !menuRef.current?.contains(event.relatedTarget as Node) && !(event.relatedTarget as Element | null)?.closest('.cm-editor')) onClose(); }}>
     <div className="format-row">
       {styles().map(({ style, label, tip }) => <button key={style} type="button" className={`format-style format-${style}`} aria-label={label} aria-pressed={active[style]} data-tip={tip} onClick={acting(() => onStyle(style))}>
-        {{ bold: 'B', italic: 'I', strike: 'S', highlight: 'H' }[style]}
+        {{ bold: 'B', italic: 'I', strike: 'S', highlight: 'H', code: '‹›' }[style]}
       </button>)}
     </div>
     <div className="format-row format-colors">
@@ -71,7 +72,7 @@ export function FormatMenu({ x, y, active, color, onStyle, onColor, onClose, blo
       <button type="button" className="format-color format-no-color" aria-label={t("Farbe entfernen")} data-tip={t("Ohne Farbe · Alt 0")} disabled={!color} onClick={acting(() => onColor(null))} />
     </div>
     {blocks && <div className="format-row format-blocks">
-      {([['h1', 'H1', t('Überschrift 1')], ['h2', 'H2', t('Überschrift 2')], ['h3', 'H3', t('Überschrift 3')], ['bullets', '•', t('Stichpunkte')], ['tasks', '☐', t('Checkliste')], ['numbers', '1.', t('Nummeriert')], ['code', '</>', t('Codeblock')], ['table', '▦', t('Tabelle')]] as [BlockKind, string, string][])
+      {([['h1', 'H1', t('Überschrift 1')], ['h2', 'H2', t('Überschrift 2')], ['h3', 'H3', t('Überschrift 3')], ['bullets', '•', t('Stichpunkte')], ['tasks', '☐', t('Checkliste')], ['numbers', '1.', t('Nummeriert')], ['quote', '❝', t('Zitat')], ['code', '</>', t('Codeblock')], ['table', '▦', t('Tabelle')]] as [BlockKind, string, string][])
         .map(([kind, symbol, label]) => <button key={kind} type="button" className={`format-block format-block-${kind}`} aria-label={label} data-tip={label} onClick={acting(() => blocks.onBlock(kind))}>{symbol}</button>)}
     </div>}
     {blocks?.table && <div className="format-row format-table">
