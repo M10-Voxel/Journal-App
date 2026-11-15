@@ -46,7 +46,12 @@ mod windows {
     }}
     /// Windows' composition blur samples the live desktop behind this window,
     /// including video wallpapers. Its strength is controlled by Windows.
-    pub fn composition_blur(hwnd:isize,enabled:bool)->Result<(),String>{unsafe{
+    pub fn composition_blur(hwnd:isize,enabled:bool)->Result<&'static str,String>{unsafe{
+        // DWMWA_SYSTEMBACKDROP_TYPE (Windows 11 22621+): transient windows use
+        // Desktop Acrylic, which includes windows behind the backdrop. Mica
+        // would only sample the wallpaper image and is unsuitable for animation.
+        let backdrop=if enabled{3i32}else{1i32};
+        if DwmSetWindowAttribute(hwnd,38,&backdrop as *const _ as *const c_void,4)>=0{return Ok("system-acrylic");}
         #[repr(C)] struct Accent {state:i32,flags:u32,color:u32,animation:u32}
         #[repr(C)] struct Data {attribute:i32,data:*const c_void,size:usize}
         #[link(name="kernel32")] unsafe extern "system" {
@@ -56,14 +61,14 @@ mod windows {
         let name:Vec<u16>="user32.dll".encode_utf16().chain(Some(0)).collect();
         let module=GetModuleHandleW(name.as_ptr());
         let address=if module!=0{GetProcAddress(module,b"SetWindowCompositionAttribute\0".as_ptr())}else{std::ptr::null()};
-        if address.is_null(){return if enabled{Err("Windows unterstützt Live Blur nicht.".into())}else{Ok(())};}
+        if address.is_null(){return if enabled{Err("Windows unterstützt Live Blur nicht.".into())}else{Ok("disabled")};}
         let set:unsafe extern "system" fn(isize,*const Data)->i32=std::mem::transmute(address);
-        // Acrylic with a nonzero, near-transparent tint avoids the opaque black
-        // fallback produced by the legacy blur policy on newer Windows builds.
-        let accent=Accent{state:if enabled{4}else{0},flags:0,color:0x01000000,animation:0};
+        // Compatibility path for older Windows: live blur-behind rather than
+        // the undocumented acrylic policy with a near-black tint.
+        let accent=Accent{state:if enabled{3}else{0},flags:0,color:0,animation:0};
         let data=Data{attribute:19,data:&accent as *const _ as *const c_void,size:std::mem::size_of::<Accent>()};
         if set(hwnd,&data)==0{return Err("Windows konnte Live Blur nicht aktivieren.".into());}
-        Ok(())
+        Ok("accent-blur")
     }}
     type Subclass = unsafe extern "system" fn(Hwnd,u32,usize,isize,usize,usize)->isize;
     #[link(name="comctl32")]

@@ -27,7 +27,7 @@ const directions: Record<string, ResizeDirection> = { n: 'North', s: 'South', w:
  */
 export function DetachedPanel({ kind }: { kind: DetachedKind }) {
   useLanguage();
-  const sticker = useLook() === 'journal';
+  const look = useLook(), sticker = look !== 'nebula';
   const window = getCurrentWindow();
   const date = useJournalDate() ?? localDate();
   const [boardContext, setBoardContext] = useState<{ date: string; period: BoardPeriod } | null>(null);

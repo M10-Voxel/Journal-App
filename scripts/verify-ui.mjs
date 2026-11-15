@@ -5839,6 +5839,18 @@ try {
       // A window that opens without the focus (here: always) is not idle, so the entrance animations finish and the entries show.
       assert.equal(await evaluate("document.documentElement.hasAttribute('data-window-idle')"), false, 'Not idle before it has had the focus.');
       assert.equal(await evaluate("getComputedStyle(document.querySelector('.editor')).opacity"), '1', `The entries show (${layout} + ${look}).`);
+      if (layout === 'desk' && look !== 'nebula') {
+        // Only the Nebula look draws terminals: the others show plain titles and icon tools, no prompts or glyphs.
+        assert.equal(await evaluate("document.querySelectorAll('.nebula-prompt').length"), 0, `No prompts (desk + ${look}).`);
+        assert.equal(await evaluate("document.querySelectorAll('.nebula-panel .desk-label').length > 0"), true, `Plain labels (desk + ${look}).`);
+        assert.equal(await evaluate("Boolean(document.querySelector('.nebula-panel .nebula-window-focus .icon'))"), true, `Icon tools (desk + ${look}).`);
+      }
+      if (layout === 'desk' && look === 'classic') {
+        // The normal look: soft cards with a thin edge in the palette's own surface, Plex Sans, no sticker edge.
+        assert.equal(await evaluate("getComputedStyle(document.querySelector('.nebula-panel')).borderRadius"), '10px', 'Soft corners on the desk cards.');
+        assert.match(await evaluate("getComputedStyle(document.querySelector('.nebula-panel .desk-label')).fontFamily"), /Plex Sans/, 'The card titles use the normal type.');
+        assert.equal(await evaluate("getComputedStyle(document.querySelector('.nebula-stage')).backgroundImage"), 'none', 'The desk is plain.');
+      }
       await screenshot(`combo-${layout}-${look}.png`);
       // Settings open and name the pair.
       await key(',', 'Comma', 2);

@@ -127,6 +127,7 @@ import './components/desktopWidgets.css';
 // The journal look last: its stickers lie over the component CSS (ContextMenu, BulletinBoard … are imported above).
 import './journal-look.css';
 import './journal-desk.css';
+import './classic-desk.css';
 import { applyColors } from './colors';
 
 applyTheme(loadSettings());

@@ -89,6 +89,10 @@ try {
     console.log('Live Blur: native layer enabled.');
     await widget.eval("localStorage.setItem('journal.widget-chrome',JSON.stringify({entries:{glass:true,liveBlur:true,glassBlur:16,glassRadius:12}}));window.dispatchEvent(new StorageEvent('storage',{key:'journal.widget-chrome'}))");
     await widget.until("document.documentElement.dataset.glass==='light' && !document.querySelector('.desktop-widget-backdrop') && !document.querySelector('.widget-message')");
+    await widget.until("window.__TAURI_INTERNALS__.invoke('widget_smoke_cdp',{label:'widget-entries',method:'Journal.liveBlur',params:'{}'}).then(layer=>layer?.painted===true)");
+    const initialBlur=await blur();
+    assert(['system-acrylic','accent-blur'].includes(initialBlur.backend),'Native backdrop uses Desktop Acrylic or legacy live blur, never the old acrylic accent');
+    console.log('Live Blur backend:',initialBlur.backend,'; transparent client painted:',initialBlur.painted);
     const checkBlur=async()=>{
       const layer=await blur(),r=geometry.widget,s=geometry.scale;
       assert.deepEqual(layer.rect,[windowInfo.position.x+Math.round(r.left*s),windowInfo.position.y+Math.round(r.top*s),Math.round(r.width*s),Math.round(r.height*s)],'Native blur covers only the widget, never the desktop canvas');
@@ -104,7 +108,7 @@ try {
     await widget.until("!!document.querySelector('.desktop-widget-backdrop')");
     await assert.rejects(()=>main.invoke('desktop_widget_live_blur',{enabled:true,radius:12}));
     assert.deepEqual(errors,[]);
-    console.log('PASS: native Live Blur limited to widget bounds, move/resize, stacking, cleanup and static wallpaper restore.');
+    console.log('PASS: native Live Blur backend, transparent client paint, widget bounds, move/resize, stacking, cleanup and static wallpaper restore.');
   } else if (process.env.JOURNAL_WIDGET_SCOPE === 'calendar') {
     await main.invoke('widget_smoke_cdp',{label:'main',method:'Journal.disableInput',params:'{}'});
     await main.invoke('widget_smoke_cdp',{label:'widget-entries',method:'Journal.disableInput',params:'{}'});

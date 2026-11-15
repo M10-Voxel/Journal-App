@@ -141,7 +141,7 @@ function NebulaCalendarPanel({ mode, date, today, onPick, dayCalendar, calendarO
   /** The big calendar's window: open or not, and its switch (Ctrl+K), here beside the views. */
   calendarOpen: boolean; onCalendarToggle: () => void; focused: boolean; dimmed: boolean; onFocus: () => void }) {
   useLanguage();
-  const sticker = useLook() === 'journal';
+  const look = useLook(), sticker = look !== 'nebula';
   const [view, setView] = useState<'month' | 'day'>(() => { try { return localStorage.getItem(calendarViewKey) === 'day' ? 'day' : 'month'; } catch { return 'month'; } });
   const choose = (next: 'month' | 'day') => { setView(next); try { localStorage.setItem(calendarViewKey, next); } catch { /* this session */ } };
   const [start, end] = periodBounds(date, mode);
@@ -208,7 +208,7 @@ function DeskWindow({ id, stage, open, front, focused, dimmed = false, command, 
   onClose?: () => void; onFront: () => void; onFocus: () => void; onDock: () => void; children: ReactNode; note?: string;
 }) {
   useLanguage();
-  const sticker = useLook() === 'journal';
+  const look = useLook(), sticker = look !== 'nebula';
   const ownRef = useRef<HTMLElement>(null);
   const frame = sectionRef ?? ownRef;
   const scrollBody = useRef<HTMLDivElement>(null);
@@ -264,7 +264,7 @@ function Panel({ id, command, label, note, minimized, span, shownSpan = span, up
   onFloat?: () => void; onClose?: () => void; children: ReactNode;
 }) {
   useLanguage();
-  const sticker = useLook() === 'journal';
+  const look = useLook(), sticker = look !== 'nebula';
   const root = useRef<HTMLElement>(null), body = useRef<HTMLDivElement>(null);
   usePanelScroll(body, !minimized);
   function resizeHeight(event: React.PointerEvent<HTMLElement>) {
@@ -413,7 +413,7 @@ export function NebulaDesk({ mode, date, today, modes, modeLabels, dirty, title,
   onOpenDay: (date: string, entry?: string) => void; onNavigate: (date: string) => void; dayCalendar: DayCalendar; scrollRef: React.RefObject<HTMLDivElement | null>; disabled?: boolean;
 }) {
   const language = useLanguage();
-  const sticker = useLook() === 'journal';
+  const look = useLook(), sticker = look !== 'nebula';
   const { data: periodData } = usePeriodData();
   const rating = mode === 'day' ? periodData?.days[date]?.rating : undefined;
   const ratingMax = ratingScale(periodData).max;
@@ -617,7 +617,7 @@ export function NebulaDesk({ mode, date, today, modes, modeLabels, dirty, title,
           </div>
           {mode === 'day' && <div className="nebula-poster-tags">{tagFilter}</div>}
         </div>
-        {sticker ? <PosterStickers /> : <Orbit />}
+        {look === 'journal' ? <PosterStickers /> : sticker ? null : <Orbit />}
         <div className="nebula-bar is-foot" aria-hidden="true" />
       </aside>
       <NebulaCalendarPanel mode={mode} date={date} today={today} onPick={onNavigate} dayCalendar={dayCalendar} calendarOpen={calendarOpen} onCalendarToggle={onCalendarToggle}
