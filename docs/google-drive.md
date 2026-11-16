@@ -14,7 +14,29 @@ Unter **Einstellungen → Google Drive** werden Inhalte manuell zwischen Geräte
 
 Der Geräteschlüssel ist ein von Journal erzeugter 256-Bit-Schlüssel, normalerweise 44 Base64-Zeichen, kein Google-Passwort. Leerraum wird entfernt; Base64-URL-Schreibweise und fehlendes Padding werden akzeptiert. Ein anderer Schlüssel bezeichnet einen anderen verschlüsselten Tresor und öffnet die bisherigen Daten nicht.
 
-Der Schlüssel wird nur im geöffneten Einstellungszustand gehalten. Nach erneutem Öffnen beziehungsweise Neuladen ist er wieder einzugeben; auch ein erfolgreicher Abgleich lädt die Oberfläche neu. Die OAuth-Anmeldung bleibt dagegen gerätelokal mit Windows-DPAPI geschützt gespeichert. Ohne den ursprünglichen Geräteschlüssel gibt es keine Wiederherstellung der Cloud-Inhalte.
+Mit **„Auf diesem Gerät merken“** (Standard) wird der Schlüssel beim nächsten Abgleich gerätelokal gespeichert – mit Windows-DPAPI geschützt wie die OAuth-Anmeldung (`drive.key` im App-Datenordner, nie im Vault, in der Cloud oder im localStorage). Ohne Häkchen wird er nur für diesen Abgleich gehalten und ist danach wieder einzugeben. Für die automatische Synchronisierung muss er gemerkt sein; „Schlüssel auf diesem Gerät vergessen“ löscht ihn. Ohne den ursprünglichen Geräteschlüssel gibt es keine Wiederherstellung der Cloud-Inhalte.
+
+## Automatisch synchronisieren
+
+Unter **Wann synchronisieren** (gerätelokal, `journal.driveSync`; Logik in `src/sync/driveSchedule.ts` und `src/sync/driveSync.ts`, läuft nur im Journal-Fenster):
+
+| Wahl | Wann |
+| --- | --- |
+| Nach jeder Speicherung | Nach dem Speichern einer Änderung (Einträge, Tags, Aktivitäten/Tageswerte, Pinnwand/Notizen, geteilte Einstellungen, Desk-Layouts, Tag-Arten-Reihenfolge), gesammelt: 20 s nach der letzten Änderung, spätestens 2 min nach der ersten, nie zwei Abgleiche in weniger als 30 s. Änderungen anderer Geräte werden alle 5 min und beim Zurückkehren ins Fenster (höchstens alle 2 min) abgeholt. |
+| Regelmäßig | Alle *n* Minuten (2–1440). |
+| Beim Schließen des Fensters (×) | Nach dem Schließen (Journal läuft im Hintergrund weiter) und beim Beenden. |
+| Beim Beenden der App | Beim Beenden über das Infobereich-Symbol; auch wenn Windows herunterfährt, neu startet oder abmeldet. |
+| Nur manuell | Nur mit „Jetzt synchronisieren“. |
+
+Jede automatische Wahl gleicht zusätzlich **beim Start der App** ab, und beim Beenden bzw. Herunterfahren wird bei allen automatischen Wahlen noch Ungesichertes übertragen.
+
+**Herunterfahren:** Das Journal-Fenster fängt `WM_QUERYENDSESSION` ab (`src-tauri/src/session.rs`), meldet über `ShutdownBlockReasonCreate` „Journal synchronisiert mit Google Drive …“, lässt die Seite speichern und abgleichen und gibt nach Abschluss oder spätestens 25 s frei. Windows kann das jederzeit abbrechen („Trotzdem herunterfahren“); ein unterbrochener Abgleich schreibt nichts halb – es bleibt beim letzten vollständigen Stand, der beim nächsten Start abgeglichen wird.
+
+**Sparsam mit Anfragen (Google-Limits):** Ein automatischer Abgleich, bei dem sich lokal nichts geändert hat (Fingerabdruck von Datenbank, Mailkonten und geteilten Einstellungen) und die Cloud-Datei dieselbe Version hat (`drive_probe`, ein Metadaten-Abruf), lädt nichts herunter und hoch. Hochgeladen wird nur, wenn sich der Cloud-Stand ändern würde; Pinnwandbilder werden nur geladen, wenn die Cloud sie noch nicht hat. `drive_write` liefert die neue Dateiversion zurück, sodass kein zusätzlicher Abruf nötig ist. Das OAuth-Token wird bis zum Ablauf wiederverwendet. Bei Fehlern wartet der nächste Versuch 1, 2, 4 … bis 60 min, beim Google-Anfragelimit (HTTP 429/`rateLimitExceeded`) mindestens 5 min; nach drei Fehlschlägen in Folge erscheint ein Hinweis. „Google Drive arbeitet bereits“ oder lokale Änderungen während des Abgleichs gelten nicht als Fehler – es wird nach 15 s erneut versucht.
+
+**Was sich auf diesem Gerät ändert:** Nur was von anderen Geräten kommt, wird übernommen (`drive_apply` meldet die geänderten Tage, Tags, Aktivitäten und die Pinnwand an alle Fenster, die sie neu laden; die Eingabe pausiert dafür kurz). Neu geladen wird die Seite nur, wenn geteilte Einstellungen oder Layouts angekommen sind – automatisch erst nach drei Sekunden ohne Tippen oder Klicken. **Konflikte** (dasselbe Feld auf zwei Geräten geändert) pausieren die automatische Synchronisierung mit einem Hinweis, bis sie in den Einstellungen aufgelöst sind.
+
+Desktop-Widgets und ihre Einstellungen werden nie übertragen (siehe [Sync-Format](sync-format-12.md)).
 
 ## Zusammenführen und Konflikte
 

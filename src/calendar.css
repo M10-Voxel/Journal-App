@@ -539,7 +539,7 @@ button.cal-time-day:hover { background: color-mix(in srgb, var(--strong) 3.137%,
 .cal-drag-preview { pointer-events: none !important; user-select: none; cursor: grabbing; }
 :root[data-pixel] .cal-drop-outline { border-radius: 0; }
 /* Year view: a span over days rings only the small markers under the day numbers, not the whole cells. */
-.cal-year-span { align-self: center; height: calc(9px + var(--span-inset, 1px) * 2); margin-block: 0; transform: translateY(11px); border-radius: 0; }
+.cal-year-span { align-self: center; height: calc(9px + var(--span-inset, 1px) * 2); margin-block: 0; transform: translateY(12px); border-radius: 0; }
 .cal-year-span.is-span-start { border-top-left-radius: 99px; border-bottom-left-radius: 99px; }
 .cal-year-span.is-span-end { border-top-right-radius: 99px; border-bottom-right-radius: 99px; }
 :root[data-pixel] .cal-year-span, :root[data-look='nebula'] .cal-year-span { border-radius: 0 !important; }

@@ -28,6 +28,8 @@
 .nebula-ticket.foil-appointment { --foil: var(--holo-mint); --ground: var(--holo-mint-ground); }
 .nebula-ticket.foil-appointment .nebula-ticket-mark { color: #aad9cd; }
 .nebula-ticket.foil-event { --foil: var(--holo-sky); --ground: var(--holo-sky-ground); }
+/* A tag's colour: its own foil (the tag's hue, lightened, with the complementary hue as veins) set on the ticket. */
+.nebula-ticket.has-tag-color .nebula-ticket-mark { color: #ffffffc4; }
 /* Nebula squares every corner; the printed ticket keeps its round ones and its round punched dot. */
 :root[data-layout='desk'] .nebula-ticket { border-radius: 16px !important; }
 :root[data-layout='desk'] .nebula-ticket-bar i { border-radius: 50% !important; }

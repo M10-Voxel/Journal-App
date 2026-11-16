@@ -2,6 +2,7 @@ import { t, useLanguage } from '../i18n';
 import { useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent, ReactNode } from 'react';
 import { pixelActive, swipeAvailable, withDesign, withLayout, withLook } from '../settings';
+import { defaultTicketBrightness } from '../colors';
 import type { PopupStyle, Settings } from '../settings';
 import { layouts as layoutIds, looks as lookIds, popupVariants, presetOf, presets, takesPixel } from '../designs';
 import type { Layout, Look, Preset } from '../designs';
@@ -186,6 +187,19 @@ export function SettingsDialog({ settings, onChange, onClose, onImport, mailStat
       <SettingRow id="settings-book-paging" label={t('Blättern')} note={t('Auf einmal: Die Pinnwand liegt über beiden Seiten')}>
         <Segmented labelledBy="settings-book-paging" attribute="data-book-paging" value={settings.bookPaging} onChange={bookPaging => onChange({ ...settings, bookPaging })}
           options={[{ value: 'page', label: t('Seite für Seite') }, { value: 'spread', label: t('Beide auf einmal') }]} />
+      </SettingRow>
+    </section>}
+    {/* The desk's tickets in the journal look: how much of the tag's colour their sticker paper shows. */}
+    {settings.layout === 'desk' && settings.look === 'journal' && <section className="settings-section">
+      <h3>{t('Desktop')}</h3>
+      <SettingRow id="settings-ticket-brightness" label={t('Helligkeit der Tickets')} note={t('Wie hell die Termin-Tickets in der Farbe ihres Tags sind')}>
+        <div className="scale-options scale-slider" data-ticket-brightness>
+          <input type="range" min="0" max="100" step="1" aria-labelledby="settings-ticket-brightness" value={settings.ticketBrightness ?? defaultTicketBrightness}
+            onChange={event => onChange({ ...settings, ticketBrightness: Number(event.target.value) })} />
+          <output>{settings.ticketBrightness ?? defaultTicketBrightness} %</output>
+          <button type="button" aria-pressed={settings.ticketBrightness === undefined || settings.ticketBrightness === defaultTicketBrightness} title={t('Wie ursprünglich')}
+            onClick={() => { const { ticketBrightness: _, ...rest } = settings; onChange(rest); }}>{t('Standard')}</button>
+        </div>
       </SettingRow>
     </section>}
     <section className="settings-section">

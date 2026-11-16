@@ -4,8 +4,8 @@ import { setLanguage } from './i18n';
 import type { Language } from './i18n';
 import { hasFixedPalette, isLayout, isLook, legacyTheme, popupStyleFor, storedDesign, takesPixel } from './designs';
 import type { Layout, Look, PopupStyle } from './designs';
-import { applyColors, colorThemeIds, defaultColorSettings, journalColorThemes, normalizeColorSettings } from './colors';
-import type { ColorSettings, ColorTheme } from './colors';
+import { applyColors, defaultColorSettings, isTicketBrightness, knownColorTheme, normalizeColorSettings } from './colors';
+import type { ColorSettings } from './colors';
 import { applyScale, isUiScale } from './uiScale';
 import type { UiScale } from './uiScale';
 import { defaultFeatures, normalizeFeatures } from './features';
@@ -29,10 +29,15 @@ export type { PopupStyle };
  * the desktop. The UI checks still exercise it through `window.__journalSwipeLayout`.
  */
 export const swipeAvailable = () => /android/i.test(navigator.userAgent) || (window as { __journalSwipeLayout?: boolean }).__journalSwipeLayout === true;
+import { normalizeLookMemory, withLook as lookSwitch } from './lookMemory';
+import type { LookMemory } from './lookMemory';
+export type { LookMemory };
+export { normalizeLookMemory };
 /**
- * `previousColorTheme`: the palette chosen before switching to the journal style, restored when leaving it.
+ * `lookMemory`: per look the palette and popup variant last used with it (Nebula keeps the palette untouched, it has
+ * its own). `previousColorTheme`: the normal look's palette, still written for older versions of the app.
  */
-export interface Settings extends ColorSettings { actionLayout: ActionLayout; layout: Layout; look: Look; pixel: boolean; popupStyle: PopupStyle; language: Language; uiScale: UiScale; bookPaging: BookPaging; inkPressure: boolean; features: Features; previousColorTheme?: ColorTheme }
+export interface Settings extends ColorSettings { actionLayout: ActionLayout; layout: Layout; look: Look; pixel: boolean; popupStyle: PopupStyle; language: Language; uiScale: UiScale; bookPaging: BookPaging; inkPressure: boolean; features: Features; previousColorTheme?: string; lookMemory?: LookMemory }
 const key = 'journal.settings';
 export const defaultSettings: Settings = { actionLayout: 'orbit', layout: 'classic', look: 'classic', pixel: false, popupStyle: 'a', language: 'de', uiScale: 'auto', bookPaging: 'page', inkPressure: true, features: defaultFeatures(), ...defaultColorSettings };
 
@@ -43,7 +48,9 @@ export function loadSettings(): Settings {
     return { actionLayout: stored.actionLayout === 'inline' || (stored.actionLayout === 'swipe' && swipeAvailable()) ? stored.actionLayout : defaultSettings.actionLayout, ...(design => ({ ...design, popupStyle: popupStyleFor(design.look, stored.popupStyle) }))(storedDesign(stored)),
       pixel: stored.pixel === true || stored.theme === 'pixel', language: stored.language === 'en' ? 'en' : 'de', uiScale: isUiScale(stored.uiScale) ? stored.uiScale : 'auto', ...normalizeColorSettings(stored),
       bookPaging: stored.bookPaging === 'spread' ? 'spread' : 'page', inkPressure: stored.inkPressure !== false, features: normalizeFeatures(stored.features),
-      ...colorThemeIds.includes(stored.previousColorTheme as ColorTheme) ? { previousColorTheme: stored.previousColorTheme } : {} };
+      ...(colors => knownColorTheme(colors, stored.previousColorTheme) ? { previousColorTheme: stored.previousColorTheme } : {})(normalizeColorSettings(stored)),
+      ...isTicketBrightness(stored.ticketBrightness) ? { ticketBrightness: stored.ticketBrightness } : {},
+      ...(memory => Object.keys(memory).length ? { lookMemory: memory } : {})(normalizeLookMemory(stored.lookMemory, normalizeColorSettings(stored))) };
   } catch { return defaultSettings; }
 }
 export function saveSettings(settings: Settings) {
@@ -56,10 +63,12 @@ export function saveSettings(settings: Settings) {
   setLanguage(settings.language);
   // The views and modules on (featureStore.ts): this window at once, the others through the storage event.
   try { window.dispatchEvent(new Event('journal:features')); } catch { /* no window */ }
+  // Shared settings changed: the automatic Drive sync takes them along (sync/driveSync.ts).
+  try { window.dispatchEvent(new Event('journal:local-change')); } catch { /* no window */ }
   void emit('journal:theme', { layout: settings.layout, look: settings.look, pixel: settings.pixel, popupStyle: settings.popupStyle }).catch(() => {});
   void emit('journal:scale', { scale: settings.uiScale, pixel: pixelActive(settings) }).catch(() => {});
   void emit('journal:language', settings.language).catch(() => {});
-  void emit('journal:colors', { colorTheme: settings.colorTheme, customColors: settings.customColors }).catch(() => {});
+  void emit('journal:colors', { colorTheme: settings.colorTheme, customColors: settings.customColors, customThemes: settings.customThemes, colorDrafts: settings.colorDrafts, ticketBrightness: settings.ticketBrightness }).catch(() => {});
 }
 
 /** Whether the pixel look shows: Nebula never takes it (the stored choice stays for the other looks). */
@@ -97,19 +106,7 @@ export function setGlassLook(look: 'light' | 'dark' | null, appPopups = false) {
 }
 /** Choosing the layout: only the structure changes. */
 export const withLayout = (settings: Settings, layout: Layout): Settings => layout === settings.layout ? settings : { ...settings, layout };
-/**
- * Choosing the look. The journal look brings its lavender palette (only when switching to it, and only if none of its own
- * palettes is chosen; the palette stays free to change afterwards). Leaving it with one of its palettes still chosen
- * brings back the palette chosen before.
- */
-export function withLook(current: Settings, look: Look): Settings {
-  if (look === current.look) return current;
-  // The popup variant stays if the new look has it (the journal look's c and d fall back to a elsewhere).
-  const settings = { ...current, popupStyle: popupStyleFor(look, current.popupStyle) };
-  const own = journalColorThemes.includes(settings.colorTheme);
-  if (look === 'journal') return own ? { ...settings, look, previousColorTheme: settings.colorTheme } : { ...settings, look, colorTheme: 'lavender', previousColorTheme: settings.colorTheme };
-  if (settings.look === 'journal' && own) return { ...settings, look, colorTheme: settings.previousColorTheme ?? 'original' };
-  return { ...settings, look };
-}
+/** Choosing the look: each look gets back its own palette and popup variant (lookMemory.ts). */
+export const withLook = (settings: Settings, look: Look): Settings => lookSwitch(settings, look);
 /** Choosing both at once (a ready-made design, see `presets`). */
 export const withDesign = (settings: Settings, layout: Layout, look: Look): Settings => withLayout(withLook(settings, look), layout);

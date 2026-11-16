@@ -121,10 +121,13 @@ fn read_cloud_file(http:&reqwest::blocking::Client,token:&str,id:&str,base:&str)
     if before!=cloud_etag(http,token,id,base)?{return Err("Der Cloud-Stand hat sich während des Downloads geändert. Bitte erneut synchronisieren.".into())}
     Ok((data,before))
 }
-fn update_cloud_file(http:&reqwest::blocking::Client,token:&str,id:&str,etag:&str,data:String,base:&str)->Result<()>{
-    checked(http.put(format!("{base}/upload/drive/v2/files/{id}?uploadType=media"))
+/// Returns the file's new version when Google reports it (the v2 file resource carries its ETag).
+fn update_cloud_file(http:&reqwest::blocking::Client,token:&str,id:&str,etag:&str,data:String,base:&str)->Result<Option<String>>{
+    let response=checked(http.put(format!("{base}/upload/drive/v2/files/{id}?uploadType=media"))
         .bearer_auth(token).header("If-Match",etag).header("Content-Type","application/json").body(data)
-        .send().map_err(|_|"Upload fehlgeschlagen")?)?;Ok(())
+        .send().map_err(|_|"Upload fehlgeschlagen")?)?;
+    let resource:Value=response.json().unwrap_or(Value::Null);
+    Ok(resource["etag"].as_str().filter(|s|s.starts_with('"')&&s.ends_with('"')&&s.len()>2).map(str::to_string))
 }
 #[tauri::command]
 pub async fn drive_read(app:tauri::AppHandle, vault:String) -> Result<Value> {
@@ -140,21 +143,72 @@ pub async fn drive_read(app:tauri::AppHandle, vault:String) -> Result<Value> {
     Ok(json!({"id":id,"etag":etag,"data":data}))
 }
 #[tauri::command]
-pub async fn drive_write(app:tauri::AppHandle,vault:String,id:Option<String>,etag:Option<String>,data:String) -> Result<()> {
+/// Writes the cloud file and returns its id and new version, so the next automatic check needs no download.
+pub async fn drive_write(app:tauri::AppHandle,vault:String,id:Option<String>,etag:Option<String>,data:String) -> Result<Value> {
     let _guard=OPERATION.try_lock().map_err(|_|"Google Drive arbeitet bereits")?;
-    if vault.len()!=64 || !vault.chars().all(|c|c.is_ascii_hexdigit()) || data.len()>250_000_000 {return Err("Ungültige Synchronisierungsdaten".into())}
+    if !valid_vault(&vault) || data.len()>250_000_000 {return Err("Ungültige Synchronisierungsdaten".into())}
     let _:Value=serde_json::from_str(&data).map_err(|_|"Ungültige Verschlüsselungshülle")?;
     let http=client()?;let t=token(&app)?;
-    if let Some(id)=id {
-        if !id.chars().all(|c|c.is_ascii_alphanumeric()||c=='_'||c=='-'){return Err("Ungültige Datei-ID".into())}
-        update_cloud_file(&http,&t,&id,&etag.ok_or("Versionsschutz fehlt")?,data,"https://www.googleapis.com")?;
+    let id=if let Some(id)=id {
+        if !valid_file_id(&id){return Err("Ungültige Datei-ID".into())}
+        if let Some(etag)=update_cloud_file(&http,&t,&id,&etag.ok_or("Versionsschutz fehlt")?,data,"https://www.googleapis.com")? {return Ok(json!({"id":id,"etag":etag}))}
+        id
     } else {
         let boundary=uuid::Uuid::new_v4().simple().to_string();
         let metadata=json!({"name":format!("journal-{vault}.json"),"parents":["appDataFolder"]});
         let body=format!("--{boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n{metadata}\r\n--{boundary}\r\nContent-Type: application/json\r\n\r\n{data}\r\n--{boundary}--\r\n");
-        checked(http.post("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart").bearer_auth(t).header("Content-Type",format!("multipart/related; boundary={boundary}")).body(body).send().map_err(|_|"Upload fehlgeschlagen")?)?;
-    } Ok(())
+        let created:Value=checked(http.post("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart").bearer_auth(&t).header("Content-Type",format!("multipart/related; boundary={boundary}")).body(body).send().map_err(|_|"Upload fehlgeschlagen")?)?.json().map_err(|_|"Ungültige Drive-Antwort")?;
+        created["id"].as_str().filter(|id|valid_file_id(id)).ok_or("Google liefert keine Datei-ID")?.to_string()
+    };
+    let etag=cloud_etag(&http,&t,&id,"https://www.googleapis.com").ok();
+    Ok(json!({"id":id,"etag":etag}))
 }
+
+fn valid_vault(vault:&str)->bool { vault.len()==64 && vault.chars().all(|c|c.is_ascii_hexdigit()) }
+fn valid_file_id(id:&str)->bool { !id.is_empty() && id.len()<=200 && id.chars().all(|c|c.is_ascii_alphanumeric()||c=='_'||c=='-') }
+/// The cloud file's id and version only (automatic sync, src/sync/driveSync.ts): one request when the id is known, so an
+/// unchanged cloud costs no download. A file gone since (404) is looked up again by name.
+#[tauri::command]
+pub async fn drive_probe(app:tauri::AppHandle, vault:String, id:Option<String>) -> Result<Value> {
+    let _guard=OPERATION.try_lock().map_err(|_|"Google Drive arbeitet bereits")?;
+    if !valid_vault(&vault){return Err("Ungültiger Tresor".into())}
+    let t=token(&app)?;let http=client()?;
+    if let Some(id)=id.filter(|id|valid_file_id(id)) {
+        let response=http.get(format!("https://www.googleapis.com/drive/v2/files/{id}")).bearer_auth(&t).query(&[("fields","etag,labels/trashed")]).send().map_err(|_|"Google Drive ist nicht erreichbar")?;
+        if response.status().as_u16()!=404 {
+            let metadata:Value=checked(response)?.json().map_err(|_|"Ungültige Dateimetadaten")?;
+            if metadata["labels"]["trashed"]!=json!(true) {
+                let etag=metadata["etag"].as_str().ok_or("Google liefert keine gültige Dateiversion")?;
+                return Ok(json!({"id":id,"etag":etag}));
+            }
+        }
+    }
+    let name=format!("journal-{vault}.json");
+    let list:Value=checked(http.get("https://www.googleapis.com/drive/v3/files").bearer_auth(&t).query(&[("spaces","appDataFolder"),("q",&format!("name='{name}' and trashed=false")),("fields","files(id),nextPageToken"),("pageSize","100")]).send().map_err(|_|"Google Drive ist nicht erreichbar")?)?.json().map_err(|_|"Ungültige Drive-Antwort")?;
+    let files=list["files"].as_array().ok_or("Ungültige Dateiliste")?;
+    if files.len()>1 || !list["nextPageToken"].is_null(){return Err("Mehrere Cloud-Stände mit derselben Tresor-ID gefunden. Es wurde nichts überschrieben.".into())}
+    let Some(id)=files.first().and_then(|file|file["id"].as_str()) else {return Ok(json!({"id":null,"etag":null}))};
+    Ok(json!({"id":id,"etag":cloud_etag(&http,&t,id,"https://www.googleapis.com")?}))
+}
+/// The device key, kept on this device only when chosen (automatic sync needs it): protected by Windows (DPAPI) like the
+/// Drive credentials, never in the vault, the cloud or localStorage.
+fn key_path(app:&tauri::AppHandle)->Result<PathBuf>{ Ok(app.path().app_data_dir().map_err(|e|e.to_string())?.join("drive.key")) }
+#[tauri::command]
+pub async fn drive_key_save(app:tauri::AppHandle, key:String) -> Result<()> {
+    if key.len()<16 || key.len()>200 || !key.chars().all(|c|c.is_ascii_alphanumeric()||"+/=-_".contains(c)) {return Err("Ungültiger Geräteschlüssel".into())}
+    let p=key_path(&app)?;std::fs::create_dir_all(p.parent().ok_or("Ungültiger Speicherpfad")?).map_err(|e|e.to_string())?;
+    let temporary=p.with_extension("tmp");
+    std::fs::write(&temporary,secrets::protect(key.as_bytes(),true)?).map_err(|e|format!("Geräteschlüssel konnte nicht gespeichert werden: {e}"))?;
+    std::fs::rename(&temporary,&p).map_err(|e|e.to_string())
+}
+#[tauri::command]
+pub async fn drive_key_load(app:tauri::AppHandle) -> Result<Option<String>> {
+    let p=key_path(&app)?;if !p.exists(){return Ok(None)}
+    let bytes=secrets::protect(&std::fs::read(p).map_err(|e|e.to_string())?,false)?;
+    Ok(Some(String::from_utf8(bytes).map_err(|_|"Gespeicherter Geräteschlüssel ist beschädigt")?))
+}
+#[tauri::command]
+pub async fn drive_key_forget(app:tauri::AppHandle) -> Result<()> { let p=key_path(&app)?; if p.exists(){std::fs::remove_file(p).map_err(|e|e.to_string())?;} Ok(()) }
 
 const TABLES: &[(&str,&str)] = &[("tags","id"),("series","id"),("days","date"),("entries","id")];
 /// Entry columns newer than the snapshot format, with the value an older snapshot's entries get.

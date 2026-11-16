@@ -10,7 +10,7 @@ Diese technische Übersicht ergänzt die [Einrichtung und Bedienung von Google D
 | `settings.period-data` | Aktivitäten, Checklisten, Bewertungen, erfasste Zeit, eigene Tageswerte samt Definitionen, Farben und Wertebereichen, Tages-/Zeitraum-Notizen sowie eigene Zeitraum-Werte (`periods`) und Zeitraum-Einträge (`entries`, je Eintrag ein Objekt, damit Geräte sie einzeln zusammenführen; siehe [Funktionen](features.md)) |
 | `settings.board:card:*`, `board:folder:*` | Pinnwand-/Notizkarten, Ordner, Inhalt, Anhänge/Verbindungen, Tagesbezug, Wochen-/Monats-/Quartals-/Jahrespinnwände mit eigenen Positionen und Größen, Farben, Linkvorschauen und Handschrift (`mode`, `ink` mit den optionalen Strichfeldern `tool`/`color`, Hintergrund `inkPaper`) |
 | `images` | Referenzierte AVIF-Dateien, im Paket als Base64 |
-| `preferences` | Allgemeine Darstellungseinstellungen aus `journal.settings`, einschließlich getrenntem Aufbau und Optik, Popup-Variante (auch Journal C/D), Farben, Sprache, UI-Größe, Schreibdruck-Option und eingeschalteten Funktionen (`features`) |
+| `preferences` | Allgemeine Darstellungseinstellungen aus `journal.settings`, einschließlich getrenntem Aufbau und Optik, Popup-Variante (auch Journal C/D), Farben (inklusive eigener Farbschemata `customThemes`, der Ticket-Helligkeit `ticketBrightness` und der je Optik gemerkten Palette/Popup-Variante `lookMemory`; ungespeicherte Änderungen `colorDrafts` bleiben lokal), Sprache, UI-Größe, Schreibdruck-Option und eingeschalteten Funktionen (`features`); dazu als `storage:<Schlüssel>` die Desk-Anordnung je Ansicht (`journal.nebulaLayout.v1`), die gespeicherten Desk-Layouts (`journal.nebulaLayout.saved`) und die Reihenfolge der Tag-Arten (`journal.tagKindOrder`). Fehlt `ticketBrightness` oder `previousColorTheme` im zusammengeführten Stand, gilt auf allen Geräten wieder der Standard; andere fehlende Schlüssel (z. B. von älteren App-Versionen weggelassene) bleiben lokal erhalten. |
 | `mailAccounts` | Kontometadaten und Abrufeinstellungen ohne Passwörter, Client-Secrets oder Anmeldetokens |
 
 Übernommene Mailtermine enthalten ihre gespeicherte Mailbeschreibung einschließlich begrenztem HTML-/Textinhalt und werden über die normalen Kalendereinträge übertragen. Mailkonten müssen auf jedem Gerät erneut angemeldet werden.
@@ -21,7 +21,7 @@ Diese technische Übersicht ergänzt die [Einrichtung und Bedienung von Google D
 - Desktop-Widgets einschließlich Instanzen, Position, Größe, Aktivierung und Autostart. Ihre Journal-/Kalenderinhalte werden als normale Inhalte übertragen.
 - Lokale Mailabruf-Zwischenstände, Modellgewichte und technische Caches.
 - Rückgängig-Historie und lokaler Sicherungsstand vor einem Abgleich.
-- Vault-Pfad, Fenstergeometrie und Nebula-Layout, lokale Auswahl-/Filterzustände sowie laufende Timer.
+- Vault-Pfad, Fenstergeometrie und Fenstergrößen im Desk (`journal.nebulaWindow.*`), lokale Auswahl-/Filterzustände (ausgeblendete Tags und Tageswerte, Notizblock-Auswahl, Kalenderansicht, Seitenleistenbreite, Buchansicht) sowie laufende Timer.
 - Handschrift-Werkzeuge (`journal.ink`: Werkzeug, Stiftfarben, Stärken, zuletzt benutzte Farben) und eine offene Auswahl in einer Zeichnung.
 
 Bereits gespeicherte Aktivitätsminuten sind Inhalt und werden synchronisiert; der Zustand einer gerade laufenden Stoppuhr ist gerätelokal. Allgemeine Darstellungseinstellungen werden bewusst übertragen, obwohl sie außerhalb eines Syncs lokal im WebView gespeichert sind.

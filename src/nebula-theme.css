@@ -107,6 +107,8 @@
   .nebula-side .nebula-cal-panel.is-month { top: calc(var(--nb-poster-h, 0px) + 18px); height: auto; max-height: calc(100dvh - 32px - 36px - var(--nb-poster-h, 0px) - 18px); }
 }
 .nebula-poster { position: relative; }
+/* The mini calendar opened from the date lies over the calendar window below the poster. */
+.nebula-poster:has(.mini-picker-panel) { z-index: 30; }
 
 /* ── Rail: grey paper, status on top, the views as hooked tabs, the violet calendar block at its foot ─────────── */
 /* ── In the window bar: the views (day … year) as shell words, the calendar's and notebook's switches ─────────── */

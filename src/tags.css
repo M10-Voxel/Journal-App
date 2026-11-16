@@ -56,7 +56,7 @@
 .tag-filter-dots i + i { margin-left: -2px; }
 .tag-filter-button.is-filtering { color: var(--accent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent); }
 .tag-filter-count { font: 10px var(--mono); font-variant-numeric: tabular-nums; }
-.cal-actions .tag-filter-button { height: 26px; margin-right: 4px; }
+.cal-actions .tag-filter-button { height: 26px; margin-right: 4px; padding: 0 9px 0 8px; } /* `.cal button` would take its padding: as wide as elsewhere */
 .mini-tag-toolbar { display: flex; flex: none; justify-content: flex-end; padding: 0 4px 6px; }
 .tag-filter { width: 228px; }
 .tag-check { display: grid; flex: none; place-items: center; width: 14px; height: 14px; border-radius: 4px; box-shadow: inset 0 0 0 1.5px var(--tag, var(--placeholder)); color: transparent;

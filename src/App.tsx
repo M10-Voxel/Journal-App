@@ -2,6 +2,7 @@
 import type { CalendarDay } from './journal';
 import { useViewHistory } from './viewHistory';
 import { flushHistoryWindows } from './components/UndoShortcuts';
+import { startDriveSync, syncBeforeEnd, syncWhenClosing } from './sync/driveSync';
 import { t, useLanguage } from './i18n.ts';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
@@ -211,16 +212,23 @@ export function App() {
       await getCurrentWindow().hide();
       if (!localStorage.getItem('journal.backgroundHint')) { localStorage.setItem('journal.backgroundHint', '1'); void invoke('background_hint').catch(() => {}); }
     };
+    // Closing (when chosen) and quitting sync with Google Drive afterwards (driveSync.ts); quitting waits for it briefly.
     getCurrentWindow().onCloseRequested(event => {
       event.preventDefault();
-      whenSaved(toBackground, t("Fenster trotzdem schließen?"));
+      whenSaved(async () => { await toBackground(); void syncWhenClosing(); }, t("Fenster trotzdem schließen?"));
     }).then(stop => { if (disposed) stop(); else unlisten = stop; })
       .catch(reason => setError(t("Schließschutz konnte nicht eingerichtet werden: {0}", String(reason))));
-    const quit = listen('journal:quit', () => whenSaved(() => invoke('quit_app'), t("Journal trotzdem beenden?")));
+    const quit = listen('journal:quit', () => whenSaved(async () => { await syncBeforeEnd(); await invoke('quit_app'); }, t("Journal trotzdem beenden?")));
     const handleKey = (event: KeyboardEvent) => onGlobalKey(event);
     window.addEventListener('keydown', handleKey);
     return () => { disposed = true; unlisten?.(); void quit.then(stop => stop()); window.removeEventListener('keydown', handleKey); };
   }, []);
+
+  // The automatic Google Drive sync runs in this window (driveSync.ts: when, how often, what it skips).
+  useEffect(() => startDriveSync({
+    beforeSync: async () => { if (!await save()) throw new Error(t("Lokale Änderungen konnten nicht gespeichert werden.")); await flushHistoryWindows(); },
+    notify: message => setError(message),
+  }), []);
 
   // Entries are grouped in the order of their tags; a changed list (or the tags arriving) groups them anew.
   const tagOrder = tags.map(tag => tag.id).join();

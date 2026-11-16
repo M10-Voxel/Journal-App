@@ -59,3 +59,39 @@ test('mixed layouts, sticker popup variants and ink preference are shared with t
  assert.deepEqual(syncPreferences(prefs),expected);
  assert.deepEqual(upgradeSnapshot({schema:13,tables:{},preferences:prefs}).preferences,expected);
 });
+
+test('custom palettes, look memory, desk layouts and the tag kinds\' order travel; device state stays', async () => {
+  const { readSyncedPreferences, writeSyncedPreferences, syncPreferences } = await import('../src/sync/snapshot.ts');
+  const memory = values => ({ values, getItem: key => values.has(key) ? values.get(key) : null, setItem: (key, value) => values.set(key, value), removeItem: key => values.delete(key) });
+  const theme = { id:'custom-sea', name:'Meer', base:'summer', colors:{ accent:'#112233' } };
+  const source = memory(new Map([
+    ['journal.settings', JSON.stringify({ look:'journal', colorTheme:'custom-sea', customThemes:[theme], lookMemory:{ journal:{ popupStyle:'c' } }, ticketBrightness:80, colorDrafts:{ 'custom-sea':{ text:'#ffffff' } } })],
+    ['journal.nebulaLayout.saved', JSON.stringify({ day:[{ columns:3 }, null, null] })],
+    ['journal.nebulaLayout.v1', JSON.stringify({ views:{ day:{ order:['entries'] } } })],
+    ['journal.tagKindOrder', JSON.stringify(['mail', 'own', 'activity'])],
+    ['journal.ink', JSON.stringify({ tool:'pencil' })], ['journal.hiddenTags', '["x"]'], ['journal.sidebar', '300'],
+  ]));
+  const shared = readSyncedPreferences(source);
+  assert.deepEqual(shared.customThemes, [theme]);
+  assert.equal(shared.colorDrafts, undefined, 'Unsaved colour changes stay on the device.');
+  assert.deepEqual(shared['storage:journal.tagKindOrder'], ['mail', 'own', 'activity']);
+  assert.deepEqual(shared['storage:journal.nebulaLayout.saved'], { day:[{ columns:3 }, null, null] });
+  assert(!Object.keys(shared).some(key => /ink|hiddenTags|sidebar/.test(key)), 'Device state stays.');
+  assert.deepEqual(syncPreferences({ ...shared, 'storage:journal.sidebar':300, 'storage:evil':1 }), shared, 'Only known storage keys are accepted.');
+
+  const target = memory(new Map([['journal.settings', JSON.stringify({ uiScale:'auto', colorDrafts:{ original:{ text:'#000000' } }, ticketBrightness:20, customThemes:[{ ...theme, id:'custom-old' }] })], ['journal.ink', '{"tool":"marker"}']]));
+  writeSyncedPreferences(target, shared);
+  const settings = JSON.parse(target.getItem('journal.settings'));
+  assert.deepEqual(settings.customThemes, [theme]);
+  assert.equal(settings.ticketBrightness, 80);
+  assert.deepEqual(settings.colorDrafts, { original:{ text:'#000000' } }, 'This device\'s unsaved changes stay.');
+  assert.equal(target.getItem('journal.ink'), '{"tool":"marker"}');
+  assert.deepEqual(JSON.parse(target.getItem('journal.nebulaLayout.v1')), { views:{ day:{ order:['entries'] } } });
+  // A setting back to its default on another device goes here too; keys an older version dropped stay.
+  const { ticketBrightness, customThemes, ...older } = shared;
+  writeSyncedPreferences(target, older);
+  const after = JSON.parse(target.getItem('journal.settings'));
+  assert.equal(after.ticketBrightness, undefined);
+  assert.deepEqual(after.customThemes, [theme]);
+  assert.equal(target.getItem('journal.tagKindOrder'), JSON.stringify(['mail', 'own', 'activity']));
+});

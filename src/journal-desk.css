@@ -120,7 +120,8 @@
 :root[data-layout='desk'][data-look='journal'] .nebula-today { padding: 0 12px; font: 700 15px var(--hand); letter-spacing: 0; text-transform: none; background: color-mix(in srgb, var(--pink) 34%, var(--tint-base, var(--surface))) !important; }
 :root[data-layout='desk'][data-look='journal'] .nebula-day-nav button:hover:not(:disabled) { background: color-mix(in srgb, var(--mint) 45%, var(--tint-base, var(--surface))); color: var(--ink-fixed); transform: rotate(-4deg); }
 :root[data-layout='desk'][data-look='journal'] .nebula-day-nav button:disabled { opacity: .5; }
-:root[data-layout='desk'][data-look='journal'] .nebula-day-nav .nebula-today:disabled { opacity: 1; cursor: default; }
+/* Already on today: a dark, sunk key without its pink. */
+:root[data-layout='desk'][data-look='journal'] .nebula-day-nav .nebula-today:disabled { opacity: 1; cursor: default; background: var(--key-bg) !important; background-image: none !important; color: var(--muted); box-shadow: var(--key-pressed); }
 :root[data-layout='desk'][data-look='journal'] .nebula-poster-tags .tag-filter-button { border: 0; color: var(--ink); font: 700 15px var(--hand); }
 :root[data-layout='desk'][data-look='journal'] .nebula-poster :focus-visible { outline: 2px solid var(--accent); }
 .desk-poster-stickers { position: absolute; top: -18px; right: -14px; width: 104px; height: 104px; overflow: visible; pointer-events: none; rotate: 8deg; }
@@ -157,13 +158,15 @@
 :root[data-layout='desk'][data-look='journal'] .nebula-empty { color: var(--muted); font: 700 16px var(--hand); }
 :root[data-layout='desk'][data-look='journal'] .nebula-ticket-row { gap: 22px; padding: 6px; }
 :root[data-layout='desk'][data-look='journal'] .nebula-ticket { --tint: var(--violet); aspect-ratio: auto; min-height: 92px; border-radius: var(--wobble-lg) !important; overflow: visible;
-  background: color-mix(in srgb, var(--tint) 34%, var(--tint-base)); background-image: var(--paper-grain); -webkit-mask: none; mask: none; color: var(--ink-fixed); --ink-soft: color-mix(in srgb, var(--ink-fixed) 45%, transparent); box-shadow: var(--sticker-sm); }
+  background: color-mix(in srgb, var(--tint) var(--ticket-tint, 34%), var(--tint-base)); background-image: var(--paper-grain); -webkit-mask: none; mask: none; color: var(--ink-fixed); --ink-soft: color-mix(in srgb, var(--ink-fixed) 45%, transparent); box-shadow: var(--sticker-sm); }
 :root[data-layout='desk'][data-look='journal'] .nebula-ticket:nth-child(2n) { rotate: 1.5deg; }
 :root[data-layout='desk'][data-look='journal'] .nebula-ticket:nth-child(2n+1) { rotate: -1.2deg; }
 :root[data-layout='desk'][data-look='journal'] .nebula-ticket.foil-delivery { --tint: #f2b386; }
 :root[data-layout='desk'][data-look='journal'] .nebula-ticket.foil-payment { --tint: var(--mint); }
 :root[data-layout='desk'][data-look='journal'] .nebula-ticket.foil-appointment { --tint: var(--violet); }
 :root[data-layout='desk'][data-look='journal'] .nebula-ticket.foil-event { --tint: var(--pink); }
+/* A tag's colour, lightened where it is dark (ticketColors), so the ink stays readable. */
+:root[data-layout='desk'][data-look='journal'] .nebula-ticket.has-tag-color { --tint: var(--tag-light); }
 :root[data-layout='desk'][data-look='journal'] .nebula-ticket:hover { box-shadow: var(--sticker); filter: none; }
 :root[data-layout='desk'][data-look='journal'] :is(.nebula-ticket-band, .nebula-ticket-bar) { display: none; }
 :root[data-layout='desk'][data-look='journal'] .nebula-ticket :is(.nebula-ticket-top, .nebula-ticket-text, .nebula-ticket-bottom) { left: 14px; right: 64px; }
@@ -205,3 +208,7 @@
 :root[data-layout='desk'][data-look='journal'] .nebula-cal-panel > .nebula-terminal-head > .desk-label { flex: none; }
 :root[data-layout='desk'][data-look='journal'] .nebula-cal-panel > .nebula-terminal-head > .nebula-cal-views { min-width: 0; flex: 0 1 auto; }
 :root[data-layout='desk'][data-look='journal'] .nebula-layout-slot[aria-pressed='true'] { background: color-mix(in srgb, var(--pink) 45%, var(--tint-base, var(--surface))); color: var(--ink-fixed); box-shadow: var(--key); }
+/* Popups opened from the poster keep its light sticker paper; their hover and choice are tints of it (the palette's own
+   are dark on dark palettes, so dark print would vanish on them). */
+:root[data-layout='desk'][data-look='journal'] .nebula-paper :is(.popover, .planner, .format-menu, .mini-picker-panel, .tag-filter-list, .color-picker-panel) {
+  --hover: color-mix(in srgb, var(--violet) 22%, var(--surface)); --selected: color-mix(in srgb, var(--violet) 36%, var(--surface)); --focus: color-mix(in srgb, var(--violet) 30%, var(--surface)); }

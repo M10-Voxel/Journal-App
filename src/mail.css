@@ -88,3 +88,17 @@
 .drive-settings pre { max-height:150px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; font:11px var(--mono); }
 .drive-settings details { margin:12px 0; font-size:12px; line-height:1.6; }
 :root[data-pixel] .drive-settings input { font-size:15px; }
+/* Automatic sync: when (a choice and, for the interval, minutes), the key kept on this device, the status line. */
+.drive-settings > label.drive-remember { flex-direction: row; align-items: center; gap: 8px; margin: 2px 0 10px; color: var(--text); }
+.drive-settings .drive-remember input { width: 15px; min-height: 0; height: 15px; margin: 0; padding: 0; accent-color: var(--accent); }
+.drive-when { margin: 16px 0 10px; padding-top: 12px; border-top: 1px solid var(--divider); }
+.drive-when > label { display: block; margin-bottom: 6px; color: var(--muted); font-size: 12px; }
+.drive-when-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.drive-when-controls select { flex: 1 1 220px; width: auto; }
+.drive-minutes { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
+.drive-settings .drive-minutes input { width: 72px; font-family: var(--sans); }
+.drive-warning { color: color-mix(in srgb, var(--priority) 55%, var(--text)); }
+.drive-status { margin: 10px 0; color: var(--muted); font-size: 12px; }
+.drive-status[data-drive-status="error"], .drive-status[data-drive-status="conflict"] { color: var(--error); }
+.drive-key-stored { margin: 12px 0; }
+:root[data-pixel] :is(.drive-status, .drive-minutes, .drive-when > label) { font-size: 14px; }

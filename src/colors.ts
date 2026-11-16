@@ -47,7 +47,19 @@ export type ColorOverrides = Partial<Palette>;
 export const colorThemeIds = ['original', 'green', 'summer', 'paper', 'candle', 'lavender', 'lavender-night'] as const;
 export type ColorTheme = typeof colorThemeIds[number];
 export type CustomColors = Partial<Record<ColorTheme, ColorOverrides>>;
-export interface ColorSettings { colorTheme: ColorTheme; customColors: CustomColors }
+/** A palette of the user's own: a name, the built-in palette it started from (which also decides the looks' light or dark
+ *  rules, `data-color-theme`), and its colours as changes to that base. */
+export interface CustomTheme { id: string; name: string; base: ColorTheme; colors: ColorOverrides }
+/**
+ * `colorTheme`: a built-in id or a custom palette's id. `customColors`: the saved changes to built-in palettes.
+ * `colorDrafts`: changes not saved yet (per palette), shown at once but kept apart until saved, discarded or turned into a
+ * palette of its own; they stay on this device (not synced, see sync/snapshot.ts).
+ */
+export interface ColorSettings { colorTheme: string; customColors: CustomColors; customThemes?: CustomTheme[]; colorDrafts?: Record<string, ColorOverrides>; ticketBrightness?: number }
+/** How light the desk's tickets are in the journal look (0: the tag's colour itself, 100: the sticker paper); see
+ *  `--ticket-tint` in journal-desk.css. 66 is the look's own (a third of the colour). */
+export const defaultTicketBrightness = 66;
+export const isTicketBrightness = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 100;
 
 const original: BasePalette = {
   background: '#000000', surface: '#292929', inset: '#1f1f1f', hover: '#393939', selected: '#494949', focus: '#494949',
@@ -157,14 +169,28 @@ function mix(first: string, second: string, weight: number): string {
   const hex = (value: number) => Math.round(value).toString(16).padStart(2, '0');
   return '#' + a.slice(0, 3).map((value, index) => hex(alpha ? (value * a[3] * weight + b[index] * b[3] * (1 - weight)) / alpha : 0)).join('') + (alpha < 1 ? hex(alpha * 255) : '');
 }
+/** The journal look's three sticker colours per palette (tabs, buttons, the blots behind the page, the ribbon): lavender's
+ *  violet, pink and mint, and for the others a trio in the palette's own family. On dark palettes `violet` is deeper, as
+
+ *  it also tints the blots on dark paper. `tint`: the light stickers' ground on dark palettes (light ones use their panels). */
+const stickerTrios: Record<ColorTheme, { violet: string; pink: string; mint: string; tint?: string }> = {
+  original: { violet: '#3f6fd0', pink: '#e9908c', mint: '#7cc7b2', tint: '#eff0f4' },
+  green: { violet: '#55822a', pink: '#e2c46e', mint: '#9ad9a8', tint: '#eef4e6' },
+  summer: { violet: '#2a7d9c', pink: '#f2b27c', mint: '#7ed6d2', tint: '#e9f3f6' },
+  paper: { violet: '#c9a46a', pink: '#dc9c86', mint: '#9cc4a0' },
+  candle: { violet: '#9a6a2a', pink: '#e39a7c', mint: '#b4c98c', tint: '#f6eee1' },
+  lavender: { violet: '#9b84e0', pink: '#e48aa8', mint: '#7cc7b2' },
+  'lavender-night': { violet: '#6b4fd0', pink: '#e48aa8', mint: '#7cc7b2', tint: '#f1ecfb' },
+};
 function withStickerColors(base: BasePalette, theme: ColorTheme, overrides: ColorOverrides = {}): Palette {
   const dark = !['lavender', 'paper'].includes(theme);
   const ink = overrides.ink ?? overrides.text ?? (dark ? '#ece6fb' : theme === 'paper' ? '#3b2a1a' : '#2b2140');
   const fixed = overrides['ink-fixed'] ?? overrides.text ?? (theme === 'paper' ? '#3b2a1a' : '#2b2140');
-  const violet = overrides.violet ?? (theme === 'paper' ? '#c9a46a' : theme === 'candle' ? '#9a6a2a' : dark ? '#6b4fd0' : '#9b84e0');
-  const tint = overrides['tint-base'] ?? (dark ? '#f1ecfb' : base.surface);
+  const trio = stickerTrios[theme];
+  const violet = overrides.violet ?? trio.violet;
+  const tint = overrides['tint-base'] ?? trio.tint ?? base.surface;
   const posterText = overrides['poster-text'] ?? overrides.text ?? fixed;
-  return { ...base, ink, 'ink-fixed': fixed, violet, 'tint-base': tint, pink: '#e48aa8', mint: '#7cc7b2',
+  return { ...base, ink, 'ink-fixed': fixed, violet, 'tint-base': tint, pink: trio.pink, mint: trio.mint,
     'key-bg': dark ? mix(base.surface, '#ffffff', .9) : theme === 'lavender' ? '#f1ecf9' : mix(base.surface, base.accent, .97),
     'key-backdrop': mix(base.surface, '#ffffff', dark ? .82 : .48),
     'poster-background': mix(violet, tint, .18), 'poster-text': posterText,
@@ -174,27 +200,102 @@ export const colorThemes = baseColorThemes.map(theme => ({ ...theme, colors: wit
 /** Light palettes (paper) need light form controls and scrollbars. */
 export const isLightPalette = (palette: Palette) => contrastRatio(palette.background, '#000000') > contrastRatio(palette.background, '#ffffff');
 export const colorTokens = colorGroups.flatMap(group => group.colors.map(([token]) => token));
-export const defaultColorSettings: ColorSettings = { colorTheme: 'original', customColors: {} };
+export const defaultColorSettings: Required<Omit<ColorSettings, 'ticketBrightness'>> = { colorTheme: 'original', customColors: {}, customThemes: [], colorDrafts: {} };
 export const isHexColor = (value: unknown): value is string => typeof value === 'string' && /^#[\da-f]{6}(?:[\da-f]{2})?$/i.test(value);
+const isBuiltIn = (id: unknown): id is ColorTheme => colorThemeIds.includes(id as ColorTheme);
+const isCustomId = (id: unknown): id is string => typeof id === 'string' && /^custom-[\w-]{1,40}$/.test(id);
+const customName = (name: unknown) => typeof name === 'string' ? name.trim().slice(0, 40) : '';
 
-/** Whitelist both tokens and hex values before they reach CSS or other windows. */
-export function normalizeColorSettings(value: unknown): ColorSettings {
+function cleanOverrides(colors: unknown): ColorOverrides {
+  const overrides: ColorOverrides = {};
+  if (!colors || typeof colors !== 'object') return overrides;
+  for (const token of colorTokens) { const value = (colors as Record<string, unknown>)[token]; if (isHexColor(value)) overrides[token] = value.toLowerCase(); }
+  return overrides;
+}
+
+/** Whitelist ids, names, tokens and hex values before they reach CSS or other windows. */
+export function normalizeColorSettings(value: unknown): Required<Omit<ColorSettings, 'ticketBrightness'>> {
   const stored = value && typeof value === 'object' ? value as Partial<ColorSettings> : {};
   const customColors: CustomColors = {};
   for (const id of colorThemeIds) {
-    const colors = stored.customColors?.[id];
-    if (!colors || typeof colors !== 'object') continue;
-    const overrides: ColorOverrides = {};
-    for (const token of colorTokens) if (isHexColor(colors[token])) overrides[token] = colors[token].toLowerCase();
+    const overrides = cleanOverrides(stored.customColors?.[id]);
     if (Object.keys(overrides).length) customColors[id] = overrides;
   }
-  return { colorTheme: colorThemeIds.find(id => id === stored.colorTheme) ?? 'original', customColors };
+  const customThemes: CustomTheme[] = [];
+  for (const theme of Array.isArray(stored.customThemes) ? stored.customThemes : []) {
+    if (!theme || typeof theme !== 'object' || !isCustomId(theme.id) || customThemes.some(other => other.id === theme.id)) continue;
+    customThemes.push({ id: theme.id, name: customName(theme.name) || 'Eigenes Farbschema', base: isBuiltIn(theme.base) ? theme.base : 'original', colors: cleanOverrides(theme.colors) });
+  }
+  const known = (id: unknown): id is string => isBuiltIn(id) || customThemes.some(theme => theme.id === id);
+  const colorDrafts: Record<string, ColorOverrides> = {};
+  for (const [id, colors] of Object.entries(stored.colorDrafts && typeof stored.colorDrafts === 'object' ? stored.colorDrafts : {})) {
+    const overrides = cleanOverrides(colors);
+    if (known(id) && Object.keys(overrides).length) colorDrafts[id] = overrides;
+  }
+  return { colorTheme: known(stored.colorTheme) ? stored.colorTheme : 'original', customColors, customThemes, colorDrafts };
 }
-export function resolvePalette(settings: ColorSettings): Palette {
-  const clean = normalizeColorSettings(settings);
-  const base = colorThemes.find(theme => theme.id === clean.colorTheme)!;
-  const overrides = clean.customColors[clean.colorTheme] ?? {};
-  return withStickerColors({ ...base.colors, ...overrides }, clean.colorTheme, overrides);
+/** Whether a palette id exists in these settings (a built-in one or one of the user's). */
+export const knownColorTheme = (settings: ColorSettings, id: unknown): id is string => isBuiltIn(id) || Boolean(settings.customThemes?.some(theme => theme.id === id));
+export const isCustomColorTheme = (id: string) => !isBuiltIn(id);
+/** The built-in palette a palette starts from (itself for a built-in one). */
+export function colorThemeBase(settings: ColorSettings, id = settings.colorTheme): ColorTheme {
+  return isBuiltIn(id) ? id : settings.customThemes?.find(theme => theme.id === id)?.base ?? 'original';
+}
+/** A palette's saved changes to its base: a built-in's adjustments, a custom palette's colours. */
+export function savedColors(settings: ColorSettings, id = settings.colorTheme): ColorOverrides {
+  return isBuiltIn(id) ? settings.customColors[id] ?? {} : settings.customThemes?.find(theme => theme.id === id)?.colors ?? {};
+}
+/** The changes in effect: the saved ones and, unless `draft` is false, the unsaved ones on top. */
+export function colorOverrides(settings: ColorSettings, id = settings.colorTheme, draft = true): ColorOverrides {
+  return { ...savedColors(settings, id), ...draft ? settings.colorDrafts?.[id] ?? {} : {} };
+}
+/** The colours of a base with changes. */
+export function paletteOf(base: ColorTheme, overrides: ColorOverrides): Palette {
+  return withStickerColors({ ...colorThemes.find(theme => theme.id === base)!.colors, ...overrides }, base, overrides);
+}
+/** A palette's colours (the chosen one unless `id` names another), with its unsaved changes unless `draft` is false. */
+export function resolvePalette(settings: ColorSettings, id?: string, draft = true): Palette {
+  const clean = normalizeColorSettings(settings), theme = id !== undefined && knownColorTheme(clean, id) ? id : clean.colorTheme;
+  return paletteOf(colorThemeBase(clean, theme), colorOverrides(clean, theme, draft));
+}
+/**
+ * The unsaved changes saved: into the built-in palette's adjustments or the custom palette's colours. A colour set back
+ * to what the base gives anyway is dropped, so a palette reset colour by colour is plain again.
+ */
+export function saveColorDraft<T extends ColorSettings>(settings: T, id = settings.colorTheme): T {
+  const base = colorThemeBase(settings, id), merged = colorOverrides(settings, id), kept: ColorOverrides = {};
+  for (const [token, value] of Object.entries(merged) as [ColorToken, string][]) {
+    const others = { ...merged }; delete others[token];
+    if (paletteOf(base, others)[token] !== value) kept[token] = value;
+  }
+  const colorDrafts = { ...settings.colorDrafts }; delete colorDrafts[id];
+  if (isBuiltIn(id)) {
+    const customColors = { ...settings.customColors };
+    if (Object.keys(kept).length) customColors[id] = kept; else delete customColors[id];
+    return { ...settings, customColors, colorDrafts };
+  }
+  return { ...settings, colorDrafts, customThemes: (settings.customThemes ?? []).map(theme => theme.id === id ? { ...theme, colors: kept } : theme) };
+}
+/** The unsaved changes of a palette thrown away. */
+export function discardColorDraft<T extends ColorSettings>(settings: T, id = settings.colorTheme): T {
+  const colorDrafts = { ...settings.colorDrafts }; delete colorDrafts[id];
+  return { ...settings, colorDrafts };
+}
+/** A new palette of the user's own from another one's colours (with its unsaved changes when `withDraft`); chosen at once. */
+export function createCustomTheme<T extends ColorSettings>(settings: T, name: string, from: string, withDraft = false, id = `custom-${crypto.randomUUID().slice(0, 8)}`): T {
+  const theme: CustomTheme = { id, name: customName(name) || 'Eigenes Farbschema', base: colorThemeBase(settings, from), colors: colorOverrides(settings, from, withDraft) };
+  const colorDrafts = { ...settings.colorDrafts }; if (withDraft) delete colorDrafts[from];
+  return { ...settings, colorTheme: id, colorDrafts, customThemes: [...settings.customThemes ?? [], theme] };
+}
+export function renameCustomTheme<T extends ColorSettings>(settings: T, id: string, name: string): T {
+  const clean = customName(name);
+  return clean ? { ...settings, customThemes: (settings.customThemes ?? []).map(theme => theme.id === id ? { ...theme, name: clean } : theme) } : settings;
+}
+/** A custom palette removed; while it was chosen, its base takes over. */
+export function removeCustomTheme<T extends ColorSettings>(settings: T, id: string): T {
+  const colorDrafts = { ...settings.colorDrafts }; delete colorDrafts[id];
+  return { ...settings, colorDrafts, customThemes: (settings.customThemes ?? []).filter(theme => theme.id !== id),
+    colorTheme: settings.colorTheme === id ? colorThemeBase(settings, id) : settings.colorTheme };
 }
 export function contrastRatio(foreground: string, background: string) {
   const luminance = (hex: string) => {
@@ -210,10 +311,12 @@ const onColor = (background: string) => contrastRatio('#ffffff', background) > c
 export function applyColors(settings: ColorSettings) {
   const clean = normalizeColorSettings(settings), palette = resolvePalette(clean);
   const root = document.documentElement;
-  root.dataset.colorTheme = clean.colorTheme;
+  // The base's id: the looks' rules for light and dark paper (journal-look.css) follow the palette it started from.
+  root.dataset.colorTheme = colorThemeBase(clean);
   root.style.colorScheme = isLightPalette(palette) ? 'light' : 'dark';
-  const overrides = clean.customColors[clean.colorTheme] ?? {};
-  const optional = new Set<string>(stickerColors.map(([token]) => token));
+  const overrides = colorOverrides(clean);
+  // Sticker colours the looks set themselves unless chosen; the palette's own sticker trio always applies.
+  const optional = new Set<string>(stickerColors.map(([token]) => token).filter(token => !['pink', 'mint', 'violet', 'tint-base'].includes(token)));
   for (const token of colorTokens) {
     if (optional.has(token) && overrides[token] === undefined) root.style.removeProperty(`--${token}`);
     else root.style.setProperty(`--${token}`, palette[token]);
@@ -226,5 +329,6 @@ export function applyColors(settings: ColorSettings) {
   if (overrides.strong && overrides['poster-text'] === undefined) root.style.setProperty('--poster-strong', overrides.strong);
   else root.style.removeProperty('--poster-strong');
   root.style.setProperty('--selection', `color-mix(in srgb, ${palette.accent} 20%, transparent)`);
+  root.style.setProperty('--ticket-tint', `${100 - Math.round(isTicketBrightness(settings.ticketBrightness) ? settings.ticketBrightness : defaultTicketBrightness)}%`);
   for (const token of ['accent', 'success', 'now', 'error'] as const) root.style.setProperty(`--on-${token}`, onColor(palette[token]));
 }

@@ -101,13 +101,14 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
   const { days, error } = useCalendarData(shiftDate(range.from, -366), range.to);
   const title = viewTitle(view, date);
   const tags = useTags();
+  const tagOrder = tags.map(tag => tag.id).join();
   const [hiddenTags, setHiddenTags] = useHiddenTags(tagScope);
   const visibleDays = useMemo(() => filterTagDays(days, hiddenTags), [days, hiddenTags, tags]);
   // A day's shown entries, filtered and ordered once per state of the data (the views ask for each day many times per
   // render); callers only read the lists.
-  const entriesOn = useMemo(() => perDay(value => orderForCalendar((visibleDays.get(value)?.entries ?? []).filter(entry => kinds[entry.kind]))), [visibleDays, kinds]);
+  const entriesOn = useMemo(() => perDay(value => orderForCalendar((visibleDays.get(value)?.entries ?? []).filter(entry => kinds[entry.kind]))), [visibleDays, kinds, tagOrder]);
   const displayDays=useMemo(()=>calendarDaysWithSpans(visibleDays,range.from,range.to),[visibleDays,range.from,range.to]);
-  const displayEntriesOn=useMemo(()=>perDay((value:string)=>orderForCalendar((displayDays.get(value)?.entries ?? []).filter(entry=>kinds[entry.kind])).sort((a,b)=>Number(Boolean(b.end && minutesOf(b.end)>1440))-Number(Boolean(a.end && minutesOf(a.end)>1440)))),[displayDays,kinds]);
+  const displayEntriesOn=useMemo(()=>perDay((value:string)=>orderForCalendar((displayDays.get(value)?.entries ?? []).filter(entry=>kinds[entry.kind])).sort((a,b)=>Number(Boolean(b.end && minutesOf(b.end)>1440))-Number(Boolean(a.end && minutesOf(a.end)>1440)))),[displayDays,kinds,tagOrder]);
   // A range drawn while entries without a tag are hidden takes the first tag shown, so it does not vanish at once.
   const newTag = isShown(hiddenTags, null) ? null : tags.find(tag => !hiddenTags.has(tag.id))?.id ?? null;
 
@@ -271,7 +272,7 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
       onKeyDown(event);
     }} onPointerDown={event => { beginMulti(event); beginFrame(event); }} onContextMenuCapture={event=>{const target=event.target as Element;if(target.closest('.cal-item,.cal-composer,.popover'))return;if(suppressContext.current){suppressContext.current=false;event.preventDefault();event.stopPropagation();return;}if(target.closest('.cal-time-column')){event.preventDefault();return;}const cell=target.closest<HTMLElement>('[data-range-date]');if(onCreate && cell && !cell.classList.contains('cal-time-allday-cell')){event.preventDefault();const selected=cell.dataset.rangeDate!;setMulti({start:selected,end:selected});}}} onClickCapture={event=>{if(suppressClick.current){event.preventDefault();event.stopPropagation();suppressClick.current=false;}}} onPointerMove={event=>{const day=(event.target as Element).closest<HTMLElement>('[data-date]')?.dataset.date;pasteTarget.current=day ?? date;}}>
       {/* Drawn over several days: the normal card, with the span's start and end (and repeating, tags, priority …). */}
-      {multi && onCreate && <CalendarComposer key="multi" date={multi.start} draft={null} span={{ end: multi.end }} onSpanChange={setMulti} tag={newTag}
+      {multi && onCreate && <CalendarComposer key={multi.start === multi.end ? `multi-day-${multi.start}` : "multi"} date={multi.start} draft={null} span={multi.start === multi.end ? undefined : { end: multi.end }} onSpanChange={setMulti} tag={newTag}
         anchor={() => (rootRef.current?.querySelector(`[data-range-date="${multi.end}"]`) ?? rootRef.current?.querySelector(`[data-range-date="${multi.start}"]`) ?? rootRef.current)?.getBoundingClientRect() ?? null}
         onCancel={byKey => { setMulti(null); if (byKey) refocus(); }} onCreate={async entry => { await onCreate(multi.start, entry); setMulti(null); refocus(); }} />}
       {frame && <div className="cal-frame" aria-hidden="true" style={{ left: frame.left, top: frame.top, width: frame.width, height: frame.height }} />}

@@ -1,3 +1,4 @@
+import { tagRank } from './tags.ts';
 import { t, dateFormat } from './i18n.ts';
 import type { Entry } from './journal';
 import { monthGrid, shiftDate, shiftMonth, weekDates } from './dates.ts';
@@ -95,11 +96,12 @@ export function formatDuration(minutes: number): string {
   return hours ? rest ? `${hours} h ${rest}` : `${hours} h` : `${rest} min`;
 }
 
-/** How an entry sorts within a day: without time first (like all-day events), then by time; priority and events first. */
+/** How an entry sorts within a day: without time first (like all-day events), then by time; all-day entries with priority first, then by the tags' order (settings) and events first. */
 export function orderForCalendar(entries: readonly Entry[]): Entry[] {
   const kindRank = { event: 0, task: 1, note: 2 };
   return [...entries].sort((a, b) => (a.time ? 1 : 0) - (b.time ? 1 : 0) || (a.time ?? '').localeCompare(b.time ?? '')
-    || Number(b.priority) - Number(a.priority) || kindRank[a.kind] - kindRank[b.kind]);
+    || Number(b.priority) - Number(a.priority)
+    || (a.time ? 0 : tagRank(a.tag) - tagRank(b.tag)) || kindRank[a.kind] - kindRank[b.kind]);
 }
 
 /**

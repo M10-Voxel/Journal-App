@@ -175,7 +175,13 @@ const bootstrap = `
     if (command === 'drive_connect') {sessionStorage.setItem('driveConnected','yes');return null;}
     if (command === 'drive_snapshot') return {schema:11,tables:{days:{'2026-11-02':{date:'2026-11-02',title:'Private Sync Test',body:'Geheim',revision:1}},entries:{},tags:{},series:{}}};
     if (command === 'drive_read') return sessionStorage.getItem('driveRemote') ? {id:'test-file',etag:'test-version',data:sessionStorage.getItem('driveRemote')} : {id:null,etag:null,data:null};
-    if (command === 'drive_write') {sessionStorage.setItem('driveEncrypted',payload.data);return null;}
+    if (command === 'drive_write') {sessionStorage.setItem('driveEncrypted',payload.data);sessionStorage.setItem('driveWrites',String(Number(sessionStorage.getItem('driveWrites')||0)+1));return {id:'test-file',etag:'test-version'};}
+    if (command === 'drive_probe') {sessionStorage.setItem('driveProbes',String(Number(sessionStorage.getItem('driveProbes')||0)+1));return sessionStorage.getItem('driveRemote')||sessionStorage.getItem('driveEncrypted') ? {id:'test-file',etag:sessionStorage.getItem('driveRemoteEtag')||'test-version'} : {id:null,etag:null};}
+    if (command === 'drive_key_save') {sessionStorage.setItem('driveKeyStored',payload.key);return null;}
+    if (command === 'drive_key_load') return sessionStorage.getItem('driveKeyStored');
+    if (command === 'drive_key_forget') {sessionStorage.removeItem('driveKeyStored');return null;}
+    if (command === 'session_sync_enabled') {sessionStorage.setItem('sessionSync',String(payload.enabled));return null;}
+    if (command === 'session_sync_done') {sessionStorage.setItem('sessionSyncDone',String(Number(sessionStorage.getItem('sessionSyncDone')||0)+1));return null;}
     if (command === 'drive_apply') {sessionStorage.setItem('driveApplied',JSON.stringify(payload.snapshot));return null;}
 
     // Activities bring their own tags; the tag checks start without any (localStorage 'test.noActivities').
@@ -849,6 +855,43 @@ async function checkLanguage() {
   await until("document.documentElement.lang==='de'"); await key('Escape');
   console.log('Language checks passed: DE/EN labels/dates, unsaved content, planning suggestions with strict preferred-language fallback, persistence and cross-window updates.');
 }
+/** Every palette in every look (JOURNAL_GALLERY_LOOKS=classic,journal,pixel; JOURNAL_GALLERY_THEMES=…): screenshots to
+ *  judge the palettes by eye, no assertions beyond loading. */
+async function checkThemeGallery() {
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  await command('Emulation.setDeviceMetricsOverride',{width:1280,height:800,deviceScaleFactor:1,mobile:false});
+  const looks = (process.env.JOURNAL_GALLERY_LOOKS ?? 'classic,journal,journal-book,pixel').split(',');
+  const themes = (process.env.JOURNAL_GALLERY_THEMES ?? 'original,green,summer,paper,candle,lavender,lavender-night').split(',');
+  const shots = [];
+  for (const variant of looks) for (const palette of themes) {
+    const look = variant === 'pixel' ? 'classic' : variant.startsWith('journal') ? 'journal' : variant, layout = variant === 'journal-book' ? 'book' : variant === 'journal-desk' || variant === 'nebula' ? 'desk' : 'classic';
+    await evaluate(`localStorage.setItem('journal.settings', JSON.stringify((({theme, ...rest}) => ({...rest, layout:'${layout}', look:'${look}', pixel:${variant === 'pixel'}, popupStyle:'a', colorTheme:'${palette}'}))(JSON.parse(localStorage.getItem('journal.settings')||'{}')))); localStorage.setItem('journal.calendarDrawer','1')`);
+    await command('Page.navigate', { url:origin });
+    await until(`document.documentElement.dataset.look==='${look}' && document.documentElement.dataset.colorTheme==='${palette}' && document.querySelectorAll('.entry').length>=1`);
+    await evaluate("document.fonts.ready.then(() => true)"); await pause(700);
+    if (process.env.JOURNAL_GALLERY_POPUP) { await evaluate("document.querySelector('.entry-text')?.focus()"); await key('F1'); await pause(400); }
+    // The colour settings with an unsaved change (the bar on top) and the new palette's form open.
+    if (process.env.JOURNAL_GALLERY_SETTINGS) {
+      await evaluate("document.querySelector('.settings-button').click()"); await until("Boolean(document.querySelector('#settings-colors-tab'))");
+      await evaluate("document.querySelector('#settings-colors-tab').click()"); await until("Boolean(document.querySelector('[data-color-field=accent] .color-hex'))");
+      await evaluate(`(() => {const input=document.querySelector('[data-color-field="md-red"] .color-hex'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'#ff7777'); input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+      await until("Boolean(document.querySelector('.color-draft-bar'))");
+      await evaluate("document.querySelector('[data-color-draft=new]').click()"); await pause(200);
+      await evaluate("document.querySelector('.color-settings').closest('.settings-panel, .dialog-panes > *:last-child')?.scrollTo?.(0,0); document.querySelector('.color-draft-bar').scrollIntoView({block:'start'})"); await pause(300);
+    }
+    if (process.env.JOURNAL_GALLERY_EVAL) console.log(variant, palette, JSON.stringify(await evaluate(process.env.JOURNAL_GALLERY_EVAL)));
+    await screenshot(`gallery-${variant}-${palette}.png`);
+    shots.push((await command('Page.captureScreenshot', { format: 'jpeg', quality: 80 })).data);
+    if (palette === themes[themes.length - 1]) {
+      // One sheet per look: the palettes side by side, two per row, named.
+      await command('Emulation.setDeviceMetricsOverride',{width:1280,height:Math.ceil(shots.length / 2) * 420,deviceScaleFactor:1,mobile:false});
+      await evaluate(`(()=>{document.documentElement.removeAttribute('style');document.body.removeAttribute('style');document.body.innerHTML=${JSON.stringify(shots.map((data, index) => `<figure style="margin:0;position:relative;width:640px;height:420px;float:left"><img style="width:640px;height:400px;display:block" src="data:image/jpeg;base64,${data}"><figcaption style="height:20px;font:13px sans-serif;color:#000;background:#fff">${themes[index]}</figcaption></figure>`).join(''))};})()`);
+      await pause(300); await screenshot(`sheet-${variant}.png`); shots.length = 0;
+      await command('Emulation.setDeviceMetricsOverride',{width:1280,height:800,deviceScaleFactor:1,mobile:false});
+    }
+  }
+  console.log('Theme gallery written.');
+}
 async function checkColors() {
   const origin = `http://127.0.0.1:${server.address().port}`;
   await command('Page.navigate', {url:origin});
@@ -948,6 +991,55 @@ async function checkColors() {
   assert.equal(await token('accent'),'#aeff00');
   assert.equal(await token('md-red'),'#eca390');
   await fill('md-red','#ffbbaa');
+  // Changes stay unsaved (shown at once) until saved from the bar at the top.
+  await until("Boolean(document.querySelector('.color-draft-bar'))");
+  assert.equal(await evaluate("JSON.parse(localStorage.getItem('journal.settings')).customColors?.green?.['md-red'] ?? null"), null, 'An unsaved change is not saved into the palette.');
+  assert(await evaluate("(() => {const bar=document.querySelector('.color-draft-bar'),r=bar.getBoundingClientRect(); return Boolean(bar.compareDocumentPosition(document.querySelector('#settings-colors-title')) & Node.DOCUMENT_POSITION_FOLLOWING) && document.elementFromPoint(r.left+r.width/2,r.top+r.height/2)?.closest('.color-draft-bar')===bar;})()"), 'The bar sits above the palettes and stays in view while the colours scroll.');
+  await screenshot('colors-draft-bar.png');
+  await evaluate("document.querySelector('[data-color-draft=save]').click()");
+  await until("!document.querySelector('.color-draft-bar') && JSON.parse(localStorage.getItem('journal.settings')).customColors?.green?.['md-red']==='#ffbbaa'");
+  assert.equal(await token('md-red'),'#ffbbaa');
+  // A new palette from unsaved changes: named, chosen at once, the built-in one left as saved.
+  await fill('md-blue','#123abc');
+  await until("Boolean(document.querySelector('[data-color-draft=new]'))");
+  await evaluate("document.querySelector('[data-color-draft=new]').click()");
+  await until("Boolean(document.querySelector('.color-draft-bar .color-new-name'))");
+  assert.equal(await evaluate("document.querySelector('.color-draft-bar .color-new-from').value"),'draft');
+  await evaluate(`(() => {const input=document.querySelector('.color-draft-bar .color-new-name'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'Waldsee'); input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+  await screenshot('colors-new-from-draft.png');
+  await evaluate("document.querySelector('.color-draft-bar .color-new-form [type=submit]').click()");
+  await until("document.documentElement.dataset.colorTheme==='green' && JSON.parse(localStorage.getItem('journal.settings')).colorTheme.startsWith('custom-')");
+  const customId = await evaluate("JSON.parse(localStorage.getItem('journal.settings')).colorTheme");
+  assert.equal(await token('md-blue'),'#123abc','The new palette keeps the changes.');
+  assert.equal(await evaluate(`document.querySelector('[data-color-theme-choice="${customId}"] strong').textContent`),'Waldsee');
+  assert.equal(await evaluate(`getComputedStyle(document.querySelector('[data-color-theme-choice="${customId}"] .color-theme-preview')).getPropertyValue('--preview-accent').trim()`),'#aeff00','The card shows the palette\'s real colours.');
+  assert(!await evaluate("Boolean(document.querySelector('.color-draft-bar'))"));
+  await evaluate("document.querySelector('[data-color-theme-choice=green]').click()");
+  await until("JSON.parse(localStorage.getItem('journal.settings')).colorTheme==='green'");
+  assert.notEqual(await token('md-blue'),'#123abc','The built-in palette was left as saved.');
+  // Renamed and removed (two steps).
+  await evaluate(`document.querySelector('[data-color-theme-choice="${customId}"]').click()`);
+  await until("Boolean(document.querySelector('.color-theme-rename input'))");
+  await evaluate(`(() => {const input=document.querySelector('.color-theme-rename input'); input.focus(); input.value='Bergsee'; input.blur();})()`);
+  await until(`document.querySelector('[data-color-theme-choice="${customId}"] strong').textContent==='Bergsee'`);
+  await screenshot('colors-custom-theme.png');
+  // A new palette from the card at the end of the list, starting from another palette.
+  await evaluate("document.querySelector('[data-color-theme-new]').click()");
+  await until("Boolean(document.querySelector('.color-new-panel .color-new-from'))");
+  await evaluate("(() => {const select=document.querySelector('.color-new-panel .color-new-from'); select.value='summer'; select.dispatchEvent(new Event('change',{bubbles:true}));})()");
+  await evaluate("document.querySelector('.color-new-panel [type=submit]').click()");
+  await until("document.documentElement.dataset.colorTheme==='summer' && document.querySelectorAll('.color-theme-options .is-custom').length===2");
+  assert.equal(await token('accent'),'#50d5ff');
+  await evaluate("document.querySelector('[data-color-theme-remove]').click()");
+  assert.equal(await evaluate("document.querySelectorAll('.color-theme-options .is-custom').length"),2,'Removing asks first.');
+  await evaluate("document.querySelector('[data-color-theme-remove]').click()");
+  await until("document.querySelectorAll('.color-theme-options .is-custom').length===1 && JSON.parse(localStorage.getItem('journal.settings')).colorTheme==='summer'");
+  await evaluate(`document.querySelector('[data-color-theme-choice="${customId}"]').click()`);
+  await until("Boolean(document.querySelector('[data-color-theme-remove]'))");
+  await evaluate("document.querySelector('[data-color-theme-remove]').click()"); await evaluate("document.querySelector('[data-color-theme-remove]').click()");
+  await until("document.querySelectorAll('.color-theme-options .is-custom').length===0");
+  await evaluate("document.querySelector('[data-color-theme-choice=green]').click()");
+  await until("JSON.parse(localStorage.getItem('journal.settings')).colorTheme==='green'");
   await command('Emulation.setDeviceMetricsOverride',{width:760,height:520,deviceScaleFactor:1,mobile:false});
   await pause(150);
   assert(await evaluate("(() => {const p=document.querySelector('.settings'),r=p.getBoundingClientRect(); return r.left>=0 && r.top>=0 && r.right<=innerWidth && r.bottom<=innerHeight && p.scrollWidth<=p.clientWidth+1 && [...p.querySelectorAll('.color-hex')].every(e=>e.getBoundingClientRect().width>=65);})()"),'Colour controls fit compact windows, including the header and close button.');
@@ -1037,6 +1129,8 @@ async function checkDrive() {
     await evaluate("document.querySelector('.settings-button').click()");await until("Boolean(document.querySelector('#settings-drive-tab'))");
     await evaluate("document.querySelector('#settings-drive-tab').click()");await until("Boolean(document.querySelector('[data-drive=connect]'))");
     await evaluate("document.querySelector('[data-drive=connect]').click()");await until("!document.querySelector('[data-drive=connect]')");
+    // The key typed for one sync only (not remembered): the manual flow first.
+    await evaluate("(()=>{const box=document.querySelector('[data-drive=remember]');if(box.checked)box.click();})()");
     await evaluate("(()=>{const f=document.querySelector('.drive-key');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(f,'a password, not a device key');f.dispatchEvent(new Event('input',{bubbles:true}));})()");
     await evaluate("document.querySelector('[data-drive=sync]').click()");
     await until("document.querySelector('.mail-error')?.textContent.includes('Ungültiger Geräteschlüssel')");
@@ -1045,14 +1139,17 @@ async function checkDrive() {
     await evaluate("document.querySelector('[data-drive=generate]').click()");
     const keyText=await evaluate("document.querySelector('.drive-key').value");assert.equal(keyText.length,44);
     await pause(200);await screenshot(`drive-${theme}.png`);
-    await evaluate("document.querySelector('[data-drive=sync]').click()");await until("sessionStorage.getItem('driveApplied')!==null && !document.querySelector('.settings')");
+    // The first sync: nothing in the cloud yet, so this device's state goes up and nothing comes back to apply.
+    await evaluate("document.querySelector('[data-drive=sync]').click()");await until("sessionStorage.getItem('driveEncrypted')!==null && document.querySelector('[data-drive-status]')?.dataset.driveStatus==='idle' && document.querySelector('.drive-status').textContent.includes('Zuletzt')");
+    assert.equal(await evaluate("sessionStorage.getItem('driveApplied')"),null,'Nothing new arrived, so nothing is applied here.');
+    await evaluate("document.querySelector('.settings-close').click()");await until("!document.querySelector('.settings')");
     const encoded=await evaluate("sessionStorage.getItem('driveEncrypted')");assert(!encoded.includes('Private Sync Test'));assert(!encoded.includes('Geheim'));
     const plain=await evaluate(`(async()=>{const e=JSON.parse(sessionStorage.getItem('driveEncrypted'));const bytes=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));const key=await crypto.subtle.importKey('raw',bytes(${JSON.stringify(keyText)}),'AES-GCM',false,['decrypt']);return new TextDecoder().decode(await crypto.subtle.decrypt({name:'AES-GCM',iv:bytes(e.iv)},key,bytes(e.cipher)));})()`);
     assert.equal(JSON.parse(plain).tables.days['2026-11-02'].body,'Geheim');
     await until("document.querySelectorAll('.entry').length===5");
-    await evaluate(`(async()=>{const bytes=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));const key=await crypto.subtle.importKey('raw',bytes(${JSON.stringify(keyText)}),'AES-GCM',false,['encrypt']);const snapshot=JSON.parse(sessionStorage.getItem('driveApplied'));snapshot.tables.days['2026-11-02'].body='Cloud edit';const iv=crypto.getRandomValues(new Uint8Array(12));const cipher=new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv},key,new TextEncoder().encode(JSON.stringify(snapshot))));sessionStorage.setItem('driveRemote',JSON.stringify({version:1,iv:btoa(String.fromCharCode(...iv)),cipher:btoa(String.fromCharCode(...cipher))}));sessionStorage.removeItem('driveApplied');})()`);
+    await evaluate(`(async()=>{const bytes=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));const key=await crypto.subtle.importKey('raw',bytes(${JSON.stringify(keyText)}),'AES-GCM',false,['encrypt','decrypt']);const sealed=JSON.parse(sessionStorage.getItem('driveEncrypted'));const snapshot=JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({name:'AES-GCM',iv:bytes(sealed.iv)},key,bytes(sealed.cipher))));snapshot.tables.days['2026-11-02'].body='Cloud edit';const iv=crypto.getRandomValues(new Uint8Array(12));const cipher=new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv},key,new TextEncoder().encode(JSON.stringify(snapshot))));sessionStorage.setItem('driveRemote',JSON.stringify({version:1,iv:btoa(String.fromCharCode(...iv)),cipher:btoa(String.fromCharCode(...cipher))}));sessionStorage.removeItem('driveApplied');})()`);
     await evaluate("document.querySelector('.settings-button').click()");await until("Boolean(document.querySelector('#settings-drive-tab'))");await evaluate("document.querySelector('#settings-drive-tab').click()");await until("Boolean(document.querySelector('.drive-key'))");
-    await evaluate(`(()=>{const field=document.querySelector('.drive-key');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(field,${JSON.stringify(' '+keyText.slice(0,20)+' '+keyText.slice(20)+' ')});field.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+    await evaluate(`(()=>{const field=document.querySelector('.drive-key');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(field,${JSON.stringify(' '+keyText.slice(0,20)+' '+keyText.slice(20)+' ')});field.dispatchEvent(new Event('input',{bubbles:true}));{const box=document.querySelector('[data-drive=remember]');if(box?.checked)box.click();}})()`);
     await until("document.querySelector('[data-drive=sync]')?.disabled===false");await evaluate("document.querySelector('[data-drive=sync]').click()");await until("sessionStorage.getItem('driveApplied')!==null && !document.querySelector('.settings')");
     assert.equal(await evaluate("JSON.parse(sessionStorage.getItem('driveApplied')).tables.days['2026-11-02'].body"),'Cloud edit','Remote offline edits are downloaded, decrypted and merged against the previous sync.');
 
@@ -1060,7 +1157,7 @@ async function checkDrive() {
       await until("document.querySelectorAll('.entry').length===5");
       await evaluate("document.querySelector('.settings-button').click()");await until("Boolean(document.querySelector('#settings-drive-tab'))");
       await evaluate("document.querySelector('#settings-drive-tab').click()");await until("Boolean(document.querySelector('.drive-key'))");
-      await evaluate(`(()=>{const f=document.querySelector('.drive-key');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(f,${JSON.stringify(keyText)});f.dispatchEvent(new Event('input',{bubbles:true}));sessionStorage.removeItem('driveApplied');})()`);
+      await evaluate(`(()=>{const f=document.querySelector('.drive-key');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(f,${JSON.stringify(keyText)});f.dispatchEvent(new Event('input',{bubbles:true}));{const box=document.querySelector('[data-drive=remember]');if(box?.checked)box.click();}sessionStorage.removeItem('driveApplied');})()`);
     };
     // Download replaces the local state without uploading anything to Drive.
     const encryptedBefore=await evaluate("sessionStorage.driveEncrypted");
@@ -1069,12 +1166,31 @@ async function checkDrive() {
     assert.equal(await evaluate("sessionStorage.driveEncrypted"),encryptedBefore);
     assert.equal(await evaluate("JSON.parse(sessionStorage.driveApplied).tables.days['2026-11-02'].body"),'Cloud edit');
     // Exact upload uses this device's current snapshot, with no local import or merge.
-    await reopenDrive();await evaluate("document.querySelector('[data-drive=upload-local]').click()");
-    await until("!document.querySelector('.settings')");
+    await reopenDrive();const writesBefore=Number(await evaluate("sessionStorage.getItem('driveWrites')||0"));await evaluate("document.querySelector('[data-drive=upload-local]').click()");
+    await until(`Number(sessionStorage.getItem('driveWrites')||0)>${writesBefore} && document.querySelector('[data-drive-status]')?.dataset.driveStatus==='idle'`);
     assert.equal(await evaluate("sessionStorage.getItem('driveApplied')"),null,'Upload does not replace the local database.');
     const uploaded=await evaluate(`(async()=>{const e=JSON.parse(sessionStorage.driveEncrypted),bytes=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));const key=await crypto.subtle.importKey('raw',bytes(${JSON.stringify(keyText)}),'AES-GCM',false,['decrypt']);return JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({name:'AES-GCM',iv:bytes(e.iv)},key,bytes(e.cipher))));})()`);
     assert.equal(uploaded.tables.days['2026-11-02'].body,'Geheim','Exact upload keeps local content instead of the remote edit.');
     assert.equal(await evaluate(`Object.values(localStorage).some(v=>v.includes(${JSON.stringify(keyText)}))`),false);
+    // Remembered on this device and synced automatically: the key goes to the protected store (never localStorage), the
+    // moment is chosen, Windows ending the session waits for the sync, and a sync with nothing new costs one probe.
+    await evaluate("(()=>{const box=document.querySelector('[data-drive=remember]');if(!box.checked)box.click();})()");
+    await evaluate(`(()=>{const f=document.querySelector('.drive-key');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(f,${JSON.stringify(keyText)});f.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+    await evaluate("sessionStorage.setItem('driveRemote',sessionStorage.getItem('driveEncrypted'))");
+    await evaluate("document.querySelector('[data-drive=sync]').click()");await until("Boolean(document.querySelector('[data-drive-key-stored]')) && document.querySelector('[data-drive-status]')?.dataset.driveStatus==='idle'");
+    assert.equal(await evaluate("sessionStorage.getItem('driveKeyStored')"),keyText,'The key is kept in the protected store.');
+    assert.equal(await evaluate(`Object.values(localStorage).some(v=>v.includes(${JSON.stringify(keyText)}))`),false,'Never in localStorage.');
+    await evaluate("(()=>{const s=document.querySelector('[data-drive=moment]');s.value='quit';s.dispatchEvent(new Event('change',{bubbles:true}));})()");
+    await until("sessionStorage.getItem('sessionSync')==='true' && JSON.parse(localStorage.getItem('journal.driveSync')).moment==='quit'");
+    await pause(200);await screenshot(`drive-automatic-${theme}.png`);
+    await evaluate("document.querySelector('.settings-close').click()");await until("!document.querySelector('.settings')");
+    await evaluate("sessionStorage.removeItem('driveProbes');sessionStorage.removeItem('sessionSyncDone')");
+    const writes=Number(await evaluate("sessionStorage.getItem('driveWrites')||0"));
+    await evaluate("window.__uiTest.emit('journal:session-end',null)");
+    await until("sessionStorage.getItem('sessionSyncDone')==='1'");
+    assert.equal(await evaluate("sessionStorage.getItem('driveProbes')"),'1','Nothing changed: one version check, no download.');
+    assert.equal(Number(await evaluate("sessionStorage.getItem('driveWrites')||0")),writes,'Nothing changed: no upload.');
+    await evaluate("localStorage.removeItem('journal.driveSync');sessionStorage.removeItem('driveKeyStored');sessionStorage.removeItem('driveRemote')");
   }
   console.log('Drive UI passed: connection setup, key generation, encrypted exchange and application in Classic/Pixel (mock transport).');
 }
@@ -3847,6 +3963,19 @@ try {
     await until("document.querySelectorAll('.nebula-ticket[data-ticket-date=\"'+window.__uiTest.ticketDay+'\"]').length===4");
     assert.deepEqual(await evaluate("[...document.querySelectorAll('.nebula-ticket[data-ticket-date=\"'+window.__uiTest.ticketDay+'\"]')].map(e=>e.dataset.ticketKind).sort()"),['appointment','delivery','event','payment']);
     await screenshot('nebula-ticket-filter.png');assert.deepEqual(errors,[]);
+    // Tickets wear their tag's colour: Nebula its own foil, Journal a lightened sticker, Classic the exact colour at the side.
+    const delivery="'.nebula-ticket[data-ticket-kind=delivery]'";
+    // A dark tag colour: Nebula's foil and Journal's sticker lighten it, Classic keeps it.
+    await evaluate("window.__TAURI_INTERNALS__.invoke('save_tags',{tags:[...window.__uiTest.tags().filter(tag=>tag.id!=='f4c8191a-2d70-4b01-9d00-000000000001'),{id:'f4c8191a-2d70-4b01-9d00-000000000001',name:'Lieferung',color:'#1a237e'}]})");
+    await until(`document.querySelector(${delivery})?.classList.contains('has-tag-color')`);await evaluate(`document.querySelector(${delivery}).scrollIntoView({block:'center'})`);await pause(300);await screenshot('nebula-ticket-nebula.png');
+    assert(await evaluate(`document.querySelector(${delivery}).classList.contains('has-tag-color') && getComputedStyle(document.querySelector(${delivery})).backgroundImage.includes('data:image/svg+xml') && document.querySelector(${delivery}).style.getPropertyValue('--tag')==='#1a237e'`),'A tagged ticket gets the tag\'s own foil in Nebula.');
+    for (const look of ['journal','classic']) {
+      await evaluate(`window.__uiTest.emit('journal:theme',{layout:'desk',look:'${look}',pixel:false,popupStyle:'a'})`);await until(`document.documentElement.dataset.look==='${look}' && Boolean(document.querySelector(${delivery}))`);
+      const tint=await evaluate(`getComputedStyle(document.querySelector(${delivery})).getPropertyValue('--tint').trim()`);
+      assert.equal(tint, look==='classic' ? '#1a237e' : await evaluate(`document.querySelector(${delivery}).style.getPropertyValue('--tag-light')`), `${look}: the ticket's tint is the tag colour.`);
+      await evaluate(`document.querySelector(${delivery}).scrollIntoView({block:'center'})`);await pause(300);await screenshot(`nebula-ticket-${look}.png`);
+    }
+    assert.deepEqual(errors,[]);
     console.log('Nebula ticket filter passed: only visible events and all three mail categories; no ordinary calendar entries or activity time.');
   } else if (process.env.JOURNAL_UI_SCOPE === 'startup-notices') {
     await command('Emulation.setFocusEmulationEnabled',{enabled:true});
@@ -5884,7 +6013,7 @@ try {
     assert.deepEqual(await Promise.all([style('.nebula-poster','backgroundColor'),style('.nebula-date','color'),style('.nebula-window-tools button','backgroundColor')]),defaults,'Reset restores the original design exactly');
     assert.deepEqual(errors,[]);
     console.log('Sticker colours passed: general text, independent ink, buttons, date card, accents, persistence, palette isolation and reset.');
-  } else if (process.env.JOURNAL_UI_SCOPE === 'drive') { await checkDrive(); } else if (process.env.JOURNAL_UI_SCOPE === 'colors') {
+  } else if (process.env.JOURNAL_UI_SCOPE === 'drive') { await checkDrive(); } else if (process.env.JOURNAL_UI_SCOPE === 'theme-gallery') { await checkThemeGallery(); } else if (process.env.JOURNAL_UI_SCOPE === 'colors') {
     await checkColors();
   } else if (process.env.JOURNAL_UI_SCOPE === 'tags') {
     await checkTags();

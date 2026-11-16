@@ -14,6 +14,8 @@ export const tagKinds: readonly TagKind[] = ['own', 'activity', 'mail'];
 // The order of the kinds is the user's: the settings move a kind up or down (stored on the device, like the other view
 // choices) and every list follows it. `kindOrder()` is the order now; `useTagKindOrder` re-renders when it changes.
 const orderKey = 'journal.tagKindOrder';
+/** Tells the automatic Drive sync that something to share changed (sync/driveSync.ts). */
+const localChange = () => { try { globalThis.window?.dispatchEvent(new Event('journal:local-change')); } catch { /* no window */ } };
 const orderListeners = new Set<() => void>();
 /** A stored order made whole: known kinds once each, in the stored order, then the kinds it lacks in the default order. */
 export function normalizeKindOrder(value: unknown): readonly TagKind[] {
@@ -37,7 +39,7 @@ export function moveKind(kind: TagKind, step: -1 | 1): boolean {
   const next = [...order], at = next.indexOf(kind), to = at + step;
   if (at < 0 || to < 0 || to >= next.length) return false;
   [next[at], next[to]] = [next[to], next[at]];
-  try { globalThis.localStorage?.setItem(orderKey, JSON.stringify(next)); } catch { /* kept for this session */ }
+  try { globalThis.localStorage?.setItem(orderKey, JSON.stringify(next)); } catch { /* kept for this session */ } localChange();
   changeOrder(next);
   return true;
 }
@@ -46,11 +48,11 @@ export function moveKindTo(kind: TagKind, to: number): boolean {
   const next = [...order], at = next.indexOf(kind);
   if (at < 0 || to < 0 || to >= next.length || at === to) return false;
   next.splice(at, 1); next.splice(to, 0, kind);
-  try { globalThis.localStorage?.setItem(orderKey, JSON.stringify(next)); } catch { /* kept for this session */ }
+  try { globalThis.localStorage?.setItem(orderKey, JSON.stringify(next)); } catch { /* kept for this session */ } localChange();
   changeOrder(next);
   return true;
 }
-export const resetKindOrder = () => { try { globalThis.localStorage?.removeItem(orderKey); } catch { /* ignore */ } changeOrder(tagKinds); };
+export const resetKindOrder = () => { try { globalThis.localStorage?.removeItem(orderKey); } catch { /* ignore */ } changeOrder(tagKinds); localChange(); };
 /** One subscribe function for every reader (an inline one would make React subscribe anew on each render). */
 const subscribeStore = (listener: () => void) => { orderListeners.add(listener); return () => { orderListeners.delete(listener); }; };
 export function useTagKindOrder(): readonly TagKind[] {

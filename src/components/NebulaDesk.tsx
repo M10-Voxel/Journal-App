@@ -6,6 +6,8 @@ import { dateFormat, t, useLanguage } from '../i18n';
 import { formatShortDate, monthGrid, shiftDate, shiftMonth, weekDates } from '../dates';
 import { formatMonthName } from '../calendar';
 import { ticketForEntry } from '../nebulaTickets';
+import { lightTagColor, tagFoil } from '../ticketColors';
+import { isHexColor } from '../colors';
 import type { TicketKind } from '../nebulaTickets';
 import type { ActivityDefinition } from '../periodData';
 import { useTags } from '../tagStore';
@@ -81,7 +83,7 @@ function Marquee({ words }: { words: string[] }) {
 const timeOf = (now: Date) => `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
 /** What a ticket is for, which also picks its foil: delivery orange, payment green, appointments lilac, events sky. */
-type Upcoming = { date: string; entry: Entry; tag: string; kind: TicketKind; icon?: string };
+type Upcoming = { date: string; entry: Entry; tag: string; kind: TicketKind; icon?: string; color?: string };
 /**
  * Mail categories and visible events, excluding activity time and ordinary calendar-only entries,
  * from today on; open ones only, and today's timed ones only until they are over.
@@ -99,7 +101,8 @@ function useUpcoming(today: string, count: number, activities: readonly Activity
       const ticket = ticketForEntry(entry, tags, activityTags);
       if (!ticket) continue;
       if (date === today && entry.time && (entry.end ?? entry.time) < time) continue;
-      list.push({ date, entry, ...ticket });
+      const color = tags.find(tag => tag.id === entry.tag)?.color;
+      list.push({ date, entry, ...ticket, ...color && isHexColor(color) ? { color } : {} });
     }
   }
   return list.sort((a, b) => `${a.date} ${a.entry.time ?? ''}`.localeCompare(`${b.date} ${b.entry.time ?? ''}`)).slice(0, count);
@@ -111,8 +114,10 @@ function Ticket({ item, index, onOpen }: { item: Upcoming; index: number; onOpen
   // A serial like a printed ticket's: five digits from the entry (the same entry keeps its number).
   const serial = String([...item.entry.id].reduce((sum, char) => (sum * 31 + char.charCodeAt(0)) % 100000, 7)).padStart(5, '0');
   const weekday = dateFormat({ weekday: 'short' }).format(noon(item.date)).replace('.', '');
-  // The foil tells the kind (nebula-ticket.css); each ticket shows another piece of it.
-  return <button type="button" className={`nebula-ticket foil-${item.kind}`} style={{ '--ticket': index, '--foil-x': `${(index * 37 + 11) % 101}%`, '--foil-y': `${(index * 59 + 23) % 101}%` } as CSSProperties} data-ticket-date={item.date} data-ticket-tag={item.tag} data-ticket-kind={item.kind}
+  // The foil tells the kind (nebula-ticket.css), or the tag's colour where it has one (ticketColors); each ticket shows
+  // another piece of it.
+  const tagged: Record<string, string> = item.color ? { '--tag': item.color, '--tag-light': lightTagColor(item.color), '--foil': tagFoil(item.color).foil, '--ground': tagFoil(item.color).ground } : {};
+  return <button type="button" className={`nebula-ticket foil-${item.kind}${item.color ? ' has-tag-color' : ''}`} style={{ '--ticket': index, '--foil-x': `${(index * 37 + 11) % 101}%`, '--foil-y': `${(index * 59 + 23) % 101}%`, ...tagged } as CSSProperties} data-ticket-date={item.date} data-ticket-tag={item.tag} data-ticket-kind={item.kind}
     title={t('{0} · Tag öffnen', text)} onClick={() => onOpen(item.date, item.entry.id)}>
     <span className="nebula-ticket-band" aria-hidden="true" />
     {/* Above the band the tag and the serial; on it the entry (the mail's subject); below it, under a rule, the day and
@@ -369,7 +374,8 @@ const showMarquee = false;
 const layoutKey = 'journal.nebulaLayout.v1';
 const savedKey = 'journal.nebulaLayout.saved';
 const read = <T,>(key: string, normalize: (raw: unknown) => T): T => { try { return normalize(JSON.parse(localStorage.getItem(key) ?? 'null')); } catch { return normalize(null); } };
-const write = (key: string, value: unknown) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* this session */ } };
+// The desk's arrangement travels with the Drive sync (sync/snapshot.ts); writing it tells the automatic sync.
+const write = (key: string, value: unknown) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* this session */ } window.dispatchEvent(new Event('journal:local-change')); };
 /** The arrangement of the view shown (each view keeps its own, nebulaLayout.ts normalizeViewLayouts) and the view's saved
  *  arrangements (up to three). */
 function useNebulaLayout(mode: PeriodMode) {
