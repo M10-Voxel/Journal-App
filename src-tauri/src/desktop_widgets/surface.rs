@@ -82,6 +82,21 @@ pub fn desktop_widget_live_blur(window:tauri::WebviewWindow,enabled:bool,radius:
     #[cfg(not(windows))] {let _=runtime;if enabled{Err("Live Blur ist nur unter Windows verfügbar.".into())}else{Ok("disabled")}}
 }
 
+/// Whether other windows hide the whole widget. The frame loop waits while they do (nothing of the picture behind it is
+/// visible) and goes on at once when a part comes into view; asked about twice a second, it costs a walk through the
+/// windows above the widget.
+#[tauri::command]
+pub async fn desktop_widget_covered(window:tauri::WebviewWindow)->Result<bool,String>{
+    let state=window.state::<DesktopWidgets>();let (_,runtime)=state.from_window(&window)?;
+    let surface=runtime.surface.lock().map_err(|e|e.to_string())?.clone().ok_or("Widget-Fläche ist noch nicht bereit.")?;
+    #[cfg(windows)] {
+        let hwnd=window.hwnd().map_err(|e|e.to_string())?.0 as isize;
+        let area=(surface.position.x,surface.position.y,surface.position.x.saturating_add(surface.size.width as i32),surface.position.y.saturating_add(surface.size.height as i32));
+        Ok(geometry::fully_covered(area,&super::host::windows_above(hwnd,area)))
+    }
+    #[cfg(not(windows))] {let _=surface;Ok(false)}
+}
+
 /// Cropped wallpaper-host frames; never a screenshot of the user's applications.
 #[tauri::command]
 pub async fn desktop_widget_live_frame(window:tauri::WebviewWindow)->Result<tauri::ipc::Response,String>{

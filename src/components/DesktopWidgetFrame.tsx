@@ -56,7 +56,8 @@ export function DesktopWidgetFrame({ widget, registry, date, nav, navRef, toolsR
     void apply();
     // Wallpaper renderers may start/stop or move to a different monitor while
     // Live Blur is enabled. Re-select the source without changing the setting.
-    const timer=enabled?globalThis.setInterval(()=>void apply(),1000):undefined;
+    // Tests shorten the wait (window.__journalLiveBlurPoll).
+    const timer=enabled?globalThis.setInterval(()=>void apply(),(globalThis as {__journalLiveBlurPoll?:number}).__journalLiveBlurPoll??10000):undefined;
     return () => {current=false;globalThis.clearInterval(timer);};
   },[chrome.glass,chrome.liveBlur,chrome.glassRadius,hasBlur]);
   const name = widgetDisplayName(widget, registry.widgets);

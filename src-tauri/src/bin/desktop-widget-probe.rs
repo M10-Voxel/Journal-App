@@ -1,5 +1,7 @@
 // Isolated native placement probe: no journal, vault, tray, or database is opened.
+// The probe uses only the placement part of the module; the rest belongs to the app.
 #[cfg(windows)]
+#[allow(dead_code,unused_imports)]
 #[path="../desktop_widgets/host.rs"]
 mod host;
 #[cfg(windows)]

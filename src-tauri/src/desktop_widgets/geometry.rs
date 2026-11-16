@@ -65,8 +65,49 @@ pub fn fit_with_minimum(saved:Option<&Placement>,screens:&[Screen],primary:usize
     let fallback = Placement { monitor: screen.name.clone(), screen: screen.id.clone(), x: 40.0, y: 40.0, width: 600.0, height: 600.0 };
     fit_on(saved.unwrap_or(&fallback), screen, minimum, found.is_some())
 }
+/// Whether the windows' rectangles (left, top, right, bottom) together hide all of `area`: each one is cut out of what is
+/// still visible; nothing left means covered. Rectangles only (rounded window corners are ignored); with an
+/// implausible number of pieces it says "not covered", the safe answer (the widget then just draws as before).
+pub fn fully_covered(area:(i32,i32,i32,i32),windows:&[(i32,i32,i32,i32)])->bool {
+    if area.2<=area.0||area.3<=area.1 {return false;}
+    let mut visible=vec![area];
+    for &(l,t,r,b) in windows {
+        let mut next=Vec::with_capacity(visible.len()+3);
+        for (vl,vt,vr,vb) in visible {
+            if r<=vl||l>=vr||b<=vt||t>=vb {next.push((vl,vt,vr,vb));continue;}
+            if t>vt {next.push((vl,vt,vr,t));}
+            if b<vb {next.push((vl,b,vr,vb));}
+            let (top,bottom)=(t.max(vt),b.min(vb));
+            if l>vl {next.push((vl,top,l,bottom));}
+            if r<vr {next.push((r,top,vr,bottom));}
+        }
+        visible=next;
+        if visible.is_empty() {return true;}
+        if visible.len()>64 {return false;}
+    }
+    false
+}
+
 #[cfg(test)] mod tests {
     use super::*;
+    #[test] fn a_window_hides_a_widget_only_when_it_covers_all_of_it(){
+        let widget=(100,100,500,400);
+        assert!(!fully_covered(widget,&[]));
+        assert!(fully_covered(widget,&[(0,0,1920,1040)]));
+        assert!(fully_covered(widget,&[(100,100,500,400)]),"an exactly matching window covers it");
+        assert!(!fully_covered(widget,&[(0,0,1920,399)]),"one row left uncovered is still visible");
+        assert!(!fully_covered(widget,&[(101,100,900,900)]),"one column left");
+        assert!(!fully_covered(widget,&[(500,100,900,400)]),"a window beside it hides nothing");
+    }
+    #[test] fn several_windows_together_hide_a_widget_but_a_gap_shows_it(){
+        let widget=(100,100,500,400);
+        assert!(fully_covered(widget,&[(0,0,300,1000),(300,0,1000,1000)]),"two windows side by side");
+        assert!(fully_covered(widget,&[(0,0,1000,250),(50,250,1000,1000)]),"one above the other");
+        assert!(fully_covered(widget,&[(120,120,480,380),(0,0,1000,1000)]),"a smaller window under a bigger one");
+        assert!(!fully_covered(widget,&[(0,0,299,1000),(301,0,1000,1000)]),"a gap between them");
+        assert!(!fully_covered(widget,&[(0,0,1000,250),(0,260,1000,1000)]),"a gap below the first");
+        assert!(!fully_covered((10,10,10,50),&[(0,0,100,100)]),"nothing to hide, nothing to skip");
+    }
     #[test] fn identifies_the_widget_monitor_independently_of_its_desktop_canvas(){
         let displays=screens();
         assert_eq!(screen_for(-2300,80,600,500,&displays).unwrap().name,"left");

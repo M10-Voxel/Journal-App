@@ -8,6 +8,7 @@ mod windows {
     #[repr(C)]
     struct WindowPos { hwnd: Hwnd, after: Hwnd, x: i32, y: i32, cx: i32, cy: i32, flags: u32 }
     #[repr(C)] struct Style { old:u32, new:u32 }
+    #[repr(C)] #[derive(Default,Clone,Copy)] struct Rect { left:i32, top:i32, right:i32, bottom:i32 }
     #[link(name="user32")]
     unsafe extern "system" {
         fn GetShellWindow() -> Hwnd;
@@ -23,6 +24,7 @@ mod windows {
         fn EnumWindows(callback:unsafe extern "system" fn(Hwnd,isize)->i32,data:isize)->i32;
         fn GetWindowThreadProcessId(hwnd:Hwnd,pid:*mut u32)->u32;
         fn SetWindowRgn(hwnd:Hwnd,region:isize,redraw:i32)->i32;
+        fn GetWindowRect(hwnd:Hwnd,rect:*mut Rect)->i32;
     }
     #[link(name="gdi32")] unsafe extern "system"{
         fn CreateRectRgn(left:i32,top:i32,right:i32,bottom:i32)->isize;
@@ -75,7 +77,7 @@ mod windows {
         fn DefSubclassProc(hwnd:Hwnd,msg:u32,wparam:usize,lparam:isize)->isize;
     }
     #[link(name="dwmapi")]
-    unsafe extern "system" { fn DwmSetWindowAttribute(hwnd:Hwnd,attribute:u32,value:*const c_void,size:u32)->i32; }
+    unsafe extern "system" { fn DwmSetWindowAttribute(hwnd:Hwnd,attribute:u32,value:*const c_void,size:u32)->i32; fn DwmGetWindowAttribute(hwnd:Hwnd,attribute:u32,value:*mut c_void,size:u32)->i32; }
     static WALLPAPER_GENERATION: AtomicU64 = AtomicU64::new(0);
     pub fn wallpaper_generation()->u64{WALLPAPER_GENERATION.load(Ordering::Relaxed)}
     static PLACING: AtomicBool = AtomicBool::new(false);
@@ -169,6 +171,29 @@ mod windows {
         SetWindowPos(hwnd,after,0,0,0,0,0x0001|0x0002|0x0010|0x0200);
         PLACING.store(false,Ordering::Relaxed);
     }}
+    /// The rectangles of the windows above `hwnd` in the z-order that can hide what lies under them and reach into `area`
+    /// (screen pixels: left, top, right, bottom): visible, not minimized, not cloaked (another virtual desktop, a suspended
+    /// app), and neither click-through nor layered (those may be translucent). The app's own helper windows (the desktop
+    /// widgets, their blur and popup surfaces: windows with an owner) do not count; its journal and calendar windows do.
+    pub fn windows_above(hwnd:isize,area:(i32,i32,i32,i32))->Vec<(i32,i32,i32,i32)> {unsafe{
+        let ours=std::process::id();
+        let mut found=Vec::new();let mut current=GetWindow(hwnd,3);let mut steps=0;
+        while current!=0&&steps<4000 {
+            steps+=1;
+            if IsWindowVisible(current)!=0&&IsIconic(current)==0&&GetWindowLongPtrW(current,-20)&(0x0008_0000|0x20)==0 {
+                let mut pid=0;GetWindowThreadProcessId(current,&mut pid);
+                let helper=pid==ours&&GetWindowLongPtrW(current,-8)!=0;
+                let mut cloaked:u32=0;
+                let hidden=DwmGetWindowAttribute(current,14,&mut cloaked as *mut _ as *mut c_void,4)==0&&cloaked!=0;
+                let mut rect=Rect::default();
+                if !helper&&!hidden&&GetWindowRect(current,&mut rect)!=0&&rect.right>area.0&&rect.left<area.2&&rect.bottom>area.1&&rect.top<area.3 {
+                    found.push((rect.left,rect.top,rect.right,rect.bottom));
+                }
+            }
+            current=GetWindow(current,3);
+        }
+        found
+    }}
     /// Puts the widgets into the given order (back to front) above the desktop icons. Only acts when the order on
     /// screen differs, so it can be called often.
     pub fn restack(order:&[isize]) { unsafe {
@@ -203,4 +228,4 @@ mod windows {
     }}
 }
 #[cfg(windows)]
-pub use windows::{configure,maintain,region,restack,composition_blur,wallpaper_generation};
+pub use windows::{configure,maintain,region,restack,composition_blur,wallpaper_generation,windows_above};

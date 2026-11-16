@@ -13,7 +13,10 @@ Ausgangspunkt war der Graphify-Graph (`graphify-out/GRAPH_REPORT.md`): `main.tsx
 - **Neuzeichnen.** `PeriodNotes`, `Notebook` und `SearchBox` sind memoisiert und erhalten stabile Props; `useLanguage` und weitere Stores nutzen eine feste Abo-Funktion; englische Texte werden je Schlüssel einmal übersetzt.
 - **Rust.** Der Desktop-Icon-Host für Widgets wird zwischengespeichert und nur neu gesucht, wenn er nicht mehr gültig ist (vorher eine vollständige Fensteraufzählung mehrmals pro Wartungsdurchlauf, alle 250 ms). Zeitraum-, Pinnwand-, Undo- und Mailbefehle laufen `async` statt auf dem UI-Thread. Ein partieller Index `entries_plans` (zusätzlich, ohne Schemaänderung) deckt die Herkunftssuche bei jedem Laden/Speichern eines Tages ab; Test `origin_lookup_reads_only_planned_entries`. Der Statement-Cache fasst 64 statt 16 Anweisungen; Pinnwand-Schlüssel werden per Bereichsabfrage gelesen; Live-Blur-Bilder werden ohne vorher genullten Puffer gebaut.
 
-Bewusst nicht geändert: die sekündliche Live-Blur-Abfrage je Widget, die Undo-Trigger und `PRAGMA synchronous` (Abwägung bei Dauerhaftigkeit) – siehe „Weitere Ansatzpunkte“.
+- **Live Blur bei verdecktem Widget.** `desktop_widget_covered` (`desktop_widgets/surface.rs`) geht in `host.rs` die Fenster oberhalb des Widgets in der Z-Reihenfolge durch (sichtbar, nicht minimiert, nicht „cloaked“, nicht klickdurchlässig oder geschichtet; eigene Hilfsfenster mit Besitzer zählen nicht) und zieht deren Rechtecke von der Widget-Fläche ab (`geometry::fully_covered`, getestet). Bleibt nichts sichtbar, fragt `WidgetLiveBackdrop` keine Bilder mehr ab (keine GPU-Auslese, kein BMP, kein IPC, kein Dekodieren); das letzte Bild bleibt stehen. Die Prüfung läuft zweimal pro Sekunde, beim Wieder-Sichtbarwerden folgt das nächste Bild sofort. Die Bildrate bei sichtbarem Widget ist unverändert (50 ms). Grenzen: abgerundete Fensterecken werden als Rechtecke gezählt; geschichtete (`WS_EX_LAYERED`) Fenster zählen nie als verdeckend, dann wird wie bisher gezeichnet.
+- **Live-Blur-Quellenwahl** (`desktop_widget_live_blur`, erkennt Start/Ende/Monitorwechsel des Wallpaper-Renderers) alle 10 s statt jede Sekunde; sie beeinflusst die Bildrate nicht.
+
+Bewusst nicht geändert: die Undo-Trigger und `PRAGMA synchronous` (Abwägung bei Dauerhaftigkeit) – siehe „Weitere Ansatzpunkte“.
 
 ## Fenster und Pinnwand (November 2026)
 
@@ -71,7 +74,7 @@ Die Bytewerte messen die serialisierte JSON-Nutzlast dieses konkreten Beispiels,
 
 ## Weitere Ansatzpunkte
 
-Offen aus der Prüfung vom 16.11.2026: `desktop_widget_live_blur` läuft noch synchron und je Widget sekündlich (Fensteraufzählung, gemeinsame Sperre mit der GPU-Auslese); die Undo-Trigger vergleichen ganze Zeilen per `json_object`; `desktop_wallpaper_info` wird von Backend und Widget getrennt abgefragt; `import_calendar` liest Tags und Serien pro Eintrag. Jede dieser Stellen braucht eine native Prüfung auf Windows.
+Offen aus der Prüfung vom 16.11.2026: `desktop_widget_live_blur` läuft noch synchron (Fensteraufzählung, gemeinsame Sperre mit der GPU-Auslese); die Undo-Trigger vergleichen ganze Zeilen per `json_object`; `desktop_wallpaper_info` wird von Backend und Widget getrennt abgefragt; `import_calendar` liest Tags und Serien pro Eintrag. Jede dieser Stellen braucht eine native Prüfung auf Windows.
 
 Der Graph zeigt Abhängigkeiten, keine gemessene CPU-Zeit. Weitergehende RAM-/CPU-Messungen sollten repräsentative Vaults mit identischen Ansichten vergleichen. Große tatsächlich angezeigte Kalenderbereiche und umfangreiche Exportergebnisse benötigen weiterhin Speicher für ihren Inhalt. Eine spätere Aufteilung der periodischen JSON-Daten auf Tabellen würde Datenmigration, Historie und Drive-Abgleich betreffen und braucht einen eigenen abgesicherten Umbau.
 

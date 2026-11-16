@@ -59,7 +59,7 @@ pub async fn board_remove(app:tauri::AppHandle,store:tauri::State<'_,Mutex<Store
     for card in cards {let _=app.emit("board:changed",json!({"card":card,"source":source}));}
     for id in removed {let _=app.emit("board:removed",json!({"id":id,"source":source}));}Ok(())
 }
-fn remove_card(db:&Store,id:&str)->Result<(Vec<Value>,Vec<String>)>{update_cards(db,&json!({}),&[id.to_string()])}
+#[cfg(test)] fn remove_card(db:&Store,id:&str)->Result<(Vec<Value>,Vec<String>)>{update_cards(db,&json!({}),&[id.to_string()])}
 fn update_cards(db:&Store,patches:&Value,remove:&[String])->Result<(Vec<Value>,Vec<String>)>{
     let tx=db.conn.unchecked_transaction().map_err(|e|e.to_string())?;
     crate::history::begin(&tx).map_err(|e|e.to_string())?;

@@ -52,6 +52,8 @@ const bootstrap = `
   // The journal saves by itself shortly after changes; the checks count saves, so they save explicitly (Ctrl+S)
   // and shorten this only where saving by itself is checked.
   window.__journalAutosaveDelay = 3600000;
+  // Live Blur re-selects its source every 10 s in the app; the tests change the mocked source and wait one second.
+  window.__journalLiveBlurPoll = 1000;
   // Mirrors storage.rs: traces create their target entries once, entries know their trace's day, removing an entry
   // removes only it, and linked groups (load_linked) can be changed together on other days (change_linked).
   const origin = id => { for (const [day, value] of days) if (value.entries.some(entry => entry.plan?.targets.some(target => target.id === id))) return day; };
@@ -334,6 +336,7 @@ const bootstrap = `
     // The native popup surface: remember what the widget asked for (its popups' rectangles), no geometry of its own.
     if (command === 'desktop_widget_surface') { window.__uiTest.surface = payload; return null; }
     if(command==='desktop_widget_live_blur'){invoked.push([command,payload]);if(payload.enabled && localStorage.getItem('test.liveBlurFail'))throw Error('Live Blur unavailable');return payload.enabled&&localStorage.getItem('test.liveCapture')==='1'?'capture':null;}
+    if(command==='desktop_widget_covered'){invoked.push([command,payload]);return localStorage.getItem('test.liveCovered')==='1';}
     if(command==='desktop_widget_live_frame'){
       invoked.push([command,payload]);if(localStorage.getItem('test.liveFrameFail'))throw Error('GPU source unavailable');if(localStorage.getItem('test.liveNoFrame'))return new ArrayBuffer(0);
       const bytes=new Uint8Array(58),view=new DataView(bytes.buffer);
@@ -2175,7 +2178,7 @@ async function checkNebulaTheme() {
   const dataFocus = await evaluate("(() => { const r=document.querySelector('.nebula-panel.is-rating .nebula-window-focus').getBoundingClientRect(); return { x:r.left+r.width/2, y:r.top+r.height/2 }; })()");
   assert(await evaluate(`document.elementFromPoint(${dataFocus.x}, ${dataFocus.y})?.matches('.nebula-panel.is-rating .nebula-window-focus')`), 'The ◐ shows through the veil.');
   await command('Input.dispatchMouseEvent', { type:'mouseMoved', x:dataFocus.x, y:dataFocus.y }); await pause(150);
-  const colorOf = selector => evaluate(`getComputedStyle(document.querySelector(${JSON.stringify(selector)})).backgroundColor.replace(/^rgba\((.*), 1\)$/, 'rgb($1)')`);
+  const colorOf = selector => evaluate(`getComputedStyle(document.querySelector(${JSON.stringify(selector)})).backgroundColor.replace(/^rgba\\((.*), 1\\)$/, 'rgb($1)')`);
   assert.equal(await colorOf('.nebula-panel.is-rating .nebula-window-focus'), await colorOf('.nebula-panel.is-entries .nebula-window-focus'), 'Pointed at, it is lit like a focused one.');
   await pause(200); await screenshot('nebula-focus-hover.png');
   await command('Input.dispatchMouseEvent', { type:'mousePressed', x:dataFocus.x, y:dataFocus.y, button:'left', buttons:1, clickCount:1 });
@@ -3408,6 +3411,16 @@ try {
     assert.equal(await evaluate(liveColor),'220,30,40','Captured bitmap appears behind the widget');
     await evaluate("localStorage.setItem('test.liveColor','[25,180,70]')");
     await until(`(${liveColor}).then(color=>color==='25,180,70')`);
+    // Covered by other windows: the loop rests (no more frames) and goes on when a part shows again.
+    await evaluate("localStorage.setItem('test.liveCovered','1')");
+    await until("window.__uiTest.invoked.filter(c=>c[0]==='desktop_widget_covered').length>0");await pause(900);
+    const coveredFrames=await evaluate("window.__uiTest.invoked.filter(c=>c[0]==='desktop_widget_live_frame').length");await pause(400);
+    assert.equal(await evaluate("window.__uiTest.invoked.filter(c=>c[0]==='desktop_widget_live_frame').length"),coveredFrames,'A fully covered widget asks for no frames');
+    assert(await evaluate("!!document.querySelector('[data-live-capture=true] > i') && !document.querySelector('.widget-message')"),'The last picture stays while covered, without an error');
+    await evaluate("localStorage.setItem('test.liveColor','[70,70,220]');localStorage.removeItem('test.liveCovered')");
+    await until(`(${liveColor}).then(color=>color==='70,70,220')`);
+    await evaluate("localStorage.setItem('test.liveColor','[25,180,70]')");
+    await until(`(${liveColor}).then(color=>color==='25,180,70')`);
     await evaluate("localStorage.setItem('test.liveFrameFail','1')");
     await until("!!document.querySelector('.widget-message') && !document.querySelector('[data-live-capture]') && !!document.querySelector('.desktop-widget-backdrop > i')");
     await evaluate("localStorage.removeItem('test.liveFrameFail')");
@@ -3462,8 +3475,8 @@ try {
     await evaluate("document.querySelector('.desktop-widget .widget-date').click()");
     await until("!!document.querySelector('.mini-picker-panel')");
     assert.notEqual(await evaluate("getComputedStyle(document.querySelector('.mini-picker-panel')).backgroundColor"),'rgba(0, 0, 0, 0)','Popups are glass panels');
-    assert.match(await evaluate("getComputedStyle(document.querySelector('.mini-picker-panel')).backdropFilter"),/blur\(18px\)/,'Popup keeps its own readable glass blur');
-    assert.equal(await evaluate("getComputedStyle(document.querySelector('.mini-picker-panel')).borderTopLeftRadius"),'22px','Popup rounding follows the slider');
+    assert.match(await evaluate("getComputedStyle(document.querySelector('.mini-picker-panel')).backdropFilter"),/blur\(14px\)/,'Popup keeps its own readable glass blur');
+    assert.equal(await evaluate("getComputedStyle(document.querySelector('.mini-picker-panel')).borderTopLeftRadius"),'20px','Popup rounding follows the slider');
     await key('Escape','Escape');await until("!document.querySelector('.mini-picker-panel')");
     await chrome({glass:true,glassText:'dark'});
     await until("document.documentElement.dataset.glass==='dark'");
@@ -4932,7 +4945,9 @@ try {
     const saved=await evaluate("window.__uiTest.day("+JSON.stringify(points[0].date)+").entries.find(e=>e.text==='Multiple days')");
     assert.equal(saved.end,'239:59');
     // Open its week and check it occupies the top band, not the hours.
-    await evaluate("document.querySelector('.cal-viewbar button[title*=Woche]')?.click()");
+    // The week of the saved entry (its own "KW" button in the month): the week shown by the view button would be today's,
+    // and the saved days lie in the second row of the month, which is today's week only on some days of the month.
+    await evaluate("(()=>{const cells=[...document.querySelectorAll('.cal-month-day')],at=cells.findIndex(e=>e.dataset.date==="+JSON.stringify(points[0].date)+");document.querySelectorAll('.cal-month-kw')[Math.floor(at/7)].click();})()");
     await until("Boolean(document.querySelector('.cal-multiday-bar'))");
     assert(await evaluate("![...document.querySelectorAll('.cal-time-body .cal-item')].some(e=>e.textContent.includes('Multiple days'))"));
     const band=await evaluate("(() => {const cells=[...document.querySelectorAll('.cal-time-allday-cell')],r=cells[0].getBoundingClientRect(),root=document.querySelector('.cal').getBoundingClientRect();return {x:r.left+10,y:r.top+10,right:root.right-5};})()");
@@ -4944,7 +4959,9 @@ try {
     await command('Input.dispatchMouseEvent',{type:'mouseReleased',x:band.right,y:band.y,button:'right',buttons:0,clickCount:1});
     await until("Boolean(document.querySelector('.cal-composer .cal-multi-form'))");
     const range=await evaluate("[document.querySelector('.cal-composer').getAttribute('aria-label'),document.querySelector('.cal-multi-input.is-end').dataset.value]");
-    assert(Date.parse(range[1])-Date.now()>5*86400000,'Drag continues into the next week: '+JSON.stringify(range));
+    // The week shown is the saved entry's (not today's): the range must end after its last day (Sunday).
+    const shownDay=new Date(points[0].date+'T12:00:00Z'),weekEnd=shownDay.getTime()+((7-((shownDay.getUTCDay()+6)%7)-1)*86400000);
+    assert(Date.parse(range[1])>weekEnd+86400000-12*3600000,'Drag continues into the next week: '+JSON.stringify(range));
     console.log('Multiday UI passed: ten-day entry, top-band rendering and dragging into the next week.');
   } else if (process.env.JOURNAL_UI_SCOPE === 'calendar-actions') {
     await evaluate("document.querySelector('.cal-item').click()");
