@@ -3,7 +3,7 @@
 #[cfg(windows)]
 mod windows {
     use std::ffi::c_void;
-    use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicU64, Ordering};
     type Hwnd = isize;
     #[repr(C)]
     struct WindowPos { hwnd: Hwnd, after: Hwnd, x: i32, y: i32, cx: i32, cy: i32, flags: u32 }
@@ -131,14 +131,28 @@ mod windows {
         place(hwnd,true);
         Ok(())
     }}
+    /// "SHELLDLL_DefView", the class of the window holding the desktop icons (UTF-16, zero-terminated).
+    const ICON_VIEW:[u16;17]=[83,72,69,76,76,68,76,76,95,68,101,102,86,105,101,119,0];
+    /// Whether a top-level window of the shell's process holds the desktop icons.
+    unsafe fn holds_icons(window:Hwnd,shell_pid:u32)->bool {
+        let mut pid=0;GetWindowThreadProcessId(window,&mut pid);
+        pid==shell_pid&&FindWindowExW(window,0,ICON_VIEW.as_ptr(),std::ptr::null())!=0
+    }
     unsafe extern "system" fn find_icons(window:Hwnd,data:isize)->i32 {
-        let class:Vec<u16>="SHELLDLL_DefView".encode_utf16().chain(Some(0)).collect();
-        let mut shell_pid=0;let mut pid=0;
-        GetWindowThreadProcessId(GetShellWindow(),&mut shell_pid);GetWindowThreadProcessId(window,&mut pid);
-        if pid==shell_pid&&FindWindowExW(window,0,class.as_ptr(),std::ptr::null())!=0 {*(data as *mut Hwnd)=window;return 0;}
+        let found=&mut *(data as *mut (Hwnd,u32));
+        if holds_icons(window,found.1) {found.0=window;return 0;}
         1
     }
-    fn desktop_host()->Hwnd {unsafe{let mut found=0;EnumWindows(find_icons,&mut found as *mut _ as isize);found}}
+    /// The icon host found last. The widgets are kept above it several times a second; checking that it still holds the
+    /// icons is a few calls, enumerating every top-level window again only happens when Explorer replaced it.
+    static ICON_HOST: AtomicIsize = AtomicIsize::new(0);
+    fn desktop_host()->Hwnd {unsafe{
+        let mut shell_pid=0;GetWindowThreadProcessId(GetShellWindow(),&mut shell_pid);
+        let known=ICON_HOST.load(Ordering::Relaxed);
+        if known!=0&&IsWindow(known)!=0&&holds_icons(known,shell_pid) {return known;}
+        let mut found:(Hwnd,u32)=(0,shell_pid);EnumWindows(find_icons,&mut found as *mut _ as isize);
+        ICON_HOST.store(found.0,Ordering::Relaxed);found.0
+    }}
     fn place(hwnd:Hwnd,raise:bool) { unsafe {
         let desktop=desktop_host();if desktop==0{return;}
         // Insert directly above the icon host, below the window preceding it. Win+D can promote

@@ -12,7 +12,7 @@ import { linkedScopes } from '../planning';
 import type { ScopeOption } from '../planning';
 import { ScopeChoice } from './ScopeChoice';
 import { t, useLanguage, getLanguage } from '../i18n';
-import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, KeyboardEvent } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { emit, listen } from '@tauri-apps/api/event';
@@ -45,15 +45,37 @@ export function useCalendarData(from: string, to: string, enabled = true) {
   const range = `${from}:${to}`;
   useEffect(() => {
     if (!enabled) { setDays(current => current.size ? new Map() : current); setError(''); setResolved(''); return; }
-    const refresh = createRefreshQueue(() => Promise.all(Array.from({length:Math.ceil((Date.parse(to)-Date.parse(from))/86400000/390)+1},(_,i)=>{const start=shiftDate(from,i*390);return start>to ? Promise.resolve([]) : loadRange(start,shiftDate(start,389)<to?shiftDate(start,389):to);})).then(parts=>parts.flat()),
-      list => { setDays(() => {
+    // The first load and a restored history read the whole range; a save reads only the span of the days it changed and
+    // keeps every other day as it was (the same objects, so the views memoized on them stay put while typing).
+    let full = true;
+    const dirty = new Set<string>();
+    const read = (start: string, end: string) => Promise.all(Array.from({length:Math.ceil((Date.parse(end)-Date.parse(start))/86400000/390)+1},(_,i)=>{const part=shiftDate(start,i*390);return part>end ? Promise.resolve([]) : loadRange(part,shiftDate(part,389)<end?shiftDate(part,389):end);})).then(parts=>parts.flat());
+    const refresh = createRefreshQueue(async () => {
+      const whole = full || !dirty.size, dates = [...dirty].sort();
+      const span = whole ? [from, to] : [dates[0], dates[dates.length - 1]];
+      return { whole, span, list: await read(span[0], span[1]) };
+    }, ({ whole, span, list }) => {
+      // Applied only when nothing changed meanwhile (createRefreshQueue), so every date asked for is covered now.
+      full = false; dirty.clear();
+      setDays(current => {
         const next = new Map<string, CalendarDay>();
-        for (const day of list) next.set(day.date, day);
+        if (whole) { for (const day of list) next.set(day.date, day); return next; }
+        const fresh = new Map(list.map(day => [day.date, day] as const));
+        const dates = [...new Set([...current.keys(), ...fresh.keys()])].sort();
+        for (const date of dates) {
+          const day = date >= span[0] && date <= span[1] ? fresh.get(date) : current.get(date);
+          if (day) next.set(date, day);
+        }
         return next;
       }); setError(''); setResolved(range); }, reason => { setError(String(reason)); setResolved(range); });
     void refresh.request();
-    const stop = listen<string[]>('journal:changed', event => { if (event.payload.some(date => date >= from && date <= to)) void refresh.request(); });
-    const restored = listen('history:restored', () => { void refresh.request(); });
+    const stop = listen<string[]>('journal:changed', event => {
+      const inside = event.payload.filter(date => date >= from && date <= to);
+      if (!inside.length) return;
+      for (const date of inside) dirty.add(date);
+      void refresh.request();
+    });
+    const restored = listen('history:restored', () => { full = true; void refresh.request(); });
     return () => { refresh.dispose(); void stop.then(unlisten => unlisten()); void restored.then(unlisten => unlisten()); };
   }, [from, to, enabled]);
   return { days, error, ready: !enabled || resolved === range };
@@ -161,8 +183,12 @@ export function CalendarItem({ entry, date, variant = 'line', short = false, sty
   const [options, setOptions] = useState<ScopeOption[] | null>(null);
   const [error, setError] = useState('');
   const [deleting, setDeleting] = useState(false);
+  // Read when a key is pressed: the listener stays the same while these change (a calendar holds hundreds of items).
+  const keyState = useRef({ remove, deleting, options });
+  keyState.current = { remove, deleting, options };
   useEffect(() => {
     const key = async (event: globalThis.KeyboardEvent) => {
+      const { remove, deleting, options } = keyState.current;
       if (!(hovered.current || details) || (event.target instanceof Element && event.target.closest('input,textarea,[contenteditable=true]'))) return;
       if (event.ctrlKey && event.key.toLowerCase()==='c') { event.preventDefault(); copyCalendarEntry(entry); }
       if (event.key!=='Delete' || !remove || deleting || options || calendarSelection().size) return;
@@ -171,7 +197,7 @@ export function CalendarItem({ entry, date, variant = 'line', short = false, sty
       catch(reason){setError(String(reason));}finally{setDeleting(false);}
     };
     window.addEventListener('keydown',key,true);return()=>window.removeEventListener('keydown',key,true);
-  },[details,entry,date,remove,deleting,options]);
+  },[details,entry,date]);
   const mail=decodeMailContent(entry.description);
   const detailTitle=details ? plainText(entry.text) || t("ohne Text") : '';
   const overview=details ? <div className="cal-details-overview">
@@ -237,7 +263,9 @@ export function CompactMonth({ month, days, today, selected, onPick, onMonth }: 
   month: string; days: Map<string, CalendarDay>; today: string; selected: string | null; onPick: (date: string) => void; onMonth: (month: string) => void;
 }) {
   useLanguage();
-  const shownDates=monthGrid(month);days=calendarDaysWithSpans(days,shownDates[0],shownDates[shownDates.length-1]);
+  // Worked out once per month and data (not on every render: the mini calendar renders with each hover and key).
+  const shownDates=useMemo(()=>monthGrid(month),[month]);
+  const source=days;days=useMemo(()=>calendarDaysWithSpans(source,shownDates[0],shownDates[shownDates.length-1]),[source,shownDates]);
   const [focus, setFocus] = useState<string | null>(null);
   const gridRef = useRef<HTMLDivElement>(null);
   const moved = useRef(false);
@@ -263,7 +291,7 @@ export function CompactMonth({ month, days, today, selected, onPick, onMonth }: 
   return <div className="cal-compact">
     <div className="cal-compact-weekdays" aria-hidden="true">{weekdayInitials().map((initial, index) => <span key={index} className={index === 5 ? 'is-saturday' : index === 6 ? 'is-sunday' : undefined}>{initial}</span>)}</div>
     <div ref={gridRef} className="cal-compact-grid" role="grid" aria-label={t("Tage des Monats")} onKeyDown={onKeyDown} key={month}>
-      {monthGrid(month).map((date, index) => {
+      {shownDates.map((date, index) => {
         const outside = !date.startsWith(month);
         const classes = `cal-compact-day${hasJournalContent(days.get(date)) ? ' has-journal-content' : ''}${outside ? ' is-outside' : ''}${date === today ? ' is-today' : ''}${index % 7 === 5 ? ' is-saturday' : index % 7 === 6 ? ' is-sunday' : ''}`;
         return <button key={date} type="button" className={classes} data-date={date} aria-selected={date === selected} aria-current={date === today ? 'date' : undefined}

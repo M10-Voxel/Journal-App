@@ -45,15 +45,17 @@ Browser-Mocks prüfen weder echte Anbieteranmeldungen noch eine native Installat
 
 | Bereich | Einstieg |
 | --- | --- |
-| Fenster, Navigation, Tagesdaten | `src/main.tsx`, `src/bootstrap.ts`, `src/journal.ts` |
+| Fenster, Navigation, Tagesdaten | `src/main.tsx` (Einstieg aller Fenster, Stylesheets, Fensterwahl), `src/App.tsx` (Journal-Hauptfenster), `src/bootstrap.ts`, `src/journal.ts` |
 | Kalender und Planung | `src/components/CalendarWindow.tsx`, `CalendarComposer.tsx`, `src/calendar.ts`, `src/repeat.ts`, `src/ical.ts` |
 | Buch und Nebula-Layout | `src/components/JournalBook.tsx`, `NebulaDesk.tsx`, `src/book.ts`, `src/nebulaLayout.ts` |
 | Aktivitäten und Pinnwand | `src/periodStore.ts`, `src/boardCards.tsx`, `src/components/BulletinBoard.tsx` |
 | Notizblock | `src/components/Notebook.tsx`, `src/notebook.ts` |
-| Mail-Erkennung | `src/mail.ts`, `src/mailMl.ts`, `src/mailContext.ts`, `src-tauri/src/mail/` |
+| Mail-Erkennung | `src/mail.ts`, `src/mailRecognize.ts` (bei Bedarf geladen), `src/mailMl.ts`, `src/mailContext.ts`, `src-tauri/src/mail/` |
 | Drive und Zusammenführung | `src/components/DriveSettings.tsx`, `src/sync/`, `src-tauri/src/drive.rs` |
 | Datenbank, Vault, Historie | `src-tauri/src/storage.rs` (Modelle/Schreiben), `src-tauri/src/storage/schema.rs` (Öffnen/Migrationen), `src-tauri/src/storage/read.rs` (Lesen/Aktivitätssummen), `vault.rs`, `history.rs` |
 | Darstellung | `src/settings.ts`, `src/colors.ts`, `src/i18n.ts`, Theme-CSS |
+
+Jedes Fenster lädt nur seinen eigenen Code: `src/main.tsx` entscheidet anhand des Fensterlabels und lädt das Journal (`App.tsx`), Widgets, Kalender-, Mini-, Erinnerungs- und herausgelöste Fenster jeweils als eigenen Chunk. Die Stylesheets der Komponenten bleiben in `main.tsx` in fester Reihenfolge importiert, damit die Kaskade (Optiken zuletzt) in jedem Fenster gleich ist; neue Komponenten-CSS gehört dort vor `styles.css` eingetragen. Code, den alle Fenster brauchen (`UndoShortcuts`, `ThemeSync` …), soll keine schweren Module statisch importieren; die Pinnwand meldet ihr Leeren der Warteschlange über `registerBoardFlush` (`src/editorFlush.ts`).
 
 Das Frontend spricht über typisierte Tauri-Aufrufe mit dem Rust-Backend. SQLite ist maßgeblich für Inhalte; `localStorage` hält ergänzende UI-/Vergleichszustände. Journal-Schema 12 und Drive-Paketformat 13 sind unterschiedliche Versionsnummern. Inhalte sind keine frei bearbeitbare Sammlung von Markdown-Dateien. Neue inhaltliche SQLite-Schreibwege müssen die [Historie](undo-redo.md) und gegebenenfalls den [Drive-Snapshot](sync-format-12.md) berücksichtigen.
 

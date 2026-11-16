@@ -1,5 +1,5 @@
 import { t, useLanguage } from '../i18n';
-import { Fragment, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, memo, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, KeyboardEvent, ReactNode } from 'react';
 import { localDate, shiftDate, formatShortDate } from '../dates';
 import { plainText } from '../markdown';
@@ -108,7 +108,9 @@ function Marked({ text, words }: { text: string; words: string[] }) {
   return <>{parts}</>;
 }
 
-export function SearchBox({ variant: place, onOpen, autoFocus = false, onClose }: { variant: SearchVariant; onOpen: (result: SearchResult) => void; autoFocus?: boolean; onClose?: () => void }) {
+/** Memoized: the journal renders on every typed key, these only when their own props change. */
+export const SearchBox = memo(SearchBoxView);
+function SearchBoxView({ variant: place, onOpen, autoFocus = false, onClose }: { variant: SearchVariant; onOpen: (result: SearchResult) => void; autoFocus?: boolean; onClose?: () => void }) {
   const english = useLanguage() === 'en';
   // The place is the layout's (the bar, the book's card, the desk's bar), the style the look's: on the desk the grep
   // prompt belongs to the Nebula look; with another look the desk's bar holds the plain field in that look's style.

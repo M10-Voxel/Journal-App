@@ -1,5 +1,20 @@
 # Ressourcenverwaltung
 
+## Bündel, Fenster und Speicherpfade (16.11.2026)
+
+Ausgangspunkt war der Graphify-Graph (`graphify-out/GRAPH_REPORT.md`): `main.tsx` hing an fast allen Communities, jedes Fenster lud dasselbe Bündel.
+
+- **Ein Chunk je Fenster.** `main.tsx` ist nur noch Einstieg (Design, Sprache, Stylesheets, Fensterwahl); das Journal steht in `App.tsx`. Widgets, Kalender-, Mini-Kalender-, Erinnerungs- und herausgelöste Fenster laden per `React.lazy` nur ihren Code. Der Einstiegs-Chunk sank von 1,43 MB auf rund 0,39 MB (minifiziert); CodeMirror, Pinnwand und Tinte lädt nur, wer sie zeigt. Das erzeugte Stylesheet ist bis auf die ausgelagerte Gaegu-Schrift bytegleich zum vorherigen (geprüft per Vergleich der Build-Ausgabe).
+- **Gaegu bei Bedarf.** Die englische Handschrift der Journal-Optik brachte 178 `@font-face`-Regeln (rund 300 kB CSS, meist Koreanisch). `src/lookFonts.ts` lädt sie erst, wenn `data-look="journal"` und `lang="en"` gesetzt sind; das Haupt-Stylesheet sank von 1,02 MB auf 0,71 MB.
+- **Mail-Erkennung bei Bedarf.** `recognizeMail` und `deliveryWorkdayWindow` stehen in `src/mailRecognize.ts` und laden mit dem Satzmodell (`mailContextModel.json`, 150 kB) erst, wenn eine Mail zu lesen ist. Der Mailstatus behält seine Identität, wenn sich nichts ändert (kein Neuzeichnen des Journals pro Minute).
+- **Nebula-Raster.** Beim Ziehen eines Fensters folgt es dem Zeiger höchstens einmal pro Bild per DOM-Transform; der Desk rendert nur, wenn sich der Landeplatz ändert (vorher bei jeder Mausbewegung samt Messung aller Fenster). Vergleiche mit Standard- und gespeicherten Anordnungen laufen einmal pro Anordnung.
+- **Kalenderdaten.** Nach einem Speichern lädt `useCalendarData` nur noch die Spanne der geänderten Tage nach (vorher den ganzen, rund ein Jahr langen Bereich) und behält unveränderte Tage als dieselben Objekte. Einträge pro Tag werden je Datenstand einmal gefiltert und sortiert; der Bearbeitungskontext der Kalendereinträge bleibt stabil, ihre Tastatur-Listener werden nicht bei jedem Render neu angelegt.
+- **Schreibwarteschlangen.** Zeitraumdaten (`periodStore.ts`) schreiben höchstens einen Stand gleichzeitig; Änderungen während eines Schreibvorgangs werden zum nächsten, neuesten Stand zusammengefasst. Kartenänderungen (`patchCard`) schließen sich einer noch nicht gesendeten Änderung derselben Karte an, solange nichts anderes dazwischen eingereiht wurde. Der zuletzt gespeicherte Stand ist in beiden Fällen der neueste.
+- **Neuzeichnen.** `PeriodNotes`, `Notebook` und `SearchBox` sind memoisiert und erhalten stabile Props; `useLanguage` und weitere Stores nutzen eine feste Abo-Funktion; englische Texte werden je Schlüssel einmal übersetzt.
+- **Rust.** Der Desktop-Icon-Host für Widgets wird zwischengespeichert und nur neu gesucht, wenn er nicht mehr gültig ist (vorher eine vollständige Fensteraufzählung mehrmals pro Wartungsdurchlauf, alle 250 ms). Zeitraum-, Pinnwand-, Undo- und Mailbefehle laufen `async` statt auf dem UI-Thread. Ein partieller Index `entries_plans` (zusätzlich, ohne Schemaänderung) deckt die Herkunftssuche bei jedem Laden/Speichern eines Tages ab; Test `origin_lookup_reads_only_planned_entries`. Der Statement-Cache fasst 64 statt 16 Anweisungen; Pinnwand-Schlüssel werden per Bereichsabfrage gelesen; Live-Blur-Bilder werden ohne vorher genullten Puffer gebaut.
+
+Bewusst nicht geändert: die sekündliche Live-Blur-Abfrage je Widget, die Undo-Trigger und `PRAGMA synchronous` (Abwägung bei Dauerhaftigkeit) – siehe „Weitere Ansatzpunkte“.
+
 ## Fenster und Pinnwand (November 2026)
 
 - Pan und Zoom behalten die berechneten Kartenpositionen, Gruppenrahmen, Pinpositionen und Fadenkurven sowie den unveränderten SVG-Baum. Verschieben und Größenänderungen einer Karte aktualisieren diese Geometrie weiterhin; Sprache, Tags und Fadenmenüs bleiben aktuell.
@@ -55,6 +70,8 @@ Die nativen Tests unter `src-tauri/src/storage/performance_tests.rs` verwenden a
 Die Bytewerte messen die serialisierte JSON-Nutzlast dieses konkreten Beispiels, nicht den gesamten IPC-Umschlag oder die RAM-Ersparnis auf einem echten Gerät. Die Abfragezahlen werden über SQLite-Statement-Tracing gezählt; Suche und Export werden gegen den früheren Leseweg auf identische serialisierte Inhalte geprüft, einschließlich Serien und veralteter Planungsreferenzen. `cargo test --manifest-path src-tauri/Cargo.toml storage:: -- --nocapture` gibt diese Werte sowie den SQLite-Abfrageplan aus. Weitere Tests prüfen Kalenderkennungen, Rückgängig/Wiederherstellen, atomaren Rollback und unveränderte Inhalte nach dem Wiederöffnen einer bestehenden Datenbank.
 
 ## Weitere Ansatzpunkte
+
+Offen aus der Prüfung vom 16.11.2026: `desktop_widget_live_blur` läuft noch synchron und je Widget sekündlich (Fensteraufzählung, gemeinsame Sperre mit der GPU-Auslese); die Undo-Trigger vergleichen ganze Zeilen per `json_object`; `desktop_wallpaper_info` wird von Backend und Widget getrennt abgefragt; `import_calendar` liest Tags und Serien pro Eintrag. Jede dieser Stellen braucht eine native Prüfung auf Windows.
 
 Der Graph zeigt Abhängigkeiten, keine gemessene CPU-Zeit. Weitergehende RAM-/CPU-Messungen sollten repräsentative Vaults mit identischen Ansichten vergleichen. Große tatsächlich angezeigte Kalenderbereiche und umfangreiche Exportergebnisse benötigen weiterhin Speicher für ihren Inhalt. Eine spätere Aufteilung der periodischen JSON-Daten auf Tabellen würde Datenmigration, Historie und Drive-Abgleich betreffen und braucht einen eigenen abgesicherten Umbau.
 

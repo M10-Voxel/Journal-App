@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { emit, listen } from '@tauri-apps/api/event';
 import type { CalendarImport } from '../journal';
-import { latestMailCandidates, recognizeMail } from '../mail';
+import { latestMailCandidates } from '../mail';
 import { mailApi } from '../mailApi';
 import { getLanguage } from '../i18n';
 import { saveTags } from '../tagStore';
@@ -23,10 +23,12 @@ export function useMailImport(onImport: (entries: CalendarImport[]) => Promise<v
           again = false;
           const pending = await mailApi.pending() ?? [];
           let processed = 0, deferredError = '';
+          // The recognizer (and its sentence model) loads with the first mail to read.
+          const recognizeMail = pending.length ? (await import('../mailRecognize')).recognizeMail : null;
           for (const item of pending) {
             if (disposed) return;
             let result;
-            try { result = await recognizeMail(item, undefined, mailApi.analyze); }
+            try { result = await recognizeMail!(item, undefined, mailApi.analyze); }
             catch (error) { deferredError = String(error); continue; }
             if (result.candidates.length) {
               const tags = await saveTags(current => ensureMailTags(current, getLanguage()));
@@ -51,7 +53,8 @@ export function useMailImport(onImport: (entries: CalendarImport[]) => Promise<v
           }
           if (!disposed) {
             const remaining = latestMailCandidates(await mailApi.candidates() ?? []);
-            setStatus({ count: remaining.length, error: deferredError });
+            // Unchanged, the status keeps its identity: the journal does not render again every minute.
+            setStatus(old => old.count === remaining.length && old.error === deferredError ? old : { count: remaining.length, error: deferredError });
             const fresh = remaining.filter(item => !notified.has(item.id));
             notified = new Set(remaining.map(item => item.id));
             // Full pending list also removes accepted/rejected suggestions from a visible notice.

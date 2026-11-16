@@ -26,7 +26,7 @@ pub fn begin(c:&Connection)->rusqlite::Result<()> {
  c.execute_batch("UPDATE undo_action SET started=0;")
 }
 #[tauri::command]
-pub fn history_step(app:tauri::AppHandle,store:tauri::State<'_,Mutex<Store>>,redo:bool,empty_entry:Option<String>)->Result<bool,String>{
+pub async fn history_step(app:tauri::AppHandle,store:tauri::State<'_,Mutex<Store>>,redo:bool,empty_entry:Option<String>)->Result<bool,String>{
  let changed={
   let mut db=store.lock().map_err(|e|e.to_string())?;
   if let Some(id)=empty_entry.filter(|_|!redo) { undo_empty_entry(&mut db,&id) } else { step(&mut db,redo) }

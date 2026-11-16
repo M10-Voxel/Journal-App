@@ -1,7 +1,7 @@
 //! Read projections; these queries never rewrite persisted journal content.
 use super::*;
 
-const ORIGINS_SQL: &str = "SELECT json_extract(t.value, '$.id'), e.day_date FROM entries e, json_each(e.plan, '$.targets') t WHERE json_extract(t.value, '$.date') = ?1";
+const ORIGINS_SQL: &str = "SELECT json_extract(t.value, '$.id'), e.day_date FROM entries e, json_each(e.plan, '$.targets') t WHERE e.plan IS NOT NULL AND json_extract(t.value, '$.date') = ?1";
 const ENTRY_COLUMNS: &str = "e.id,e.kind,e.text,e.done,e.cancelled,e.priority,e.time,e.reminder,e.plan,e.end_time,e.show_in_journal,e.calendar_uid,e.series,s.rule,s.horizon,e.description,e.tag,e.reminder_before,e.icon";
 type EntryRow = (Entry, Option<String>, (Option<String>, Option<String>, Option<String>));
 
@@ -30,6 +30,15 @@ mod tests {
         let minutes=minutes.query_map(["2026-11-08","2026-11-09","reading"],|r|r.get::<_,String>(3)).unwrap().collect::<rusqlite::Result<Vec<_>>>().unwrap().join("; ");
         println!("Activity query plan: {minutes}");
         assert!(minutes.contains("entries_activity_time"),"{minutes}");
+    }
+    /// Loading or saving a day looks up the plans pointing at it: only entries with a plan are read (entries_plans),
+    /// not every entry of the journal.
+    #[test]
+    fn origin_lookup_reads_only_planned_entries() {
+        let db=Store::from_connection(Connection::open_in_memory().unwrap()).unwrap();
+        let mut plan=db.conn.prepare(&format!("EXPLAIN QUERY PLAN {ORIGINS_SQL}")).unwrap();
+        let plan=plan.query_map(["2026-11-08"],|r|r.get::<_,String>(3)).unwrap().collect::<rusqlite::Result<Vec<_>>>().unwrap().join("; ");
+        assert!(plan.contains("entries_plans"),"{plan}");
     }
 }
 
@@ -83,7 +92,7 @@ impl Store {
         let wanted:HashMap<&str,&str>=entries.iter().map(|(date,entry)|(entry.id.as_str(),date.as_str())).collect();
         let ids=serde_json::to_string(&entries.iter().map(|(_,entry)|entry.id.as_str()).collect::<Vec<_>>())?;
         let mut statement=self.conn.prepare_cached("SELECT json_extract(t.value,'$.id'),json_extract(t.value,'$.date'),e.day_date
-            FROM entries e,json_each(e.plan,'$.targets') t WHERE json_extract(t.value,'$.id') IN (SELECT value FROM json_each(?1)) ORDER BY e.rowid")?;
+            FROM entries e,json_each(e.plan,'$.targets') t WHERE e.plan IS NOT NULL AND json_extract(t.value,'$.id') IN (SELECT value FROM json_each(?1)) ORDER BY e.rowid")?;
         let rows=statement.query_map([ids],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?)))?;
         let mut origins=HashMap::new();
         for row in rows { let (id,date,origin)=row?;if wanted.get(id.as_str()).copied()==Some(date.as_str()){origins.insert(id,origin);} }

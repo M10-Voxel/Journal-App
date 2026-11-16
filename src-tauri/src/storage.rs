@@ -533,7 +533,7 @@ impl Store {
 /// whole chains. The plan links are read once; a series' occurrences once per series.
 fn linked_ids(conn: &Connection, id: &str) -> Result<Vec<String>> {
     let mut links: HashMap<String, Vec<String>> = HashMap::new();
-    let mut plans = conn.prepare_cached("SELECT e.id, json_extract(t.value, '$.id') FROM entries e, json_each(e.plan, '$.targets') t")?;
+    let mut plans = conn.prepare_cached("SELECT e.id, json_extract(t.value, '$.id') FROM entries e, json_each(e.plan, '$.targets') t WHERE e.plan IS NOT NULL")?;
     for row in plans.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))? {
         let (trace, target) = row?;
         links.entry(trace.clone()).or_default().push(target.clone());

@@ -255,7 +255,7 @@ pub fn start(app: tauri::AppHandle) {
     });
 }
 #[tauri::command]
-pub fn mail_accounts(state: tauri::State<'_, MailState>) -> Result<Vec<Account>> { state.accounts() }
+pub async fn mail_accounts(state: tauri::State<'_, MailState>) -> Result<Vec<Account>> { state.accounts() }
 #[tauri::command]
 pub async fn mail_save(app: tauri::AppHandle, mut account: Account, password: Option<String>, client_secret: Option<String>, authorize: bool) -> Result<Account> {
     tauri::async_runtime::spawn_blocking(move || {
@@ -344,7 +344,7 @@ pub fn mail_remove(app: tauri::AppHandle, id: String) -> Result<()> {
     let _ = app.emit("mail:changed", ()); Ok(())
 }
 #[tauri::command]
-pub fn mail_pending(state: tauri::State<'_, MailState>) -> Result<Vec<Pending>> {
+pub async fn mail_pending(state: tauri::State<'_, MailState>) -> Result<Vec<Pending>> {
     let accounts = state.accounts()?;
     let db = state.db.lock().map_err(err)?;
     let mut query = db.prepare("SELECT account_id,body FROM messages WHERE body IS NOT NULL ORDER BY CASE WHEN json_array_length(body,'$.calendars')>0 OR instr(body,'application/ld+json')>0 THEN 0 ELSE 1 END,created LIMIT 50").map_err(err)?;
@@ -354,7 +354,7 @@ pub fn mail_pending(state: tauri::State<'_, MailState>) -> Result<Vec<Pending>> 
     Ok(pending)
 }
 #[tauri::command]
-pub fn mail_stage(app: tauri::AppHandle, account_id: String, message_key: String, candidates: Vec<Candidate>, notice: String) -> Result<()> {
+pub async fn mail_stage(app: tauri::AppHandle, account_id: String, message_key: String, candidates: Vec<Candidate>, notice: String) -> Result<()> {
     if candidates.len() > 500 || notice.len() > 2000 { return Err("Zu viele Terminvorschläge".into()); }
     let state = app.state::<MailState>();
     let mut db = state.db.lock().map_err(err)?;
@@ -371,7 +371,7 @@ pub fn mail_stage(app: tauri::AppHandle, account_id: String, message_key: String
     let _ = app.emit("mail:changed", ()); Ok(())
 }
 #[tauri::command]
-pub fn mail_candidates(state: tauri::State<'_, MailState>) -> Result<Vec<Candidate>> {
+pub async fn mail_candidates(state: tauri::State<'_, MailState>) -> Result<Vec<Candidate>> {
     let db = state.db.lock().map_err(err)?;
     let model=learning::load(&db)?;
     let mut query = db.prepare("SELECT data FROM candidates WHERE state='pending' ORDER BY created DESC LIMIT 500").map_err(err)?;
@@ -379,7 +379,7 @@ pub fn mail_candidates(state: tauri::State<'_, MailState>) -> Result<Vec<Candida
     rows.map(|row| {let mut candidate:Candidate=serde_json::from_str(&row.map_err(err)?).map_err(err)?;candidate.relevance=model.score(&candidate);Ok(candidate)}).collect()
 }
 #[tauri::command]
-pub fn mail_resolve(app: tauri::AppHandle, ids: Vec<String>, accepted: bool, manual: Option<bool>) -> Result<()> {
+pub async fn mail_resolve(app: tauri::AppHandle, ids: Vec<String>, accepted: bool, manual: Option<bool>) -> Result<()> {
     if ids.len() > 500 { return Err("Zu viele Vorschläge".into()); }
     let state = app.state::<MailState>();
     let mut db = state.db.lock().map_err(err)?;

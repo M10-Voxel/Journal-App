@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { extractModelEvents, prepareMailText } from '../src/mailMl.ts';
-import { newMailAccount, recognizeMail } from '../src/mail.ts';
+import { newMailAccount } from '../src/mail.ts';
+import { recognizeMail } from '../src/mailRecognize.ts';
 
 // These are real outputs from the pinned GLiNER2.5 model, not hand-written predictions.
 const samples = JSON.parse(readFileSync(new URL('./fixtures/mail-ml-model-output.json', import.meta.url),'utf8'));

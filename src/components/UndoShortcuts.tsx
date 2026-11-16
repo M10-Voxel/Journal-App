@@ -2,9 +2,8 @@ import { t } from '../i18n.ts';
 import { useEffect } from 'react';
 import { emit, listen } from '@tauri-apps/api/event';
 import { getAllWindows, getCurrentWindow } from '@tauri-apps/api/window';
-import { flushBoardData } from '../boardCards';
 import { flushPeriodData } from '../periodStore';
-import { flushEditors } from '../editorFlush';
+import { flushBoards, flushEditors } from '../editorFlush';
 
 /** Drain every window's pending writes before replaying the database transaction. */
 export async function flushHistoryWindows(labels?: ReadonlySet<string>) {
@@ -28,7 +27,7 @@ export function UndoShortcuts() {
   useEffect(() => {
     const flush = listen<{ id: string }>('history:flush', async e => {
       let error: string | undefined;
-      try { await flushEditors(); await flushBoardData(); await flushPeriodData(); } catch (reason) { error = String(reason); }
+      try { await flushEditors(); await flushBoards(); await flushPeriodData(); } catch (reason) { error = String(reason); }
       await emit('history:flushed', { id: e.payload.id, window: getCurrentWindow().label, error });
     });
     const key = (e: KeyboardEvent) => {

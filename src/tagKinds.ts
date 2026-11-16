@@ -51,8 +51,10 @@ export function moveKindTo(kind: TagKind, to: number): boolean {
   return true;
 }
 export const resetKindOrder = () => { try { globalThis.localStorage?.removeItem(orderKey); } catch { /* ignore */ } changeOrder(tagKinds); };
+/** One subscribe function for every reader (an inline one would make React subscribe anew on each render). */
+const subscribeStore = (listener: () => void) => { orderListeners.add(listener); return () => { orderListeners.delete(listener); }; };
 export function useTagKindOrder(): readonly TagKind[] {
-  return useSyncExternalStore(listener => { orderListeners.add(listener); return () => { orderListeners.delete(listener); }; }, kindOrder, kindOrder);
+  return useSyncExternalStore(subscribeStore, kindOrder, kindOrder);
 }
 export const tagKindLabel = (kind: TagKind) => ({ own: t('Eigene'), activity: t('Checkliste'), mail: t('E-Mail') })[kind];
 const mailIds = new Set(Object.values(mailTagDefinitions).map(definition => definition.id));

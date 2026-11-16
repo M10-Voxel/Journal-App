@@ -8,17 +8,17 @@ type Result<T> = std::result::Result<T, String>;
 const MAX_CARD_BYTES:usize=2_000_000;
 
 #[tauri::command]
-pub fn board_list(store:tauri::State<'_,Mutex<Store>>) -> Result<Vec<Value>> {
+pub async fn board_list(store:tauri::State<'_,Mutex<Store>>) -> Result<Vec<Value>> {
     let db=store.lock().map_err(|e|e.to_string())?;
     card_list(&db)
 }
 fn card_list(db:&Store)->Result<Vec<Value>> {
-    let mut stmt=db.conn.prepare("SELECT value FROM settings WHERE key LIKE 'board:card:%'").map_err(|e|e.to_string())?;
+    let mut stmt=db.conn.prepare("SELECT value FROM settings WHERE key >= 'board:card:' AND key < 'board:card;'").map_err(|e|e.to_string())?;
     let rows=stmt.query_map([],|r|r.get::<_,String>(0)).map_err(|e|e.to_string())?;
     rows.map(|r|serde_json::from_str(&r.map_err(|e|e.to_string())?).map_err(|e|e.to_string())).collect()
 }
 #[tauri::command]
-pub fn board_patch(app:tauri::AppHandle,store:tauri::State<'_,Mutex<Store>>,id:String,patch:Value,source:String) -> Result<Value> {
+pub async fn board_patch(app:tauri::AppHandle,store:tauri::State<'_,Mutex<Store>>,id:String,patch:Value,source:String) -> Result<Value> {
     uuid::Uuid::parse_str(&id).map_err(|_|"Ungültige Karte")?;
     let value={
         let db=store.lock().map_err(|e|e.to_string())?;
@@ -47,13 +47,13 @@ fn write_card(db:&Store,id:&str,patch:&Value)->Result<Value>{
 }
 /// A thread has two ends: save both in one transaction and one undo step.
 #[tauri::command]
-pub fn board_patch_many(app:tauri::AppHandle,store:tauri::State<'_,Mutex<Store>>,patches:Value,source:String)->Result<()> {
+pub async fn board_patch_many(app:tauri::AppHandle,store:tauri::State<'_,Mutex<Store>>,patches:Value,source:String)->Result<()> {
     let (cards,_)={let db=store.lock().map_err(|e|e.to_string())?;update_cards(&db,&patches,&[])?};
     for card in cards {let _=app.emit("board:changed",json!({"card":card,"source":source}));}Ok(())
 }
 /// Deleting a note, its private attachments and the threads is one undoable operation.
 #[tauri::command]
-pub fn board_remove(app:tauri::AppHandle,store:tauri::State<'_,Mutex<Store>>,id:String,ids:Option<Vec<String>>,source:String) -> Result<()> {
+pub async fn board_remove(app:tauri::AppHandle,store:tauri::State<'_,Mutex<Store>>,id:String,ids:Option<Vec<String>>,source:String) -> Result<()> {
     let ids=ids.unwrap_or_else(||vec![id]);
     let (cards,removed)={let db=store.lock().map_err(|e|e.to_string())?;update_cards(&db,&json!({}),&ids)?};
     for card in cards {let _=app.emit("board:changed",json!({"card":card,"source":source}));}
@@ -94,14 +94,14 @@ fn update_cards(db:&Store,patches:&Value,remove:&[String])->Result<(Vec<Value>,V
 
 // The notebook's folders: `board:folder:{id}` = { id, name, parent, order }. A note names its folder in `folder`.
 fn folder_list(db:&Store)->Result<Vec<Value>>{
-    let mut stmt=db.conn.prepare("SELECT value FROM settings WHERE key LIKE 'board:folder:%'").map_err(|e|e.to_string())?;
+    let mut stmt=db.conn.prepare("SELECT value FROM settings WHERE key >= 'board:folder:' AND key < 'board:folder;'").map_err(|e|e.to_string())?;
     let rows=stmt.query_map([],|r|r.get::<_,String>(0)).map_err(|e|e.to_string())?;
     rows.map(|r|serde_json::from_str(&r.map_err(|e|e.to_string())?).map_err(|e|e.to_string())).collect()
 }
 #[tauri::command]
-pub fn board_folders(store:tauri::State<'_,Mutex<Store>>) -> Result<Vec<Value>> { let db=store.lock().map_err(|e|e.to_string())?; folder_list(&db) }
+pub async fn board_folders(store:tauri::State<'_,Mutex<Store>>) -> Result<Vec<Value>> { let db=store.lock().map_err(|e|e.to_string())?; folder_list(&db) }
 #[tauri::command]
-pub fn board_folder_save(app:tauri::AppHandle,store:tauri::State<'_,Mutex<Store>>,folder:Value) -> Result<Value> {
+pub async fn board_folder_save(app:tauri::AppHandle,store:tauri::State<'_,Mutex<Store>>,folder:Value) -> Result<Value> {
     let value={ let db=store.lock().map_err(|e|e.to_string())?; save_folder(&db,&folder)? };
     let _=app.emit("board:folders",());Ok(value)
 }
@@ -125,7 +125,7 @@ fn save_folder(db:&Store,folder:&Value)->Result<Value>{
 }
 /// Removes a folder; its subfolders and notes move up into its parent (or out of every folder).
 #[tauri::command]
-pub fn board_folder_remove(app:tauri::AppHandle,store:tauri::State<'_,Mutex<Store>>,id:String) -> Result<()> {
+pub async fn board_folder_remove(app:tauri::AppHandle,store:tauri::State<'_,Mutex<Store>>,id:String) -> Result<()> {
     let cards={ let db=store.lock().map_err(|e|e.to_string())?; remove_folder(&db,&id)? };
     for card in cards {let _=app.emit("board:changed",json!({"card":card,"source":"backend"}));}
     let _=app.emit("board:folders",());Ok(())
@@ -145,7 +145,7 @@ fn remove_folder(db:&Store,id:&str)->Result<Vec<Value>>{
         let child_key=format!("board:folder:{}",child["id"].as_str().unwrap_or_default());write(child_key,&child)?;
     }
     let cards:Vec<(String,String)>={
-        let mut stmt=db.conn.prepare("SELECT key,value FROM settings WHERE key LIKE 'board:card:%'").map_err(|e|e.to_string())?;
+        let mut stmt=db.conn.prepare("SELECT key,value FROM settings WHERE key >= 'board:card:' AND key < 'board:card;'").map_err(|e|e.to_string())?;
         let rows=stmt.query_map([],|r|Ok((r.get(0)?,r.get(1)?))).map_err(|e|e.to_string())?;
         rows.collect::<std::result::Result<_,_>>().map_err(|e|e.to_string())?
     };
@@ -162,7 +162,7 @@ fn asset_path(app:&tauri::AppHandle,id:&str)->Result<std::path::PathBuf>{
     Ok(crate::vault::directory(app).join("board-images").join(format!("{id}.avif")))
 }
 #[tauri::command]
-pub fn board_image_save(app:tauri::AppHandle,id:String,data:String)->Result<()> {
+pub async fn board_image_save(app:tauri::AppHandle,id:String,data:String)->Result<()> {
     if data.len()>28_000_000{return Err("Bild ist zu groß".into())}
     let bytes=STANDARD.decode(data).map_err(|_|"Ungültige Bilddaten")?;
     if bytes.len()<16 || &bytes[4..8]!=b"ftyp" || !bytes[8..32.min(bytes.len())].windows(4).any(|s|s==b"avif"||s==b"avis") {return Err("AVIF-Bild erwartet".into())}
@@ -170,7 +170,7 @@ pub fn board_image_save(app:tauri::AppHandle,id:String,data:String)->Result<()> 
     std::fs::write(p,bytes).map_err(|e|e.to_string())
 }
 #[tauri::command]
-pub fn board_image_load(app:tauri::AppHandle,id:String)->Result<String>{
+pub async fn board_image_load(app:tauri::AppHandle,id:String)->Result<String>{
     Ok(format!("data:image/avif;base64,{}",STANDARD.encode(std::fs::read(asset_path(&app,&id)?).map_err(|e|e.to_string())?)))
 }
 fn link_url(input:&str)->Result<url::Url>{let u=url::Url::parse(input).map_err(|_|"Ungültiger Link")?;if u.scheme()!="https"||u.host_str().is_none()||!u.username().is_empty()||u.password().is_some(){return Err("Bitte einen HTTPS-Link eingeben".into())}Ok(u)}

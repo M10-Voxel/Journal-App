@@ -42,6 +42,12 @@ const weekendClass = (date: string, index?: number) => {
   return weekday === 5 ? ' is-saturday' : weekday === 6 ? ' is-sunday' : '';
 };
 
+/** A per-day lookup that works out each day once (until the lookup is made anew). */
+function perDay<T>(make: (date: string) => T): (date: string) => T {
+  const cache = new Map<string, T>();
+  return date => { let value = cache.get(date); if (value === undefined) { value = make(date); cache.set(date, value); } return value; };
+}
+
 /** The calendar as a window of its own: it hears the journal's day through events and asks the journal window to show days. */
 export function CalendarWindow() {
   useLanguage();
@@ -97,9 +103,11 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
   const tags = useTags();
   const [hiddenTags, setHiddenTags] = useHiddenTags(tagScope);
   const visibleDays = useMemo(() => filterTagDays(days, hiddenTags), [days, hiddenTags, tags]);
-  const entriesOn = (value: string) => orderForCalendar((visibleDays.get(value)?.entries ?? []).filter(entry => kinds[entry.kind]));
+  // A day's shown entries, filtered and ordered once per state of the data (the views ask for each day many times per
+  // render); callers only read the lists.
+  const entriesOn = useMemo(() => perDay(value => orderForCalendar((visibleDays.get(value)?.entries ?? []).filter(entry => kinds[entry.kind]))), [visibleDays, kinds]);
   const displayDays=useMemo(()=>calendarDaysWithSpans(visibleDays,range.from,range.to),[visibleDays,range.from,range.to]);
-  const displayEntriesOn=(value:string)=>orderForCalendar((displayDays.get(value)?.entries ?? []).filter(entry=>kinds[entry.kind])).sort((a,b)=>Number(Boolean(b.end && minutesOf(b.end)>1440))-Number(Boolean(a.end && minutesOf(a.end)>1440)));
+  const displayEntriesOn=useMemo(()=>perDay((value:string)=>orderForCalendar((displayDays.get(value)?.entries ?? []).filter(entry=>kinds[entry.kind])).sort((a,b)=>Number(Boolean(b.end && minutesOf(b.end)>1440))-Number(Boolean(a.end && minutesOf(a.end)>1440)))),[displayDays,kinds]);
   // A range drawn while entries without a tag are hidden takes the first tag shown, so it does not vanish at once.
   const newTag = isShown(hiddenTags, null) ? null : tags.find(tag => !hiddenTags.has(tag.id))?.id ?? null;
 
@@ -134,7 +142,9 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
   const inGrid = editing?.entry.time && !(editing.entry.end && durationOf({time:editing.entry.time,end:editing.entry.end})>1440) && gridDates.includes(editing.date) ? editing : null;
   const save = async (change: EntryEdit, scope?: ScopeOption) => { if (editing) { await onEdit!(editing.date, editing.entry.id, change, scope); setEditing(null); refocus(); } };
   const remove = async (others: { id: string; date: string }[]) => { if (editing) { await onRemove!(editing.date, editing.entry.id, others); setEditing(null); refocus(); } };
-  const editContext = { move:onMove, change: onEdit ? (entry:Entry, value:string, change:EntryEdit)=>onEdit(value,entry.id,change) : undefined, remove: onRemove ? (entry:Entry, value:string, others:ScopeOption['others'])=>onRemove(value,entry.id,others) : undefined, edit: onEdit ? (entry: Entry, value: string, element: HTMLElement) => setEditing({ entry, date: value, element }) : null, editingId: editing?.entry.id ?? null };
+  const editingId = editing?.entry.id ?? null;
+  // The same context while nothing it carries changes: every item in the calendar reads it.
+  const editContext = useMemo(() => ({ move:onMove, change: onEdit ? (entry:Entry, value:string, change:EntryEdit)=>onEdit(value,entry.id,change) : undefined, remove: onRemove ? (entry:Entry, value:string, others:ScopeOption['others'])=>onRemove(value,entry.id,others) : undefined, edit: onEdit ? (entry: Entry, value: string, element: HTMLElement) => setEditing({ entry, date: value, element }) : null, editingId }), [onMove, onEdit, onRemove, editingId]);
 
   const setView = (next: CalendarView) => { if (!fixedView) setPrefs(current => ({ ...current, view: next })); };
   // Going somewhere directly shows it in place; stepping slides the next page in from that side.
@@ -510,7 +520,7 @@ function TimeGrid({ journalDays, dates, today, now, journalDate, entriesOn, onDa
       .map(entry => ({ id: `${entry.id}:rest`, time: '00:00', end: timeOfMinutes(minutesOf(entry.end) - 24 * 60), entry, from: before, night: 'rest' as const }));
     return { date, untimed: entries.filter(entry => !entry.time), timed: layoutTimed([...carried, ...own]) };
   });
-  const spans=[...journalDays].flatMap(([date,day])=>day.entries.filter(entry=>entriesOn(date).some(shown=>shown.id===entry.id) && entry.time && entry.end && durationOf({time:entry.time,end:entry.end})>1440).map(entry=>({date,entry,end:shiftDate(date,Math.floor((minutesOf(entry.end!)-1)/1440))}))).filter(item=>item.date<=dates[dates.length-1] && item.end>=dates[0]);
+  const spans=[...journalDays].flatMap(([date,day])=>day.entries.filter(entry=>entry.time && entry.end && durationOf({time:entry.time,end:entry.end})>1440 && entriesOn(date).some(shown=>shown.id===entry.id)).map(entry=>({date,entry,end:shiftDate(date,Math.floor((minutesOf(entry.end!)-1)/1440))}))).filter(item=>item.date<=dates[dates.length-1] && item.end>=dates[0]);
   // Always open the shown days at 04:00, independently of their appointments.
   useLayoutEffect(() => {
     pendingStart.current = true;
@@ -688,7 +698,8 @@ function DaySide({ date, today, journalDate, days, hiddenTags, onPick }: { date:
   useEffect(() => setMonth(date.slice(0, 7)), [date]);
   // Paging the small month on its own needs that month's days for the dots.
   const grid = monthGrid(month);
-  const shown = filterTagDays(useCalendarData(shiftDate(grid[0],-366), grid[grid.length - 1]).days, hiddenTags);
+  const loaded = useCalendarData(shiftDate(grid[0],-366), grid[grid.length - 1]).days;
+  const shown = useMemo(() => filterTagDays(loaded, hiddenTags), [loaded, hiddenTags]);
   const day = days.get(date);
   const entries = day?.entries ?? [];
   const tasks = entries.filter(entry => entry.kind === 'task');

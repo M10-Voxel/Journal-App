@@ -16,4 +16,6 @@ if (typeof window !== 'undefined') window.addEventListener('storage', event => {
   try { const parsed = JSON.parse(localStorage.getItem(key) ?? '{}'); timers = parsed && typeof parsed === 'object' ? parsed : {}; } catch { timers = {}; }
   listeners.forEach(listener => listener());
 });
-export function useActivityTimers() { return useSyncExternalStore(listener => { listeners.add(listener); return () => { listeners.delete(listener); }; }, () => timers); }
+/** One subscribe function for every reader (an inline one would make React subscribe anew on each render). */
+const subscribeStore = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
+export function useActivityTimers() { return useSyncExternalStore(subscribeStore, () => timers); }

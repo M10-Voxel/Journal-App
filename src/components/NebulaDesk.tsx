@@ -1,6 +1,6 @@
 import { createPortal } from 'react-dom';
 import { useViewHistory } from '../viewHistory';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { dateFormat, t, useLanguage } from '../i18n';
 import { formatShortDate, monthGrid, shiftDate, shiftMonth, weekDates } from '../dates';
@@ -255,7 +255,8 @@ function Panel({ id, command, label, note, minimized, span, shownSpan = span, up
   /** The room left after it when it is its row's last window (columns), and for resizing without a pair: how wide it may
    *  get, and which window of the row carries the room left (and how much). */
   rest?: number; room?: { max: number; owner: PanelId; rest: number };
-  height?: number; held: { dx: number; dy: number } | null;
+  /** Carried by the pointer (its offset is written straight onto the element by NebulaDesk grab, without rendering). */
+  height?: number; held: boolean;
   /** Where a dragged window would land: above this one, beside it (sharing its width; the half it would take is shown), or
    *  in its stack above or below it. */
   dropBefore: 'top' | 'split-left' | 'split-right' | 'stack-above' | 'stack-below' | null;
@@ -333,7 +334,7 @@ function Panel({ id, command, label, note, minimized, span, shownSpan = span, up
     window.addEventListener('pointermove', move); window.addEventListener('pointerup', end); window.addEventListener('pointercancel', end);
   }
   return <section ref={root} className={`nebula-terminal nebula-panel is-${id}${height ? ' is-custom-height' : ''}${shownSpan < columns ? ' is-part' : ''}${shownSpan === columns / 2 ? ' is-half' : ''}${minimized ? ' is-minimized' : ''}${upright ? ' is-upright' : ''}${held ? ' is-held' : ''}${dropBefore ? ` is-drop-${dropBefore}` : ''}${focused ? ' is-focused' : ''}${dimmed ? ' is-dimmed' : ''}`}
-    data-panel={id} data-span={shownSpan} aria-label={label} style={{ '--span': shownSpan + bars, ...bars ? { '--bars': bars } : {}, ...rest ? { '--rest': rest } : {}, ...held ? { transform: `translate(${held.dx}px, ${held.dy}px) rotate(-.6deg)` } : {} } as CSSProperties}>
+    data-panel={id} data-span={shownSpan} aria-label={label} style={{ '--span': shownSpan + bars, ...bars ? { '--bars': bars } : {}, ...rest ? { '--rest': rest } : {}, } as CSSProperties}>
     <header className="nebula-terminal-head nebula-panel-head" onPointerDown={onGrab} onDoubleClick={event => { if (!(event.target as Element).closest('button')) onMinimize(); }}
       onContextMenu={contextMenu(() => ({ title: label, command: command.replace(/^\.\//, '').replace(/\.sh.*$/, '') || 'window', items: [
         ...(!minimized && onFocus ? [{ id: 'focus', command: 'focus', label: focused ? t('Fokus beenden') : t('Fokus: Hintergrund abdunkeln'), icon: 'focus', checked: focused, run: onFocus } as MenuItem] : []),
@@ -537,7 +538,7 @@ export function NebulaDesk({ mode, date, today, modes, modeLabels, dirty, title,
   // A drag in progress: the window moved (carried from the grid, or floating), where it would land, whether Shift is held
   // while a floating window is over the grid (only then it docks), and whether the pointer has left the journal's window.
   const [drop, setDrop] = useState<{ id: PanelId; target: Drop; floating: boolean; shift: boolean; out: boolean } | null>(null);
-  const [held, setHeld] = useState<{ id: PanelId; dx: number; dy: number } | null>(null);
+  const [held, setHeld] = useState<PanelId | null>(null);
   // Every window in the grid (stacked ones too, with the stack they stand in) except the one moved.
   const boxes = (without: PanelId): (Box & { id: PanelId; cell?: PanelId })[] => [...(gridRef.current?.querySelectorAll<HTMLElement>('.nebula-panel') ?? [])]
     .filter(element => element.dataset.panel !== without).map(element => { const r = element.getBoundingClientRect(), stack = element.closest<HTMLElement>('.nebula-stack')?.dataset.stack as PanelId | undefined;
@@ -555,8 +556,13 @@ export function NebulaDesk({ mode, date, today, modes, modeLabels, dirty, title,
   };
   const sizeOf = (id: PanelId) => { const r = document.querySelector<HTMLElement>(`[data-panel="${id}"], [data-window="${id}"]`)?.getBoundingClientRect(); return { width: r?.width ?? 560, height: r?.height ?? 460 }; };
   const floatingDrag = (id: PanelId): FloatingDrag => ({
-    onDrag: (point, shift) => setDrop(!Number.isFinite(point.x) ? null : outside(point) && canLeave(id) ? { id, target: none, floating: true, shift, out: true }
-      : overGrid(point) ? { id, target: dropTarget(boxes(id), point), floating: true, shift, out: false } : null),
+    // Only a new landing place renders the desk again (the same one keeps its state while the window moves on).
+    onDrag: (point, shift) => {
+      const next = !Number.isFinite(point.x) ? null : outside(point) && canLeave(id) ? { id, target: none, floating: true, shift, out: true }
+        : overGrid(point) ? { id, target: dropTarget(boxes(id), point), floating: true, shift, out: false } : null;
+      const key = JSON.stringify(next);
+      setDrop(current => JSON.stringify(current) === key ? current : next);
+    },
     onDrop: (point, shift) => {
       setDrop(null);
       if (outside(point) && canLeave(id)) { detach(id, { x: window.screenX + point.x, y: window.screenY + point.y }, sizeOf(id)); return true; }
@@ -582,17 +588,29 @@ export function NebulaDesk({ mode, date, today, modes, modeLabels, dirty, title,
     header.setPointerCapture(event.pointerId);
     const startX = event.clientX, startY = event.clientY;
     let moving = false, last = { x: startX, y: startY, screenX: event.screenX, screenY: event.screenY };
+    // The carried window follows the pointer once per frame, its offset written straight onto it; the desk renders again
+    // only when the place it would land changes (not on every pointer move).
+    const panel = header.closest<HTMLElement>('.nebula-panel');
+    let frame = 0, landing = '';
+    const follow = () => {
+      frame = 0;
+      if (panel) panel.style.transform = `translate(${last.x - startX}px, ${last.y - startY}px) rotate(-.6deg)`;
+      const out = outside(last) && canLeave(id);
+      const next = { id, target: !out && overGrid(last) ? dropTarget(boxes(id), last) : none, floating: false, shift: false, out };
+      const key = JSON.stringify(next);
+      if (key !== landing) { landing = key; setDrop(next); }
+    };
     const move = (moved: PointerEvent) => {
       last = { x: moved.clientX, y: moved.clientY, screenX: moved.screenX, screenY: moved.screenY };
       if (!moving && Math.hypot(last.x - startX, last.y - startY) < 6) return;
-      moving = true;
-      setHeld({ id, dx: last.x - startX, dy: last.y - startY });
-      const out = outside(last) && canLeave(id);
-      setDrop({ id, target: !out && overGrid(last) ? dropTarget(boxes(id), last) : none, floating: false, shift: false, out });
+      if (!moving) { moving = true; setHeld(id); }
+      if (!frame) frame = requestAnimationFrame(follow);
     };
     const end = (ended: PointerEvent) => {
       header.removeEventListener('pointermove', move); header.removeEventListener('pointerup', end); header.removeEventListener('pointercancel', end);
+      if (frame) { cancelAnimationFrame(frame); frame = 0; }
       const size = sizeOf(id);
+      panel?.style.removeProperty('transform');
       setDrop(null); setHeld(null);
       if (!moving || ended.type === 'pointercancel') return;
       if (outside(last) && canLeave(id)) detach(id, { x: last.screenX, y: last.screenY }, size);
@@ -609,10 +627,11 @@ export function NebulaDesk({ mode, date, today, modes, modeLabels, dirty, title,
   const shownWhen = mode === 'day' ? formatShortDate(date) : periodTitle(date, mode);
   const noteOf = (id: PanelId) => periodPanel(id) ? shownWhen : undefined;
   const panelContent: Partial<Record<PanelId, ReactNode>> = { ...panels, calendar, notebook };
-  const isDefault = JSON.stringify(layout) === JSON.stringify(defaultLayout());
+  // Compared once per arrangement, not on every render (a drag renders the desk often).
+  const isDefault = useMemo(() => JSON.stringify(layout) === JSON.stringify(defaultLayout()), [layout]);
   // Saved arrangements: the one matching the current arrangement is pressed; saving is offered for an arrangement not
   // saved yet (with all three places taken, a number is chosen to replace).
-  const activeSlot = slots.findIndex(slot => slot && sameLayout(slot, layout));
+  const activeSlot = useMemo(() => slots.findIndex(slot => slot && sameLayout(slot, layout)), [slots, layout]);
   const full = slots.every(Boolean), canSave = activeSlot < 0 && !isDefault;
   const [replacing, setReplacing] = useState(false);
   useEffect(() => { if (!canSave) setReplacing(false); }, [canSave, mode]);
@@ -693,7 +712,7 @@ export function NebulaDesk({ mode, date, today, modes, modeLabels, dirty, title,
                 : !drop.target.beside && !drop.target.stack && others.indexOf(id) === drop.target.index && id === head && !stacked ? 'top' : null;
               const window = id === 'calendar' || id === 'notebook' ? id : null;
               return <Panel key={id} id={id} command={commandOf(id)} label={panelLabels[id]} note={noteOf(id)} minimized={layout.minimized.includes(id)} span={spanOf(layout, head)} shownSpan={display.spans[id] ?? spanOf(layout, head)} upright={display.upright.includes(id)} bars={stacked ? 0 : display.bars[id] ?? 0} rest={stacked ? 0 : display.rest[id] ?? 0} room={room} height={layout.heights[id] ?? (window ? 560 : undefined)}
-                held={held?.id === id ? held : null} dropBefore={mark} focused={isFocused(id)} dimmed={dimmedNow(id)} onFocus={() => toggleFocus(id)} pair={neighbour ? { id: neighbour, total: spanOf(layout, head) + spanOf(layout, neighbour) } : null}
+                held={held === id} dropBefore={mark} focused={isFocused(id)} dimmed={dimmedNow(id)} onFocus={() => toggleFocus(id)} pair={neighbour ? { id: neighbour, total: spanOf(layout, head) + spanOf(layout, neighbour) } : null}
                 onGrab={event => grab(id, event)} onMinimize={() => changeLayout(current => toggleMinimized(current, id))} onHalf={() => changeLayout(current => toggleHalf(current, headOf(current, shown, id, family), shown, family))}
                 onSpan={span => changeLayout(current => span == null ? wholeRow(current, headOf(current, shown, id, family), shown, family) : resizeInRow(current, shown, id, span, family))} onHeight={height => changeLayout(current => setHeight(current, id, height))}
                 onFloat={() => float(id)} onClose={window === 'calendar' ? onCalendarClose : window === 'notebook' ? onNotebookClose : undefined}>

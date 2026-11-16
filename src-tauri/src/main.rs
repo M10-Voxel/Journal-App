@@ -39,11 +39,11 @@ async fn move_calendar_entry(app: tauri::AppHandle, store: tauri::State<'_, Mute
 }
 
 #[tauri::command]
-fn load_period_data(store: tauri::State<'_, Mutex<Store>>) -> Result<String, String> {
+async fn load_period_data(store: tauri::State<'_, Mutex<Store>>) -> Result<String, String> {
     store.lock().map_err(|e| e.to_string())?.period_data().map_err(|e| e.to_string())
 }
 #[tauri::command]
-fn save_period_data(data: String, store: tauri::State<'_, Mutex<Store>>, app: tauri::AppHandle, window: tauri::WebviewWindow) -> Result<(), String> {
+async fn save_period_data(data: String, store: tauri::State<'_, Mutex<Store>>, app: tauri::AppHandle, window: tauri::WebviewWindow) -> Result<(), String> {
     store.lock().map_err(|e| e.to_string())?.save_period_data(&data).map_err(|e| e.to_string())?;
     // Other windows (the app, desktop widgets) reload the day values and activities; the saving window knows them already.
     let _ = app.emit("period:changed", window.label());

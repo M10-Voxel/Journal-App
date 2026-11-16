@@ -21,15 +21,27 @@ export function setLanguage(value: Language) {
   language = next;
   for (const listener of [...listeners]) listener();
 }
-export function useLanguage() { return useSyncExternalStore(listener => { listeners.add(listener); return () => { listeners.delete(listener); }; }, getLanguage, getLanguage); }
+// One subscribe function for every component (a new one each render would make React subscribe anew each time).
+const subscribeLanguage = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
+export function useLanguage() { return useSyncExternalStore(subscribeLanguage, getLanguage, getLanguage); }
+
+/** English texts by German key, worked out once (an interface asks for the same texts on every render). */
+const englishCache = new Map<string, string>();
+function toEnglish(key: string): string {
+  let text = englishCache.get(key);
+  if (text !== undefined) return text;
+  text = key;
+  const translated = (english as Record<string, string>)[key.replace(/\s+/g, ' ').trim()];
+  if (translated !== undefined) text = `${/^\s*/.exec(key)![0]}${translated}${/\s*$/.exec(key)![0]}`;
+  text = text.replace(/\bStrg\b/g, 'Ctrl').replace(/\bEntf\b/g, 'Del').replace(/\bBild(?=[↑↓]| [↑↓])/g, 'Page');
+  if (englishCache.size > 5000) englishCache.clear();
+  englishCache.set(key, text);
+  return text;
+}
 
 /** Translate application-owned text only. Never apply this to journal or mail content. */
 export function t(key: string, ...values: unknown[]): string {
-  let text = key;
-  if (language === 'en') {
-    const translated = (english as Record<string, string>)[key.replace(/\s+/g, ' ').trim()];
-    if (translated !== undefined) text = `${/^\s*/.exec(key)![0]}${translated}${/\s*$/.exec(key)![0]}`;
-    text = text.replace(/\bStrg\b/g, 'Ctrl').replace(/\bEntf\b/g, 'Del').replace(/\bBild(?=[↑↓]| [↑↓])/g, 'Page');
-  }
+  const text = language === 'en' ? toEnglish(key) : key;
+  if (!values.length && !text.includes('{')) return text;
   return text.replace(/\{(\d+)\}/g, (_, index: string) => String(values[Number(index)] ?? `{${index}}`));
 }

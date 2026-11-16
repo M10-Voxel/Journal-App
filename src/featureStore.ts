@@ -15,6 +15,8 @@ if (typeof window !== 'undefined') {
   window.addEventListener('storage', event => { if (event.key === 'journal.settings' || event.key === null) refresh(); });
 }
 export const currentFeatures = (): Features => current ??= loadSettings().features;
+/** One subscribe function for every reader (an inline one would make React subscribe anew on each render). */
+const subscribeStore = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
 export function useFeatures(): Features {
-  return useSyncExternalStore(listener => { listeners.add(listener); return () => { listeners.delete(listener); }; }, currentFeatures);
+  return useSyncExternalStore(subscribeStore, currentFeatures);
 }

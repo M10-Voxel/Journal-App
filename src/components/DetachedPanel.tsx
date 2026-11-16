@@ -13,9 +13,9 @@ import { useLook } from '../popupLook';
 import { requestCalendarCreate, requestCalendarMove } from '../calendarRequests';
 import type { BoardPeriod } from '../boardPlacement';
 
-/** What can leave the journal as a window of its own: windows whose data every window keeps in step. */
-export type DetachedKind = 'calendar' | 'notebook' | 'board';
-export const detachable: readonly DetachedKind[] = ['calendar', 'notebook', 'board'];
+import type { DetachedKind } from '../detachedKinds';
+export { detachable } from '../detachedKinds';
+export type { DetachedKind } from '../detachedKinds';
 
 type ResizeDirection = Parameters<ReturnType<typeof getCurrentWindow>['startResizeDragging']>[0];
 const directions: Record<string, ResizeDirection> = { n: 'North', s: 'South', w: 'West', e: 'East', nw: 'NorthWest', ne: 'NorthEast', sw: 'SouthWest', se: 'SouthEast' };

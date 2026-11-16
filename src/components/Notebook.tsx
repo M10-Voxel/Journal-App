@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, DragEvent, KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { isShown, tagOf } from '../tags';
@@ -39,7 +39,9 @@ const noteType = 'application/x-journal-note', folderType = 'application/x-journ
  * navigation (`nav`), the "+" for a new note beside it (`tools`); folders, paper, the day switch and attaching are in the
  * note's right-click menu. The widget remembers its own note (`id`); `tagScope` whose tag filter hides notes.
  */
-export function Notebook({ onClose, onOpenDay, tagScope = 'journal', widget }: { onClose?: () => void; onOpenDay?: (date: string) => void; tagScope?: TagScope;
+/** Memoized: the journal renders on every typed key, these only when their own props change. */
+export const Notebook = memo(NotebookView);
+function NotebookView({ onClose, onOpenDay, tagScope = 'journal', widget }: { onClose?: () => void; onOpenDay?: (date: string) => void; tagScope?: TagScope;
   widget?: { id: string; nav: Element | null; tools: Element | null; onPage?: (id: string | null) => void } }) {
   useLanguage();
   const compact = !!widget;

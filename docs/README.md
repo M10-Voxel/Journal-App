@@ -29,6 +29,7 @@ Die Dokumentation beschreibt den aktuellen Windows-Zweig `Windows`. Android ist 
 
 ## Entwicklung
 
+- [Projektgraph mit Graphify](graphify.md): lokale Installation, interaktive Projektübersicht und Aktualisierung.
 - [Entwicklung und Prüfungen](development.md): Voraussetzungen, Befehle, Architektur und Release-Ablauf.
 - [Ressourcenverwaltung](performance.md): Kalender-Caches, Hintergrundfenster und lokales Mailmodell.
 - [Eigenständige ML-Probe](../tools/mail-ml-probe/README.md): zusätzliches Entwicklerwerkzeug für synthetische Mailtexte.

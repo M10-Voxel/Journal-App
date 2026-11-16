@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { changePeriodData, usePeriodData } from '../periodStore';
 import type { PeriodDay } from '../periodData';
@@ -55,7 +55,8 @@ const partModules: Record<Exclude<PeriodPart, 'notes' | 'data'>, Module> = { rat
 const legacy = (mode: Mode): ReadonlySet<Module> => new Set(mode === 'day' ? ['rating', 'scales', 'activities'] : ['note', 'evaluation']);
 /** `bare`: only the values themselves (a desktop widget): no headings, hints or "manage" buttons; with nothing set up yet,
  *  the hint itself opens the settings. */
-export function PeriodNotes({ date, mode, onManage, onImport, part, modules, bare = false }: { date: string; mode: Mode; onManage: (tab?: ManageTab) => void; onImport: (entries: CalendarImport[]) => Promise<void>; part?: PeriodPart; modules?: ReadonlySet<Module>; bare?: boolean }) {
+export const PeriodNotes = memo(PeriodNotesView);
+function PeriodNotesView({ date, mode, onManage, onImport, part, modules, bare = false }: { date: string; mode: Mode; onManage: (tab?: ManageTab) => void; onImport: (entries: CalendarImport[]) => Promise<void>; part?: PeriodPart; modules?: ReadonlySet<Module>; bare?: boolean }) {
   useLanguage();
   const timers = useActivityTimers();
   const { data, error } = usePeriodData();

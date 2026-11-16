@@ -13,6 +13,7 @@ import type { Card, Folder, Patches } from './notebook';
 import { encodeBase64 } from './base64';
 import { syncPatches } from './boardSync';
 import { createSharedLoads } from './sharedLoads';
+import { registerBoardFlush } from './editorFlush';
 export type { Card, Folder, Paper } from './notebook';
 
 // What the pinboard and the notebook share: the cards (one store per window, so a board and a notebook open side by side
@@ -22,6 +23,7 @@ export type { Card, Folder, Paper } from './notebook';
 export const source = getCurrentWindow().label;
 const queue = new Map<string, Promise<unknown>>();
 export async function flushBoardData() { while (queue.size) await Promise.all([...queue.values()]); }
+registerBoardFlush(flushBoardData);
 export const waitForCard = (id: string) => queue.get(id) ?? Promise.resolve();
 function enqueue(keys: string[], action: () => Promise<unknown>) {
   const pending = Promise.all([...new Set(keys.map(key => queue.get(key)).filter(Boolean))].map(task => task!.catch(() => {}))).then(action);
@@ -68,9 +70,18 @@ export function patchCard(id: string, changes: Partial<Card>) {
   if (isNew && changes.createdAt == null) changes = { ...changes, createdAt: now, updatedAt: now };
   else if ('title' in changes || 'text' in changes || 'ink' in changes) changes = { ...changes, updatedAt: now };
   set(cardStore, old => old.some(c => c.id === id) ? old.map(c => c.id === id ? { ...c, ...changes } : c) : [...old, { ...changes, id } as Card]);
-  const pending = enqueue([id, 'folders'], () => invoke('board_patch', { id, patch: changes, source }));
+  // Typing changes a note on every key: a change waiting behind the one being saved joins the next save instead of
+  // queuing a save of its own, as long as nothing else was queued after it (so the order of saves stays the same).
+  const waiting = unsent.get(id);
+  if (waiting && queue.get(id) === waiting.pending && queue.get('folders') === waiting.pending) { Object.assign(waiting.changes, changes); return waiting.pending; }
+  const entry = { changes: { ...changes }, pending: Promise.resolve() as Promise<unknown> };
+  unsent.set(id, entry);
+  const pending = enqueue([id, 'folders'], () => { if (unsent.get(id) === entry) unsent.delete(id); return invoke('board_patch', { id, patch: entry.changes, source }); });
+  entry.pending = pending;
   void pending.catch(e => fail(cardStore, e)); return pending;
 }
+/** Per card, the changes queued but not sent yet (patchCard). */
+const unsent = new Map<string, { changes: Partial<Card>; pending: Promise<unknown> }>();
 export function patchCards(patches: Patches) {
   patches = syncPatches(cardStore.value, patches);
   const ids = Object.keys(patches);

@@ -5,6 +5,9 @@ impl Store {
     pub fn open(path: &Path) -> Result<Self> { Self::from_connection(Connection::open(path)?) }
     pub(super) fn from_connection(mut conn: Connection) -> Result<Self> {
         conn.execute_batch("PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;")?;
+        // A save alone runs more than the default 16 statements (and a search adds its own): with room for all of them
+        // none is compiled anew on the next save.
+        conn.set_prepared_statement_cache_capacity(64);
         // WAL needs fewer syncs per save than the rollback journal and keeps reads independent of writes.
         conn.pragma_update_and_check(None, "journal_mode", "WAL", |r| r.get::<_, String>(0))?;
         let version: i64 = conn.pragma_query_value(None, "user_version", |r| r.get(0))?;
@@ -136,6 +139,8 @@ impl Store {
         }
         // Additive index only: schema version, persisted rows and older app compatibility stay unchanged.
         conn.execute_batch("CREATE INDEX IF NOT EXISTS entries_activity_time ON entries(tag,day_date,time,end_time) WHERE plan IS NULL AND time IS NOT NULL AND end_time IS NOT NULL AND cancelled=0;")?;
+        // The few entries with a plan (traces), for the lookups of what points at a day or an entry (storage/read.rs).
+        conn.execute_batch("CREATE INDEX IF NOT EXISTS entries_plans ON entries(id,day_date,plan) WHERE plan IS NOT NULL;")?;
         crate::history::install(&conn)?;
         Ok(Self { conn })
     }

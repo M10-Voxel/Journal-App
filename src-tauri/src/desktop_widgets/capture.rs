@@ -93,10 +93,11 @@ impl Source {
         self.context.CopySubresourceRegion(staging,0,0,0,0,&texture,0,Some(&crop));
         let mut mapped=D3D11_MAPPED_SUBRESOURCE::default();self.context.Map(staging,0,D3D11_MAP_READ,0,Some(&mut mapped))?;
         let size=(width*height*4) as usize;
-        let mut bmp=vec![0u8;54+size];bmp[..2].copy_from_slice(b"BM");
-        let length=bmp.len() as u32;bmp[2..6].copy_from_slice(&length.to_le_bytes());bmp[10..14].copy_from_slice(&54u32.to_le_bytes());bmp[14..18].copy_from_slice(&40u32.to_le_bytes());
+        // The header is filled in, the rows appended as they are read (no zeroed buffer of the picture's size first).
+        let mut bmp=Vec::with_capacity(54+size);bmp.extend_from_slice(&[0u8;54]);bmp[..2].copy_from_slice(b"BM");
+        let length=(54+size) as u32;bmp[2..6].copy_from_slice(&length.to_le_bytes());bmp[10..14].copy_from_slice(&54u32.to_le_bytes());bmp[14..18].copy_from_slice(&40u32.to_le_bytes());
         bmp[18..22].copy_from_slice(&(width as i32).to_le_bytes());bmp[22..26].copy_from_slice(&(-(height as i32)).to_le_bytes());bmp[26..28].copy_from_slice(&1u16.to_le_bytes());bmp[28..30].copy_from_slice(&32u16.to_le_bytes());
-        for y in 0..height as usize {let row=std::slice::from_raw_parts((mapped.pData as *const u8).add(y*mapped.RowPitch as usize),width as usize*4);bmp[54+y*width as usize*4..54+(y+1)*width as usize*4].copy_from_slice(row);}
+        for y in 0..height as usize {let row=std::slice::from_raw_parts((mapped.pData as *const u8).add(y*mapped.RowPitch as usize),width as usize*4);bmp.extend_from_slice(row);}
         self.context.Unmap(staging,0);
         Ok((bmp,time))
     }}

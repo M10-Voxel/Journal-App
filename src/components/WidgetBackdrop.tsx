@@ -62,6 +62,8 @@ function picture(index: number, monitor: Monitor) {
   })());
   return urls.get(key) ?? null;
 }
+/** One subscribe function for every reader (an inline one would make React subscribe anew on each render). */
+const subscribeStore = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
 function useWallpapers(active: boolean) {
   useEffect(() => {
     if (!active) return;
@@ -86,7 +88,7 @@ function useWallpapers(active: boolean) {
       }
     };
   }, [active]);
-  return useSyncExternalStore(listener => { listeners.add(listener); return () => { listeners.delete(listener); }; }, () => snapshot).info;
+  return useSyncExternalStore(subscribeStore, () => snapshot).info;
 }
 
 /** The canvas window's origin on the desktop (physical pixels); read again when the canvas changes. */

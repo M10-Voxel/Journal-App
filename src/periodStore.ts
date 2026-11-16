@@ -37,13 +37,30 @@ function ensure() {
     void moveTimerTime().then(ensureActivityTags).catch(reason => publish({ ...snapshot, error: String(reason) }));
   }).catch(reason => { loading = null; publish({ ...snapshot, error: String(reason) }); });
 }
+// Writes go out one at a time, the newest state only: typing in a note changes the data on every key, and a write
+// waiting behind one in flight is replaced by the next change instead of saving every state in turn (the last saved is
+// always the newest, as before).
+let queued: { data: PeriodData; version: number } | null = null;
+let draining: Promise<void> | null = null;
+function drain(): Promise<void> {
+  return draining ??= (async () => {
+    while (queued) {
+      const { data, version } = queued;
+      queued = null;
+      try {
+        await invoke('save_period_data', { data: JSON.stringify(data) });
+        if (version === revision) publish({ ...snapshot, saving: false, error: '' });
+      } catch (reason) { if (version === revision) publish({ ...snapshot, saving: false, error: String(reason) }); }
+    }
+    draining = null;
+  })();
+}
 export function changePeriodData(update: (current: PeriodData) => PeriodData) {
   if (!snapshot.data) return;
   const next = update(snapshot.data), version = ++revision;
   publish({ data: next, error: '', saving: true });
-  writes = writes.catch(() => {}).then(() => invoke('save_period_data', { data: JSON.stringify(next) })).then(() => {
-    if (version === revision) publish({ ...snapshot, saving: false, error: '' });
-  }, reason => { if (version === revision) publish({ ...snapshot, saving: false, error: String(reason) }); });
+  queued = { data: next, version };
+  writes = drain();
 }
 const subscribe = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
 export async function flushPeriodData() { await writes; if (snapshot.error) throw new Error(snapshot.error); }

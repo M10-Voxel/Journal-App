@@ -4,7 +4,8 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 import { isDeepStrictEqual } from 'node:util';
-import { recognizeMail, newMailAccount } from '../src/mail.ts';
+import { newMailAccount } from '../src/mail.ts';
+import { recognizeMail } from '../src/mailRecognize.ts';
 
 const executable = resolve(process.argv[2] ?? 'src-tauri/target/release/journal-app.exe');
 const assets = resolve(process.argv[3] ?? 'src-tauri/target/mail-ml-assets');

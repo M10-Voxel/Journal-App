@@ -2,7 +2,8 @@ import { decodeMailContent } from '../src/mailContent.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { latestMailCandidates, mailText, newMailAccount, recognizeMail } from '../src/mail.ts';
+import { latestMailCandidates, mailText, newMailAccount } from '../src/mail.ts';
+import { recognizeMail } from '../src/mailRecognize.ts';
 
 const today = '2026-10-30';
 const account = { ...newMailAccount('custom'), id:'d5fd0501-3bda-440a-b401-69c6c4292684' };
@@ -61,7 +62,7 @@ test('HTML stays plain text and does not treat scripts as instructions or mail c
 });
 
 test('delivery workday ranges use sending date and skip weekends',async()=>{
- const {deliveryWorkdayWindow}=await import('../src/mail.ts');
+ const {deliveryWorkdayWindow}=await import('../src/mailRecognize.ts');
  const sent=new Date('2026-11-06T12:00:00').getTime()/1000;
  assert.deepEqual(deliveryWorkdayWindow('Lieferung','Lieferzeit: 1 bis 2 Werktage',sent).date,'2026-11-09');
  assert.equal(deliveryWorkdayWindow('Lieferung','Lieferzeit: 1 bis 2 Werktage',sent).end,'47:59');
