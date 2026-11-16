@@ -153,6 +153,8 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
   const show = (next: CalendarView, value: string) => { go(value); setView(withoutDay && next === 'day' ? 'week' : next); };
   // A day clicked in any view opens its note in the journal; the calendar goes there too.
   const openDay = (value: string) => { go(value); onOpen(value); };
+  // In the year and month view a click shows the day's week; Ctrl opens the day's note.
+  const pickDay = (value: string, journal?: boolean) => { if (journal) openDay(value); else show('week', value); };
   const step = (amount: 1 | -1) => { setFollowToday(false); setSlide(amount > 0 ? 'next' : 'prev'); setDate(shiftView(view, date, amount)); };
   useWheelSwipe(step, { root:rootRef, ignore:'.cal-viewbar, .cal-toolbar, .cal-composer' });
   function onKeyDown(event: KeyboardEvent) {
@@ -286,8 +288,8 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
       {error && <div className="cal-error" role="alert">{error}</div>}
       <div className="cal-body">
         <div className={`cal-page${slide ? ` slide-${slide}` : ''}`}>
-          {view === 'year' && <YearView date={date} today={today} journalDate={journalDate} days={displayDays} entriesOn={displayEntriesOn} onDay={openDay} onMonth={value => show('month', value)} />}
-          {view === 'month' && <MonthView date={date} today={today} journalDate={journalDate} days={displayDays} entriesOn={displayEntriesOn} onDay={openDay} onMore={value => show('day', value)} onWeek={value => show('week', value)} />}
+          {view === 'year' && <YearView date={date} today={today} journalDate={journalDate} days={displayDays} entriesOn={displayEntriesOn} onDay={pickDay} onMonth={value => show('month', value)} />}
+          {view === 'month' && <MonthView date={date} today={today} journalDate={journalDate} days={displayDays} entriesOn={displayEntriesOn} onDay={pickDay} onMore={value => show('day', value)} onWeek={value => show('week', value)} />}
           {(view === 'week' || view === 'workweek' || view === 'day') && <div className="cal-split">
             <TimeGrid journalDays={days} dates={viewDates(view, date)} today={today} now={now} journalDate={journalDate} entriesOn={entriesOn} onDay={openDay} onCreate={onCreate} newTag={newTag}
               editing={inGrid} onEditEnd={byKey => { setEditing(null); if (byKey) refocus(); }} onSave={save} onRemove={remove} />
@@ -305,7 +307,7 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
  * Twelve small months (Apple's year view). Below a day's number a dot means tasks, a blue ring events, both a dot in a
  * blue ring (notes, when shown, a faint dot). A day opens its note in the journal, a month name the month view.
  */
-function YearView({ date, today, journalDate, days, entriesOn, onDay, onMonth }: { date: string; today: string; journalDate: string | null; days: Map<string, CalendarDay>; entriesOn: (date: string) => Entry[]; onDay: (date: string) => void; onMonth: (date: string) => void }) {
+function YearView({ date, today, journalDate, days, entriesOn, onDay, onMonth }: { date: string; today: string; journalDate: string | null; days: Map<string, CalendarDay>; entriesOn: (date: string) => Entry[]; onDay: (date: string, journal?: boolean) => void; onMonth: (date: string) => void }) {
   useLanguage();
   const year = date.slice(0, 4);
   const tags = useTags();
@@ -322,7 +324,7 @@ function YearView({ date, today, journalDate, days, entriesOn, onDay, onMonth }:
           const mark = task || event ? `${task ? ' is-task' : ''}${event ? ' is-event' : ''}` : entries.length ? ' is-note' : '';
           return <button key={value} type="button" data-range-date={value} data-date={value} className={`cal-year-day${hasJournalContent(days.get(value)) ? ' has-journal-content' : ''}${weekendClass(value, index % 7)}${value === today ? ' is-today' : ''}${value === journalDate ? ' is-journal' : ''}${mark ? ' has-mark' : ''}`}
             style={{ gridRow: Math.floor(index / 7) + 1, gridColumn: index % 7 + 1 }}
-            aria-current={value === today ? 'date' : undefined} title={dayLabel(value, days.get(value))} onClick={() => onDay(value)}>
+            aria-current={value === today ? 'date' : undefined} title={dayLabel(value, days.get(value))} onClick={event => onDay(value, event.ctrlKey || event.metaKey)}>
             <span>{Number(value.slice(8))}</span>{mark && <i className={`cal-year-mark${mark}`} aria-hidden="true" />}
           </button>;
         })}
@@ -345,7 +347,7 @@ function YearView({ date, today, journalDate, days, entriesOn, onDay, onMonth }:
 
 /** Six weeks with week numbers. As many entries as fit, then "+n weitere"; a day number opens the day view. */
 function MonthView({ date, today, journalDate, days, entriesOn, onDay, onMore, onWeek }: {
-  date: string; today: string; journalDate: string | null; days: Map<string, CalendarDay>; entriesOn: (date: string) => Entry[]; onDay: (date: string) => void; onMore: (date: string) => void; onWeek: (date: string) => void;
+  date: string; today: string; journalDate: string | null; days: Map<string, CalendarDay>; entriesOn: (date: string) => Entry[]; onDay: (date: string, journal?: boolean) => void; onMore: (date: string) => void; onWeek: (date: string) => void;
 }) {
   useLanguage();
   const month = date.slice(0, 7);
@@ -383,9 +385,9 @@ function MonthView({ date, today, journalDate, days, entriesOn, onDay, onMore, o
           const title = days.get(value)?.title;
           return <div key={value} data-range-date={value} data-date={value} className={`cal-month-day${hasJournalContent(days.get(value)) ? ' has-journal-content' : ''}${weekendClass(value, index)}${value.startsWith(month) ? '' : ' is-outside'}${value === today ? ' is-today' : ''}${value === journalDate ? ' is-journal' : ''}`}
             style={{ gridColumn: index + 2, gridRow: 1 }}
-            onClick={() => onDay(value)}>
+            onClick={event => onDay(value, event.ctrlKey || event.metaKey)}>
             <div className="cal-month-day-head">
-              <button type="button" className="cal-month-number" aria-label={t("{0} im Journal öffnen", formatDate(value))} aria-current={value === today ? 'date' : undefined} onClick={event => { event.stopPropagation(); onDay(value); }}>
+              <button type="button" className="cal-month-number" aria-label={t("{0} im Journal öffnen", formatDate(value))} aria-current={value === today ? 'date' : undefined} onClick={event => { event.stopPropagation(); onDay(value, event.ctrlKey || event.metaKey); }}>
                 {value.endsWith('-01') ? <>{Number(value.slice(8))}.<small> {formatMonthName(value).slice(0, 3)}</small></> : Number(value.slice(8))}
               </button>
               {title && <span className="cal-month-title" title={title}>{title}</span>}

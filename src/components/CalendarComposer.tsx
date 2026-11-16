@@ -183,7 +183,9 @@ export function CalendarComposer({ date, draft, entry, span, onSpanChange, tag: 
       const longEnd = (Date.parse(longEndDate) - Date.parse(date)) / 86400000 * 1440 + minutesOf(longEndTime);
       if (longSpan && (longEnd <= minutesOf(longStartTime) || longEnd - minutesOf(longStartTime) > 366 * 1440)) { setError(t('Bitte den Zeitraum prüfen.')); setBusy(false); return; }
       if (!entry) {
-        const times = longSpan ? { time: longStartTime, end: timeOfMinutes(longEnd) } : { time: draft ? timeOfMinutes(draft.start) : null, end: draft ? timeOfMinutes(draft.end) : null };
+        // A single day marked in the calendar (default times, one date) is an all-day entry, not 0:00–23:59.
+        const wholeDay = longSpan && longEndDate === date && longStartTime === '00:00' && longEndTime === '23:59';
+        const times = wholeDay ? { time: null, end: null } : longSpan ? { time: longStartTime, end: timeOfMinutes(longEnd) } : { time: draft ? timeOfMinutes(draft.start) : null, end: draft ? timeOfMinutes(draft.end) : null };
         const made = { kind: kind === 'note' ? 'event' as const : kind, text: text.trim(), description: description.trim(), tag: tagId, ...times, priority, reminder, reminderBefore: reminder ? reminderBefore : 0, icon, showInJournal };
         await onCreate?.({ ...made, repeat: await repeatOf({ id: '', done: false, cancelled: false, plan: null, ...made }) });
       } else {
