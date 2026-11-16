@@ -35,7 +35,7 @@ export function DesktopCalendarWidget({widget,registry}:{widget:DesktopWidgetIns
       let count=0;
       for(const file of calendars){
         if(file.size>5_000_000)throw new Error(t('Die ICS-Datei ist zu groß (höchstens 5 MB)'));
-        const {entries}=importCalendar(await file.text());
+        const {entries}=await importCalendar(await file.text());
         if(entries.length){await requestCalendarImport(entries);count+=entries.length;}
       }
       tell(count?t('{0} Einträge importiert.',count):t('Die Datei enthält keine Ereignisse oder Aufgaben.'));

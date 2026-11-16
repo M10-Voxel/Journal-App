@@ -7,7 +7,7 @@ import { PlanCalendar } from './PlanCalendar';
 import type { PlannerView } from './PlanCalendar';
 import type { SwipeActions } from './useSwipe';
 import { formatShortDate, localDate } from '../dates';
-import { Schedule, canBeNote, canPlan, keepDuration, repeatChange, tomorrowChange } from '../planning';
+import { Schedule, canBeNote, canPlan, keepDuration, repeatChangeAsync, tomorrowChange } from '../planning';
 import type { RepeatRule } from '../repeat';
 import { ActionSheet } from './ActionSheet';
 import type { SheetGroup, SheetItem } from './ActionSheet';
@@ -202,7 +202,7 @@ export function EntryActionDock({ layout, swipeActions, removeChoice, onClose, e
     : content;
   if (planning) return floating(<div ref={dockRef} data-entry-actions={entry.id} className={`entry-dock-shell${isOpen ? ' is-open' : ''}`} inert={!isOpen} aria-hidden={!isOpen}>
     <PlanCalendar day={day} initialView={plannerView} initial={{ date: day, time: entry.time ?? null, reminder: entry.reminder ?? false, reminderBefore: entry.reminderBefore ?? 0, repeat: entry.repeat?.rule ?? null }} onPreview={onPlanDatePreview}
-      onCancel={() => onPlanningChange(false)} onConfirm={(dates: string[], schedule: Schedule, repeat: RepeatRule | null) => onPlan(repeatChange(entry, day, dates, { ...schedule, end: keepDuration(entry, schedule.time) }, repeat, localDate()))} />
+      onCancel={() => onPlanningChange(false)} onConfirm={async (dates: string[], schedule: Schedule, repeat: RepeatRule | null) => onPlan(await repeatChangeAsync(entry, day, dates, { ...schedule, end: keepDuration(entry, schedule.time) }, repeat, localDate()))} />
   </div>);
 
   return floating(<div ref={dockRef} data-entry-actions={entry.id} className={`entry-dock-shell${isOpen ? ' is-open' : ''}`} inert={!isOpen} aria-hidden={!isOpen} role="toolbar" aria-label={t("Aktionen für {0}", label)} tabIndex={-1} onKeyDown={event => {

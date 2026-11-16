@@ -1,7 +1,8 @@
+import { useRepeatOccurrences } from './useRepeatOccurrences';
 import { t, useLanguage } from '../i18n';
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { KeyboardEvent, MouseEvent } from 'react';
-import { defaultPause, describe, describeMonths, describePattern, formatOccurrence, occurrences, onChoices, onLabel, unitNames, weekdayOf, weekdayShort } from '../repeat';
+import { defaultPause, describe, describeMonths, describePattern, formatOccurrence, onChoices, onLabel, unitNames, weekdayOf, weekdayShort } from '../repeat';
 import type { RepeatRule, RepeatUnit } from '../repeat';
 import { parseRepeat, suggestions } from '../repeatText';
 import { Icon } from './Icon';
@@ -76,7 +77,7 @@ export function RepeatPanel({ rule, today, onChange:changeRule, onBack, onOff, o
   const pausing = rule.unit === 'day' || rule.unit === 'week', onUnit = !pausing;
   const pause = pausing ? rule.pause ?? null : null;
   const endMode = rule.end?.count ? 'count' : rule.end?.until ? 'until' : 'never';
-  const upcoming = occurrences(rule, rule.start > today ? rule.start : today, '9999-12-31', 3);
+  const upcoming = useRepeatOccurrences(rule, rule.start > today ? rule.start : today, '9999-12-31', 3);
 
   // Another unit is a quick choice of its own ("Jahr": yearly), so it starts again at every 1.
   function setUnit(unit: RepeatUnit) {

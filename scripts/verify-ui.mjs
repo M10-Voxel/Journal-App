@@ -1,7 +1,7 @@
 // Browser verification of the production frontend with Tauri's official IPC mocks.
 // This uses synthetic data only; it never opens the application's SQLite database.
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { createServer } from 'node:http';
 import { createServer as createPortServer } from 'node:net';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
@@ -12,7 +12,7 @@ const root = process.cwd();
 const dist = resolve(root, 'dist');
 const artifacts = resolve(root, 'src-tauri/target/ui-validation');
 await mkdir(artifacts, { recursive: true });
-const edge = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
+const edge = [process.env.JOURNAL_UI_BROWSER, 'C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', 'C:/Program Files/Microsoft/Edge/Application/msedge.exe'].find(path => path && existsSync(path));
 assert(existsSync(edge), 'Microsoft Edge is required for this Windows UI check.');
 const indexHtml = await readFile(join(dist, 'index.html'), 'utf8');
 const entryScript = indexHtml.match(/<script[^>]*src="([^"]+)"[^>]*><\/script>/)?.[1];
@@ -225,6 +225,12 @@ const bootstrap = `
         mail.pending.push({ account:structuredClone(account), message:{ key:'mail-test-1', subject:'Lieferung UI-Test',sender:'Carrier <notify@carrier.example>',sentAt:Date.now()/1000,text:'Ihre Lieferung kommt am ' + target + ' zwischen 10 und 12 Uhr.',html:'',calendars:[] } });
       }
       mailChanged(); return;
+    }
+    if (['calendar_import','calendar_export','calendar_occurrences','calendar_with_start'].includes(command)) {
+      return fetch('/__test/calendar', {method:'POST', body:JSON.stringify({cmd:command,...payload})}).then(response => response.json()).then(result => {
+        if (result.error) throw new Error(result.error);
+        return result.value;
+      });
     }
     if (command === 'read_calendar_file') return window.__uiTest.icsInput ?? null;
     if (command === 'write_calendar_file') { window.__uiTest.icsOutput = payload.content; return true; }
@@ -482,6 +488,12 @@ const html = indexHtml.replace(/<script[^>]*src="[^"]+"[^>]*><\/script>/, `<scri
 const server = createServer(async (request, response) => {
   try {
     const pathname = new URL(request.url, 'http://localhost').pathname;
+    if (pathname === '/__test/calendar' && request.method === 'POST') {
+      let body=''; for await (const chunk of request) body+=chunk;
+      const result=spawnSync(resolve(root,'src-tauri/target/debug/calendar-probe.exe'),[],{input:body+'\n',encoding:'utf8',windowsHide:true});
+      if(result.error || result.status!==0) throw result.error ?? new Error(result.stderr);
+      response.setHeader('content-type','application/json');response.end(result.stdout);return;
+    }
     if (pathname === '/') { response.setHeader('content-type', 'text/html; charset=utf-8'); response.setHeader('content-security-policy', csp); response.end(html); return; }
     const file = pathname === '/__test/mocks.js' ? resolve(root, 'node_modules/@tauri-apps/api/mocks.js') : resolve(dist, `.${pathname}`);
     if (pathname !== '/__test/mocks.js' && !file.startsWith(dist + sep)) { response.writeHead(403).end(); return; }

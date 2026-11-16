@@ -85,3 +85,15 @@ Die Oberfläche, Markdown-Bearbeitung und sprachabhängige Planervorschläge ble
 Funktionale Prüfungen: native Tests, `tests/journal-cache.test.mjs`, `tests/base64.test.mjs`, `tests/sync-crypto.test.mjs` und Browserbereiche `search`, `performance`, `notebook`, `calendar-start`, `nebula-sizing`, `drive`, `board`, `undo` und `language`. Die Suchprüfung deckt auch den Ausfall der nativen Suche und das Freigeben des Rückfallwegs ab. Verschlüsselungstests prüfen alte und neue Umschläge in beiden Richtungen sowie manipulierte Daten; der native Drive-Test prüft 320 Einträge mit Sicherung, Vorschau, Rollback und Historie. Sie verwenden Beispieldaten und sind keine Vorher-/Nachher-Benchmarks des Gesamt-RAMs. Für solche Messungen denselben Datenstand, dieselben geöffneten Panels und denselben Modellzustand vergleichen.
 
 Implementierung: `src/components/WindowActivity.tsx`, `src/components/calendarShared.tsx`, `src/components/useCalendarMinutes.ts`, `src/refreshQueue.ts`, `src/journal.ts`, `src-tauri/src/storage/read.rs`, `src-tauri/src/storage/schema.rs`, `src-tauri/src/main.rs`, `src-tauri/src/mail/ml.rs`. Befehle: [Entwicklung](development.md). Grundlagen: [SQLite UPSERT](https://www.sqlite.org/lang_upsert.html) und [partielle Indizes](https://www.sqlite.org/partialindex.html).
+
+## ICS nach Rust
+
+`ical.js` wurde vollständig aus dem Frontend entfernt. Import, Export sowie Berechnung und Startänderung importierter ICS-Regeln laufen in `src-tauri/src/calendar.rs`. Normale Wiederholungen bleiben synchron in TypeScript. Produktionsbuild vom 16.11.2026, identische Vite-Konfiguration:
+
+| Chunk | Vorher | Nachher | gzip vorher → nachher |
+| --- | --- | --- | --- |
+| Einstieg (`main`) | 394,65 kB | 316,46 kB | 122,42 → 98,60 kB |
+| ICS (dynamisch) | 10,37 kB | 0,75 kB | 4,11 → 0,43 kB |
+| App | 212,96 kB | 212,96 kB | 67,12 → 67,12 kB |
+
+Dies sind Bündelgrößen, keine RAM-Messungen. Gemeinsame Import-/Export-Fixtures vergleichen die Rust-Befehle mit den erfassten bisherigen Ergebnissen; zusätzliche Fälle prüfen Sommerzeit, eingebettete Zeitzonen und Serienausnahmen. Details: [Umsetzungsplan](plan-ical-repeat-rust.md).

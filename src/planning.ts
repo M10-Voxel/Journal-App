@@ -1,3 +1,4 @@
+import { occurrencesAsync, withStartAsync, continuedAsync } from './repeat.ts';
 import type { Entry, LinkedEntry, Plan, PlanVia, Repeat } from './journal';
 import { shiftDate } from './dates.ts';
 import { cleanRule, continued, occurrences, sameRule, seriesHorizon, withStart } from './repeat.ts';
@@ -46,6 +47,23 @@ export function repeatChange(entry: Entry, day: string, dates: readonly string[]
   }
   if (!rule) return { ...change, ...leave };
   return { ...change, repeat: series(current ? continued(rule, day) : withStart(rule, day), day) };
+}
+export async function repeatChangeAsync(entry: Entry, day: string, dates: readonly string[], schedule: Schedule, rule: RepeatRule | null, today: string, newId: () => string = () => crypto.randomUUID()): Promise<PlanChange> {
+  if (!rule?.ics && !entry.repeat?.rule?.ics) return repeatChange(entry, day, dates, schedule, rule, today, newId);
+  const change = planChange(day, dates, schedule, undefined, newId);
+  const current = entry.repeat?.rule ?? null;
+  if (sameRule(rule, current) || (change.plan && change.plan.targets.length > 1)) return change;
+  const series = async (rule: RepeatRule, first: string): Promise<Repeat> => {
+    const horizon = seriesHorizon(today, first);
+    return { series: newId(), rule: cleanRule(rule), horizon, dates: await occurrencesAsync(rule, shiftDate(first, 1), horizon) };
+  };
+  const leave = current ? { repeat: { series: newId(), rule: null, horizon: '' } } : {};
+  if (change.plan) {
+    const target = change.plan.targets[0].date;
+    return rule ? { ...change, plan: { ...change.plan, repeat: await series(await withStartAsync(rule, target), target) } } : { ...change, ...leave };
+  }
+  if (!rule) return { ...change, ...leave };
+  return { ...change, repeat: await series(current ? await continuedAsync(rule, day) : await withStartAsync(rule, day), day) };
 }
 export const tomorrowChange = (entry: Entry, day: string, newId?: () => string) =>
   planChange(day, [shiftDate(day, 1)], { time: entry.time ?? null, end: entry.end ?? null, reminder: entry.reminder ?? false }, 'tomorrow', newId);

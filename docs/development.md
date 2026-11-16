@@ -46,7 +46,7 @@ Browser-Mocks prüfen weder echte Anbieteranmeldungen noch eine native Installat
 | Bereich | Einstieg |
 | --- | --- |
 | Fenster, Navigation, Tagesdaten | `src/main.tsx` (Einstieg aller Fenster, Stylesheets, Fensterwahl), `src/App.tsx` (Journal-Hauptfenster), `src/bootstrap.ts`, `src/journal.ts` |
-| Kalender und Planung | `src/components/CalendarWindow.tsx`, `CalendarComposer.tsx`, `src/calendar.ts`, `src/repeat.ts`, `src/ical.ts` |
+| Kalender und Planung | `src/components/CalendarWindow.tsx`, `CalendarComposer.tsx`, `src/calendar.ts`, `src/repeat.ts`, `src/ical.ts`, `src-tauri/src/calendar.rs` |
 | Buch und Nebula-Layout | `src/components/JournalBook.tsx`, `NebulaDesk.tsx`, `src/book.ts`, `src/nebulaLayout.ts` |
 | Aktivitäten und Pinnwand | `src/periodStore.ts`, `src/boardCards.tsx`, `src/components/BulletinBoard.tsx` |
 | Notizblock | `src/components/Notebook.tsx`, `src/notebook.ts` |
@@ -70,3 +70,5 @@ Die Version im Quellcode ist eine Basisversion. CI erzeugt im Runner eine höher
 `scripts/ci-release.mjs` bereitet Version und Downloads vor und veröffentlicht erst nach Signatur- und Upload-Prüfung. `scripts/build-release.ps1` erstellt das signierte Paket; `scripts/verify-update.mjs` prüft es gegen den öffentlichen App-Schlüssel. Die zwei Actions-Secrets sind nur im Signierungsschritt vertrauenswürdiger Windows-Läufe eingebunden. Private Schlüssel, Passwörter, Vault-Daten, `dist/` und `src-tauri/target/` gehören nicht ins Repository.
 
 Reine Dokumentations-Commits können mit `[skip ci]` im Committext hochgeladen werden, um kein neues App-Update auszulösen. Neue Dokumente in der Dokumentationsübersicht und der kurzen Projekt-README verlinken; historische Release-Notizen als Archiv behandeln.
+
+ICS-Tests rufen über `calendar-probe` die echten Rust-Befehle ohne Vault/WebView auf. `npm test` baut diesen Prozess automatisch; einzelne Tests benötigen vorher `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-calendar-probe.ps1`. Die Browserprüfung benötigt denselben Prozess und findet Chrome oder Edge automatisch; `JOURNAL_UI_BROWSER` erlaubt einen eigenen Pfad.

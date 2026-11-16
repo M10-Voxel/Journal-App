@@ -73,7 +73,7 @@ export async function recognizeMail({ account, message }: MailPending, today = l
   for (const calendar of message.calendars) {
     try {
       const { importCalendar } = await import('./ical.ts');
-      const preview = importCalendar(calendar, Number(today.slice(0, 4)));
+      const preview = await importCalendar(calendar, Number(today.slice(0, 4)));
       for (const item of preview.entries) await add(item, `ics:${item.entry.calendarUid}`, `Kalenderanhang · ${message.subject}`, true);
       notices.push(...preview.notices);
       if (preview.entries.length > 200) notices.push(t("Der Kalenderanhang enthält viele Termine. Es werden höchstens 200 zukünftige Termine pro Mail vorgeschlagen."));

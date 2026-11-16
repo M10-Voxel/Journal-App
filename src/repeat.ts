@@ -1,4 +1,4 @@
-import ICAL from 'ical.js';
+import { invoke } from '@tauri-apps/api/core';
 // Repeating entries. A rule describes which days an entry recurs on, starting with its first day (`start`, which is
 // always an occurrence, like DTSTART in iCalendar). Occurrences are real entries; see `Repeat` in journal.ts.
 import { shiftDate } from './dates.ts';
@@ -117,12 +117,7 @@ function inActivePeriod(rule: RepeatRule, date: string): boolean {
 /** The occurrences from `from` to `to` (inclusive), at most `limit` of them. */
 export function occurrences(rule: RepeatRule, from: string, to: string, limit = 5000): string[] {
   const result: string[] = [];
-  if(rule.ics){
-    const component=new ICAL.Component(ICAL.parse(rule.ics));
-    const event=new ICAL.Event(component),iterator=event.iterator();let next=iterator.next(),steps=0;
-    while(next){if(++steps>200000)throw new Error(t("Wiederholung zu groß"));const date=next.toString().slice(0,10);if(date>to || (rule.end?.until && date>rule.end.until))break;if(date>=from && !result.includes(date))result.push(date);if(result.length>=limit)break;next=iterator.next();}
-    return result;
-  }
+  if (rule.ics) throw new Error('ICS rules require occurrencesAsync');
   const until = rule.end?.until, count = rule.end?.count;
   let counted = 0;
   for (const date of candidates(rule)) {
@@ -271,7 +266,7 @@ export function onChoices(start: string, unit: RepeatUnit): RepeatOn[] {
  */
 export function withStart(rule: RepeatRule, start: string, followWeekday = true): RepeatRule {
   const next: RepeatRule = { ...rule, start };
-  if(rule.ics && start!==rule.start){const component=new ICAL.Component(ICAL.parse(rule.ics));const date=component.getFirstPropertyValue('dtstart') as InstanceType<typeof ICAL.Time>;const [y,m,d]=start.split('-').map(Number);date.year=y;date.month=m;date.day=d;component.updatePropertyWithValue('dtstart',date);next.ics=component.toString();delete next.icsUid;}
+  if (rule.ics && start !== rule.start) throw new Error('ICS rules require withStartAsync');
   if (followWeekday && rule.weekdays?.length === 1 && rule.weekdays[0] === weekdayOf(rule.start)) next.weekdays = [weekdayOf(start)];
   const offered = onChoices(start, next.unit);
   if (next.on && !offered.includes(next.on)) next.on = next.on !== 'last-weekday' && offered.includes('last-weekday') ? 'last-weekday' : 'date';
@@ -308,4 +303,19 @@ export function cleanRule(rule: RepeatRule): RepeatRule {
 export function seriesHorizon(today: string, start = today): string {
   const ahead = `${parts(today)[0] + 2}-12-31`, own = `${parts(start)[0]}-12-31`;
   return own > ahead ? own : ahead;
+}
+
+/** ICS rules are evaluated by Rust; native journal rules remain synchronous. */
+export function occurrencesAsync(rule: RepeatRule, from: string, to: string, limit = 5000): Promise<string[]> {
+  return rule.ics ? invoke('calendar_occurrences', {ics:rule.ics, from, to, limit, until:rule.end?.until ?? null}) : Promise.resolve(occurrences(rule, from, to, limit));
+}
+export async function withStartAsync(rule: RepeatRule, start: string, followWeekday = true): Promise<RepeatRule> {
+  if (!rule.ics || start === rule.start) return withStart(rule, start, followWeekday);
+  const next = withStart({...rule, ics:undefined}, start, followWeekday);
+  next.ics = await invoke('calendar_with_start', {ics:rule.ics, start});
+  delete next.icsUid;
+  return next;
+}
+export async function continuedAsync(rule: RepeatRule, day: string): Promise<RepeatRule> {
+  return rule.start < day && (await occurrencesAsync(rule, day, day)).length ? rule : withStartAsync(rule, day);
 }

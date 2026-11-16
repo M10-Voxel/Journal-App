@@ -2,7 +2,7 @@ import { createPortal } from 'react-dom';
 import { calendarDaysWithSpans, calendarSpanLanes, calendarSpanSegment } from '../calendarSpans';
 import { useViewHistory } from '../viewHistory';
 import { readCalendarEntry } from '../calendarClipboard';
-import { withStart, occurrences, seriesHorizon } from '../repeat';
+import { withStartAsync, occurrencesAsync, seriesHorizon } from '../repeat';
 import { Popover } from './Popover';
 import { t, useLanguage } from '../i18n';
 import { memo, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -224,9 +224,9 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
   const paste = async (entry:Entry,target:string,whole:boolean) => {
     if(!onCreate) {setNotice(t('Dieser Eintrag kann hier nicht eingefügt werden.'));return;}
     try {
-      const rule=whole && entry.repeat?.rule ? withStart(entry.repeat.rule,target) : null;
+      const rule=whole && entry.repeat?.rule ? await withStartAsync(entry.repeat.rule,target) : null;
       const horizon=seriesHorizon(localDate(),target);
-      const repeat=rule ? {series:crypto.randomUUID(),rule,horizon,dates:occurrences(rule,target,horizon).filter(value=>value>target)} : undefined;
+      const repeat=rule ? {series:crypto.randomUUID(),rule,horizon,dates:(await occurrencesAsync(rule,target,horizon)).filter(value=>value>target)} : undefined;
       await onCreate(target,{kind:entry.kind,text:entry.text,description:entry.description ?? '',tag:entry.tag ?? null,time:entry.time ?? null,end:entry.end ?? null,priority:entry.priority,reminder:Boolean(entry.reminder),showInJournal:entry.showInJournal!==false,repeat});
       setPasting(null);setNotice(t('Eintrag eingefügt'));
     }catch(reason){setNotice(String(reason));}

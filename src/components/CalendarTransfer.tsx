@@ -33,13 +33,13 @@ export function CalendarTransfer({ onExport, onImport }: { onExport: () => Promi
         <p>{t("Ereignisse und Aufgaben austauschen – auch Einträge, die nur im Kalender stehen.")}</p>
         <button type="button" disabled={busy} onClick={() => void run(async () => {
           const content = await invoke<string | null>('read_calendar_file');
-          if (content !== null) { const { importCalendar } = await import('../ical'); setPreview(importCalendar(content)); }
+          if (content !== null) { const { importCalendar } = await import('../ical'); setPreview(await importCalendar(content)); }
         })}><Icon name="down" /><span>{t("Datei importieren")}</span></button>
         <button type="button" disabled={busy} onClick={() => void run(async () => {
           const { exportCalendar } = await import('../ical');
           const days = await onExport();
           if (!days.some(day => day.entries.some(entry => !entry.plan && entry.kind !== 'note'))) { setMessage(t("Keine Ereignisse oder Aufgaben zum Exportieren.")); return; }
-          if (await invoke<boolean>('write_calendar_file', { content: exportCalendar(days) })) setMessage(t("Kalender als ICS-Datei gespeichert."));
+          if (await invoke<boolean>('write_calendar_file', { content: await exportCalendar(days) })) setMessage(t("Kalender als ICS-Datei gespeichert."));
         })}><Icon name="up" /><span>{t("Alle Einträge exportieren")}</span></button>
       </> : <>
         <p><strong>{preview.entries.length} {preview.entries.length === 1 ? t("Eintrag") : t("Einträge")}</strong>{t(" bereit zum Import. Bekannte Kalender-UIDs werden aktualisiert, andere Einträge bleiben erhalten.")}</p>

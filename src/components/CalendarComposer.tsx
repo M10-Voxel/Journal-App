@@ -12,7 +12,7 @@ import { journal } from '../journal';
 import type { Entry, EntryKind, Repeat } from '../journal';
 import { formatMonth, formatShortDate, localDate, shiftMonth } from '../dates';
 import { minutesOf, formatDuration, slotMinutes, snapMinutes } from '../calendar';
-import { formatEnd, canBeNote, editScopes, formatSpan, linkedScopes, repeatChange, timeOfMinutes } from '../planning';
+import { formatEnd, canBeNote, editScopes, formatSpan, linkedScopes, repeatChangeAsync, timeOfMinutes } from '../planning';
 import { defaultRule, describe, withStart } from '../repeat';
 import type { RepeatRule } from '../repeat';
 import { RepeatPanel } from './RepeatPanel';
@@ -178,18 +178,18 @@ export function CalendarComposer({ date, draft, entry, span, onSpanChange, tag: 
     setError('');
     try {
       // The same change the planner makes: a new or changed rule starts a series here (see repeatChange).
-      const repeatOf = (base: Entry) => kind === 'note' ? undefined : repeatChange(base, date, [date], { time: null, reminder }, shownRule, localDate()).repeat ?? undefined;
+      const repeatOf = async (base: Entry) => kind === 'note' ? undefined : (await repeatChangeAsync(base, date, [date], { time: null, reminder }, shownRule, localDate())).repeat ?? undefined;
       // Over several days: the end in minutes from the first day's start (as storage.rs keeps it).
       const longEnd = (Date.parse(longEndDate) - Date.parse(date)) / 86400000 * 1440 + minutesOf(longEndTime);
       if (longSpan && (longEnd <= minutesOf(longStartTime) || longEnd - minutesOf(longStartTime) > 366 * 1440)) { setError(t('Bitte den Zeitraum prüfen.')); setBusy(false); return; }
       if (!entry) {
         const times = longSpan ? { time: longStartTime, end: timeOfMinutes(longEnd) } : { time: draft ? timeOfMinutes(draft.start) : null, end: draft ? timeOfMinutes(draft.end) : null };
         const made = { kind: kind === 'note' ? 'event' as const : kind, text: text.trim(), description: description.trim(), tag: tagId, ...times, priority, reminder, reminderBefore: reminder ? reminderBefore : 0, icon, showInJournal };
-        await onCreate?.({ ...made, repeat: repeatOf({ id: '', done: false, cancelled: false, plan: null, ...made }) });
+        await onCreate?.({ ...made, repeat: await repeatOf({ id: '', done: false, cancelled: false, plan: null, ...made }) });
       } else {
         // An entry without an end keeps having none, unless its length changed.
         const times = longSpan ? {time:longStartTime,end:timeOfMinutes((Date.parse(longEndDate)-Date.parse(date))/86400000*1440+minutesOf(longEndTime))} : draft ? { time: timeOfMinutes(draft.start), end: entry.end || length !== slotMinutes ? timeOfMinutes(draft.end) : null } : {};
-        const repeat = repeatOf(entry);
+        const repeat = await repeatOf(entry);
         const change: EntryEdit = { kind, text: text.trim(), description: description.trim(), tag: tagId, priority, showInJournal, reminder: kind === 'note' ? false : reminder, reminderBefore: kind !== 'note' && reminder ? reminderBefore : 0, icon, ...times, ...kind === 'task' ? {} : { done: false, cancelled: false }, ...repeat ? { repeat } : {} };
         // A changed rule makes a new series anyway; otherwise the group decides whether there is anything to ask.
         const options = repeat ? [] : editScopes(await journal.linked(entry.id).catch(() => []), entry.id, date);

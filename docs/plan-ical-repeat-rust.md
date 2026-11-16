@@ -1,8 +1,21 @@
 # Plan: iCal-Import und -Export nach Rust
 
-Status: **geplant, nichts umgesetzt.** Ausgangspunkt war die Frage, wie viel TypeScript sich durch Rust ersetzen lässt (siehe [Ressourcenverwaltung](performance.md), „Bündel, Fenster und Speicherpfade“). Die Oberfläche bleibt in der WebView (Tauri); verlagert wird nur Logik ohne Oberfläche.
+Status: **umgesetzt und geprüft (16.11.2026).** Die folgenden Abschnitte dokumentieren den ursprünglichen Plan; der tatsächliche Stand und die Entscheidung aus Schritt 0 stehen hier.
 
 **Entscheidung (User, 16.11.2026):** Nur ICS (Import, Export und der `ics`-Zweig der Regeln) geht nach Rust. Die übrige Wiederholungslogik (`occurrences`, `withStart`, `continued`, Ostern, Pausen, Monatsfilter, Anzeige) bleibt in TypeScript und damit synchron. Begründung: Die Rechnung wird in Vorschau, Planung und beim Verschieben sofort gebraucht, ein asynchroner Aufruf würde viele Aufrufer und die UI-Tests (Browser mit nachgebauten Tauri-Aufrufen) umbauen. Ein Gewinn für das Backend gäbe es nur, wenn es Serien ohne Frontend verlängern soll; dafür besteht kein Bedarf.
+
+
+## Umsetzung und Entscheidung aus Schritt 0
+
+Gewählt wurde **Lösung 1**: Import, Export und ICS-Regeln laufen in Rust (`calendar.rs`, Crates `ical`, `rrule`, `chrono-tz`). `ical.js` ist vollständig entfernt. Die normalen Journal-Regeln und Freitext-Erkennung bleiben synchron in TypeScript.
+
+Aufrufer: `journal.ensureSeries` war bereits asynchron. Kopieren/Verschieben in `CalendarWindow` und Speichern im `CalendarComposer` ebenfalls. `EntryActionDock` verwendet beim Bestätigen jetzt `repeatChangeAsync`; native Regeln nutzen weiterhin `repeatChange`. `PlanCalendar` und `RepeatPanel` beziehen nur für ICS-Regeln asynchrone Vorschauen über `useRepeatOccurrences`; veraltete Antworten werden verworfen. Die synchronen `withStart`-Aufrufe in `PlanCalendar`/`CalendarComposer` betreffen ausschließlich neu erstellte native Regeln. ICS-Änderungen verwenden `withStartAsync`/`continuedAsync`.
+
+Die bisherigen Import-Ergebnisse wurden vor dem Umbau als `tests/fixtures/ical-import.json` erfasst; die Export-Referenz liegt in `ical-export.json`. Rust- und Frontend-Tests verwenden dieselben Dateien. UUIDs und die textuelle Reihenfolge der ICS-Regel-Eigenschaften werden beim Vergleich normalisiert; Wiederholungsdaten werden separat verglichen. Zusätzliche synthetische Google-/Apple-/Outlook-Fälle stehen in `ical-special.json` (keine privaten Kalenderdaten). Der Vergleich läuft dauerhaft in Tests über die echten Rust-Befehle; ein temporärer Vergleichsmodus in der ausgelieferten App ist damit nicht nötig. Browserprüfungen verwenden denselben isolierten Rust-Testprozess ohne Vault-Zugriff.
+
+Der Einstiegs-Chunk sank beim Produktionsbuild von 394,65 auf 316,46 kB (gzip 122,42 → 98,60 kB), der ICS-Chunk von 10,37 auf 0,75 kB. Der App-Chunk blieb bei 212,96 kB. Es gibt keine Datenmigration; vorhandene ICS-Regeln bleiben lesbar. Wie bisher exportiert die App angelegte einzelne Vorkommen; Serienregeln werden beim Export nicht rekonstruiert.
+
+Abschlussprüfung: `npm test` (379 Tests), `cargo test` (117 App-Tests und 3 Kalender-Probe-Tests), `npm run build` sowie alle sieben Browserbereiche `calendar`, `calendar-actions`, `periods`, `mail`, `undo`, `language` und `multiday` erfolgreich. Der zuvor im Plan erwähnte Multiday-Fehler trat auf dem aktuellen Stand nicht auf.
 
 ## Ziel und Gewinn
 
@@ -73,13 +86,13 @@ Lösung 3 ist auch der Maßstab: Wenn der Rust-Weg gegenüber dem reinen Nachlad
 - `npm test` und `cargo test` grün, dieselben Fixtures in beiden Sprachen.
 - UI-Bereiche: `calendar`, `calendar-actions`, `periods`, `mail`, `undo`, `language`, außerdem `multiday`\*. (\*`multiday` scheitert schon auf dem Stand vor der Optimierung am Test `.cal-multiday-bar`; vorher beheben oder getrennt bewerten.)
 - Eine ICS-Datei mit allen Sonderfällen importieren, exportieren und erneut importieren: gleiche Einträge, gleiche Serien, gleiche Wiederholungstermine.
-- Kein Datenformat ändert sich: Journal-Schema 12 und Drive-Format 13 bleiben (`docs/sync-format-12.md`); gespeicherte `RepeatRule`-JSONs (auch mit `ics`) bleiben lesbar.
+- Kein Datenformat ändert sich: Journal-Schema und Drive-Format bleiben unverändert (`docs/sync-format-12.md`); gespeicherte `RepeatRule`-JSONs (auch mit `ics`) bleiben lesbar.
 
 ## Nicht Teil dieses Plans
 
 - Die Wiederholungsrechnung selbst (`occurrences` ohne `ics`, Ostern, Pausen, Monatsfilter), `repeatText.ts`, alle Anzeige- und Beschriftungsfunktionen, `RepeatPanel`.
 - Eine native Rust-Oberfläche anstelle der WebView (Neubau).
 
-## Offene Frage an den User
+## Optionale spätere Ergänzung
 
-- Gibt es echte ICS-Dateien (Google, Outlook, Apple), die ohne private Inhalte als Testfälle dienen dürfen?
+Weitere anonymisierte Kalenderdateien können die synthetischen Provider-Fixtures ergänzen.

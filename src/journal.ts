@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { localDate, shiftDate } from './dates.ts';
-import { lastOccurrence, occurrences, seriesHorizon } from './repeat.ts';
+import { occurrencesAsync, seriesHorizon } from './repeat.ts';
 import type { RepeatRule } from './repeat.ts';
 
 export type EntryKind = 'task' | 'event' | 'note';
@@ -167,8 +167,8 @@ function ensureSeries(date: string): Promise<void> {
   ensured = wanted;
   ensuring = ensuring.then(async () => {
     const series = await invoke<{ series: string; rule: RepeatRule; horizon: string }[]>('load_series');
-    const extensions = series.filter(item => item.horizon < wanted && (lastOccurrence(item.rule) ?? '9999-12-31') > item.horizon)
-      .map(item => ({ series: item.series, from: item.horizon, to: wanted, dates: occurrences(item.rule, shiftDate(item.horizon, 1), wanted) }));
+    const extensions = await Promise.all(series.filter(item => item.horizon < wanted)
+      .map(async item => ({ series: item.series, from: item.horizon, to: wanted, dates: await occurrencesAsync(item.rule, shiftDate(item.horizon, 1), wanted) })));
     if (!extensions.length) return;
     const touched = await invoke<string[]>('extend_series', { extensions });
     for (const date of touched) forgetDay(date);

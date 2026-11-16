@@ -26,6 +26,9 @@ url = "2"
 gliner25-rs = { version = "=0.5.6", default-features = false }
 ort = { version = "=2.0.0-rc.13", default-features = false, features = ["std", "load-dynamic"] }
 zip = { version = "6", default-features = false, features = ["deflate"] }
+ical = "0.11"
+rrule = "0.14"
+chrono-tz = "0.10"
 
 # Reminders as Windows notifications (the same windows crate Tauri already uses).
 [target.'cfg(windows)'.dependencies]

@@ -1,3 +1,4 @@
+import { useRepeatOccurrences } from './useRepeatOccurrences';
 import { t, useLanguage, getLanguage } from '../i18n';
 import { PopupHead, PopupKeys, PopupTabs } from './PopupChrome';
 import { usePopupLook } from '../popupLook';
@@ -6,7 +7,7 @@ import type { KeyboardEvent } from 'react';
 import { formatDate, formatMonth, formatShortDate, localDate, monthGrid, shiftDate, shiftMonth } from '../dates';
 import { adjustRange, nextFullHour, pickedDays } from '../planning';
 import type { Schedule } from '../planning';
-import { defaultRule, describe, occurrences, withStart } from '../repeat';
+import { defaultRule, describe, withStart } from '../repeat';
 import type { RepeatRule } from '../repeat';
 import { ClockDial } from './ClockDial';
 import { RepeatPanel } from './RepeatPanel';
@@ -28,10 +29,12 @@ const weekdayInitials = () => getLanguage() === 'en' ? ['M','T','W','T','F','S',
 export type PlannerView = 'date' | 'time' | 'days' | 'repeat';
 export function PlanCalendar({ day, initial, initialView = 'date', onPreview, onConfirm, onCancel }: {
   day: string; initial: { date: string; repeat?: RepeatRule | null } & Schedule; initialView?: PlannerView;
-  onPreview: (date: string, count: number) => void; onConfirm: (dates: string[], schedule: Schedule, repeat: RepeatRule | null) => void; onCancel: () => void;
+  onPreview: (date: string, count: number) => void; onConfirm: (dates: string[], schedule: Schedule, repeat: RepeatRule | null) => void | Promise<void>; onCancel: () => void;
 }) {
   useLanguage();
   const [selected, setSelected] = useState(initial.date);
+  const [saving, setSaving] = useState(false), [saveError, setSaveError] = useState('');
+  const savingRef = useRef(false);
   const [month, setMonth] = useState(initial.date.slice(0, 7));
   const [time, setTime] = useState(initial.time || (initialView === 'time' ? nextFullHour() : ''));
   const [reminder, setReminder] = useState(initial.reminder);
@@ -60,7 +63,7 @@ export function PlanCalendar({ day, initial, initialView = 'date', onPreview, on
   const grid = monthGrid(month);
   // The repetition the calendar shows; several days are planned without one.
   const shownRule = multi ? null : rule;
-  const repeating = new Set(shownRule ? occurrences(shownRule, grid[0], grid[grid.length - 1], grid.length) : []);
+  const repeating = new Set(useRepeatOccurrences(shownRule, grid[0], grid[grid.length - 1], grid.length));
   const cursor = pickEnd ? endCursor : selected;
 
   useEffect(() => { onPreview(multi ? picked[0] ?? day : selected, multi ? picked.length : 1); }, [selected, multi, picked]);
@@ -126,7 +129,13 @@ export function PlanCalendar({ day, initial, initialView = 'date', onPreview, on
     setEndCursor(date);
     setMonth(date.slice(0, 7));
   }
-  const confirm = () => { if (!multi || picked.length) onConfirm(multi ? picked : [selected], { time: time || null, reminder, reminderBefore }, multi ? initial.repeat ?? null : rule); };
+  const confirm = async () => {
+    if (savingRef.current || (multi && !picked.length)) return;
+    savingRef.current = true; setSaving(true); setSaveError('');
+    try { await onConfirm(multi ? picked : [selected], { time: time || null, reminder, reminderBefore }, multi ? initial.repeat ?? null : rule); }
+    catch (error) { setSaveError(String(error instanceof Error ? error.message : error)); }
+    finally { savingRef.current = false; setSaving(false); }
+  };
   /** Left click: starts a range, closes it, or moves one of its ends (adjustRange). */
   function setPoint(date: string) {
     const next = adjustRange(range, pending, date);
@@ -225,6 +234,7 @@ export function PlanCalendar({ day, initial, initialView = 'date', onPreview, on
     </div>
     {choosingReminder && <ReminderChoice anchor={reminderButton.current} value={{ reminder, before: reminderBefore }} timed={Boolean(time)}
       onChange={next => { setReminder(next.reminder); setReminderBefore(next.before); }} onClose={byKey => { setChoosingReminder(false); if (byKey) reminderButton.current?.focus({ preventScroll: true }); }} />}
+    {saveError && <p role="alert">{saveError}</p>}
     <div className="planner-foot">
       <div className={`planner-time${time ? ' is-set' : ''}${view === 'time' ? ' is-active' : ''}`}>
         <button type="button" className="planner-time-toggle" aria-pressed={view === 'time'} aria-label={view === 'time' ? t("Zurück zum Kalender") : time ? t("Uhrzeit {0} ändern", time) : t("Uhrzeit wählen (optional)")} data-tip={view === 'time' ? t("Kalender · U") : t("Uhrzeit · U")} onClick={toggleClock}>
@@ -237,7 +247,7 @@ export function PlanCalendar({ day, initial, initialView = 'date', onPreview, on
         aria-label={reminder ? t('Erinnerung: {0}', reminderLeadLabel(reminderBefore)) : t("Erinnern")} data-tip={`${reminder ? `${t("Erinnerung")} ${reminderLeadLabel(reminderBefore)}` : t("Erinnern")} ${time ? t("um {0}", time) : t("um 9:00")} · E`} onClick={() => setChoosingReminder(value => !value)}>
         <Icon name="bell" key={String(reminder)} />
       </button>
-      <button type="button" className={`planner-confirm${moved ? ' is-move' : ''}`} disabled={(multi && !picked.length) || pickEnd}
+      <button type="button" className={`planner-confirm${moved ? ' is-move' : ''}`} disabled={saving || (multi && !picked.length) || pickEnd}
         aria-label={`${multi ? t("Planen auf {0} Tage", picked.length) : moved ? t("Planen auf {0}", formatDate(selected)) : t("Übernehmen")}${time ? t(", {0} Uhr", time) : ''}${shownRule ? `, ${describe(shownRule)}` : ''}`} data-tip="Enter" onClick={confirm}>
         <Icon name={confirmIcon} key={confirmIcon} />
         <span key={multi ? picked.length : selected}>{multi ? picked.length === 1 ? formatShortDate(picked[0]) : t("{0} Tage", picked.length) : moved ? formatShortDate(selected) : t("Hier")}</span>

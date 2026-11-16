@@ -38,7 +38,7 @@ Ziel: weitere Aufbauten, Optiken und Popup-Varianten sollen sich leicht ergänze
 - [ ] **Stufe 2: die sechs Mischungen gestalten** – Liste im Abschnitt „Stufe 2“ von `docs/design-axes.md` (Aufbau-Komponenten lesen Optik-Variablen, Palette je Kombination, Suche trennen, Popups/Pixel/Widgets je Mischung, Vorschaubilder, Tests).
 - [ ] **Journal-Optik neu: Sticker auf Lavendelpapier** – umgesetzt: Mali/Nunito, Paletten Lavendel und Lavendel Nacht, Sticker-Bausteine (`journal-look.css`), Popups a–d (Karteikarte, Sticker, Sticker-Bogen, Papierschnipsel), Buch, Desk ohne Fenster (`journal-desk.css`), Widgets, Bereich `journal-sticker`. Offen: Auswahl, welche Popup-Varianten bleiben, und Feinschliff nach Durchsicht der Screenshots (`docs/journal-style.md`).
 
-- [ ] **iCal-Import und -Export nach Rust** – Plan in `docs/plan-ical-repeat-rust.md` (nur ICS, Wiederholungsrechnung bleibt in TS; `ical.js` aus dem Bündel; Vergleichstests vor dem Umschalten).
+- [x] **iCal-Import und -Export nach Rust** – Plan in `docs/plan-ical-repeat-rust.md` (nur ICS, Wiederholungsrechnung bleibt in TS; `ical.js` aus dem Bündel; Vergleichstests vor dem Umschalten).
 
 ## Offene Fragen
 - ~~**Pinnwand für Zeiträume** (Woche…Jahr)~~ – entschieden: jede Ansicht kann eine Pinnwand haben (Funktionen).

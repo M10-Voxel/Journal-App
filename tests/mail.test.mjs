@@ -1,3 +1,4 @@
+import './calendar-native.mjs';
 import { decodeMailContent } from '../src/mailContent.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';

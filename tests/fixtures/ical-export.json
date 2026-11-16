@@ -1,0 +1,29 @@
+[
+  {
+    "days": [
+      {
+        "date": "2026-10-30",
+        "title": "",
+        "entries": [
+          {
+            "id": "10000000-0000-4000-8000-000000000001",
+            "calendarUid": "10000000-0000-4000-8000-000000000001@journal.local",
+            "kind": "task",
+            "text": "**Überraschung** 🎉, Kaffee; Tee\\Milch\nZweite Zeile\nÄ😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀",
+            "description": "Details, mehrzeilig\nRaum 2; Unterlagen mitbringen 🎉",
+            "done": true,
+            "cancelled": false,
+            "priority": true,
+            "time": "09:15",
+            "end": "10:30",
+            "reminder": true,
+            "showInJournal": false,
+            "plan": null
+          }
+        ]
+      }
+    ],
+    "now": "2026-01-01T00:00:00Z",
+    "content": "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Journal//Calendar//DE\r\nCALSCALE:GREGORIAN\r\nBEGIN:VEVENT\r\nUID:10000000-0000-4000-8000-000000000001@journal.local\r\nDTSTAMP:20260101T000000Z\r\nSUMMARY:**Überraschung** 🎉\\, Kaffee\\; Tee\\\\Milch\r\nDESCRIPTION:Details\\, mehrzeilig\\nRaum 2\\; Unterlagen mitbringen 🎉\r\nX-JOURNAL-DESCRIPTION-VERSION:1\r\nX-JOURNAL-TEXT;VALUE=TEXT:**Überraschung** 🎉\\, Kaffee\\; Tee\\\\Milch\\nZwe\r\n ite Zeile\\nÄ😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä\r\n 😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä\r\n 😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä\r\n 😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä\r\n 😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä\r\n 😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä\r\n 😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀Ä😀\r\nX-JOURNAL-KIND:task\r\nX-JOURNAL-SHOW-IN-JOURNAL:FALSE\r\nX-JOURNAL-DONE:TRUE\r\nX-JOURNAL-CANCELLED:FALSE\r\nX-JOURNAL-REMINDER:TRUE\r\nPRIORITY:1\r\nDTSTART:20261030T081500Z\r\nDTEND:20261030T093000Z\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+  }
+]

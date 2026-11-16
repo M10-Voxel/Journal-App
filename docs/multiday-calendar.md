@@ -24,3 +24,5 @@ Die Endzeit kodiert Stunden seit Mitternacht des Starttags, etwa `513:30` für 0
 [ICS](ics-import.md) exportiert das tatsächliche Enddatum; der Import behält mehrtägige Termine als Einheit. [Drive](sync-format-12.md) überträgt die gespeicherten Endzeiten. Auf beiden Geräten wird eine aktuelle App-Version benötigt.
 
 Implementierung: `src/components/CalendarWindow.tsx`, `src/components/CalendarComposer.tsx`, `src/calendarSpans.ts`, `src/calendarClipboard.ts`. Browserprüfungen: `multiday`, `calendar-actions`, `calendar-drag`, `calendar-connected-spans`, `calendar-start`, `mail-view-zoom`.
+
+ICS-Import und -Export sowie importierte Serienregeln werden in `src-tauri/src/calendar.rs` verarbeitet. Die Zeitspanne bleibt ein Eintrag; ein Export mit anschließendem Reimport wird in `tests/ical.test.mjs` geprüft.
