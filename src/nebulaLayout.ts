@@ -4,8 +4,10 @@
 // too. The grid has twelve columns: each docked window takes some of them (`spans`, the whole row by default), and can
 // be minimized to its bar. The layout is remembered on the device.
 
-/** `activities` is the day's checklist in a day and the activity overview in an overview (one window, its content per family). */
-export type PanelId = 'entries' | 'rating' | 'scales' | 'activities' | 'board' | 'notes' | 'ratings' | 'calendar' | 'notebook';
+/** `activities` is the day's checklist in a day and the activity overview in an overview (one window, its content per
+ *  family); an overview's checklist is `checklist`. Which own windows show follows the view's modules (features.ts,
+ *  NebulaDesk `available`): `notes` is the note, `entries` the day's or the period's own entries. */
+export type PanelId = 'entries' | 'rating' | 'scales' | 'activities' | 'board' | 'notes' | 'ratings' | 'checklist' | 'calendar' | 'notebook';
 export type Family = 'day' | 'period';
 export type WindowId = 'calendar' | 'notebook';
 export interface NebulaLayout {
@@ -29,13 +31,14 @@ export interface NebulaLayout {
   stacked: Record<Family, PanelId[]>;
 }
 
-export const own: Record<Family, PanelId[]> = { day: ['entries', 'rating', 'scales', 'activities', 'board'], period: ['notes', 'ratings', 'activities', 'board'] };
+export const own: Record<Family, PanelId[]> = { day: ['entries', 'rating', 'scales', 'activities', 'board', 'notes'], period: ['notes', 'ratings', 'activities', 'board', 'entries', 'rating', 'scales', 'checklist'] };
 export const windows: readonly WindowId[] = ['calendar', 'notebook'];
 export const columns = 12, minSpan = 3;
 /** By default the entries stand left, the day's rating, values and checklist stacked right of them; in an overview the note
- *  with the ratings below it left, the activities right. The board takes the row below. */
-export const defaultLayout = (): NebulaLayout => ({ order: { day: [...own.day], period: [...own.period] }, minimized: [], spans: { entries: 7, rating: 5, notes: 7, activities: 5 }, docked: [], floating: [], heights: { board: 620 },
-  stacked: { day: ['scales', 'activities'], period: ['ratings'] } });
+ *  with the ratings below it left, the activities right (its own entries above them, its rating, values and checklist
+ *  stacked below, where switched on). The board takes the row below. */
+export const defaultLayout = (): NebulaLayout => ({ order: { day: [...own.day], period: ['entries', 'notes', 'ratings', 'activities', 'rating', 'scales', 'checklist', 'board'] }, minimized: [], spans: { entries: 7, rating: 5, notes: 7, activities: 5 }, docked: [], floating: [], heights: { board: 620 },
+  stacked: { day: ['scales', 'activities'], period: ['ratings', 'scales', 'checklist'] } });
 export const spanOf = (layout: NebulaLayout, id: PanelId) => layout.spans[id] ?? columns;
 const isOwn = (id: PanelId) => !windows.includes(id as WindowId);
 
@@ -44,7 +47,7 @@ const isPanel = (value: unknown, family: Family): value is PanelId => typeof val
 const fromData: PanelId[] = ['rating', 'scales', 'activities'];
 const withoutData = (list: unknown[]): unknown[] => list.flatMap(id => id === 'data' ? fromData : [id]);
 /** Where an own window missing from a stored order joins it: after this one (else at the end). */
-const after: Record<Family, Partial<Record<PanelId, PanelId>>> = { day: { rating: 'entries', scales: 'rating', activities: 'scales' }, period: { ratings: 'notes' } };
+const after: Record<Family, Partial<Record<PanelId, PanelId>>> = { day: { rating: 'entries', scales: 'rating', activities: 'scales' }, period: { ratings: 'notes', rating: 'entries', scales: 'rating', checklist: 'scales' } };
 /**
  * A stored layout made whole: unknown ids go, the family's own windows are always there (new ones after the window they
  * belong to, others at the end). An older layout's data window becomes the rating, day values and activities, taking
@@ -88,8 +91,9 @@ export function normalizeLayout(raw: unknown): NebulaLayout {
 }
 
 /** The windows shown in the grid, in order: the family's own, and the calendar or notebook while docked and open. */
-export function visiblePanels(layout: NebulaLayout, family: Family, open: Record<WindowId, boolean> & { board?: boolean }): PanelId[] {
-  return layout.order[family].filter(id => id === 'board' && open.board === false ? false : isOwn(id) ? !layout.floating.includes(id) : layout.docked.includes(id as WindowId) && open[id as WindowId]);
+/** `available`: the own windows the view's modules show (without it all of them); the others keep their place. */
+export function visiblePanels(layout: NebulaLayout, family: Family, open: Record<WindowId, boolean> & { board?: boolean; available?: readonly PanelId[] }): PanelId[] {
+  return layout.order[family].filter(id => id === 'board' && open.board === false ? false : isOwn(id) ? !layout.floating.includes(id) && (!open.available || open.available.includes(id)) : layout.docked.includes(id as WindowId) && open[id as WindowId]);
 }
 
 /**
@@ -315,3 +319,53 @@ export function displaySpans(layout: NebulaLayout, ids: readonly PanelId[], fami
   return { spans, upright, pull };
 }
 
+
+/** The own windows a view shows for its modules (features.ts): the module's window, an overview's checklist as
+ *  `checklist` and its evaluation as the chart (`ratings`) and the activities' overview (`activities`). */
+export function panelsOf(modules: ReadonlySet<string>, family: Family): PanelId[] {
+  const result: PanelId[] = [];
+  if (modules.has('entries')) result.push('entries');
+  if (modules.has('rating')) result.push('rating');
+  if (modules.has('scales')) result.push('scales');
+  if (modules.has('activities')) result.push(family === 'day' ? 'activities' : 'checklist');
+  if (modules.has('note')) result.push('notes');
+  if (family === 'period' && modules.has('evaluation')) result.push('ratings', 'activities');
+  if (modules.has('board')) result.push('board');
+  return result;
+}
+
+/**
+ * Each view (day … year) keeps its own arrangement. Stored as `{ views: { day: …, week: … } }`; an older single layout
+ * (without `views`) becomes every view's arrangement, a view without one starts from the default.
+ */
+export type ViewMode = 'day' | 'week' | 'month' | 'quarter' | 'year';
+export const viewModes: readonly ViewMode[] = ['day', 'week', 'month', 'quarter', 'year'];
+export type ViewLayouts = Record<ViewMode, NebulaLayout>;
+export function normalizeViewLayouts(raw: unknown): ViewLayouts {
+  const views = raw && typeof raw === 'object' && 'views' in raw ? (raw as { views?: Record<string, unknown> }).views ?? {} : null;
+  return Object.fromEntries(viewModes.map(mode => [mode, normalizeLayout(views ? views[mode] : raw)])) as ViewLayouts;
+}
+/** Whether two arrangements are the same (both made whole first). */
+export const sameLayout = (a: NebulaLayout, b: NebulaLayout) => JSON.stringify(normalizeLayout(a)) === JSON.stringify(normalizeLayout(b));
+
+/** Up to three saved arrangements per view, at fixed places (1–3): removing one leaves its place empty. */
+export const maxSaved = 3;
+export type SavedLayouts = Record<ViewMode, (NebulaLayout | null)[]>;
+export function normalizeSaved(raw: unknown): SavedLayouts {
+  const value = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
+  return Object.fromEntries(viewModes.map(mode => {
+    const list = Array.isArray(value[mode]) ? (value[mode] as unknown[]).slice(0, maxSaved) : [];
+    return [mode, Array.from({ length: maxSaved }, (_, index) => list[index] && typeof list[index] === 'object' ? normalizeLayout(list[index]) : null)];
+  })) as SavedLayouts;
+}
+/** Saves an arrangement at a place (`at`), or at the first free one; unchanged when all are taken and none is given. */
+export function saveLayout(slots: readonly (NebulaLayout | null)[], layout: NebulaLayout, at?: number): (NebulaLayout | null)[] {
+  const next = Array.from({ length: maxSaved }, (_, index) => slots[index] ?? null);
+  const index = at ?? next.findIndex(slot => !slot);
+  if (index < 0 || index >= maxSaved) return next;
+  next[index] = normalizeLayout(layout);
+  return next;
+}
+export function removeLayout(slots: readonly (NebulaLayout | null)[], index: number): (NebulaLayout | null)[] {
+  return Array.from({ length: maxSaved }, (_, place) => place === index ? null : slots[place] ?? null);
+}

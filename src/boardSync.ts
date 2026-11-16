@@ -1,5 +1,5 @@
 import type { Card, Patches } from './notebook';
-import { cardGroups, copyLayout, isOnBoard, layoutBoard } from './boardPlacement.ts';
+import { cardGroups, copyLayout, isOnBoard, isPeriodBoard, layoutBoard } from './boardPlacement.ts';
 
 const shared = ['title', 'text', 'mode', 'ink', 'inkPaper', 'paper', 'tag', 'url', 'pixel', 'groupName'] as const;
 const geometry = ['boardX', 'x', 'y', 'w', 'h'] as const;
@@ -111,7 +111,7 @@ export function copySyncPatches(cards: Card[], ids: string[], enabled: boolean, 
       const position = { boardX: (layouts[anchor].boardX ?? 0) + (layouts[source].boardX ?? 0) - (layouts[sourceAnchor].boardX ?? 0), y: (layouts[anchor].y ?? 0) + (layouts[source].y ?? 0) - (layouts[sourceAnchor].y ?? 0) };
       const own = byId.get(id)!;
       const target = board && isOnBoard(own, board) ? board : own.dates[0] ?? Object.keys(own.boards ?? {}).find(key => own.boards?.[key]);
-      if (target?.startsWith('month:') || target?.startsWith('year:')) result[id].boards = { ...own.boards, [target]: { ...own.boards?.[target], ...position } };
+      if (target && isPeriodBoard(target)) result[id].boards = { ...own.boards, [target]: { ...own.boards?.[target], ...position } };
       else Object.assign(result[id], position);
     }
   }

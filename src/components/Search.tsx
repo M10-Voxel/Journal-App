@@ -15,6 +15,8 @@ import { createRefreshQueue } from '../refreshQueue';
 import { useEffect } from 'react';
 import type { Entry } from '../journal';
 import type { ParsedQuery } from '../search';
+import { useFeatures } from '../featureStore';
+import { hasModule, modes } from '../features';
 import { useLook } from '../popupLook';
 import { Icon } from './Icon';
 import { kindOfTag, kindOrder, tagKindLabel, useTagKindOrder } from '../tagKinds';
@@ -53,6 +55,7 @@ type Hit = { date: string; title?: string; entry?: Entry };
  * Board and notebook cards are searched here, where they are.
  */
 function useSearchItems(parsed: ParsedQuery, active: boolean): { items: SearchItem[]; pending: boolean } {
+  const features = useFeatures();
   const today = localDate();
   const { cards } = useCards();
   const [stored, setStored] = useState<SearchItem[] | null>(null);
@@ -88,9 +91,10 @@ function useSearchItems(parsed: ParsedQuery, active: boolean): { items: SearchIt
       if (day.title.trim()) items.push(titleItem(day.date, day.title));
       for (const entry of day.entries) items.push(entryItem(day.date, entry));
     }
-    for (const card of cards) { const item = cardItem(card, cards, t('Ohne Titel')); if (item) items.push(item); }
+    const shown = { periods: modes.filter(mode => hasModule(features, mode, 'board')), notebook: features.notebook };
+    for (const card of cards) { const item = cardItem(card, cards, t('Ohne Titel'), shown); if (item) items.push(item); }
     return items;
-  }, [days, cards, stored, active, hasTerms]);
+  }, [days, cards, stored, active, hasTerms, features]);
   return { items, pending: active && hasTerms && !onlyCards && (completed !== key || (fallback && !ready)) };
 }
 

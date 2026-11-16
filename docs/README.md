@@ -8,6 +8,7 @@ Die Dokumentation beschreibt den aktuellen Windows-Zweig `Windows`. Android ist 
 - [Vault und Updates](vault-and-updates.md): Speicherort, Datensicherung, Installation und automatische Veröffentlichung.
 - [Notizblock](notebook.md): Ordner, Suche, Mehrfachauswahl und Löschen.
 - [Pinnwand](bulletin-board.md): Zettel, schwebende Notizen, Bilder, Links und Verbindungen.
+- [Funktionen](features.md): Ansichten und Bereiche ein- und ausschalten, Zeitraum-Einträge, -Werte, -Checkliste und -Pinnwände.
 - [Mehrtägige Termine](multiday-calendar.md): Zeichnen, Uhrzeiten, Serienaktionen und Kalenderansichten.
 - [ICS-Import und -Export](ics-import.md): Kalenderdateien, Wiederholungen und Grenzen des Austauschs.
 - [Rückgängig und Wiederherstellen](undo-redo.md): Inhaltshistorie und Editor-Verhalten.

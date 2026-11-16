@@ -21,12 +21,13 @@ import { ActivitySettings } from './ActivitySettings';
 import { StorageSettings } from './StorageSettings';
 import { UpdateSettings } from './UpdateSettings';
 import { DesktopWidgetSettings } from './DesktopWidgetSettings';
+import { FeatureSettings } from './FeatureSettings';
 import '../settings.css';
 
-const tabs = ['appearance', 'colors', 'tags', 'activities', 'scales', 'widgets', 'storage', 'drive', 'mail', 'updates'] as const;
+const tabs = ['appearance', 'colors', 'features', 'tags', 'activities', 'scales', 'widgets', 'storage', 'drive', 'mail', 'updates'] as const;
 export type SettingsTab = typeof tabs[number];
 const tabInfo = (): Record<SettingsTab, { icon: IconName; label: string }> => ({
-  appearance: { icon: 'layout', label: t("Darstellung") }, colors: { icon: 'pencil', label: t('Farben') }, tags: { icon: 'tag', label: t('Tags') },
+  appearance: { icon: 'layout', label: t("Darstellung") }, colors: { icon: 'pencil', label: t('Farben') }, features: { icon: 'details', label: t('Funktionen') }, tags: { icon: 'tag', label: t('Tags') },
   widgets: { icon: 'offline', label: 'Desktop-Widgets' },
   activities: { icon: 'check', label: t('Aktivitäten') }, scales: { icon: 'week', label: t('Tageswerte') }, storage: { icon: 'save', label: t('Speicherort') }, drive: { icon: 'transfer', label: 'Google Drive' }, mail: { icon: 'mail', label: t("E-Mail-Konten") }, updates: { icon: 'repeat', label: t('Updates') },
 });
@@ -227,7 +228,7 @@ export function SettingsDialog({ settings, onChange, onClose, onImport, mailStat
   </>;
 
   const panels: Record<SettingsTab, ReactNode> = {
-    appearance, colors: <ColorSettings settings={settings} onChange={onChange} />, tags: <TagSettings />, activities: <ActivitySettings />, scales: <ScaleSettings />,
+    appearance, colors: <ColorSettings settings={settings} onChange={onChange} />, features: <FeatureSettings features={settings.features} onChange={features => onChange({ ...settings, features })} />, tags: <TagSettings />, activities: <ActivitySettings />, scales: <ScaleSettings />,
     storage: <StorageSettings beforeChange={beforeSync} onBusy={value => { setDriveBusy(value); onDriveBusy(value); }} />,
     updates: <UpdateSettings beforeChange={beforeSync} onBusy={value => { setDriveBusy(value); onDriveBusy(value); }} />,
     widgets: <DesktopWidgetSettings initialWidgetId={initialWidgetId} />,

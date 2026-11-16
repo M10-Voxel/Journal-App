@@ -66,7 +66,7 @@
 .desk-label b { min-width: 0; overflow: hidden; font-weight: 700; text-overflow: ellipsis; }
 .desk-label small { flex: none; font: 600 10.5px var(--sans); letter-spacing: .02em; opacity: .7; }
 :root[data-layout='desk'][data-look='journal'] :is(.nebula-panel, .nebula-floating):is(.is-rating, .is-ratings, .is-calendar) { --label-tint: color-mix(in srgb, var(--pink) 40%, var(--tint-base, var(--surface))); }
-:root[data-layout='desk'][data-look='journal'] :is(.nebula-panel, .nebula-floating):is(.is-scales, .is-activities, .is-notebook) { --label-tint: color-mix(in srgb, var(--mint) 45%, var(--tint-base, var(--surface))); }
+:root[data-layout='desk'][data-look='journal'] :is(.nebula-panel, .nebula-floating):is(.is-scales, .is-activities, .is-checklist, .is-notebook) { --label-tint: color-mix(in srgb, var(--mint) 45%, var(--tint-base, var(--surface))); }
 :root[data-layout='desk'][data-look='journal'] :is(.nebula-panel, .nebula-floating).is-board { --label-tint: color-mix(in srgb, var(--sticker-edge) 70%, var(--surface)); }
 :root[data-layout='desk'][data-look='journal'] :is(.nebula-cal-panel, .nebula-calendar) { --label-tint: color-mix(in srgb, var(--pink) 40%, var(--tint-base, var(--surface))); }
 :root[data-layout='desk'][data-look='journal'] .nebula-notebook { --label-tint: color-mix(in srgb, var(--mint) 45%, var(--tint-base, var(--surface))); }
@@ -204,3 +204,4 @@
 /* The calendar card's label keeps its word; the view tabs give way first. */
 :root[data-layout='desk'][data-look='journal'] .nebula-cal-panel > .nebula-terminal-head > .desk-label { flex: none; }
 :root[data-layout='desk'][data-look='journal'] .nebula-cal-panel > .nebula-terminal-head > .nebula-cal-views { min-width: 0; flex: 0 1 auto; }
+:root[data-layout='desk'][data-look='journal'] .nebula-layout-slot[aria-pressed='true'] { background: color-mix(in srgb, var(--pink) 45%, var(--tint-base, var(--surface))); color: var(--ink-fixed); box-shadow: var(--key); }

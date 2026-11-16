@@ -256,3 +256,36 @@
 .scale-remove .icon { width:13px; height:13px; }
 .scale-remove:hover { background:var(--hover); color:var(--text); }
 .scale-remove.is-asking { background:color-mix(in srgb,var(--error) 16%,transparent); color:var(--error); }
+
+/* A week's … year's own entries (PeriodEntries): rows like the journal's, a symbol slot, the text, a quiet delete. */
+.period-entries .checklist-section-heading { margin-top:0; padding-top:4px; border-top:0; }
+.period-section > .period-entries:not(:first-child) .checklist-section-heading, .period-section > .document-header + .period-entries .checklist-section-heading { margin-top:8px; }
+.period-entries h3 { display:flex; align-items:baseline; gap:8px; }
+.period-entry-list { display:grid; gap:1px; }
+.period-entry { display:flex; align-items:center; gap:10px; min-height:36px; padding:3px 0; border-radius:6px; }
+.period-entry.is-group-start { margin-top:10px; }
+.period-entry-symbol { display:grid; place-items:center; flex:none; width:30px; height:30px; padding:0; border:0; border-radius:6px; background:transparent; color:var(--accent); }
+button.period-entry-symbol { cursor:pointer; } button.period-entry-symbol:hover { background:var(--surface); }
+.period-entry-symbol .icon { width:15px; height:15px; }
+.period-entry.is-note .period-entry-symbol { color:var(--muted); }
+.period-entry-text { flex:1; min-width:0; height:30px; padding:0 6px; border:0; border-radius:6px; background:transparent; color:var(--text); font:14px/24px var(--write); }
+.period-entry-text:focus { outline:none; background:color-mix(in srgb,var(--surface) 55%,transparent); }
+.period-entry[data-done] .period-entry-text { color:var(--muted); text-decoration:line-through; text-decoration-color:color-mix(in srgb,var(--muted) 60%,transparent); }
+.period-entry-remove { display:grid; place-items:center; flex:none; width:26px; height:26px; padding:0; border:0; border-radius:6px; background:transparent; color:var(--muted); opacity:0; cursor:pointer; transition:opacity var(--fast) ease, background-color var(--fast) ease; }
+.period-entry:is(:hover, :focus-within) .period-entry-remove { opacity:1; }
+.period-entry-remove:hover { background:var(--surface); color:var(--text); }
+.period-entry-remove .icon { width:13px; height:13px; }
+.period-entries .checklist-empty { margin:0; }
+:root[data-pixel] :is(.period-entry, .period-entry-symbol, .period-entry-text, .period-entry-remove) { border-radius:0; }
+:root[data-pixel] .period-entry-text { font-size:16px; }
+
+/* A week's … year's checklist: the days' totals in chips, today's check box and timer. */
+.period-list.is-period .activity-period-days { flex:none; color:var(--muted); font:11px var(--mono); font-variant-numeric:tabular-nums; }
+.activity-time.is-total { cursor:default; }
+.activity-time.is-total:hover { background:transparent; }
+.activity-checkbox .activity-dot { width:8px; height:8px; border-radius:50%; background:var(--activity-color); }
+:root[data-pixel] .activity-checkbox .activity-dot { border-radius:0; }
+/* Between a period's blocks the same rule as between the checklist's sections. */
+.period-section .period-entry-text:focus-visible { outline:none; }
+.period-entries + .period-rating { margin-top:28px; padding-top:20px; border-top:1px solid var(--divider); }
+.period-section > :is(.period-rating, .period-scales, .period-list, .period-entries) ~ .period-range + .period-note { margin-top:28px; padding-top:20px; border-top:1px solid var(--divider); }

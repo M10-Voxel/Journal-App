@@ -168,7 +168,7 @@
 .nebula-prompt b { color: var(--nb-violet); font-weight: 700; }
 .nebula-terminal-glyphs { padding: 0 10px; font: 700 13px var(--mono); letter-spacing: .2em; }
 .nebula-terminal-body { padding: 20px 24px 24px 38px; }
-.nebula-terminal.is-board .nebula-terminal-body, .nebula-terminal:is(.is-rating, .is-scales, .is-activities) .nebula-terminal-body { padding-left: 24px; }
+.nebula-terminal.is-board .nebula-terminal-body, .nebula-terminal:is(.is-rating, .is-scales, .is-activities, .is-checklist) .nebula-terminal-body { padding-left: 24px; }
 .nebula-pair { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; align-items: start; }
 @container nebula-center (min-width: 900px) { .nebula-pair { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
 
@@ -182,9 +182,9 @@
 .nebula-terminal .kind-picker button { margin-left: -1px; padding: 4px 9px; border: 1px solid var(--edge); color: var(--text); font: 10.5px var(--mono); text-transform: lowercase; }
 .nebula-terminal .kind-picker button:hover { border-color: var(--accent); background: var(--event-background); color: var(--strong); }
 .nebula-terminal .period-section { margin-top: 0; }
-.nebula-terminal:is(.is-rating, .is-scales, .is-activities) .period-section { padding: 0; }
-.nebula-terminal:is(.is-rating, .is-scales, .is-activities) > .nebula-panel-body { padding-top: 14px; padding-bottom: 14px; }
-.nebula-terminal.is-activities .period-section > .checklist-section-heading { display: none; }
+.nebula-terminal:is(.is-rating, .is-scales, .is-activities, .is-checklist) .period-section { padding: 0; }
+.nebula-terminal:is(.is-rating, .is-scales, .is-activities, .is-checklist) > .nebula-panel-body { padding-top: 14px; padding-bottom: 14px; }
+.nebula-terminal:is(.is-activities, .is-checklist) .period-section > .checklist-section-heading { display: none; }
 .nebula-terminal.is-rating .period-rating { padding: 0; }
 .nebula-terminal.is-rating .rating-heading { margin-bottom: 10px; }
 .nebula-terminal :is(.period-section > .section-heading) { display: none; }
@@ -239,11 +239,10 @@
 
 /* ── Decoration: orbits, waves, glitch pixels ─────────────────────────────────────────────────────────────────── */
 .nebula-backdrop { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
-.nebula-orbits { position: absolute; inset: -10%; width: 120%; height: 120%; }
+.nebula-orbits { position: absolute; inset: -10%; width: 120%; height: 120%; overflow: visible; transform-origin: 50% 50%; }
 .nebula-orbits ellipse { fill: none; stroke: #ffffff26; stroke-width: 1; vector-effect: non-scaling-stroke; }
-.nebula-orbits g { transform-origin: 500px 350px; }
-.nebula-orbit-a { transform: rotate(-18deg); animation: nebula-orbit-a 140s linear infinite; }
-.nebula-orbit-b { transform: rotate(14deg); animation: nebula-orbit-b 180s linear infinite; }
+.nebula-orbit-a { transform: rotate(-18deg); animation: nebula-orbit-a 140s linear infinite; will-change: transform; }
+.nebula-orbit-b { transform: rotate(14deg); animation: nebula-orbit-b 180s linear infinite; will-change: transform; }
 .nebula-orbit-b ellipse { stroke: #7b2cbf66; stroke-dasharray: 3 7; }
 .nebula-orbit-c { transform: rotate(-4deg); }
 .nebula-orbit-c ellipse { stroke: #ffffff12; }

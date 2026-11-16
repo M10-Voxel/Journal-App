@@ -4,6 +4,8 @@ import { t } from './i18n.ts';
 // Suggestions complete the filter being typed, like the repeat field does (see repeatText.ts).
 import type { Tag } from './tags.ts';
 import type { Card } from './notebook.ts';
+import { boardOfKey } from './boardPlacement.ts';
+import type { BoardPeriod } from './boardPlacement.ts';
 import { noteOwners, notesIn } from './notebook.ts';
 import { plainText } from './markdown.ts';
 
@@ -93,18 +95,20 @@ export function acceptSuggestion(query: string, parsed: ParsedQuery, suggestion:
 export interface SearchResult {
   key: string; type: SearchType; title: string; snippet: string; date: string | null; tag: string | null;
   /** A card opens on the board it hangs on: a day's, or (`period`) the month's or year's of `date`. */
-  target: { kind: 'entry'; date: string; id: string; calendar: boolean } | { kind: 'title'; date: string } | { kind: 'card'; id: string; date: string | null; notebook: boolean; period?: 'month' | 'year' };
+  target: { kind: 'entry'; date: string; id: string; calendar: boolean } | { kind: 'title'; date: string } | { kind: 'card'; id: string; date: string | null; notebook: boolean; period?: Exclude<BoardPeriod, 'day'> };
 }
 /** The candidates any source supplies, before filtering. */
 export type SearchItem = SearchResult;
 
 /** The board a card hangs on, for opening it: its first day, else the newest month's or year's board it is shown on. */
-export function cardBoard(card: Card): { date: string; period?: 'month' | 'year' } | null {
-  if (card.dates?.[0]) return { date: card.dates[0] };
-  const keys = Object.entries(card.boards ?? {}).filter(([, placement]) => placement).map(([key]) => key).sort().reverse();
-  const month = keys.find(key => /^month:\d{4}-\d{2}$/.test(key)), year = keys.find(key => /^year:\d{4}$/.test(key));
-  return month ? { date: `${month.slice(6)}-01`, period: 'month' } : year ? { date: `${year.slice(5)}-01-01`, period: 'year' } : null;
+export function cardBoard(card: Card, periods: readonly BoardPeriod[] = boardPeriods): { date: string; period?: Exclude<BoardPeriod, 'day'> } | null {
+  if (card.dates?.[0] && periods.includes('day')) return { date: card.dates[0] };
+  // The smallest period first (week … year), of it the newest board.
+  const boards = Object.entries(card.boards ?? {}).filter(([, placement]) => placement).flatMap(([key]) => { const board = boardOfKey(key); return board && periods.includes(board.period) ? [board] : []; })
+    .sort((a, b) => boardPeriods.indexOf(a.period) - boardPeriods.indexOf(b.period) || b.date.localeCompare(a.date));
+  return boards[0] ?? null;
 }
+const boardPeriods: readonly BoardPeriod[] = ['day', 'week', 'month', 'quarter', 'year'];
 /**
  * A card as something to find, or null if it is nowhere to be seen. A note is on a board (a day's, month's or year's)
  * or in the notebook. An image or link taken down from every board only still exists as the attachment of a note it is
@@ -118,16 +122,19 @@ function notebookVisible(card:Card,cards:readonly Card[]):boolean{
   if(!visible){const all=[...cards],roots=new Set(notesIn(all,[],'all').map(card=>card.id));visible=new Set([...noteOwners(all)].filter(([,root])=>roots.has(root)).map(([id])=>id));notebookVisibility.set(cards,visible);}
   return visible.has(card.id);
 }
-export function cardItem(card: Card, cards: readonly Card[], untitled: string): SearchItem | null {
-  const board = cardBoard(card);
+/** `shown`: the boards on (Einstellungen → Funktionen) and whether the notebook is; a card only elsewhere is not offered. */
+export function cardItem(card: Card, cards: readonly Card[], untitled: string, shown: { periods?: readonly BoardPeriod[]; notebook?: boolean } = {}): SearchItem | null {
+  const board = cardBoard(card, shown.periods), withNotebook = shown.notebook !== false;
   const base = { key: `card:${card.id}`, title: card.title || untitled, snippet: `${plainText(card.text ?? '')} ${card.url ?? ''}`.trim(), tag: card.tag ?? null };
   if (card.kind === 'note') {
     if(!notebookVisible(card,cards))return null;
-    const notebook = !board || Boolean(card.notebook);
+    const notebook = withNotebook && (!board || Boolean(card.notebook));
+    if (!notebook && !board) return null;
     return { ...base, type: notebook ? 'notebook' : 'board-note', date: board?.date ?? null, target: { kind: 'card', id: card.id, date: board?.date ?? null, notebook, period: board?.period } };
   }
   const type = card.kind === 'image' ? 'board-image' : 'board-link';
   if (board) return { ...base, type, date: board.date, target: { kind: 'card', id: card.id, date: board.date, notebook: false, period: board.period } };
+  if (!withNotebook) return null;
   const note = cards.find(other => other.kind === 'note' && (card.links ?? []).includes(other.id)&&notebookVisible(other,cards));
   return note ? { ...base, type, date: cardBoard(note)?.date ?? null, target: { kind: 'card', id: note.id, date: null, notebook: true } } : null;
 }

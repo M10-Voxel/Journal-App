@@ -7,15 +7,17 @@ import type { Tag } from './tags.ts';
 export type TicketKind = MailTagKind | 'event';
 type TicketEntry = Pick<Entry, 'kind' | 'tag' | 'showInJournal' | 'done' | 'cancelled'>;
 
-/** Calendar-only entries also use kind=event internally. Tickets follow the visible entry type. */
-export function ticketForEntry(entry: TicketEntry, tags: readonly Tag[], activityTags: ReadonlySet<string>): { tag: string; kind: TicketKind } | null {
+/** Calendar-only entries also use kind=event internally. Tickets follow the visible entry type. `icon`: the tag's own
+ *  icon (Lucide name), shown on the ticket after the tag's name. */
+export function ticketForEntry(entry: TicketEntry, tags: readonly Tag[], activityTags: ReadonlySet<string>): { tag: string; kind: TicketKind; icon?: string } | null {
   if (entry.done || entry.cancelled || (entry.tag && activityTags.has(entry.tag))) return null;
   const own = tags.find(tag => tag.id === entry.tag);
+  const icon = own?.icon ? { icon: own.icon } : {};
   for (const [kind, definition] of Object.entries(mailTagDefinitions)) {
     if (entry.tag === definition.id || (own && [definition.de, definition.en].some(name => name.toLowerCase() === own.name.trim().toLowerCase()))) {
-      return { tag: own?.name ?? definition.de, kind: kind as MailTagKind };
+      return { tag: own?.name ?? definition.de, kind: kind as MailTagKind, ...icon };
     }
   }
   return entry.kind === 'event' && entry.showInJournal !== false
-    ? { tag: own?.name ?? t('Ereignis'), kind: 'event' } : null;
+    ? { tag: own?.name ?? t('Ereignis'), kind: 'event', ...icon } : null;
 }

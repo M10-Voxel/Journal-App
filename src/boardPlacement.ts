@@ -1,9 +1,28 @@
 import type { BoardPlacement, Card, Patches } from './notebook';
 import { pageDirections } from './notebook.ts';
+import { weekDates } from './dates.ts';
 
-export type BoardPeriod = 'day' | 'month' | 'year';
-export const boardKey = (date: string, period: BoardPeriod = 'day') => period === 'day' ? date : `${period}:${date.slice(0, period === 'month' ? 7 : 4)}`;
-const periodBoard = (key: string) => key.startsWith('month:') || key.startsWith('year:');
+/** Every view can have a board (Einstellungen → Funktionen): a day's, a week's (`week:` its Monday), a month's
+ *  (`month:2026-11`), a quarter's (`quarter:2026-Q4`) or a year's (`year:2026`). */
+export type BoardPeriod = 'day' | 'week' | 'month' | 'quarter' | 'year';
+export function boardKey(date: string, period: BoardPeriod = 'day'): string {
+  if (period === 'day') return date;
+  if (period === 'week') return `week:${weekDates(date)[0]}`;
+  if (period === 'quarter') return `quarter:${date.slice(0, 4)}-Q${Math.floor((Number(date.slice(5, 7)) - 1) / 3) + 1}`;
+  return `${period}:${date.slice(0, period === 'month' ? 7 : 4)}`;
+}
+/** A period board's key: where a card keeps its own place there (`boards`), not a day in `dates`. */
+export const isPeriodBoard = (key: string) => /^(week|month|quarter|year):/.test(key);
+const periodBoard = isPeriodBoard;
+/** The period and a day of it for a board key (null for a day's board or an unknown key). */
+export function boardOfKey(key: string): { period: Exclude<BoardPeriod, 'day'>; date: string } | null {
+  let match = /^week:(\d{4}-\d{2}-\d{2})$/.exec(key);
+  if (match) return { period: 'week', date: match[1] };
+  if ((match = /^month:(\d{4}-\d{2})$/.exec(key))) return { period: 'month', date: `${match[1]}-01` };
+  if ((match = /^quarter:(\d{4})-Q([1-4])$/.exec(key))) return { period: 'quarter', date: `${match[1]}-${String((Number(match[2]) - 1) * 3 + 1).padStart(2, '0')}-01` };
+  if ((match = /^year:(\d{4})$/.exec(key))) return { period: 'year', date: `${match[1]}-01-01` };
+  return null;
+}
 const layoutKeys = ['boardX', 'x', 'y', 'z', 'w', 'h'] as const;
 export const cardWidth = (card: Card) => card.w ?? (card.kind === 'note' ? 232 : card.kind === 'image' ? 236 : 260);
 export const isOnBoard = (card: Card, key: string) => periodBoard(key) ? !!card.boards?.[key] : card.dates.includes(key);

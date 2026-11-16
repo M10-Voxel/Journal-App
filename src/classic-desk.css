@@ -76,7 +76,7 @@
 :root[data-layout='desk'][data-look='classic'] .nebula-cal-panel > .nebula-terminal-head > .nebula-cal-views { min-width: 0; flex: 0 1 auto; }
 /* The body. */
 :root[data-layout='desk'][data-look='classic'] .nebula-terminal-body { padding: 18px 22px 22px 22px; }
-:root[data-layout='desk'][data-look='classic'] :is(.nebula-terminal.is-board, .nebula-terminal:is(.is-rating, .is-scales, .is-activities)) .nebula-terminal-body { padding-left: 22px; }
+:root[data-layout='desk'][data-look='classic'] :is(.nebula-terminal.is-board, .nebula-terminal:is(.is-rating, .is-scales, .is-activities, .is-checklist)) .nebula-terminal-body { padding-left: 22px; }
 :root[data-layout='desk'][data-look='classic'] .nebula-panel-resize::after, :root[data-layout='desk'][data-look='classic'] .nebula-panel-width::after { background: var(--divider); }
 
 /* What runs inside the cards: the look's own type, not the terminal's. */
@@ -179,3 +179,4 @@
 :root[data-look='classic'] .nebula-panel.is-detached .nebula-window-tools button:hover { background: var(--hover); color: var(--strong); }
 :root[data-look='classic'] .nebula-panel.is-detached .nebula-window-tools button .icon { width: 14px; height: 14px; }
 :root[data-layout='desk'][data-look='classic'] .nebula-cal-panel > .nebula-terminal-head > :is(.nebula-window-focus, .nebula-calendar-toggle) { align-self: center; margin-top: 0; margin-bottom: 0; }
+:root[data-layout='desk'][data-look='classic'] .nebula-layout-slot[aria-pressed='true'] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--strong); box-shadow: none; }

@@ -1214,7 +1214,7 @@ async function checkScales() {
         assert(Math.abs(await evaluate(`document.querySelector('.nebula-panel.is-${id}').getBoundingClientRect().width`)-before.width)<1,'Changing height keeps the stack width during dragging.');
         await command('Input.dispatchMouseEvent',{type:'mouseReleased',x:before.x,y:before.y-240,button:'left',buttons:0,clickCount:1});
         assert(Math.abs(await evaluate(`document.querySelector('.nebula-panel.is-${id}').getBoundingClientRect().width`)-before.width)<1,'The saved height keeps the stack width.');
-        assert.equal(await evaluate(`JSON.parse(localStorage.getItem('journal.nebulaLayout.v1')).heights.${id}`),64);
+        assert.equal(await evaluate(`JSON.parse(localStorage.getItem('journal.nebulaLayout.v1')).views.day.heights.${id}`),64);
       }
       assert(await evaluate("(() => { const e=document.querySelector('.nebula-panel.is-entries').getBoundingClientRect(), s=document.querySelector('.nebula-stack[data-stack=rating]'); return Boolean(s) && [...s.children].map(p => p.dataset.panel).join()==='rating,scales,activities' && s.getBoundingClientRect().left>e.right; })()"), 'Nebula: a stack right of the entries.');
       assert.equal(await evaluate("document.querySelector('.nebula-poster-prose').textContent.includes('Bewertung " + ratingValue + " / 10')"), true);
@@ -1241,9 +1241,9 @@ async function checkScales() {
   assert(await evaluate("document.querySelector('.nebula-panel.is-scales').classList.contains('is-drop-stack-below')"), 'The landing place below the window is marked.');
   await release(scalesRim);
   await until("[...document.querySelector('.nebula-stack[data-stack=rating]')?.children ?? []].map(p => p.dataset.panel).join()==='rating,scales,entries,activities'");
-  assert.equal(await evaluate("JSON.parse(localStorage.getItem('journal.nebulaLayout.v1')).stacked.day.includes('entries')"), true);
+  assert.equal(await evaluate("JSON.parse(localStorage.getItem('journal.nebulaLayout.v1')).views.day.stacked.day.includes('entries')"), true);
   await pause(200); await screenshot('scales-nebula-stacked.png');
-  await evaluate("document.querySelector('.nebula-layout-reset').click()");
+  await evaluate("document.querySelector('.nebula-layout-reset.is-reset').click()");
   await until("[...document.querySelector('.nebula-stack[data-stack=rating]')?.children ?? []].map(p => p.dataset.panel).join()==='rating,scales,activities'");
   // The overview: the note with the ratings below it, the activities right.
   await key('2', 'Digit2', 2);
@@ -2296,9 +2296,9 @@ async function checkNebulaTheme() {
   // Remembered after a reload; then back to the first layout.
   await command('Page.reload');
   await until("[...document.querySelectorAll('.nebula-grid > .nebula-panel')].map(p => p.dataset.panel).join()==='rating,entries,calendar,board,scales,activities'");
-  await evaluate("document.querySelector('.nebula-layout-reset').click()");
+  await evaluate("document.querySelector('.nebula-layout-reset.is-reset').click()");
   await until("[...document.querySelectorAll('.nebula-grid .nebula-panel')].map(p => p.dataset.panel).join()==='entries,rating,scales,activities,board' && Boolean(document.querySelector('section.nebula-calendar.is-open'))");
-  assert.equal(await evaluate("Boolean(document.querySelector('.nebula-layout-reset'))"), false);
+  assert.equal(await evaluate("Boolean(document.querySelector('.nebula-layout-reset.is-reset'))"), false);
   // The running line is off (its code stays).
   assert.equal(await evaluate("document.querySelector('.nebula-marquee')"), null);
   // Reset gives the default layout; the width checks below start from the rating and board sharing a row again.
@@ -2380,7 +2380,7 @@ async function checkNebulaTheme() {
   await until("window.__uiTest.invoked.some(call => call[0]==='panel_detach' && call[1].kind==='board') && !document.querySelector('.nebula-grid > .nebula-panel.is-board')");
   await evaluate("window.__uiTest.emit('nebula:panel-closed','board')");
   await until("Boolean(document.querySelector('.nebula-grid > .nebula-panel.is-board'))");
-  await evaluate("document.querySelector('.nebula-layout-reset')?.click()");
+  await evaluate("document.querySelector('.nebula-layout-reset.is-reset')?.click()");
   await key('Escape'); await until("!document.querySelector('.nebula-calendar.is-open')");
   await command('Emulation.setDeviceMetricsOverride',{width:1180,height:780,deviceScaleFactor:1,mobile:false});
   // Back to the normal design: the pixel look chosen before returns with it; then off again.
@@ -5918,6 +5918,215 @@ try {
     console.log('Popup styles passed: planner, composer, icon picker and reminder choice in every popup look of the normal, journal (four) and Nebula designs (icons also in pixel).');
   } else if (process.env.JOURNAL_UI_SCOPE === 'journal-sticker') {
     await checkJournalSticker();
+  } else if (process.env.JOURNAL_UI_SCOPE === 'features') {
+    // Einstellungen → Funktionen: views and their modules in every layout and look. The day here has its entries, a note
+    // and its board (no values); the week everything (its own entries, rating and values, the checklist adding up the
+    // days, note, evaluation, board); the month is off; the notebook is off. The calendar is always there.
+    const origin = `http://127.0.0.1:${server.address().port}`;
+    await command('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
+    const features = { notebook:false, views:{ day:{ on:true, modules:['entries','note','board'] }, week:{ on:true, modules:['entries','rating','scales','activities','note','evaluation','board'] }, month:{ on:false, modules:['note','evaluation','board'] }, quarter:{ on:true, modules:['note','evaluation'] }, year:{ on:true, modules:['note','evaluation','board'] } } };
+    const structure = { classic:'.sidebar', book:'.book-stage', desk:'.nebula-desk' };
+    const tabs = { classic:'.journal-tab:not(.is-notebook)', book:'.book-register-tab', desk:'.nebula-tab' };
+    for (const layout of ['classic', 'book', 'desk']) for (const look of ['classic', 'journal', 'nebula']) {
+      const palette = look === 'journal' ? 'paper' : 'original';
+      await evaluate(`localStorage.setItem('journal.settings', JSON.stringify((({theme, ...rest}) => ({...rest, layout:'${layout}', look:'${look}', pixel:false, colorTheme:'${palette}', features:${JSON.stringify(features)}}))(JSON.parse(localStorage.getItem('journal.settings')||'{}')))); localStorage.setItem('journal.calendarDrawer','0'); localStorage.setItem('journal.notebook','1'); localStorage.setItem('journal.bookView','double'); localStorage.removeItem('journal.activityTimers.v1')`);
+      await command('Page.navigate', { url:origin });
+      await until(`document.documentElement.dataset.layout==='${layout}' && Boolean(document.querySelector('${structure[layout]}')) && document.querySelectorAll('.entry').length>=1`);
+      const where = `(${layout} + ${look})`;
+      // Only the views that are on; no notebook (its stored "open" is ignored), the calendar stays.
+      assert.deepEqual(await evaluate(`[...document.querySelectorAll('${tabs[layout]}')].map(tab => tab.dataset.periodMode ?? tab.textContent.trim())`).then(list => list.length), 4, `Four views ${where}.`);
+      assert.equal(await evaluate("Boolean(document.querySelector('.journal-tab.is-notebook, .notebook-tab, .nebula-notebook-toggle, .notebook'))"), false, `No notebook ${where}.`);
+      if (layout === 'classic') assert.equal(await evaluate("Boolean(document.querySelector('.sidebar .cal'))"), true, 'The calendar is always there.');
+      // The day: entries, its note, its board; no rating or checklist.
+      assert.equal(await evaluate("Boolean(document.querySelector('.editor'))"), true, `The day's entries ${where}.`);
+      if (layout !== 'book') {
+        assert.equal(await evaluate("Boolean(document.querySelector('.period-section[data-mode=day] .period-note textarea'))"), true, `The day's note ${where}.`);
+        assert.match(await evaluate("document.querySelector('.bulletin-board')?.dataset.boardKey ?? ''"), /^\d{4}-\d{2}-\d{2}$/, `The day's board ${where}.`);
+      } else assert.deepEqual(await evaluate("[...document.querySelectorAll('.book-cut-tab')].map(tab => tab.dataset.page)"), ['entries', 'notes', 'board'], `The day's pages ${where}.`);
+      assert.equal(await evaluate("Boolean(document.querySelector('#daily-rating, .period-list'))"), false, `No rating or checklist on the day ${where}.`);
+      // Alt+A adds a day entry only where the day's entries are shown: here they are.
+      // The week (Ctrl+2: the second view on).
+      await key('2', 'Digit2', 2);
+      await until("document.querySelector('[aria-current=page][data-period-mode=week], .journal-tab[aria-current=page]')?.textContent.match(/Woche|week/i) || document.querySelector('[data-period-mode=week][aria-current=page]')");
+      await until("Boolean(document.querySelector('.period-entries'))");
+      if (layout === 'book') assert.deepEqual(await evaluate("[...document.querySelectorAll('.book-cut-tab')].map(tab => tab.dataset.page)"), ['entries', 'data', 'notes', 'activities', 'board'], `The week's pages ${where}.`);
+      if (layout === 'desk') assert.deepEqual(await evaluate("['entries','rating','scales','checklist','notes','ratings','activities','board'].filter(id => !document.querySelector(`[data-panel=${id}]`))"), [], `Every module of the week has its window ${where}.`);
+      assert.equal(await evaluate("Boolean(document.querySelector('.period-list.is-period .period-item[data-activity-id=reading]'))"), true, `The week's checklist ${where}.`);
+      assert.equal(await evaluate("Boolean(document.querySelector('#week-rating'))"), true, `The week's own rating ${where}.`);
+      // A week entry: Alt+A starts a task, typing writes it into the period data under the week's key.
+      await key('a', 'KeyA', 1);
+      await until("document.activeElement?.classList.contains('period-entry-text')");
+      await command('Input.insertText', { text:'Wochenziel' });
+      await until("Object.values(window.__uiTest.periodData?.entries ?? {}).some(list => Object.values(list).some(entry => entry.text === 'Wochenziel'))");
+      const weekKey = await evaluate("Object.keys(window.__uiTest.periodData.entries).find(key => Object.values(window.__uiTest.periodData.entries[key]).some(entry => entry.text === 'Wochenziel'))");
+      assert.match(weekKey, /^week:\d{4}-\d{2}-\d{2}$/, 'Kept under the week\'s key.');
+      assert.equal(await evaluate(`new Date('${weekKey.slice(5)}T12:00:00').getDay()`), 1, 'The week\'s key is its Monday.');
+      await key('Enter');
+      await until("document.querySelectorAll('.period-entry').length === 2");
+      await key('Backspace');
+      await until("document.querySelectorAll('.period-entry').length === 1");
+      // The timer in the week records on today: the day's activity is checked, the timer is today's.
+      const today = await evaluate("(d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`)(new Date())");
+      if (layout !== 'book') {
+        await evaluate("document.querySelector('.period-list.is-period [data-activity-id=reading] .timer-start').click()");
+        await until(`Boolean(JSON.parse(localStorage.getItem('journal.activityTimers.v1')||'{}')['${today}:reading'])`);
+        await until(`window.__uiTest.periodData?.days?.['${today}']?.items?.reading?.done === true`);
+        await evaluate("document.querySelector('.period-list.is-period [data-activity-id=reading] .timer-pause').click()");
+        await evaluate("localStorage.removeItem('journal.activityTimers.v1')");
+      }
+      await screenshot(`features-${layout}-${look}.png`);
+    }
+    // The settings: the calendar cannot be switched off; the notebook and the views can; the last module stays.
+    await evaluate("localStorage.setItem('journal.settings', JSON.stringify((({theme, features, ...rest}) => ({...rest, layout:'classic', look:'classic', pixel:false, colorTheme:'original'}))(JSON.parse(localStorage.getItem('journal.settings')||'{}'))))");
+    await command('Page.navigate', { url:origin });
+    await until("Boolean(document.querySelector('.sidebar')) && document.querySelectorAll('.journal-tab').length === 6");
+    await key(',', 'Comma', 2);
+    await until("Boolean(document.querySelector('#settings-features-tab'))");
+    await evaluate("document.querySelector('#settings-features-tab').click()");
+    await until("Boolean(document.querySelector('[data-feature=notebook]'))");
+    assert.equal(await evaluate("document.querySelector('[aria-labelledby=feature-calendar]').disabled"), true, 'The calendar stays on.');
+    await evaluate("document.querySelector('[data-feature=notebook]').click()");
+    await until("!document.querySelector('.journal-tab.is-notebook')");
+    await evaluate("document.querySelector('[data-feature-mode=month]').click()");
+    await until("document.querySelectorAll('.journal-tab').length === 4");
+    assert.equal(await evaluate("Boolean(document.querySelector('[data-feature-view=month] .feature-modules'))"), false, 'A view switched off hides its modules.');
+    // Week: add the board; the pin picker of a day card now offers the week and the year.
+    await evaluate("document.querySelector('[data-feature-view=week] [data-feature-module=board] input').click()");
+    await until("JSON.parse(localStorage.getItem('journal.settings')).features.views.week.modules.includes('board')");
+    for (const module of ['note']) await evaluate(`document.querySelector('[data-feature-view=quarter] [data-feature-module=${module}] input').click()`);
+    assert.equal(await evaluate("document.querySelector('[data-feature-view=quarter] [data-feature-module=evaluation] input').disabled"), true, 'The last module of a view stays.');
+    for (const mode of ['week', 'quarter', 'year']) await evaluate(`document.querySelector('[data-feature-mode=${mode}]').click()`);
+    assert.equal(await evaluate("document.querySelector('[data-feature-mode=day]').disabled"), true, 'The last view stays on.');
+    await screenshot('features-settings.png');
+    await key('Escape'); await until("!document.querySelector('.settings')");
+    assert.equal(await evaluate("document.querySelectorAll('.journal-tab').length"), 1, 'Only the day is left.');
+    console.log('Feature checks passed: views and modules in all nine layouts and looks, a week\'s own entries and rating, its checklist with a timer recording on today, no notebook, the settings keeping the calendar, a view and a module.');
+  } else if (process.env.JOURNAL_UI_SCOPE === 'desk-scroll') {
+    // Scrolling the desk up and down by wheel in each look: how long the browser spends on styles, layout and painting,
+    // and how even the frames come. Scrolling must not restyle the whole desk on every frame.
+    const origin = `http://127.0.0.1:${server.address().port}`;
+    await command('Emulation.setDeviceMetricsOverride',{width:1440,height:800,deviceScaleFactor:1,mobile:false});
+    await command('Performance.enable', {});
+    const results = [];
+    for (const look of ['nebula', 'classic', 'journal']) {
+      const palette = look === 'journal' ? 'paper' : 'original';
+      await evaluate(`localStorage.setItem('journal.settings', JSON.stringify((({theme, features, ...rest}) => ({...rest, layout:'desk', look:'${look}', pixel:false, colorTheme:'${palette}'}))(JSON.parse(localStorage.getItem('journal.settings')||'{}')))); localStorage.setItem('journal.calendarDrawer','0'); localStorage.removeItem('journal.nebulaLayout')`);
+      await command('Page.navigate', { url:origin });
+      await until("Boolean(document.querySelector('.nebula-desk')) && document.querySelectorAll('.entry').length>=1");
+      await evaluate("document.fonts.ready.then(() => true)"); await pause(800);
+      const room = await evaluate("(d => d.scrollHeight - d.clientHeight)(document.querySelector('.nebula-desk'))");
+      assert(room > 200, `The desk has room to scroll (${look}: ${room}px).`);
+      const metric = async () => Object.fromEntries((await command('Performance.getMetrics', {})).metrics.map(item => [item.name, item.value]));
+      const idle0 = await metric(); await pause(1000); const idle1 = await metric();
+      await evaluate("window.__frames = []; (function tick(time) { window.__frames.push(time); if (window.__frames.length < 100000) requestAnimationFrame(tick); })(performance.now())");
+      const before = await metric();
+      const point = await evaluate("(r => ({ x: r.left + r.width / 2, y: r.top + 300 }))(document.querySelector('.nebula-terminals').getBoundingClientRect())");
+      for (let round = 0; round < 2; round++) for (const delta of [80, -80]) for (let step = 0; step < 14; step++) {
+        await command('Input.dispatchMouseEvent', { type:'mouseWheel', x:point.x, y:point.y, deltaX:0, deltaY:delta });
+        await pause(16);
+      }
+      await pause(300);
+      const after = await metric();
+      const frames = await evaluate("(f => f.slice(1).map((time, i) => time - f[i]))(window.__frames.splice(0))");
+      frames.sort((a, b) => a - b);
+      const ms = name => Math.round((after[name] - before[name]) * 1000);
+      results.push({ look, idleRecalcs: idle1.RecalcStyleCount - idle0.RecalcStyleCount, idleLayouts: idle1.LayoutCount - idle0.LayoutCount, style: ms('RecalcStyleDuration'), layout: ms('LayoutDuration'), recalcs: after.RecalcStyleCount - before.RecalcStyleCount, layouts: after.LayoutCount - before.LayoutCount,
+        frames: frames.length, p50: Math.round(frames[Math.floor(frames.length * .5)]), p95: Math.round(frames[Math.floor(frames.length * .95)]), worst: Math.round(frames.at(-1)) });
+    }
+    console.table(results);
+    console.log('Desk scroll measured in the three looks.');
+  } else if (process.env.JOURNAL_UI_SCOPE === 'desk-layouts') {
+    const origin = `http://127.0.0.1:${server.address().port}`;
+    await command('Emulation.setDeviceMetricsOverride',{width:1600,height:950,deviceScaleFactor:1,mobile:false});
+    const structure = { classic:'.sidebar', book:'.book-stage', desk:'.nebula-desk' };
+    const current = "document.querySelector('[data-period-mode][aria-current=page]')?.dataset.periodMode ?? [...document.querySelectorAll('.journal-tab')].findIndex(tab => tab.getAttribute('aria-current') === 'page')";
+    // 1. Switching off the view on screen: the nearest view that is on takes its place at once, nothing goes blank.
+    for (const layout of ['classic', 'book', 'desk']) {
+      await evaluate(`localStorage.setItem('journal.settings', JSON.stringify((({theme, features, ...rest}) => ({...rest, layout:'${layout}', look:'${layout === 'desk' ? 'nebula' : layout === 'book' ? 'journal' : 'classic'}', pixel:false}))(JSON.parse(localStorage.getItem('journal.settings')||'{}')))); localStorage.setItem('journal.calendarDrawer','0'); localStorage.removeItem('journal.nebulaLayout.v1'); localStorage.removeItem('journal.nebulaLayout.saved')`);
+      await command('Page.navigate', { url:origin });
+      await until(`Boolean(document.querySelector('${structure[layout]}')) && document.querySelectorAll('.entry').length>=1`);
+      errors.length = 0;
+      await key('3', 'Digit3', 2);
+      await until("Boolean(document.querySelector('.period-section[data-mode=month]'))");
+      await key(',', 'Comma', 2);
+      await until("Boolean(document.querySelector('#settings-features-tab'))");
+      await evaluate("document.querySelector('#settings-features-tab').click()");
+      await until("Boolean(document.querySelector('[data-feature-mode=month]'))");
+      await evaluate("document.querySelector('[data-feature-mode=month]').click()");
+      await pause(150);
+      assert.equal(await evaluate(`Boolean(document.querySelector('${structure[layout]}'))`), true, `The ${layout} layout is still there with the month switched off while shown.`);
+      await key('Escape'); await until("!document.querySelector('.settings')");
+      await until("Boolean(document.querySelector('.period-section[data-mode]'))");
+      assert.notEqual(await evaluate("document.querySelector('.period-section[data-mode]').dataset.mode"), 'month', `Another view is shown (${layout}).`);
+      assert(await evaluate("document.querySelector('.main').innerText.trim().length > 40"), `Something is drawn (${layout}).`);
+      assert.deepEqual(errors, [], `No errors (${layout}).`);
+      await screenshot(`view-off-${layout}.png`);
+    }
+    // 2. The desk: each view keeps its own arrangement; up to three are saved per view as numbers by the reset.
+    await evaluate(`localStorage.setItem('journal.settings', JSON.stringify((({theme, features, ...rest}) => ({...rest, layout:'desk', look:'nebula', pixel:false}))(JSON.parse(localStorage.getItem('journal.settings')||'{}')))); localStorage.removeItem('journal.nebulaLayout.v1'); localStorage.removeItem('journal.nebulaLayout.saved')`);
+    await command('Page.navigate', { url:origin });
+    await until("Boolean(document.querySelector('.nebula-desk')) && document.querySelectorAll('.entry').length>=1");
+    assert.equal(await evaluate("Boolean(document.querySelector('.nebula-layouts'))"), false, 'Nothing saved and the default arrangement: no row.');
+    const minimize = id => evaluate(`document.querySelector('.nebula-panel[data-panel=${id}] .nebula-panel-minimize').click()`);
+    const minimized = id => evaluate(`document.querySelector('.nebula-panel[data-panel=${id}] .nebula-panel-minimize').getAttribute('aria-expanded') === 'false'`);
+    await minimize('board');
+    await until("Boolean(document.querySelector('.nebula-layout-save'))");
+    await evaluate("document.querySelector('.nebula-layout-save').click()");
+    await until("Boolean(document.querySelector('[data-layout-slot=\"1\"][aria-pressed=true]'))");
+    assert.equal(await evaluate("Boolean(document.querySelector('.nebula-layout-save'))"), false, 'A saved arrangement is not offered for saving again.');
+    await minimize('entries');
+    await evaluate("document.querySelector('.nebula-layout-save').click()");
+    await until("Boolean(document.querySelector('[data-layout-slot=\"2\"][aria-pressed=true]'))");
+    await screenshot('desk-layouts-saved.png');
+    // Reset: the numbers stay where the reset was.
+    await evaluate("document.querySelector('.nebula-layout-reset.is-reset').click()");
+    await until("!document.querySelector('[data-layout-slot][aria-pressed=true]')");
+    assert.equal(await evaluate("document.querySelectorAll('.nebula-layouts button').length"), 2, 'Only the two numbers are left in the row.');
+    assert.equal(await minimized('board'), false);
+    await screenshot('desk-layouts-default.png');
+    // Choosing a number applies it.
+    await evaluate("document.querySelector('[data-layout-slot=\"1\"]').click()");
+    await until("document.querySelector('[data-layout-slot=\"1\"]').getAttribute('aria-pressed') === 'true'");
+    assert.equal(await minimized('board'), true); assert.equal(await minimized('entries'), false);
+    // The week has its own arrangement and its own (empty) places.
+    await key('2', 'Digit2', 2);
+    await until("Boolean(document.querySelector('.nebula-stage[data-period-mode=week]'))");
+    assert.equal(await evaluate("Boolean(document.querySelector('.nebula-layouts'))"), false, 'The week starts from the default without saved arrangements.');
+    await minimize('notes');
+    await key('1', 'Digit1', 2);
+    await until("Boolean(document.querySelector('.nebula-stage[data-period-mode=day]'))");
+    assert.equal(await minimized('board'), true, 'The day kept its arrangement.');
+    assert.equal(await evaluate("Boolean(document.querySelector('.nebula-panel[data-panel=notes]'))"), false);
+    // With three places taken a number is chosen to replace.
+    await minimize('rating'); await evaluate("document.querySelector('.nebula-layout-save').click()");
+    await until("Boolean(document.querySelector('[data-layout-slot=\"3\"][aria-pressed=true]'))");
+    await minimize('scales');
+    await evaluate("document.querySelector('.nebula-layout-save').click()");
+    await until("document.querySelector('.nebula-layout-save').classList.contains('is-choosing')");
+    await evaluate("document.querySelector('[data-layout-slot=\"2\"]').click()");
+    await until("document.querySelector('[data-layout-slot=\"2\"]').getAttribute('aria-pressed') === 'true'");
+    const saved = await evaluate("JSON.parse(localStorage.getItem('journal.nebulaLayout.saved'))");
+    assert.equal(saved.day.filter(Boolean).length, 3); assert.equal(saved.week.filter(Boolean).length, 0);
+    assert(saved.day[1].minimized.includes('scales'), 'Place 2 now holds the new arrangement.');
+    // Removing by right click leaves its number's place empty.
+    const point = await pointAt('[data-layout-slot="1"]');
+    await command('Input.dispatchMouseEvent',{type:'mousePressed',...point,button:'right',buttons:2,clickCount:1});
+    await command('Input.dispatchMouseEvent',{type:'mouseReleased',...point,button:'right',buttons:0,clickCount:1});
+    await until("Boolean(document.querySelector('[data-menu-id=remove], .context-menu [data-id=remove]')) || [...document.querySelectorAll('.context-menu button, [role=menuitem]')].some(b => /Löschen/.test(b.textContent))");
+    await evaluate("[...document.querySelectorAll('.context-menu button, [role=menuitem]')].find(b => /Löschen/.test(b.textContent)).click()");
+    await until("!document.querySelector('[data-layout-slot=\"1\"]')");
+    assert.deepEqual(await evaluate("[...document.querySelectorAll('[data-layout-slot]')].map(b => b.dataset.layoutSlot)"), ['2', '3']);
+    assert.deepEqual(errors, []);
+    // 3. A ticket shows its tag's icon in place of the dashes.
+    await evaluate(`window.__TAURI_INTERNALS__.invoke('save_tags',{tags:[...window.__uiTest.tags().filter(tag => tag.id !== 'ticket-tag'),{id:'ticket-tag',name:'Payment',color:'#76d982',icon:'credit-card'}]})`);
+    await evaluate(`(()=>{const day=window.__uiTest.shift(1);window.__uiTest.ticketDay=day;const current=window.__uiTest.day(day)??{date:day,title:'',body:'',revision:0,entries:[]};current.entries.push({id:crypto.randomUUID(),kind:'event',text:'Mit Icon',done:false,cancelled:false,priority:false,time:'09:00',end:'10:00',showInJournal:true,tag:'ticket-tag'},{id:crypto.randomUUID(),kind:'event',text:'Ohne Icon',done:false,cancelled:false,priority:false,time:'11:00',end:'12:00',showInJournal:true});current.revision++;return window.__uiTest.store(current)})()`);
+    await until("[...document.querySelectorAll('.nebula-ticket')].some(ticket => ticket.textContent.includes('Mit Icon'))");
+    assert.equal(await evaluate("Boolean([...document.querySelectorAll('.nebula-ticket')].find(ticket => ticket.textContent.includes('Mit Icon')).querySelector('.nebula-ticket-tag .nebula-ticket-icon'))"), true, 'The tag\'s icon is on the ticket.');
+    assert.equal(await evaluate("[...document.querySelectorAll('.nebula-ticket')].find(ticket => ticket.textContent.includes('Mit Icon')).querySelector('.nebula-ticket-tag').textContent.includes('---')"), false);
+    assert.equal(await evaluate("[...document.querySelectorAll('.nebula-ticket')].find(ticket => ticket.textContent.includes('Ohne Icon')).querySelector('.nebula-ticket-tag').textContent.includes('---')"), true, 'Without an icon the dashes stay.');
+    await evaluate("document.querySelector('.nebula-tickets').scrollIntoView()"); await pause(200);
+    await screenshot('desk-ticket-icon.png');
+    console.log('Desk checks passed: switching off the view on screen in every layout, an arrangement per view with three saved places (save, apply, replace, remove, reset), tag icons on tickets.');
   } else if (process.env.JOURNAL_UI_SCOPE === 'combos') {
     // Layout (what is where) and look (type, colours, shapes) are chosen apart: all nine pairs open, show their own
     // structure with the look's attributes, stay usable (settings open, a day turns) and throw nothing.

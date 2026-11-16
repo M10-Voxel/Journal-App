@@ -8,6 +8,8 @@ import { applyColors, colorThemeIds, defaultColorSettings, journalColorThemes, n
 import type { ColorSettings, ColorTheme } from './colors';
 import { applyScale, isUiScale } from './uiScale';
 import type { UiScale } from './uiScale';
+import { defaultFeatures, normalizeFeatures } from './features';
+import type { Features } from './features';
 
 // Device-local UI preferences live in localStorage. ThemeSync also mirrors language
 // to native preferences so the tray and reminders use it before a webview opens.
@@ -30,9 +32,9 @@ export const swipeAvailable = () => /android/i.test(navigator.userAgent) || (win
 /**
  * `previousColorTheme`: the palette chosen before switching to the journal style, restored when leaving it.
  */
-export interface Settings extends ColorSettings { actionLayout: ActionLayout; layout: Layout; look: Look; pixel: boolean; popupStyle: PopupStyle; language: Language; uiScale: UiScale; bookPaging: BookPaging; inkPressure: boolean; previousColorTheme?: ColorTheme }
+export interface Settings extends ColorSettings { actionLayout: ActionLayout; layout: Layout; look: Look; pixel: boolean; popupStyle: PopupStyle; language: Language; uiScale: UiScale; bookPaging: BookPaging; inkPressure: boolean; features: Features; previousColorTheme?: ColorTheme }
 const key = 'journal.settings';
-export const defaultSettings: Settings = { actionLayout: 'orbit', layout: 'classic', look: 'classic', pixel: false, popupStyle: 'a', language: 'de', uiScale: 'auto', bookPaging: 'page', inkPressure: true, ...defaultColorSettings };
+export const defaultSettings: Settings = { actionLayout: 'orbit', layout: 'classic', look: 'classic', pixel: false, popupStyle: 'a', language: 'de', uiScale: 'auto', bookPaging: 'page', inkPressure: true, features: defaultFeatures(), ...defaultColorSettings };
 
 export function loadSettings(): Settings {
   try {
@@ -40,7 +42,7 @@ export function loadSettings(): Settings {
     // Before layout and look were chosen apart there was one theme for both; and the pixel style used to be a theme of its own.
     return { actionLayout: stored.actionLayout === 'inline' || (stored.actionLayout === 'swipe' && swipeAvailable()) ? stored.actionLayout : defaultSettings.actionLayout, ...(design => ({ ...design, popupStyle: popupStyleFor(design.look, stored.popupStyle) }))(storedDesign(stored)),
       pixel: stored.pixel === true || stored.theme === 'pixel', language: stored.language === 'en' ? 'en' : 'de', uiScale: isUiScale(stored.uiScale) ? stored.uiScale : 'auto', ...normalizeColorSettings(stored),
-      bookPaging: stored.bookPaging === 'spread' ? 'spread' : 'page', inkPressure: stored.inkPressure !== false,
+      bookPaging: stored.bookPaging === 'spread' ? 'spread' : 'page', inkPressure: stored.inkPressure !== false, features: normalizeFeatures(stored.features),
       ...colorThemeIds.includes(stored.previousColorTheme as ColorTheme) ? { previousColorTheme: stored.previousColorTheme } : {} };
   } catch { return defaultSettings; }
 }
@@ -52,6 +54,8 @@ export function saveSettings(settings: Settings) {
   void applyScale(settings.uiScale, pixelActive(settings));
   applyColors(settings);
   setLanguage(settings.language);
+  // The views and modules on (featureStore.ts): this window at once, the others through the storage event.
+  try { window.dispatchEvent(new Event('journal:features')); } catch { /* no window */ }
   void emit('journal:theme', { layout: settings.layout, look: settings.look, pixel: settings.pixel, popupStyle: settings.popupStyle }).catch(() => {});
   void emit('journal:scale', { scale: settings.uiScale, pixel: pixelActive(settings) }).catch(() => {});
   void emit('journal:language', settings.language).catch(() => {});

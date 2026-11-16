@@ -79,3 +79,6 @@
   :is(.repeat-chip, .planner-reminder, .planner-repeat, .board-thread-primary)[aria-pressed='true'], .planner-time.is-active) { background: var(--holo) !important; color: #111 !important; }
 :root[data-look='nebula'][data-popups='b'] :is(.planner-confirm:not(:disabled), .tag-option.is-create:is(:hover, :focus-visible, [aria-selected='true'])) { background: var(--holo-positive) !important; color: #111 !important; }
 :root[data-look='nebula'][data-popups='b'] :is(.chrome-actions .chrome-cancel, .board-thread-cut):is(:hover, :focus-visible) { background: var(--holo-danger) !important; color: #111 !important; }
+/* The tag's own icon in place of the dashes after its name (Einstellungen → Tags). */
+.nebula-ticket-tag:has(.nebula-ticket-icon) { display: inline-flex; align-items: center; gap: .45em; }
+.nebula-ticket-icon { flex: none; width: 1.15em; height: 1.15em; }

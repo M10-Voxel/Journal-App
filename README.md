@@ -14,7 +14,8 @@ Pushes auf `Windows` veröffentlichen nach erfolgreichen Prüfungen automatisch 
 
 - Tagesnotizen mit Markdown, Aufgaben, Ereignissen und Erinnerungen.
 - Kalender mit Wiederholungen, mehrtägigen Einträgen sowie ICS-Import und -Export.
-- Notizblock sowie Tages-, Monats- und Jahrespinnwände mit verbundenen Notizen, Bildern und Links.
+- Notizblock sowie Pinnwände für Tag, Woche, Monat, Quartal und Jahr mit verbundenen Notizen, Bildern und Links.
+- Einstellbare Funktionen: jede Ansicht (Tag … Jahr) und ihre Bereiche – Einträge, Notiz, Bewertung, Werte, Checkliste, Auswertung, Pinnwand – einzeln ein- und ausschaltbar.
 - Aktivitäten, Zeiterfassung und Tagesbewertungen.
 - Farbige Tags, Filter, anpassbare Themes und optionaler Pixelstil.
 - Deutsche und englische Oberfläche, Tastenkürzel und Rückgängig/Wiederherstellen.

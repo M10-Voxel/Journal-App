@@ -5,6 +5,11 @@ import type { BoardPlacement, Card } from '../notebook';
 import { useLanguage, t } from '../i18n';
 import { Icon } from './Icon';
 import { Popover } from './Popover';
+import { periodTitle } from './PeriodNotes';
+import { useFeatures } from '../featureStore';
+import { periodBoards } from '../features';
+
+const boardNames = () => ({ week: t("Woche"), month: t("Monat"), quarter: t("Quartal"), year: t("Jahr") });
 
 /** The three-line action assigns the same card (or its whole connected group) to a period board. */
 export function BoardScopePicker({ cards, id, date, positions = {}, source }: { cards: Card[]; id: string; date: string; positions?: Record<string, BoardPlacement>; source?: string }) {
@@ -13,10 +18,9 @@ export function BoardScopePicker({ cards, id, date, positions = {}, source }: { 
   const label = t("Auf Pinnwänden anzeigen");
   const group = anchor ? cardGroups(cards).find(ids => ids.includes(id)) ?? [id] : [id];
   const selected = whole ? group : [id];
-  const targets = anchor ? [
-    { key: boardKey(date, 'month'), icon: 'month' as const, name: t("Monat"), detail: new Intl.DateTimeFormat(t("de-DE"), { month: 'long', year: 'numeric' }).format(new Date(`${date}T12:00:00`)) },
-    { key: boardKey(date, 'year'), icon: 'year' as const, name: t("Jahr"), detail: date.slice(0, 4) },
-  ] : [];
+  // Only the period boards that are on (Einstellungen → Funktionen); without any the action is not offered.
+  const periods = periodBoards(useFeatures());
+  const targets = anchor ? periods.map(period => ({ key: boardKey(date, period), icon: period, name: boardNames()[period], detail: periodTitle(date, period) })) : [];
   async function assign(key: string, show: boolean) {
     setBusy(true); setError('');
     const resolved = Object.fromEntries(layoutBoard(cards, source ?? date, 640).map(({ card, x, y, z }) => [card.id, { boardX: x, y, z, ...(card.w == null ? {} : { w: card.w }), ...(card.h == null ? {} : { h: card.h }) }]));
@@ -24,6 +28,7 @@ export function BoardScopePicker({ cards, id, date, positions = {}, source }: { 
     catch (reason) { setError(String(reason)); }
     finally { setBusy(false); }
   }
+  if (!periods.length) return null;
   return <>
     <button type="button" className="board-extra board-assign" title={label} aria-label={label} aria-haspopup="dialog" aria-expanded={!!anchor}
       onClick={event => { setWhole(false); setError(''); setAnchor(anchor ? null : event.currentTarget); }}><Icon name="details" /></button>

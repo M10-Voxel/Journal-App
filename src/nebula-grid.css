@@ -139,3 +139,10 @@
   .nebula-panel.is-upright .nebula-window-tools { order: 0; flex-direction: row; }
   .nebula-panel.is-upright .nebula-window-tools > button { width: 30px !important; height: 100% !important; border-bottom: 0 !important; border-left: 1px solid var(--nb-ink) !important; }
 }
+/* The view's saved arrangements (1–3), saving and the reset in one row at the reset's place. */
+.nebula-layouts { align-self: flex-end; display: flex; align-items: center; gap: 6px; margin-top: -6px; }
+.nebula-layouts .nebula-layout-reset { align-self: auto; margin-top: 0; }
+.nebula-layout-slot { min-width: 28px; text-align: center; font-variant-numeric: tabular-nums; }
+.nebula-layout-slot[aria-pressed='true'] { border-color: var(--nb-violet-light, var(--accent)); color: var(--strong, #fff); box-shadow: inset 0 -2px 0 var(--nb-violet-light, var(--accent)); }
+.nebula-layout-save.is-choosing { border-style: dashed; }
+.nebula-layouts:has(.is-choosing) .nebula-layout-slot { outline: 1px dashed var(--nb-violet-light, var(--accent)); outline-offset: 2px; }

@@ -31,3 +31,10 @@ test('finished entries and similarly named activities do not leak into tickets',
   assert.equal(ticketForEntry(entry({tag,cancelled:true}), [], activities), null);
   assert.equal(ticketForEntry(entry({tag:'activity-reading'}), [{id:'activity-reading',name:'Delivery',color:'#123456'}], activities), null);
 });
+
+test('a ticket carries its tag\'s icon when the tag has one', () => {
+  const activities = new Set();
+  const tags = [{ id: 'pay', name: 'Payment', color: '#123456', icon: 'credit-card' }, { id: 'plain', name: 'Plain', color: '#123456' }];
+  assert.equal(ticketForEntry(entry({ tag: 'pay' }), tags, activities)?.icon, 'credit-card');
+  assert.equal('icon' in ticketForEntry(entry({ tag: 'plain' }), tags, activities), false);
+});

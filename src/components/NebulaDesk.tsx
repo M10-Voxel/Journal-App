@@ -11,12 +11,12 @@ import type { ActivityDefinition } from '../periodData';
 import { useTags } from '../tagStore';
 import type { Entry } from '../journal';
 import type { PeriodMode } from '../periods';
-import { hasPinboard, periodBounds } from '../periods';
+import { periodBounds } from '../periods';
 import { plainText } from '../markdown';
 import { formatSpan } from '../planning';
 import { usePeriodData } from '../periodStore';
 import { ratingScale } from '../periodData';
-import { periodTitle } from './PeriodNotes';
+import { periodTitle, ratingName, scalesName } from './PeriodNotes';
 import { CompactMonth, useCalendarData, useNow } from './calendarShared';
 import { Icon } from './Icon';
 import type { IconName } from './Icon';
@@ -25,12 +25,13 @@ import { contextMenu } from './ContextMenu';
 import type { MenuItem } from './ContextMenu';
 import { useFloatingWindow, windowGrips, writeWindowRect } from './useFloatingWindow';
 import type { FloatingDrag } from './useFloatingWindow';
-import { cellsOf, columns, defaultLayout, displaySpans, dropTarget, floatPanel, headOf, leaveRow, minSpan, minPanelHeight, normalizeLayout, own, placePanel, resizeInRow, rowsOf, setHeight, setSpan, spanOf, toggleHalf, toggleMinimized, visiblePanels } from '../nebulaLayout';
+import { cellsOf, columns, defaultLayout, displaySpans, dropTarget, floatPanel, headOf, leaveRow, minSpan, minPanelHeight, normalizeLayout, normalizeSaved, normalizeViewLayouts, own, placePanel, removeLayout, resizeInRow, rowsOf, sameLayout, saveLayout, setHeight, setSpan, spanOf, toggleHalf, toggleMinimized, visiblePanels } from '../nebulaLayout';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { detachable } from './DetachedPanel';
 import type { DetachedKind } from './DetachedPanel';
-import type { Box, Drop, Family, NebulaLayout, PanelId, WindowId } from '../nebulaLayout';
+import { EntryIcon } from './EntryIcon';
+import type { Box, Drop, Family, NebulaLayout, PanelId, SavedLayouts, ViewLayouts, WindowId } from '../nebulaLayout';
 
 /**
  * Nebula: the app as a Y2K desktop. A grey rail on the left (status, turning days, the views as hooked tabs, the
@@ -80,7 +81,7 @@ function Marquee({ words }: { words: string[] }) {
 const timeOf = (now: Date) => `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
 /** What a ticket is for, which also picks its foil: delivery orange, payment green, appointments lilac, events sky. */
-type Upcoming = { date: string; entry: Entry; tag: string; kind: TicketKind };
+type Upcoming = { date: string; entry: Entry; tag: string; kind: TicketKind; icon?: string };
 /**
  * Mail categories and visible events, excluding activity time and ordinary calendar-only entries,
  * from today on; open ones only, and today's timed ones only until they are over.
@@ -116,7 +117,7 @@ function Ticket({ item, index, onOpen }: { item: Upcoming; index: number; onOpen
     <span className="nebula-ticket-band" aria-hidden="true" />
     {/* Above the band the tag and the serial; on it the entry (the mail's subject); below it, under a rule, the day and
         time. The stub past the tear line keeps the weekday and the black bar with its punched dot. */}
-    <span className="nebula-ticket-top"><span className="nebula-ticket-tag">{item.tag.toLowerCase()} ---</span><span className="nebula-ticket-number">No. {serial}</span></span>
+    <span className="nebula-ticket-top"><span className="nebula-ticket-tag">{item.tag.toLowerCase()} {item.icon ? <EntryIcon name={item.icon} className="nebula-ticket-icon" /> : '---'}</span><span className="nebula-ticket-number">No. {serial}</span></span>
     <strong className="nebula-ticket-text"><span>{text}</span></strong>
     <span className="nebula-ticket-bottom"><span className="nebula-ticket-date">{formatShortDate(item.date)}</span>{item.entry.time ? <time>{formatSpan(item.entry.time, item.entry.end)}</time> : <span>{t('ganztägig')}</span>}</span>
     <span className="nebula-ticket-mark" aria-hidden="true">{weekday.toUpperCase()}</span>
@@ -348,15 +349,26 @@ function Panel({ id, command, label, note, minimized, span, shownSpan = span, up
 const showMarquee = false;
 
 const layoutKey = 'journal.nebulaLayout.v1';
-function useNebulaLayout(): [NebulaLayout, (update: (layout: NebulaLayout) => NebulaLayout) => void] {
-  const [layout, setLayout] = useState<NebulaLayout>(() => { try { return normalizeLayout(JSON.parse(localStorage.getItem(layoutKey) ?? 'null')); } catch { return defaultLayout(); } });
-  const change = (update: (layout: NebulaLayout) => NebulaLayout) => setLayout(current => {
-    const next = update(current);
-    try { localStorage.setItem(layoutKey, JSON.stringify(next)); } catch { /* this session */ }
+const savedKey = 'journal.nebulaLayout.saved';
+const read = <T,>(key: string, normalize: (raw: unknown) => T): T => { try { return normalize(JSON.parse(localStorage.getItem(key) ?? 'null')); } catch { return normalize(null); } };
+const write = (key: string, value: unknown) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* this session */ } };
+/** The arrangement of the view shown (each view keeps its own, nebulaLayout.ts normalizeViewLayouts) and the view's saved
+ *  arrangements (up to three). */
+function useNebulaLayout(mode: PeriodMode) {
+  const [views, setViews] = useState<ViewLayouts>(() => read(layoutKey, normalizeViewLayouts));
+  const change = (update: (layout: NebulaLayout) => NebulaLayout) => setViews(current => {
+    const next = { ...current, [mode]: update(current[mode]) };
+    write(layoutKey, { views: next });
     return next;
   });
-  useViewHistory(layout, value => { setLayout(value); localStorage.setItem(layoutKey, JSON.stringify(value)); });
-  return [layout, change];
+  useViewHistory(views, value => { setViews(value); write(layoutKey, { views: value }); });
+  const [saved, setSaved] = useState<SavedLayouts>(() => read(savedKey, normalizeSaved));
+  const changeSaved = (update: (slots: (NebulaLayout | null)[]) => (NebulaLayout | null)[]) => setSaved(current => {
+    const next = { ...current, [mode]: update(current[mode]) };
+    write(savedKey, next);
+    return next;
+  });
+  return { layout: views[mode], changeLayout: change, slots: saved[mode], changeSaved };
 }
 
 /** The poster's big figure: the day, the week's number, the month, the quarter or the year. */
@@ -385,11 +397,11 @@ function Orbit() {
 export function NebulaBackdrop() {
   const pixels = [[6, 12, 18, 6], [9, 14, 6, 6], [71, 8, 26, 4], [84, 64, 8, 8], [42, 88, 30, 3], [92, 30, 5, 14], [3, 72, 10, 10], [58, 4, 6, 6], [30, 40, 4, 4], [66, 94, 12, 4]];
   return <div className="nebula-backdrop" aria-hidden="true">
-    <svg className="nebula-orbits" viewBox="0 0 1000 700" preserveAspectRatio="xMidYMid slice">
-      <g className="nebula-orbit-a"><ellipse cx="500" cy="350" rx="620" ry="150" /></g>
-      <g className="nebula-orbit-b"><ellipse cx="500" cy="350" rx="520" ry="110" /></g>
-      <g className="nebula-orbit-c"><ellipse cx="500" cy="350" rx="700" ry="220" /></g>
-    </svg>
+    {/* Each orbit is an <svg> of its own that turns as a whole: the compositor turns it without restyling, laying out or
+        repainting anything (turning shapes inside one SVG would redraw it on every frame). */}
+    {([['a', 620, 150], ['b', 520, 110], ['c', 700, 220]] as const).map(([name, rx, ry]) => <svg key={name} className={`nebula-orbits nebula-orbit-${name}`} viewBox="0 0 1000 700" preserveAspectRatio="xMidYMid slice">
+      <ellipse cx="500" cy="350" rx={rx} ry={ry} />
+    </svg>)}
     <svg className="nebula-waves" viewBox="0 0 240 40" preserveAspectRatio="none">
       {[0, 1, 2].map(row => <path key={row} d={`M0 ${10 + row * 10} q 10 -8 20 0 t 20 0 t 20 0 t 20 0 t 20 0 t 20 0 t 20 0 t 20 0 t 20 0 t 20 0 t 20 0 t 20 0`} />)}
     </svg>
@@ -399,14 +411,13 @@ export function NebulaBackdrop() {
 }
 
 export function NebulaDesk({ mode, date, today, modes, modeLabels, dirty, title, onTitleChange, stats, onMode, onStep, onToday, stepLabels, datePicker, tagFilter,
-  entries, rating: ratingPanel, scales, board, notes, ratings, activities, calendar, calendarOpen, onCalendarToggle, onCalendarClose, notebook, notebookOpen = false, onNotebookToggle, onNotebookClose, onOpenDay, onNavigate, dayCalendar, scrollRef, disabled }: {
+  panels, available, calendar, calendarOpen, onCalendarToggle, onCalendarClose, notebook, notebookOpen = false, onNotebookToggle, onNotebookClose, onOpenDay, onNavigate, dayCalendar, scrollRef, disabled }: {
   mode: PeriodMode; date: string; today: string; modes: readonly PeriodMode[]; modeLabels: string[]; dirty: boolean; title: string; onTitleChange: (title: string) => void; stats: NebulaStats;
   onMode: (mode: PeriodMode) => void; onStep: (step: 1 | -1) => void; onToday: () => void; stepLabels: { prev: { label: string; tip: string }; next: { label: string; tip: string } };
   /** The date as a button opening the mini calendar (Ctrl+G). */
   datePicker: ReactNode; tagFilter: ReactNode;
-  /** The windows' contents: the day's entries, rating, day values (`scales`) and board; the overview's note and ratings;
-   *  the activities (the day's checklist or the overview's activities, whichever is shown). */
-  entries: ReactNode; rating: ReactNode; scales: ReactNode; board: ReactNode; notes: ReactNode; ratings: ReactNode; activities: ReactNode;
+  /** The own windows' contents (see nebulaLayout.ts PanelId), and which of them the view's modules show. */
+  panels: Partial<Record<PanelId, ReactNode>>; available: readonly PanelId[];
   calendar: ReactNode; calendarOpen: boolean; onCalendarToggle: () => void; onCalendarClose: () => void;
   /** The notebook: a window of its own like the calendar's; with both open each takes half of the middle. */
   notebook?: ReactNode; notebookOpen?: boolean; onNotebookToggle?: () => void; onNotebookClose?: () => void;
@@ -434,7 +445,7 @@ export function NebulaDesk({ mode, date, today, modes, modeLabels, dirty, title,
   const [start, end] = periodBounds(date, mode);
   const isToday = mode === 'day' ? date === today : start <= today && today <= end;
   const word = mode === 'day' ? (date === today ? t('heute') : dateFormat({ weekday: 'long' }).format(noon(date)).toLowerCase())
-    : modeLabels[modes.indexOf(mode)].toLowerCase();
+    : (modeLabels[modes.indexOf(mode)] ?? periodTitle(date, mode)).toLowerCase();
   const dayArg = mode === 'day' ? `--day ${date}` : `--${mode} ${start}`;
   const prose = mode === 'day'
     ? [stats.entries === 1 ? t('Ein Eintrag') : t('{0} Einträge', stats.entries), t('{0} offen', stats.open), t('{0} erledigt', stats.done),
@@ -446,8 +457,16 @@ export function NebulaDesk({ mode, date, today, modes, modeLabels, dirty, title,
   useEffect(() => {
     const desk = scrollRef.current, poster = posterRef.current;
     if (!desk || !poster) return;
-    let frame = 0;
-    const measure = () => { frame = 0; desk.style.setProperty('--nb-poster-shown', `${Math.max(0, poster.offsetHeight + 18 - desk.scrollTop)}px`); desk.style.setProperty('--nb-poster-h', `${poster.offsetHeight}px`); };
+    // The values go on the column of the poster and the calendar only, and only when they change: set on the desk, every
+    // scrolled frame would restyle every window on it (custom properties are inherited).
+    const side = poster.parentElement ?? desk;
+    let frame = 0, shown = '', height = '';
+    const measure = () => {
+      frame = 0;
+      const nextShown = `${Math.max(0, poster.offsetHeight + 18 - desk.scrollTop)}px`, nextHeight = `${poster.offsetHeight}px`;
+      if (nextShown !== shown) { shown = nextShown; side.style.setProperty('--nb-poster-shown', shown); }
+      if (nextHeight !== height) { height = nextHeight; side.style.setProperty('--nb-poster-h', height); }
+    };
     const later = () => { if (!frame) frame = requestAnimationFrame(measure); };
     measure();
     desk.addEventListener('scroll', later, { passive: true });
@@ -466,9 +485,9 @@ export function NebulaDesk({ mode, date, today, modes, modeLabels, dirty, title,
 
   // The grid of windows in the middle (nebulaLayout.ts): its order, widths, minimized windows, heights; the calendar and
   // notebook while docked in it; the day's own windows floating over the desk.
-  const [layout, changeLayout] = useNebulaLayout();
+  const { layout, changeLayout, slots, changeSaved } = useNebulaLayout(mode);
   const family: Family = mode === 'day' ? 'day' : 'period';
-  const openWindows = { calendar: calendarOpen, notebook: notebookOpen && Boolean(notebook), board: hasPinboard(mode) };
+  const openWindows = { calendar: calendarOpen, notebook: notebookOpen && Boolean(notebook), board: available.includes('board'), available };
   // Windows pulled out of the journal (their own windows now); the board comes back when its window closes.
   const [detached, setDetached] = useState<PanelId[]>([]);
   useEffect(() => {
@@ -485,9 +504,9 @@ export function NebulaDesk({ mode, date, today, modes, modeLabels, dirty, title,
   const notebookOpenRef = useRef(notebookOpen); notebookOpenRef.current = notebookOpen;
   const shown = visiblePanels(layout, family, openWindows).filter(id => !detached.includes(id));
   const shownRef = useRef(shown); shownRef.current = shown;
-  const floatingOwn = layout.floating.filter(id => own[family].includes(id) && !detached.includes(id) && (id !== 'board' || openWindows.board));
+  const floatingOwn = layout.floating.filter(id => own[family].includes(id) && !detached.includes(id) && available.includes(id));
   const docked = (id: WindowId) => layout.docked.includes(id);
-  const isOpen = (id: PanelId) => id === 'calendar' ? calendarOpen : id === 'notebook' ? openWindows.notebook : !detached.includes(id) && (id !== 'board' || openWindows.board);
+  const isOpen = (id: PanelId) => id === 'calendar' ? calendarOpen : id === 'notebook' ? openWindows.notebook : !detached.includes(id) && available.includes(id);
   // Focus: any window that is there to see (open, not minimized; in the grid or floating) and the overview's calendar.
   const present = (id: FocusId) => id === 'overview' || (isOpen(id) && (floatingOwn.includes(id) || (id === 'calendar' || id === 'notebook') && !docked(id)
     || shown.includes(id) && !layout.minimized.includes(id)));
@@ -565,14 +584,27 @@ export function NebulaDesk({ mode, date, today, modes, modeLabels, dirty, title,
     };
     header.addEventListener('pointermove', move); header.addEventListener('pointerup', end); header.addEventListener('pointercancel', end);
   }
-  const panelLabels: Record<PanelId, string> = { entries: t('Einträge'), rating: t('Tagesbewertung'), scales: t('Tageswerte'), board: t('Pinnwand'), notes: t('Notiz'), ratings: t('Bewertungen'), activities: t('Aktivitäten'), calendar: t('Kalender'), notebook: t('Notizen') };
-  const commandOf = (id: PanelId) => id === 'entries' || id === 'notes' || id === 'activities' || id === 'board' || id === 'ratings' ? `./${id}.sh ${dayArg}`
+  const panelLabels: Record<PanelId, string> = { entries: t('Einträge'), rating: ratingName(mode), scales: scalesName(mode), board: t('Pinnwand'), notes: t('Notiz'), ratings: t('Bewertungen'), activities: mode === 'day' ? t('Aktivitäten') : t('Aktivitäten im Überblick'), checklist: t('Checkliste'), calendar: t('Kalender'), notebook: t('Notizen') };
+  const periodPanel = (id: PanelId) => id === 'entries' || id === 'notes' || id === 'activities' || id === 'board' || id === 'ratings' || id === 'checklist' || (mode !== 'day' && (id === 'rating' || id === 'scales'));
+  const commandOf = (id: PanelId) => periodPanel(id) ? `./${id}.sh ${dayArg}`
     : ({ rating: './rating.sh', scales: './scales.sh', calendar: './calendar.sh', notebook: './notes.sh --tree' } as Record<string, string>)[id];
   // The small word on a label (journal look): the day or period a window shows.
   const shownWhen = mode === 'day' ? formatShortDate(date) : periodTitle(date, mode);
-  const noteOf = (id: PanelId) => id === 'entries' || id === 'notes' || id === 'activities' || id === 'board' || id === 'ratings' ? shownWhen : undefined;
-  const panelContent: Record<PanelId, ReactNode> = { entries, rating: ratingPanel, scales, board, notes, ratings, activities, calendar, notebook };
+  const noteOf = (id: PanelId) => periodPanel(id) ? shownWhen : undefined;
+  const panelContent: Partial<Record<PanelId, ReactNode>> = { ...panels, calendar, notebook };
   const isDefault = JSON.stringify(layout) === JSON.stringify(defaultLayout());
+  // Saved arrangements: the one matching the current arrangement is pressed; saving is offered for an arrangement not
+  // saved yet (with all three places taken, a number is chosen to replace).
+  const activeSlot = slots.findIndex(slot => slot && sameLayout(slot, layout));
+  const full = slots.every(Boolean), canSave = activeSlot < 0 && !isDefault;
+  const [replacing, setReplacing] = useState(false);
+  useEffect(() => { if (!canSave) setReplacing(false); }, [canSave, mode]);
+  const slotMenu = (index: number) => contextMenu(() => ({ title: t('Anordnung {0}', index + 1), command: `layout --slot ${index + 1}`, items: [
+    { id: 'apply', command: 'load', label: t('Anwenden'), icon: 'layout', run: () => changeLayout(() => normalizeLayout(slots[index]!)) },
+    { id: 'replace', command: 'save', label: t('Durch aktuelle Anordnung ersetzen'), icon: 'save', disabled: activeSlot === index, run: () => changeSaved(current => saveLayout(current, layout, index)) },
+    '-',
+    { id: 'remove', command: 'rm', label: t('Löschen'), icon: 'trash', danger: true, run: () => changeSaved(current => removeLayout(current, index)) },
+  ] }));
   const [barSlots, setBarSlots] = useState<{ center: HTMLElement; end: HTMLElement } | null>(null);
   useLayoutEffect(() => {
     const center = document.querySelector<HTMLElement>('.nebula-bar-center'), end = document.querySelector<HTMLElement>('.nebula-bar-end');
@@ -658,7 +690,20 @@ export function NebulaDesk({ mode, date, today, modes, modeLabels, dirty, title,
           {drop?.floating && !drop.shift && !drop.out && <p className="nebula-dock-hint" role="status">{t('⇧ halten und loslassen: hier andocken')}</p>}
         </div>
         {drop?.out && <p className="nebula-detach-hint" role="status">{t('Loslassen: als eigenes Fenster')}</p>}
-        {!isDefault && <button type="button" className="nebula-layout-reset" title={t('Fenster wieder wie am Anfang anordnen')} onClick={() => changeLayout(() => defaultLayout())}>{sticker ? t('Anordnung zurücksetzen') : './layout --reset'}</button>}
+        {/* The view's saved arrangements as numbers (1–3), saving the current one, and the reset: one row, the numbers
+            where the reset would be while the arrangement is the default. A number's right click replaces or removes it. */}
+        {(slots.some(Boolean) || !isDefault) && <div className="nebula-layouts" role="group" aria-label={t('Anordnungen')}>
+          {slots.map((slot, index) => slot && <button type="button" key={index} className="nebula-layout-reset nebula-layout-slot" data-layout-slot={index + 1}
+            aria-pressed={activeSlot === index} aria-label={replacing ? t('Anordnung {0} ersetzen', index + 1) : t('Anordnung {0}', index + 1)}
+            title={replacing ? t('Hier speichern') : t('Anordnung {0} · Rechtsklick: ersetzen oder löschen', index + 1)}
+            onClick={() => { if (replacing) { changeSaved(current => saveLayout(current, layout, index)); setReplacing(false); } else changeLayout(() => normalizeLayout(slot)); }}
+            onContextMenu={slotMenu(index)}>{index + 1}</button>)}
+          {canSave && <button type="button" className={`nebula-layout-reset nebula-layout-save${replacing ? ' is-choosing' : ''}`} aria-pressed={replacing || undefined}
+            title={full ? t('Alle drei Plätze sind belegt: eine Zahl wählen, um sie zu ersetzen') : t('Diese Anordnung speichern')}
+            onClick={() => { if (full) setReplacing(value => !value); else changeSaved(current => saveLayout(current, layout)); }}>
+            {replacing ? t('Platz wählen …') : sticker ? t('Anordnung speichern') : './layout --save'}</button>}
+          {!isDefault && <button type="button" className="nebula-layout-reset is-reset" title={t('Fenster wieder wie am Anfang anordnen')} onClick={() => { setReplacing(false); changeLayout(() => defaultLayout()); }}>{sticker ? t('Anordnung zurücksetzen') : './layout --reset'}</button>}
+        </div>}
         <section className="nebula-tickets" aria-label={t('Nächste Termine')}>
           <h2 className="nebula-label">{t('Nächste Termine')} <span aria-hidden="true">────→</span></h2>
           {upcoming.length ? <div ref={ticketRow} className="nebula-ticket-row" style={{ gridTemplateColumns: `repeat(${Math.min(ticketCount, upcoming.length)}, minmax(0, 1fr))` }}>{upcoming.slice(0, ticketCount).map((item, index) => <Ticket key={`${item.date}:${item.entry.id}`} item={item} index={index} onOpen={onOpenDay} />)}</div>

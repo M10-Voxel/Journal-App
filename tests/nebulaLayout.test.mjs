@@ -24,8 +24,8 @@ test('by default the entries stand left of a stack of rating, day values and act
 test('a stored layout is made whole: own windows always there, unknown ids and stray windows gone', () => {
   assert.deepEqual(normalizeLayout(null), defaultLayout());
   const layout = normalizeLayout({ order: { day: ['board', 'calendar', 'nonsense', 'board', 'entries', 'rating', 'scales', 'activities'], period: [] }, docked: ['notebook'], minimized: ['rating', 'x'], heights: { board: 300, rating: 20, nonsense: 400 }, stacked: { day: ['scales'], period: [] } });
-  assert.deepEqual(layout.order.day, ['board', 'entries', 'rating', 'scales', 'activities', 'notebook'], 'The calendar is not docked, so it leaves; the docked notebook joins.');
-  assert.deepEqual(layout.order.period, ['notes', 'ratings', 'activities', 'board', 'notebook']);
+  assert.deepEqual(layout.order.day, ['board', 'entries', 'rating', 'scales', 'activities', 'notes', 'notebook'], 'The calendar is not docked, so it leaves; the docked notebook joins.');
+  assert.deepEqual(layout.order.period, ['notes', 'ratings', 'activities', 'board', 'entries', 'rating', 'scales', 'checklist', 'notebook']);
   assert.deepEqual(layout.minimized, ['rating']);
   assert.deepEqual(layout.heights, { board: 300 }, 'Heights below the minimum are dropped.');
   assert.deepEqual(layout.stacked, { day: ['scales'], period: [] }, 'Stored stacks are kept.');
@@ -33,14 +33,14 @@ test('a stored layout is made whole: own windows always there, unknown ids and s
 
 test("an older layout's data window becomes the rating, day values and activities in its place", () => {
   const layout = normalizeLayout({ order: { day: ['board', 'entries', 'data'], period: ['activities', 'notes', 'board'] }, minimized: ['data'], spans: { entries: 8, data: 4 }, floating: [], docked: [], heights: { data: 520, entries: 520 } });
-  assert.deepEqual(layout.order.day, ['board', 'entries', 'rating', 'scales', 'activities']);
-  assert.deepEqual(layout.order.period, ['activities', 'notes', 'ratings', 'board'], 'The ratings join after the note.');
+  assert.deepEqual(layout.order.day, ['board', 'entries', 'rating', 'scales', 'activities', 'notes']);
+  assert.deepEqual(layout.order.period, ['activities', 'notes', 'ratings', 'board', 'entries', 'rating', 'scales', 'checklist'], 'The ratings join after the note.');
   assert.deepEqual(layout.minimized, ['rating', 'scales', 'activities']);
   assert.equal(spanOf(layout, 'rating'), 4, 'The rating heads the stack with the old width.');
   assert.deepEqual(layout.stacked, defaultLayout().stacked);
   const floating = normalizeLayout({ order: { day: ['entries', 'data', 'board'] }, floating: ['data'] });
   assert.deepEqual(floating.floating, ['rating', 'scales', 'activities']);
-  assert.deepEqual(normalizeLayout({ order: { day: ['board', 'entries'] } }).order.day, ['board', 'entries', 'rating', 'scales', 'activities'], 'Without the data window: after the entries.');
+  assert.deepEqual(normalizeLayout({ order: { day: ['board', 'entries'] } }).order.day, ['board', 'entries', 'rating', 'scales', 'activities', 'notes'], 'Without the data window: after the entries.');
 });
 
 test('docking puts the calendar into both grids, at the chosen place in this one', () => {
@@ -55,13 +55,14 @@ test('docking puts the calendar into both grids, at the chosen place in this one
 
 test('old period layouts gain a board panel while weeks and quarters can hide it without losing its place', () => {
   const layout=normalizeLayout({order:{period:['activities','notes']},heights:{board:480}});
-  assert.deepEqual(layout.order.period,['activities','notes','ratings','board']);
-  assert.deepEqual(visiblePanels(layout,'period',{...open,board:true}),['activities','notes','ratings','board']);
-  assert.deepEqual(visiblePanels(layout,'period',{...open,board:false}),['activities','notes','ratings']);
+  assert.deepEqual(layout.order.period,['activities','notes','ratings','board','entries','rating','scales','checklist']);
+  const available=['notes','ratings','activities','board'];
+  assert.deepEqual(visiblePanels(layout,'period',{...open,board:true,available}),['activities','notes','ratings','board']);
+  assert.deepEqual(visiblePanels(layout,'period',{...open,board:false,available}),['activities','notes','ratings']);
   assert.equal(layout.heights.board,480);
-  const front=movePanel(layout,'period','board',0,{...open,board:true});
-  assert.deepEqual(visiblePanels(front,'period',{...open,board:true}),['board','activities','notes','ratings']);
-  assert.deepEqual(visiblePanels(front,'period',{...open,board:false}),['activities','notes','ratings']);
+  const front=movePanel(layout,'period','board',0,{...open,board:true,available});
+  assert.deepEqual(visiblePanels(front,'period',{...open,board:true,available}),['board','activities','notes','ratings']);
+  assert.deepEqual(visiblePanels(front,'period',{...open,board:false,available}),['activities','notes','ratings']);
 });
 
 test('moving counts the shown windows; hidden ones keep their place', () => {
@@ -184,6 +185,7 @@ test("a drop on a window's upper or lower rim puts it into that window's stack",
   assert.deepEqual(dropTarget(boxes, { x: 790, y: 300 }), { index: 4, beside: { id: 'rating', side: 'right' } }, 'Beside a stacked window: beside its whole cell.');
   assert.deepEqual(dropTarget(boxes, { x: 640, y: 300 }), { index: 4 }, 'In the middle of a stacked window: after the whole cell, never inside it.');
   const ids = ['entries', 'rating', 'scales', 'activities', 'board'];
+  const open = { calendar: true, notebook: false, available: ids };
   // The board stacked below the activities.
   const below = placePanel(defaultLayout(), 'day', ids, 'board', { index: 4, stack: { id: 'activities', side: 'below' } }, open, true);
   assert.deepEqual(cellsOf(below, visiblePanels(below, 'day', open), 'day'), [['entries'], ['rating', 'scales', 'activities', 'board']]);
@@ -195,4 +197,46 @@ test("a drop on a window's upper or lower rim puts it into that window's stack",
   const out = placePanel(defaultLayout(), 'day', ids, 'scales', { index: 4 }, open, true);
   assert.deepEqual(cellsOf(out, visiblePanels(out, 'day', open), 'day'), [['entries'], ['rating', 'activities'], ['board'], ['scales']]);
   assert.equal(spanOf(out, 'scales'), 12);
+});
+
+test('the windows shown follow the view\'s modules; the others keep their place', async () => {
+  const { panelsOf } = await import('../src/nebulaLayout.ts');
+  assert.deepEqual(panelsOf(new Set(['entries', 'rating', 'scales', 'activities', 'board']), 'day'), ['entries', 'rating', 'scales', 'activities', 'board']);
+  assert.deepEqual(panelsOf(new Set(['entries', 'note', 'activities', 'evaluation', 'board']), 'period'), ['entries', 'checklist', 'notes', 'ratings', 'activities', 'board'], 'An overview\'s checklist is a window of its own; the evaluation is the chart and the overview.');
+  const layout = defaultLayout();
+  const available = panelsOf(new Set(['entries', 'note']), 'period');
+  assert.deepEqual(visiblePanels(layout, 'period', { ...open, available }), ['entries', 'notes'], "By default an overview's own entries come first.");
+  assert.deepEqual(visiblePanels(layout, 'day', { ...open, available: panelsOf(new Set(['note', 'board']), 'day') }), ['board', 'notes'], 'A day\'s note is a window of its own.');
+});
+
+test('each view keeps its own arrangement; an older single layout becomes every view\'s', async () => {
+  const { normalizeViewLayouts, sameLayout } = await import('../src/nebulaLayout.ts');
+  const old = { ...defaultLayout(), minimized: ['rating'] };
+  const views = normalizeViewLayouts(old);
+  for (const mode of ['day', 'week', 'month', 'quarter', 'year']) assert(sameLayout(views[mode], old), mode);
+  const stored = normalizeViewLayouts({ views: { week: { ...defaultLayout(), minimized: ['notes'] } } });
+  assert.deepEqual(stored.week.minimized, ['notes']);
+  assert.deepEqual(stored.day, defaultLayout(), 'A view without its own arrangement starts from the default.');
+  assert.deepEqual(normalizeViewLayouts(null).year, defaultLayout());
+});
+
+test('up to three saved arrangements per view, at fixed places', async () => {
+  const { normalizeSaved, saveLayout, removeLayout, sameLayout } = await import('../src/nebulaLayout.ts');
+  const one = { ...defaultLayout(), minimized: ['rating'] }, two = { ...defaultLayout(), minimized: ['board'] }, three = { ...defaultLayout(), spans: { entries: 6 } };
+  let slots = normalizeSaved(null).day;
+  assert.deepEqual(slots, [null, null, null]);
+  slots = saveLayout(saveLayout(saveLayout(slots, one), two), three);
+  assert(sameLayout(slots[2], three));
+  assert.deepEqual(saveLayout(slots, defaultLayout()), slots, 'All three taken: nothing is saved without a place.');
+  slots = saveLayout(slots, defaultLayout(), 1);
+  assert(sameLayout(slots[1], defaultLayout()), 'A chosen place is replaced.');
+  slots = removeLayout(slots, 0);
+  assert.equal(slots[0], null, 'Removing leaves the place empty; the others keep their numbers.');
+  assert(sameLayout(slots[2], three));
+  assert(sameLayout(saveLayout(slots, two)[0], two), 'The next one fills the free place.');
+  const stored = normalizeSaved({ week: [one, 'x', null, two], nonsense: [one] });
+  assert.equal(stored.week.length, 3);
+  assert(sameLayout(stored.week[0], one));
+  assert.equal(stored.week[1], null);
+  assert.deepEqual(stored.day, [null, null, null]);
 });

@@ -10,8 +10,18 @@ export interface RatingScale { color: string; min: number; max: number }
 /** `scales`: the day values by the scale's id (an object, so syncing merges them one by one, see sync/merge.ts). */
 export interface PeriodDay { rating?: number; scales?: Record<string, number>; items: Record<string, ActivityRecord> }
 /** `calendarTime`: the days' minutes hold only typed time; the timer's time lives in the calendar (see activityCalendar.ts). */
+/** A week's … year's own rating and values (Einstellungen → Funktionen: Bewertung/Werte), unrelated to its days. */
+export interface PeriodValues { rating?: number; scales?: Record<string, number> }
+/** An entry of a week's … year's own list: a task (with its check box) or a note; `order` sorts the list. */
+export interface PeriodEntry { kind: 'task' | 'note'; text: string; done?: boolean; order: number }
+/**
+ * `periods` and `entries` are keyed by the period (`periodKey`, e.g. `week:2026-11-16`), the entries by their id: objects,
+ * so syncing merges them one by one (sync/merge.ts keeps arrays whole).
+ */
 export interface PeriodData { definitions: ActivityDefinition[]; days: Record<string, PeriodDay>; notes: Record<string, string>; calendarTime?: boolean;
-  scales?: ScaleDefinition[]; rating?: RatingScale }
+  scales?: ScaleDefinition[]; rating?: RatingScale; periods?: Record<string, PeriodValues>; entries?: Record<string, Record<string, PeriodEntry>> }
+/** The key of a day's or period's note, values and entries: the mode and the period's first day. */
+export const periodKey = (mode: string, start: string) => `${mode}:${start}`;
 export const defaultRatingColor = '#569eff';
 export const defaultScaleRange = { min: 0, max: 10 } as const;
 /** Spans: whole numbers, `min` below `max`, at most this far apart (a click per step must stay possible). */
@@ -46,8 +56,68 @@ export function normalizePeriodData(raw: Partial<PeriodData>): PeriodData {
     id: item.id, name: typeof item.name === 'string' ? item.name : '', color: validColor(item.color, defaultRatingColor), ...scaleRange(item), active: item.active !== false })) : [];
   // The rating is stored only once it differs from the default (an older vault keeps its data as it was).
   const rating = raw.rating && typeof raw.rating === 'object' ? ratingScale(raw) : undefined;
+  const periods = normalizePeriods(raw.periods), entries = normalizeEntries(raw.entries);
   return { definitions: (raw.definitions ?? []).map(item => ({ ...item, color: /^#[\da-f]{6}$/i.test(item.color ?? '') ? item.color : '#569eff', trackTime: item.trackTime !== false, textField: item.textField !== false, active: item.active !== false, ...rangeFields(item) })), days: raw.days ?? {}, notes: raw.notes ?? {}, ...(raw.calendarTime ? { calendarTime: true } : {}),
-    ...(scales.length ? { scales } : {}), ...(rating ? { rating } : {}) };
+    ...(scales.length ? { scales } : {}), ...(rating ? { rating } : {}), ...(periods ? { periods } : {}), ...(entries ? { entries } : {}) };
+}
+const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
+const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+/** Only numbers stay; empty periods go (an older vault has none). */
+function normalizePeriods(raw: unknown): Record<string, PeriodValues> | undefined {
+  if (!record(raw)) return undefined;
+  const result: Record<string, PeriodValues> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (!record(value)) continue;
+    const scales = record(value.scales) ? Object.fromEntries(Object.entries(value.scales).filter(([, item]) => finite(item))) as Record<string, number> : {};
+    const item: PeriodValues = { ...(finite(value.rating) ? { rating: value.rating } : {}), ...(Object.keys(scales).length ? { scales } : {}) };
+    if (Object.keys(item).length) result[key] = item;
+  }
+  return Object.keys(result).length ? result : undefined;
+}
+function normalizeEntries(raw: unknown): Record<string, Record<string, PeriodEntry>> | undefined {
+  if (!record(raw)) return undefined;
+  const result: Record<string, Record<string, PeriodEntry>> = {};
+  for (const [key, list] of Object.entries(raw)) {
+    if (!record(list)) continue;
+    const items: Record<string, PeriodEntry> = {};
+    for (const [id, value] of Object.entries(list)) {
+      if (!record(value) || !id) continue;
+      items[id] = { kind: value.kind === 'note' ? 'note' : 'task', text: typeof value.text === 'string' ? value.text : '', ...(value.done === true ? { done: true } : {}), order: finite(value.order) ? value.order : 0 };
+    }
+    if (Object.keys(items).length) result[key] = items;
+  }
+  return Object.keys(result).length ? result : undefined;
+}
+/** A period's entries in their order: tasks before notes (like a day's), then by `order`. */
+export function periodEntries(data: Pick<PeriodData, 'entries'>, key: string): (PeriodEntry & { id: string })[] {
+  return Object.entries(data.entries?.[key] ?? {}).map(([id, entry]) => ({ ...entry, id }))
+    .sort((a, b) => (a.kind === b.kind ? 0 : a.kind === 'task' ? -1 : 1) || a.order - b.order || a.id.localeCompare(b.id));
+}
+/** Changes a period's entries; a list left empty goes. */
+export function withPeriodEntries(data: PeriodData, key: string, update: (entries: Record<string, PeriodEntry>) => Record<string, PeriodEntry>): PeriodData {
+  const next = update({ ...data.entries?.[key] });
+  const { [key]: _old, ...rest } = data.entries ?? {};
+  const entries = Object.keys(next).length ? { ...rest, [key]: next } : rest;
+  const { entries: _entries, ...without } = data;
+  return Object.keys(entries).length ? { ...without, entries } : without;
+}
+/** Moves an entry one place up or down among the entries of its kind (their `order` is renumbered). */
+export function movePeriodEntry(data: PeriodData, key: string, id: string, offset: -1 | 1): PeriodData {
+  const list = periodEntries(data, key), entry = list.find(item => item.id === id);
+  if (!entry) return data;
+  const kind = list.filter(item => item.kind === entry.kind), index = kind.indexOf(entry), target = index + offset;
+  if (target < 0 || target >= kind.length) return data;
+  [kind[index], kind[target]] = [kind[target], kind[index]];
+  return withPeriodEntries(data, key, entries => { kind.forEach((item, order) => { entries[item.id] = { ...entries[item.id], order }; }); return entries; });
+}
+/** Changes a period's own values; values left empty go. */
+export function withPeriodValues(data: PeriodData, key: string, update: (values: PeriodValues) => PeriodValues): PeriodData {
+  const next = update({ ...data.periods?.[key] });
+  const clean: PeriodValues = { ...(next.rating != null ? { rating: next.rating } : {}), ...(next.scales && Object.keys(next.scales).length ? { scales: next.scales } : {}) };
+  const { [key]: _old, ...rest } = data.periods ?? {};
+  const periods = Object.keys(clean).length ? { ...rest, [key]: clean } : rest;
+  const { periods: _periods, ...without } = data;
+  return Object.keys(periods).length ? { ...without, periods } : without;
 }
 /** What a chart line shows: the daily rating (`rating`) or a day value (the scale's id). */
 export type SeriesKey = 'rating' | string;

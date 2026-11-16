@@ -6,6 +6,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { Icon } from './Icon';
 import { Popover } from './Popover';
 import { BoardScopePicker } from './BoardScopePicker';
+import { useFeatures } from '../featureStore';
 import { NoteModeButton, inkKey } from './InkCanvas';
 import { contextMenu } from './ContextMenu';
 import type { MenuEntry, MenuItem, MenuSpec } from './ContextMenu';
@@ -82,6 +83,8 @@ export function BulletinBoard({ date, period = 'day', tagScope = 'journal', tool
   const threadMaskId = `board-threads-${useId().replace(/:/g, '')}`;
   const { cards, patch: savePatch, error } = useCards(); useLanguage();
   const key = boardKey(date, period);
+  // The notebook switched off (Einstellungen → Funktionen): cards do not offer to open there.
+  const withNotebook = useFeatures().notebook;
   const patch = (id: string, changes: Partial<Card>) => savePatch(id, scopedBoardPatch(cards.find(card => card.id === id), key, changes));
   const pixelTheme = usePixelTheme();
   const { folders } = useFolders();
@@ -437,7 +440,7 @@ export function BulletinBoard({ date, period = 'day', tagScope = 'journal', tool
   function cardMenu(card: Card, x: number): MenuSpec {
     const tied = (card.links ?? []).map(id => cards.find(other => other.id === id)).filter((other): other is Card => !!other);
     const kindItems: MenuEntry[] = card.kind === 'note' ? [
-      { id: 'notebook', command: 'notes --open', label: t("Im Notizblock öffnen"), icon: 'note', run: () => window.dispatchEvent(new CustomEvent('journal:show-note', { detail: card.id })) },
+      ...withNotebook ? [{ id: 'notebook', command: 'notes --open', label: t("Im Notizblock öffnen"), icon: 'note', run: () => window.dispatchEvent(new CustomEvent('journal:show-note', { detail: card.id })) } as MenuEntry] : [],
       { id: 'float', command: 'detach', label: t("Als schwebende Notiz öffnen"), icon: 'pin', run: () => void run(() => invoke('board_detach', { id: card.id })) },
       { id: 'mode', command: card.mode === 'ink' ? 'mode text' : 'mode ink', label: card.mode === 'ink' ? t("Als Text schreiben") : t("Handschriftlich schreiben"), icon: 'pencil', run: () => void patch(card.id, { mode: card.mode === 'ink' ? 'text' : 'ink' }) },
       { id: 'paper', command: 'color', label: t("Papierfarbe"), icon: 'pipette', items: paperNames.map(([paper, name]) => ({ id: `paper-${paper}`, command: paper, label: name, swatch: `paper-${paper}`, checked: (card.paper ?? 'yellow') === paper, run: () => void patch(card.id, { paper }) })) },
@@ -484,7 +487,7 @@ export function BulletinBoard({ date, period = 'day', tagScope = 'journal', tool
     ] };
   };
 
-  const boardTitle = period === 'month' ? t("Monatspinnwand") : period === 'year' ? t("Jahrespinnwand") : t("Pinnwand");
+  const boardTitle = ({ day: t("Pinnwand"), week: t("Wochenpinnwand"), month: t("Monatspinnwand"), quarter: t("Quartalspinnwand"), year: t("Jahrespinnwand") })[period];
   const positions = Object.fromEntries(placed.map(({ card, x, y, z }) => [card.id, { boardX: x, y, z, w: widthOf(card), h: sizing?.id === card.id ? sizing.h : card.h }]));
   const boxes: Record<string, BoardBox> = Object.fromEntries(placed.map(({ card, x, y }) => {
     const w = sizing?.id === card.id ? sizing.w : widthOf(card), h = sizing?.id === card.id ? sizing.h ?? heights[card.id] ?? 220 : heights[card.id] ?? 220;

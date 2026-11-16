@@ -122,3 +122,18 @@
 .system-settings progress { width: 100%; accent-color: var(--accent); }
 :root[data-pixel] .system-actions button, :root[data-pixel] .system-confirm, :root[data-look='nebula'] .system-actions button, :root[data-look='nebula'] .system-confirm { border-radius: 0; }
 :root[data-pixel] .system-actions button, :root[data-pixel] .system-message, :root[data-pixel] .system-path { font-size: 15px; }
+
+/* Einstellungen → Funktionen: a view per section, its switch in the head, its modules as check boxes below. */
+.feature-view-head .setting-label > span { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; }
+.feature-view-head .setting-label .icon { width: 15px; height: 15px; color: var(--accent); }
+.feature-view.is-off .feature-view-head .setting-label > span { color: var(--muted); }
+.feature-modules { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 6px; padding: 4px 0 8px; }
+.feature-module { display: flex; align-items: flex-start; gap: 9px; padding: 8px 10px; border-radius: 6px; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--divider) 70%, transparent); cursor: pointer; }
+.feature-module:hover { background: var(--surface); }
+.feature-module:has(input:checked) { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent); }
+.feature-module:has(input:disabled) { cursor: default; }
+.feature-module input { flex: none; margin: 2px 0 0; accent-color: var(--accent); }
+.feature-module > span { display: grid; gap: 2px; min-width: 0; }
+.feature-module strong { font: 600 13px var(--sans); color: var(--text); }
+.feature-module small { color: var(--muted); font-size: 11.5px; line-height: 1.35; }
+:root[data-pixel] .feature-module { border-radius: 0; }

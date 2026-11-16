@@ -7,10 +7,10 @@ Diese technische Übersicht ergänzt die [Einrichtung und Bedienung von Google D
 | Bestandteil | Inhalt |
 | --- | --- |
 | `tables.days`, `entries`, `tags`, `series` | Tagesdaten, Einträge und Kalender, Beschreibungen, Status, Tags, Planungsverknüpfungen und Wiederholungen |
-| `settings.period-data` | Aktivitäten, Checklisten, Bewertungen, erfasste Zeit, eigene Tageswerte samt Definitionen, Farben und Wertebereichen sowie Tages-/Zeitraum-Notizen |
-| `settings.board:card:*`, `board:folder:*` | Pinnwand-/Notizkarten, Ordner, Inhalt, Anhänge/Verbindungen, Tagesbezug, Monats-/Jahrespinnwände mit eigenen Positionen und Größen, Farben, Linkvorschauen und Handschrift (`mode`, `ink` mit den optionalen Strichfeldern `tool`/`color`, Hintergrund `inkPaper`) |
+| `settings.period-data` | Aktivitäten, Checklisten, Bewertungen, erfasste Zeit, eigene Tageswerte samt Definitionen, Farben und Wertebereichen, Tages-/Zeitraum-Notizen sowie eigene Zeitraum-Werte (`periods`) und Zeitraum-Einträge (`entries`, je Eintrag ein Objekt, damit Geräte sie einzeln zusammenführen; siehe [Funktionen](features.md)) |
+| `settings.board:card:*`, `board:folder:*` | Pinnwand-/Notizkarten, Ordner, Inhalt, Anhänge/Verbindungen, Tagesbezug, Wochen-/Monats-/Quartals-/Jahrespinnwände mit eigenen Positionen und Größen, Farben, Linkvorschauen und Handschrift (`mode`, `ink` mit den optionalen Strichfeldern `tool`/`color`, Hintergrund `inkPaper`) |
 | `images` | Referenzierte AVIF-Dateien, im Paket als Base64 |
-| `preferences` | Allgemeine Darstellungseinstellungen aus `journal.settings`, einschließlich getrenntem Aufbau und Optik, Popup-Variante (auch Journal C/D), Farben, Sprache, UI-Größe und Schreibdruck-Option |
+| `preferences` | Allgemeine Darstellungseinstellungen aus `journal.settings`, einschließlich getrenntem Aufbau und Optik, Popup-Variante (auch Journal C/D), Farben, Sprache, UI-Größe, Schreibdruck-Option und eingeschalteten Funktionen (`features`) |
 | `mailAccounts` | Kontometadaten und Abrufeinstellungen ohne Passwörter, Client-Secrets oder Anmeldetokens |
 
 Übernommene Mailtermine enthalten ihre gespeicherte Mailbeschreibung einschließlich begrenztem HTML-/Textinhalt und werden über die normalen Kalendereinträge übertragen. Mailkonten müssen auf jedem Gerät erneut angemeldet werden.
