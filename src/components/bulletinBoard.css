@@ -548,3 +548,16 @@
 :root[data-pixel] .ink-selection-bar { box-shadow: 0 0 0 1px color-mix(in srgb, var(--paper-ink, var(--text)) 40%, transparent), 3px 3px 0 #0006; }
 :root[data-pixel] .ink-toolbar button[aria-pressed='true'] { box-shadow: 2px 2px 0 #0006; }
 @media (prefers-reduced-motion: reduce) { .ink-toolbar { transition: none; } }
+
+/* Performance. The view's pan and zoom are read only by the viewport's own background (the cork's pattern): registered
+   as not inherited, changing them restyles the viewport alone, not every card in it. */
+@property --board-scale { syntax: '<number>'; inherits: false; initial-value: 1; }
+@property --board-pan-x { syntax: '<length>'; inherits: false; initial-value: 0px; }
+@property --board-pan-y { syntax: '<length>'; inherits: false; initial-value: 0px; }
+/* A card being dragged moves by `translate` on a layer of its own: the browser moves its picture instead of redrawing it. */
+.board-card.is-dragged { will-change: translate, transform; transition: box-shadow 200ms ease; }
+/* While the view moves, the world is one layer that is only shifted (not while still: a zoomed layer would stay blurry). */
+.board-viewport.is-panning > .board-world { will-change: transform; }
+/* The threads under the cards (BulletinBoard: drawn twice, see there) light up with their hit line above. */
+.board-threads.is-under { pointer-events: none; }
+.board-thread-under.is-active .board-thread { stroke-width: calc(var(--thread-w) + 1px); }

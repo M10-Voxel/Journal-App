@@ -1,5 +1,14 @@
 # Ressourcenverwaltung
 
+## Fenster und Pinnwand (November 2026)
+
+- Pan und Zoom behalten die berechneten Kartenpositionen, Gruppenrahmen, Pinpositionen und Fadenkurven sowie den unveränderten SVG-Baum. Verschieben und Größenänderungen einer Karte aktualisieren diese Geometrie weiterhin; Sprache, Tags und Fadenmenüs bleiben aktuell.
+- Die Pinnwand verbindet ihre Größenbeobachter nur beim Wechsel der sichtbaren Karten neu. Größenänderungen übernehmen die gemeldeten Rahmenhöhen der betroffenen Karten statt erneut alle Kartenhöhen aus dem DOM zu lesen. Neue oder wieder eingeblendete Karten werden zunächst vollständig gemessen.
+- Kopier-Synchronisierungsschalter werden in einem linearen Durchlauf ermittelt. Ketten, gemischte Zweige, Zyklen und fehlende Originale behalten ihre bisherige Anzeige; ein Regressionstest vergleicht sie mit dem bisherigen Suchverfahren. Bei 1.500 synthetischen Karten betrug der Median aus fünf lokalen Durchläufen etwa 29,4 ms für das bisherige Verfahren und 0,26 ms für den neuen Durchlauf. Dies misst nur diese Hilfsfunktion.
+- Schwebende Fenster ändern während des Ziehens nur ihre DOM-Geometrie, höchstens einmal pro Bild. React-Zustand, gespeicherte Position und Ansichtshistorie werden beim Loslassen übernommen. Ausstehende Bewegungen werden vor dem Andocken verarbeitet und Listener beim Entfernen des Fensters freigegeben. Höhenänderungen im Raster werden ebenfalls pro Bild gebündelt.
+
+Prüfung: `npm.cmd run build`, `npm.cmd test` (369 Tests), Browserbereiche `nebula`, `nebula-sizing`, `board`, `period-boards`, `board-widget`, `journal-grid`, `journal-layout` und `looks`. Der Browserbereich `perf` misst dieselben Interaktionen mit zwölf verbundenen Testnotizen in vier Kombinationen aus Layout und Design; `JOURNAL_PERF_JSON` speichert die Messwerte. Die lokalen Vergleichsdateien liegen unter `src-tauri/target/perf-before-codex.json` und `src-tauri/target/perf-after-codex.json`. Gemessen wird in Chrome mit deaktivierter GPU, nicht in der nativen WebView2. Einzelne Durchläufe schwanken; insbesondere horizontales Skalieren im Journal-Design verursacht weiterhin längere Frames. Eine versuchsweise Rasterisierung der Papiertextur brachte keinen verlässlichen Zusatzgewinn und ist nicht Teil der Änderung.
+
 Die App verwendet ein Rust-Backend und WebViews. Unter Windows übernimmt WebView2 die Oberfläche mit mehreren Prozessen, unter anderem für Rendering und GPU. Die Gruppierung im Windows-Task-Manager ist kein einzelner gemeinsamer Speicherblock der App.
 
 ## Implementierte Maßnahmen

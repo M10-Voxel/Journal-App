@@ -1,9 +1,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { syncPatches, copySyncPatches } from '../src/boardSync.ts';
+import { syncPatches, copySyncPatches, copySyncStates } from '../src/boardSync.ts';
 
 const note = (id, extra = {}) => ({ id, kind: 'note', title: id, text: `Text ${id}`, dates: [], order: 0, ...extra });
 const cards = [note('a'), note('b', { copyOf: 'a', copySync: true }), note('c', { copyOf: 'b', copySync: true }), note('d', { copyOf: 'a', copySync: false }), note('e', { links: ['a'] })];
+
+test('copy switches preserve mixed branches, chains, cycles and missing originals', () => {
+  const fixture = [...cards, note('orphan', { copyOf: 'missing', copySync: true }),
+    note('self', { copyOf: 'self', copySync: true }), note('cycle-a', { copyOf: 'cycle-b', copySync: true }),
+    note('cycle-b', { copyOf: 'cycle-a', copySync: false })];
+  const expected = new Map();
+  for (const card of fixture) {
+    const copies = fixture.filter(other => !!other.copyOf && (other.id === card.id || other.copyOf === card.id) && fixture.some(source => source.id === other.copyOf));
+    if (copies.length) expected.set(card.id, copies.every(other => other.copySync) ? 'on' : 'off');
+  }
+  assert.deepEqual(copySyncStates(fixture), expected);
+});
 
 test('content edits propagate both ways through enabled copies, not through ordinary threads or disabled copies', () => {
   for (const id of ['a', 'b', 'c']) {

@@ -1,4 +1,12 @@
 /** Semantic colours shared by every window. Markdown stores names, never resolved hex values. */
+const stickerColors = [
+  ['ink', 'Text und Linien im Sticker-Stil'], ['ink-fixed', 'Text auf hellen Stickern'],
+  ['key-bg', 'Button-Fläche'], ['key-backdrop', 'Heller Button-Rand'],
+  ['tint-base', 'Grundfläche der hellen Sticker'],
+  ['pink', 'Rosa Sticker-Akzent'], ['mint', 'Mintgrüner Sticker-Akzent'], ['violet', 'Violetter Sticker-Akzent'],
+  ['poster-background', 'Datumsbox: Hintergrund'], ['poster-text', 'Datumsbox: Text'], ['poster-muted', 'Datumsbox: sekundärer Text'],
+] as const;
+type StickerToken = typeof stickerColors[number][0];
 export const colorGroups = [
   { id: 'surfaces', label: 'Flächen und Linien', colors: [
     ['background', 'Hintergrund'], ['surface', 'Panels und Popups'], ['inset', 'Eingabefelder'],
@@ -29,17 +37,19 @@ export const colorGroups = [
   ] },
   { id: 'sticker', label: 'Sticker (Journal-Optik)', colors: [
     ['sticker-edge', 'Weißer Rand der Sticker'], ['sticker-line', 'Tintenlinie um die Sticker'],
+    ...stickerColors,
   ] },
 ] as const;
 export type ColorToken = typeof colorGroups[number]['colors'][number][0];
 export type Palette = Record<ColorToken, string>;
+type BasePalette = Omit<Palette, StickerToken>;
 export type ColorOverrides = Partial<Palette>;
 export const colorThemeIds = ['original', 'green', 'summer', 'paper', 'candle', 'lavender', 'lavender-night'] as const;
 export type ColorTheme = typeof colorThemeIds[number];
 export type CustomColors = Partial<Record<ColorTheme, ColorOverrides>>;
 export interface ColorSettings { colorTheme: ColorTheme; customColors: CustomColors }
 
-const original: Palette = {
+const original: BasePalette = {
   background: '#000000', surface: '#292929', inset: '#1f1f1f', hover: '#393939', selected: '#494949', focus: '#494949',
   border: '#141414', divider: '#2e2e2e', edge: '#ffffff12', line: '#ffffff21', scrollbar: '#3d3d3d',
   text: '#bcbcbc', strong: '#e0e0e0', muted: '#999999', placeholder: '#7a7a7a', disabled: '#656565',
@@ -51,7 +61,7 @@ const original: Palette = {
   'md-highlight-background': '#e6a85c2e', 'md-highlight-text': '#e2d7b7',
   cover: '#2a2b30', spine: '#000000', 'sticker-edge': '#e8e8ec', 'sticker-line': '#0d0d0f',
 };
-const green: Palette = {
+const green: BasePalette = {
   background: '#0a120c', surface: '#202e22', inset: '#141f16', hover: '#2c4028', selected: '#3c542d', focus: '#405431',
   border: '#121d14', divider: '#3a4e30', edge: '#aeff0029', line: '#d5edc526', scrollbar: '#526d40',
   text: '#d0d9cf', strong: '#edf3e5', muted: '#a4b5a3', placeholder: '#81957f', disabled: '#657663',
@@ -64,7 +74,7 @@ const green: Palette = {
   cover: '#2c4027', spine: '#000000', 'sticker-edge': '#e3eedb', 'sticker-line': '#0a120c',
 };
 // Summer sky, shaded stone, foliage and the warm red railings in the reference image.
-const summer: Palette = {
+const summer: BasePalette = {
   background: '#0c1c26', surface: '#183140', inset: '#102631', hover: '#234451', selected: '#2b5360', focus: '#315562',
   border: '#122936', divider: '#345365', edge: '#80d6ed26', line: '#b4dbe52b', scrollbar: '#4a7788',
   text: '#dbeaf0', strong: '#fff3d5', muted: '#aac3ce', placeholder: '#809fac', disabled: '#617d8b',
@@ -77,7 +87,7 @@ const summer: Palette = {
   cover: '#1d3d50', spine: '#000000', 'sticker-edge': '#e6f2f6', 'sticker-line': '#0a1820',
 };
 // Light paper and ink for the journal style: cream pages, dark brown ink and blue ink as the accent.
-const paper: Palette = {
+const paper: BasePalette = {
   background: '#f3ecdc', surface: '#f8f3e7', inset: '#ece3cf', hover: '#e9dfc8', selected: '#e0d3b6', focus: '#ddd0b2',
   border: '#e6dcc6', divider: '#d9ccb0', edge: '#5a462a24', line: '#5a462a1f', scrollbar: '#c9b994',
   text: '#2b2620', strong: '#1d1915', muted: '#6b5f4f', placeholder: '#8c806c', disabled: '#a89c86',
@@ -90,7 +100,7 @@ const paper: Palette = {
   cover: '#6a4129', spine: '#3b2a1a', 'sticker-edge': '#ffffff', 'sticker-line': '#3b2a1a',
 };
 // The journal style at night: dark brown pages, warm cream ink and candle gold as the accent.
-const candle: Palette = {
+const candle: BasePalette = {
   background: '#1c1612', surface: '#28201a', inset: '#211a15', hover: '#352a21', selected: '#433528', focus: '#46382b',
   border: '#17120e', divider: '#3e3127', edge: '#f3e2c21a', line: '#f3e2c21f', scrollbar: '#5c4836',
   text: '#e6d8c0', strong: '#f7ecd8', muted: '#bba98f', placeholder: '#968569', disabled: '#6f604d',
@@ -103,7 +113,7 @@ const candle: Palette = {
   cover: '#5a3020', spine: '#000000', 'sticker-edge': '#f3e6d0', 'sticker-line': '#120c08',
 };
 // The journal look's own: lavender paper with violet ink, pink and mint stickers (the reference sheet „purpl“).
-const lavender: Palette = {
+const lavender: BasePalette = {
   background: '#e9e4f5', surface: '#f5f2fb', inset: '#ebe6f6', hover: '#ddd4f1', selected: '#d0c4ef', focus: '#d4c9ee',
   border: '#ded6ef', divider: '#c9bde6', edge: '#2b214026', line: '#2b21401f', scrollbar: '#b3a4dc',
   text: '#2b2140', strong: '#1b1330', muted: '#594e74', placeholder: '#7e7399', disabled: '#a59dbe',
@@ -116,7 +126,7 @@ const lavender: Palette = {
   cover: '#cbbfe9', spine: '#5a4a86', 'sticker-edge': '#ffffff', 'sticker-line': '#2b2140',
 };
 // The same sheet at night: deep violet paper, pale lilac ink, the stickers glowing a little.
-const lavenderNight: Palette = {
+const lavenderNight: BasePalette = {
   background: '#1e1830', surface: '#2a2240', inset: '#241d38', hover: '#352b50', selected: '#43375f', focus: '#463a64',
   border: '#1a1529', divider: '#3d3358', edge: '#efe8ff21', line: '#efe8ff1f', scrollbar: '#5c4f80',
   text: '#e6e0f5', strong: '#f7f3ff', muted: '#b9afd0', placeholder: '#8f84aa', disabled: '#665c80',
@@ -130,7 +140,7 @@ const lavenderNight: Palette = {
 };
 /** The palettes made for the journal look (lavender first: the look brings it, see settings.ts withLook). */
 export const journalColorThemes: readonly ColorTheme[] = ['lavender', 'lavender-night', 'paper', 'candle'];
-export const colorThemes: { id: ColorTheme; name: string; description: string; colors: Palette }[] = [
+const baseColorThemes: { id: ColorTheme; name: string; description: string; colors: BasePalette }[] = [
   { id: 'original', name: 'Original', description: 'Schwarz, Graphit und kühles Blau.', colors: original },
   { id: 'green', name: 'Graphit & Limette', description: 'Dunkles Waldgrün, sanfte Grautöne und frische Limette.', colors: green },
   { id: 'summer', name: 'Himmel & Sonne', description: 'Himmelblau, Türkis und Sonnenwärme auf dunklem Marineblau.', colors: summer },
@@ -139,6 +149,28 @@ export const colorThemes: { id: ColorTheme; name: string; description: string; c
   { id: 'lavender', name: 'Lavendel', description: 'Lavendelpapier, violette Tinte, rosa und mintgrüne Sticker.', colors: lavender },
   { id: 'lavender-night', name: 'Lavendel Nacht', description: 'Tiefes Violett, helle Tinte und leuchtende Sticker.', colors: lavenderNight },
 ];
+
+/** Hex values for the editor; uncustomized CSS keeps its original color-mix expressions. */
+function mix(first: string, second: string, weight: number): string {
+  const rgba = (hex: string) => [1, 3, 5, 7].map((at, index) => index === 3 ? (hex.length === 9 ? parseInt(hex.slice(at, at + 2), 16) / 255 : 1) : parseInt(hex.slice(at, at + 2), 16));
+  const a = rgba(first), b = rgba(second), alpha = a[3] * weight + b[3] * (1 - weight);
+  const hex = (value: number) => Math.round(value).toString(16).padStart(2, '0');
+  return '#' + a.slice(0, 3).map((value, index) => hex(alpha ? (value * a[3] * weight + b[index] * b[3] * (1 - weight)) / alpha : 0)).join('') + (alpha < 1 ? hex(alpha * 255) : '');
+}
+function withStickerColors(base: BasePalette, theme: ColorTheme, overrides: ColorOverrides = {}): Palette {
+  const dark = !['lavender', 'paper'].includes(theme);
+  const ink = overrides.ink ?? overrides.text ?? (dark ? '#ece6fb' : theme === 'paper' ? '#3b2a1a' : '#2b2140');
+  const fixed = overrides['ink-fixed'] ?? overrides.text ?? (theme === 'paper' ? '#3b2a1a' : '#2b2140');
+  const violet = overrides.violet ?? (theme === 'paper' ? '#c9a46a' : theme === 'candle' ? '#9a6a2a' : dark ? '#6b4fd0' : '#9b84e0');
+  const tint = overrides['tint-base'] ?? (dark ? '#f1ecfb' : base.surface);
+  const posterText = overrides['poster-text'] ?? overrides.text ?? fixed;
+  return { ...base, ink, 'ink-fixed': fixed, violet, 'tint-base': tint, pink: '#e48aa8', mint: '#7cc7b2',
+    'key-bg': dark ? mix(base.surface, '#ffffff', .9) : theme === 'lavender' ? '#f1ecf9' : mix(base.surface, base.accent, .97),
+    'key-backdrop': mix(base.surface, '#ffffff', dark ? .82 : .48),
+    'poster-background': mix(violet, tint, .18), 'poster-text': posterText,
+    'poster-muted': overrides.muted ?? mix(posterText, '#00000000', .72), ...overrides };
+}
+export const colorThemes = baseColorThemes.map(theme => ({ ...theme, colors: withStickerColors(theme.colors, theme.id) }));
 /** Light palettes (paper) need light form controls and scrollbars. */
 export const isLightPalette = (palette: Palette) => contrastRatio(palette.background, '#000000') > contrastRatio(palette.background, '#ffffff');
 export const colorTokens = colorGroups.flatMap(group => group.colors.map(([token]) => token));
@@ -161,7 +193,8 @@ export function normalizeColorSettings(value: unknown): ColorSettings {
 export function resolvePalette(settings: ColorSettings): Palette {
   const clean = normalizeColorSettings(settings);
   const base = colorThemes.find(theme => theme.id === clean.colorTheme)!;
-  return { ...base.colors, ...clean.customColors[clean.colorTheme] };
+  const overrides = clean.customColors[clean.colorTheme] ?? {};
+  return withStickerColors({ ...base.colors, ...overrides }, clean.colorTheme, overrides);
 }
 export function contrastRatio(foreground: string, background: string) {
   const luminance = (hex: string) => {
@@ -179,7 +212,19 @@ export function applyColors(settings: ColorSettings) {
   const root = document.documentElement;
   root.dataset.colorTheme = clean.colorTheme;
   root.style.colorScheme = isLightPalette(palette) ? 'light' : 'dark';
-  for (const token of colorTokens) root.style.setProperty(`--${token}`, palette[token]);
+  const overrides = clean.customColors[clean.colorTheme] ?? {};
+  const optional = new Set<string>(stickerColors.map(([token]) => token));
+  for (const token of colorTokens) {
+    if (optional.has(token) && overrides[token] === undefined) root.style.removeProperty(`--${token}`);
+    else root.style.setProperty(`--${token}`, palette[token]);
+  }
+  // General text controls also reach the look's own ink, unless a specific sticker colour was chosen.
+  if (overrides.text) for (const token of ['ink', 'ink-fixed', 'poster-text'] as const) {
+    if (overrides[token] === undefined) root.style.setProperty(`--${token}`, overrides.text);
+  }
+  if (overrides.muted && overrides['poster-muted'] === undefined) root.style.setProperty('--poster-muted', overrides.muted);
+  if (overrides.strong && overrides['poster-text'] === undefined) root.style.setProperty('--poster-strong', overrides.strong);
+  else root.style.removeProperty('--poster-strong');
   root.style.setProperty('--selection', `color-mix(in srgb, ${palette.accent} 20%, transparent)`);
   for (const token of ['accent', 'success', 'now', 'error'] as const) root.style.setProperty(`--on-${token}`, onColor(palette[token]));
 }

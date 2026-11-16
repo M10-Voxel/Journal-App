@@ -104,8 +104,8 @@
 :root[data-layout='desk'][data-look='journal'] .nebula-terminal input[type='range'] { accent-color: var(--accent); }
 
 /* ── The poster: a big date sticker – day and month in Mali, a flower and a star stuck beside them ──────────── */
-:root[data-layout='desk'][data-look='journal'] .nebula-poster { padding: 16px 20px 18px; background-color: color-mix(in srgb, var(--violet) 18%, var(--tint-base, var(--surface))); overflow: visible; rotate: -.6deg;
-  --surface: var(--tint-base); --ink: var(--ink-fixed); --text: var(--ink-fixed); --strong: var(--ink-fixed); --muted: color-mix(in srgb, var(--ink-fixed) 72%, transparent); --placeholder: color-mix(in srgb, var(--ink-fixed) 50%, transparent); --ink-soft: color-mix(in srgb, var(--ink-fixed) 45%, transparent); }
+:root[data-layout='desk'][data-look='journal'] .nebula-poster { padding: 16px 20px 18px; background-color: var(--poster-background, color-mix(in srgb, var(--violet) 18%, var(--tint-base, var(--surface)))); overflow: visible; rotate: -.6deg;
+  --surface: var(--tint-base); --ink: var(--poster-text, var(--ink-fixed)); --text: var(--poster-text, var(--ink-fixed)); --strong: var(--poster-strong, var(--poster-text, var(--ink-fixed))); --muted: var(--poster-muted, color-mix(in srgb, var(--poster-text, var(--ink-fixed)) 72%, transparent)); --placeholder: color-mix(in srgb, var(--poster-text, var(--ink-fixed)) 50%, transparent); --ink-soft: color-mix(in srgb, var(--poster-text, var(--ink-fixed)) 45%, transparent); }
 :root[data-layout='desk'][data-look='journal'] .nebula-poster::before, :root[data-layout='desk'][data-look='journal'] .nebula-poster::after, :root[data-layout='desk'][data-look='journal'] .nebula-bar { display: none; }
 :root[data-layout='desk'][data-look='journal'] .nebula-poster-figure { margin-top: 0; color: var(--ink); font: 700 clamp(84px, 8vw, 118px)/.9 var(--hand); letter-spacing: -.02em; text-shadow: 4px 4px 0 var(--pink); }
 :root[data-layout='desk'][data-look='journal'] .nebula-poster hr { border-top: 1.5px dashed var(--ink-soft); }

@@ -43,8 +43,9 @@ export function ColorSettings({ settings, onChange }: { settings: Settings; onCh
   const swatches = [...new Set((['accent', 'priority', 'success', 'error', 'cancelled', 'md-red', 'md-orange', 'md-yellow', 'md-green', 'md-cyan', 'md-blue', 'md-purple', 'md-pink', 'text', 'muted', 'surface'] as const).map(token => palette[token].slice(0, 7)))];
   const setColor = (token: ColorToken, value: string | null) => {
     const next = { ...overrides };
-    const base = colorThemes.find(theme => theme.id === settings.colorTheme)!.colors;
-    if (value === null || value.toLowerCase() === base[token]) delete next[token];
+    delete next[token];
+    const inherited = resolvePalette({ ...settings, customColors: { ...settings.customColors, [settings.colorTheme]: next } });
+    if (value === null || value.toLowerCase() === inherited[token]) delete next[token];
     else next[token] = value;
     onChange({ ...settings, customColors: { ...settings.customColors, [settings.colorTheme]: next } });
   };

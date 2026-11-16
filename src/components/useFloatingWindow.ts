@@ -44,6 +44,8 @@ export interface FloatingDrag { onDrag?: (point: { x: number; y: number }, shift
 export function useFloatingWindow(key: string, stage: RefObject<HTMLElement | null>, frame: RefObject<HTMLElement | null>, drag: FloatingDrag = {}) {
   const [rect, setRect] = useState<WindowRect | null>(() => read(key));
   const [dragging, setDragging] = useState(false);
+  const dragCleanup = useRef<(() => void) | null>(null);
+  useEffect(() => () => dragCleanup.current?.(), []);
   useViewHistory(rect, value => { setRect(value); write(key, value); });
   const latest = useRef(rect); latest.current = rect;
   // The stage may shrink (a smaller window): the floating window stays inside it.
@@ -72,19 +74,41 @@ export function useFloatingWindow(key: string, stage: RefObject<HTMLElement | nu
     const startX = event.clientX, startY = event.clientY;
     const before = latest.current;
     let last = origin;
+    const element = frame.current;
+    let animation = 0, pointer = { x: startX, y: startY, shift: event.shiftKey };
+    dragCleanup.current?.();
     setDragging(true);
+    // Only geometry changes during the gesture. Commit React state and history once on release,
+    // rather than rendering the calendar/notebook/window contents for every pointer sample.
+    const apply = () => {
+      animation = 0;
+      last = clampRect(dragRect(origin, pointer.x - startX, pointer.y - startY, edges), size);
+      element.classList.add('is-floating');
+      Object.assign(element.style, { left: `${last.x}px`, top: `${last.y}px`, width: `${last.w}px`, height: `${last.h}px`, right: 'auto', bottom: 'auto' });
+      if (edges === 'move') drag.onDrag?.(pointer, pointer.shift);
+    };
     const move = (moved: PointerEvent) => {
-      last = clampRect(dragRect(origin, moved.clientX - startX, moved.clientY - startY, edges), size); setRect(last);
-      if (edges === 'move') drag.onDrag?.({ x: moved.clientX, y: moved.clientY }, moved.shiftKey);
+      if (moved.pointerId !== event.pointerId) return;
+      pointer = { x: moved.clientX, y: moved.clientY, shift: moved.shiftKey };
+      if (!animation) animation = requestAnimationFrame(apply);
+    };
+    const cleanup = () => {
+      cancelAnimationFrame(animation);
+      window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', end); window.removeEventListener('pointercancel', end);
+      dragCleanup.current = null;
     };
     const end = (ended: PointerEvent) => {
-      window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', end); window.removeEventListener('pointercancel', end);
+      if (ended.pointerId !== event.pointerId) return;
+      if (animation) { cancelAnimationFrame(animation); apply(); }
+      cleanup();
+      setRect(last === origin ? before : last);
       setDragging(false);
       // Taken by the drop (docked into the grid): the window keeps the place it floated at before this drag.
       if (edges === 'move' && ended.type === 'pointerup' && drag.onDrop?.({ x: ended.clientX, y: ended.clientY }, ended.shiftKey)) { setRect(before); return; }
       if (edges === 'move') drag.onDrag?.({ x: NaN, y: NaN }, false);
       if (last !== origin) write(key, last);
     };
+    dragCleanup.current = cleanup;
     window.addEventListener('pointermove', move); window.addEventListener('pointerup', end); window.addEventListener('pointercancel', end);
   }
   const dock = () => { setRect(null); write(key, null); };

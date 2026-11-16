@@ -29,6 +29,13 @@ export interface NebulaLayout {
    * neighbours count cells.
    */
   stacked: Record<Family, PanelId[]>;
+  /**
+   * Where rows begin (per family, by the cells' first windows): rows are kept as they were made, so a window made narrower
+   * leaves room in its row instead of the next row's first window moving up into it (and wider, it never pushes its
+   * neighbour into the next row). Without an entry (an older layout) rows are filled in order; the first change
+   * writes them down (freezeRows). A row whose widths add up to more than twelve columns still wraps.
+   */
+  breaks: Record<Family, PanelId[]>;
 }
 
 export const own: Record<Family, PanelId[]> = { day: ['entries', 'rating', 'scales', 'activities', 'board', 'notes'], period: ['notes', 'ratings', 'activities', 'board', 'entries', 'rating', 'scales', 'checklist'] };
@@ -38,7 +45,7 @@ export const columns = 12, minSpan = 3;
  *  with the ratings below it left, the activities right (its own entries above them, its rating, values and checklist
  *  stacked below, where switched on). The board takes the row below. */
 export const defaultLayout = (): NebulaLayout => ({ order: { day: [...own.day], period: ['entries', 'notes', 'ratings', 'activities', 'rating', 'scales', 'checklist', 'board'] }, minimized: [], spans: { entries: 7, rating: 5, notes: 7, activities: 5 }, docked: [], floating: [], heights: { board: 620 },
-  stacked: { day: ['scales', 'activities'], period: ['ratings', 'scales', 'checklist'] } });
+  stacked: { day: ['scales', 'activities'], period: ['ratings', 'scales', 'checklist'] }, breaks: { day: [], period: [] } });
 export const spanOf = (layout: NebulaLayout, id: PanelId) => layout.spans[id] ?? columns;
 const isOwn = (id: PanelId) => !windows.includes(id as WindowId);
 
@@ -78,7 +85,7 @@ export function normalizeLayout(raw: unknown): NebulaLayout {
   if (value.spans && typeof value.spans === 'object') {
     for (const [stored, span] of Object.entries(value.spans)) {
       const id = stored === 'data' ? 'rating' : stored;
-      if ((isPanel(id, 'day') || isPanel(id, 'period')) && Number.isFinite(span)) spans[id as PanelId] = Math.max(minSpan, Math.min(columns, Math.round(span as number)));
+      if ((isPanel(id, 'day') || isPanel(id, 'period')) && Number.isFinite(span)) spans[id as PanelId] = Math.max(minSpan, Math.min(columns, roundSpan(span as number)));
     }
   } else if (Array.isArray(value.half)) for (const id of ids(value.half.map(id => id === 'data' ? 'rating' : id))) spans[id] = 6;
   else Object.assign(spans, base.spans);
@@ -86,8 +93,10 @@ export function normalizeLayout(raw: unknown): NebulaLayout {
   const stack = value.stacked && typeof value.stacked === 'object' ? value.stacked as Partial<Record<Family, unknown>> : null;
   const stacked = (family: Family): PanelId[] => !stack ? [...base.stacked[family]]
     : [...new Set(Array.isArray(stack[family]) ? (stack[family] as unknown[]).filter((id): id is PanelId => isPanel(id, family) && isOwn(id)) : [])];
+  const breakList = value.breaks && typeof value.breaks === 'object' ? value.breaks as Partial<Record<Family, unknown>> : {};
+  const breaks = (family: Family): PanelId[] => [...new Set(Array.isArray(breakList[family]) ? (breakList[family] as unknown[]).filter((id): id is PanelId => isPanel(id, family)) : [])];
   return { order: { day: order('day'), period: order('period') }, minimized: ids(value.minimized), spans, docked, floating: ids(value.floating).filter(isOwn), heights,
-    stacked: { day: stacked('day'), period: stacked('period') } };
+    stacked: { day: stacked('day'), period: stacked('period') }, breaks: { day: breaks('day'), period: breaks('period') } };
 }
 
 /** The windows shown in the grid, in order: the family's own, and the calendar or notebook while docked and open. */
@@ -124,11 +133,28 @@ export function undockWindow(layout: NebulaLayout, id: WindowId): NebulaLayout {
 }
 const toggle = (list: PanelId[], id: PanelId) => list.includes(id) ? list.filter(other => other !== id) : [...list, id];
 export const toggleMinimized = (layout: NebulaLayout, id: PanelId): NebulaLayout => ({ ...layout, minimized: toggle(layout.minimized, id) });
-/** Half a row, or the whole row again (from any other width: half). */
-export const toggleHalf = (layout: NebulaLayout, id: PanelId): NebulaLayout => setSpan(layout, id, spanOf(layout, id) === columns / 2 ? columns : columns / 2);
+/**
+ * Half a row, or the whole row again (from any other width: half). Taking the whole width in a row shared with others
+ * (`ids`: the shown windows), the window gets a row of its own; the windows after it start the next row.
+ */
+export function toggleHalf(layout: NebulaLayout, id: PanelId, ids?: readonly PanelId[], family: Family = ids ? familyOf(ids) : 'day'): NebulaLayout {
+  if (spanOf(layout, id) !== columns / 2) return setSpan(layout, id, columns / 2);
+  return wholeRow(layout, id, ids, family);
+}
+/** The whole width: alone in its row at once; in a shared row (`ids`: the shown windows) in a row of its own. */
+export function wholeRow(layout: NebulaLayout, id: PanelId, ids?: readonly PanelId[], family: Family = ids ? familyOf(ids) : 'day'): NebulaLayout {
+  if (!ids) return setSpan(layout, id, columns);
+  const frozen = freezeRows(layout, ids, family);
+  const row = rowsOf(frozen, ids, family).find(list => list.includes(id)) ?? [id];
+  if (row.length === 1) return setSpan(frozen, id, columns);
+  const after = row[row.indexOf(id) + 1];
+  return setSpan(withBreaks(frozen, family, [id, ...after ? [after] : []], []), id, columns);
+}
+/** Widths are kept to a hundredth of a column (they follow the pointer without steps; see NebulaDesk Panel). */
+export const roundSpan = (span: number) => Math.round(span * 100) / 100;
 export function setSpan(layout: NebulaLayout, id: PanelId, span: number): NebulaLayout {
-  const spans = { ...layout.spans }, value = Math.max(minSpan, Math.min(columns, Math.round(span)));
-  if (value === columns) delete spans[id]; else spans[id] = value;
+  const spans = { ...layout.spans }, value = Math.max(minSpan, Math.min(columns, roundSpan(span)));
+  if (value >= columns) delete spans[id]; else spans[id] = value;
   return { ...layout, spans };
 }
 /** A window leaves the grid and floats over the desk (the calendar and notebook: undocked; the others: floating). */
@@ -186,46 +212,88 @@ export const headOf = (layout: NebulaLayout, ids: readonly PanelId[], id: PanelI
  * not fit starts the next row).
  */
 export function rowsOf(layout: NebulaLayout, ids: readonly PanelId[], family: Family = familyOf(ids)): PanelId[][] {
+  const heads = cellsOf(layout, ids, family).map(cell => cell[0]);
+  // A row begins at a written-down break; one written on a window not shown passes to the next shown cell.
+  const breaks = new Set(layout.breaks?.[family] ?? []), starts = new Set<PanelId>(), shown = new Set(ids), isHead = new Set(heads);
+  let pending = false;
+  for (const id of layout.order[family]) {
+    if (isHead.has(id)) { if (pending || breaks.has(id)) starts.add(id); pending = false; }
+    else if (!shown.has(id) && breaks.has(id)) pending = true;
+  }
+  for (const id of heads) if (breaks.has(id)) starts.add(id);
   const rows: PanelId[][] = [];
   let used = columns;
-  for (const [id] of cellsOf(layout, ids, family)) {
+  for (const id of heads) {
     const span = spanOf(layout, id);
-    if (used + span > columns) { rows.push([]); used = 0; }
+    if (!rows.length || starts.has(id) || used + span > columns + 1e-6) { rows.push([]); used = 0; }
     rows[rows.length - 1].push(id);
     used += span;
   }
   return rows;
 }
-/** The cell sharing the row with `id`'s cell that gives or takes width: the next one, else the one before. */
-function neighbourOf(layout: NebulaLayout, ids: readonly PanelId[], id: PanelId, family: Family): PanelId | null {
+/** The room left in each row (columns), by the row's last cell. */
+export function restOf(layout: NebulaLayout, ids: readonly PanelId[], family: Family = familyOf(ids)): Partial<Record<PanelId, number>> {
+  const rest: Partial<Record<PanelId, number>> = {};
+  for (const row of rowsOf(layout, ids, family)) {
+    const free = roundSpan(columns - row.reduce((sum, id) => sum + spanOf(layout, id), 0));
+    if (free > 0) rest[row[row.length - 1]] = free;
+  }
+  return rest;
+}
+function withBreaks(layout: NebulaLayout, family: Family, add: readonly PanelId[], remove: readonly PanelId[]): NebulaLayout {
+  const list = (layout.breaks?.[family] ?? []).filter(id => !remove.includes(id));
+  for (const id of add) if (!list.includes(id)) list.push(id);
+  return { ...layout, breaks: { ...{ day: [], period: [] }, ...layout.breaks, [family]: list } };
+}
+/** Writes the rows as they are shown down (every row's first cell), keeping the breaks of windows not shown. */
+export function freezeRows(layout: NebulaLayout, ids: readonly PanelId[], family: Family = familyOf(ids)): NebulaLayout {
+  const shown = new Set(ids), kept = (layout.breaks?.[family] ?? []).filter(id => !shown.has(id));
+  const starts = rowsOf(layout, ids, family).slice(1).map(row => row[0]);
+  return { ...layout, breaks: { ...{ day: [], period: [] }, ...layout.breaks, [family]: [...kept, ...starts] } };
+}
+/** The cell right of `id`'s cell in its row (it gives or takes width when the edge between them moves). */
+function nextInRow(layout: NebulaLayout, ids: readonly PanelId[], id: PanelId, family: Family): PanelId | null {
   const head = headOf(layout, ids, id, family);
   const row = rowsOf(layout, ids, family).find(list => list.includes(head)) ?? [];
-  const at = row.indexOf(head);
-  return row[at + 1] ?? row[at - 1] ?? null;
+  return row[row.indexOf(head) + 1] ?? null;
+}
+/** The widest a cell can be in its row: what the other cells leave. */
+export function roomOf(layout: NebulaLayout, ids: readonly PanelId[], id: PanelId, family: Family = familyOf(ids)): number {
+  const head = headOf(layout, ids, id, family);
+  const row = rowsOf(layout, ids, family).find(list => list.includes(head)) ?? [head];
+  return roundSpan(columns - row.filter(other => other !== head).reduce((sum, other) => sum + spanOf(layout, other), 0));
 }
 /**
- * A new width for a window's cell in its row: its neighbour takes up the difference, so the row stays as wide as it was
- * (both at least the minimum). Alone in its row, only the cell changes.
+ * A new width for a window's cell (its right edge moved): the cell to its right takes up the difference, so that edge is
+ * all that moves (both keep the minimum). The last cell of a row grows into the room left in the row, no further, and
+ * shrinking leaves room; the rows stay as they are.
  */
 export function resizeInRow(layout: NebulaLayout, ids: readonly PanelId[], id: PanelId, span: number, family: Family = familyOf(ids)): NebulaLayout {
-  const head = headOf(layout, ids, id, family);
-  const neighbour = neighbourOf(layout, ids, head, family);
-  if (!neighbour) return setSpan(layout, head, span);
-  const pair = spanOf(layout, head) + spanOf(layout, neighbour);
-  const own = Math.max(minSpan, Math.min(pair - minSpan, Math.round(span)));
-  return setSpan(setSpan(layout, head, own), neighbour, pair - own);
+  const frozen = freezeRows(layout, ids, family);
+  const head = headOf(frozen, ids, id, family);
+  const neighbour = nextInRow(frozen, ids, head, family);
+  if (!neighbour) return setSpan(frozen, head, Math.min(roomOf(frozen, ids, head, family), span));
+  const pair = spanOf(frozen, head) + spanOf(frozen, neighbour);
+  const own = roundSpan(Math.max(minSpan, Math.min(pair - minSpan, span)));
+  return setSpan(setSpan(frozen, head, own), neighbour, pair - own);
 }
 /**
  * A window leaving its place (moved, floating, pulled out). Stacked, its cell just closes up; heading a stack, the next
  * window of the stack heads it now (with the cell's width); alone in its cell, it leaves its width to its neighbour.
  */
 export function leaveRow(layout: NebulaLayout, ids: readonly PanelId[], id: PanelId, family: Family = familyOf(ids)): NebulaLayout {
-  const cell = cellsOf(layout, ids, family).find(list => list.includes(id));
+  const frozen = freezeRows(layout, ids, family);
+  const cell = cellsOf(frozen, ids, family).find(list => list.includes(id));
   const unstack = (next: NebulaLayout, other: PanelId): NebulaLayout => next.stacked[family].includes(other) ? { ...next, stacked: { ...next.stacked, [family]: next.stacked[family].filter(item => item !== other) } } : next;
-  if (!cell || cell[0] !== id) return unstack(layout, id);
-  if (cell.length > 1) return unstack(setSpan(layout, cell[1], spanOf(layout, id)), cell[1]);
-  const neighbour = neighbourOf(layout, ids, id, family);
-  return neighbour ? setSpan(layout, neighbour, Math.min(columns, spanOf(layout, neighbour) + spanOf(layout, id))) : layout;
+  if (!cell || cell[0] !== id) return unstack(frozen, id);
+  const starts = frozen.breaks[family].includes(id);
+  // Heading a stack: the next window heads it now, in its place and with its width.
+  if (cell.length > 1) return unstack(withBreaks(setSpan(frozen, cell[1], spanOf(frozen, id)), family, starts ? [cell[1]] : [], [id]), cell[1]);
+  // Alone in its cell: it leaves its room in the row free (the others keep their widths); the next cell of its row
+  // begins the row if it did.
+  const row = rowsOf(frozen, ids, family).find(list => list.includes(id)) ?? [];
+  const after = row[row.indexOf(id) + 1];
+  return withBreaks(frozen, family, starts && after ? [after] : [], [id]);
 }
 /**
  * Where a dragged window lands: beside a window's cell (`side`) when the pointer is on its outer quarter left or right,
@@ -263,19 +331,38 @@ export function dropTarget(boxes: readonly (Box & { id: PanelId; cell?: PanelId 
  * stack it takes the stack's width (above the head: it heads the stack now).
  */
 export function placePanel(layout: NebulaLayout, family: Family, ids: readonly PanelId[], id: PanelId, drop: Drop, open: Record<WindowId, boolean>, fromGrid: boolean): NebulaLayout {
-  let next = fromGrid ? leaveRow(layout, ids, id, family) : layout;
+  let next = fromGrid ? leaveRow(layout, ids, id, family) : freezeRows(layout, ids, family);
+  const rest = ids.filter(other => other !== id);
+  next = withBreaks(next, family, [], [id]);
   next = { ...next, stacked: { ...next.stacked, [family]: next.stacked[family].filter(other => other !== id) } };
   next = isOwn(id) ? { ...next, floating: next.floating.filter(other => other !== id) } : next.docked.includes(id as WindowId) ? next : dockWindow(next, family, id as WindowId, drop.index, open);
   next = movePanel(next, family, id, drop.index, { ...open, ...(!isOwn(id) ? { [id]: true } : {}) });
   if (drop.stack) {
     const target = drop.stack.id, stacked = next.stacked[family];
-    // Above a stack's head (or a window alone): the dropped window heads the cell, with its width; the other is stacked below it.
-    if (drop.stack.side === 'above' && !stacked.includes(target)) return setSpan({ ...next, stacked: { ...next.stacked, [family]: [...stacked, target] } }, id, spanOf(next, target));
+    // Above a stack's head (or a window alone): the dropped window heads the cell, with its width and its place in the
+    // rows; the other is stacked below it.
+    if (drop.stack.side === 'above' && !stacked.includes(target)) {
+      const starts = next.breaks[family].includes(target);
+      return setSpan(withBreaks({ ...next, stacked: { ...next.stacked, [family]: [...stacked, target] } }, family, starts ? [id] : [], [target]), id, spanOf(next, target));
+    }
     return { ...next, stacked: { ...next.stacked, [family]: [...stacked, id] } };
   }
-  if (!drop.beside) return setSpan(next, id, columns);
-  const total = spanOf(next, drop.beside.id), own = Math.max(minSpan, Math.floor(total / 2));
-  return setSpan(setSpan(next, drop.beside.id, Math.max(minSpan, total - own)), id, own);
+  const shown = visiblePanels(next, family, { ...open, ...(!isOwn(id) ? { [id]: true } : {}) }).filter(other => other === id || rest.includes(other));
+  const heads = cellsOf(next, shown, family).map(cell => cell[0]);
+  if (!drop.beside) {
+    // Between rows: a row of its own, at the width it had (no window grows to the whole row by itself); the cell after
+    // it begins the next row.
+    const after = heads[heads.indexOf(id) + 1];
+    return withBreaks(next, family, [id, ...after ? [after] : []], []);
+  }
+  // Beside a window: into its row. Room left in the row is taken (up to the window's width); otherwise the two share
+  // the target's width. Dropped left of a row's first cell, it begins the row.
+  const target = drop.beside.id;
+  if (drop.beside.side === 'left' && next.breaks[family].includes(target)) next = withBreaks(next, family, [id], [target]);
+  const free = roundSpan(columns - (rowsOf(next, shown, family).find(row => row.includes(target)) ?? []).filter(other => other !== id).reduce((sum, other) => sum + spanOf(next, other), 0));
+  if (free >= minSpan) return setSpan(next, id, Math.min(free, spanOf(layout, id)));
+  const total = spanOf(next, target), own = Math.max(minSpan, Math.floor(total / 2));
+  return setSpan(setSpan(next, target, Math.max(minSpan, total - own)), id, own);
 }
 
 /**
@@ -284,14 +371,14 @@ export function placePanel(layout: NebulaLayout, family: Family, ids: readonly P
  * only minimized windows, or a minimized window alone, keeps its widths (bars lying flat). The stored widths stay as
  * they are, so restoring a window gives back the row it had.
  */
-export function displaySpans(layout: NebulaLayout, ids: readonly PanelId[], family: Family = familyOf(ids)): { spans: Partial<Record<PanelId, number>>; upright: PanelId[]; pull: Partial<Record<PanelId, [number, number]>> } {
+export function displaySpans(layout: NebulaLayout, ids: readonly PanelId[], family: Family = familyOf(ids)): { spans: Partial<Record<PanelId, number>>; upright: PanelId[]; bars: Partial<Record<PanelId, number>>; rest: Partial<Record<PanelId, number>> } {
   const spans: Partial<Record<PanelId, number>> = {}, upright: PanelId[] = [];
   // Rows are made of cells (by their heads); a cell lies on its side only as a single minimized window, never a stack.
   const cells = cellsOf(layout, ids, family);
   const view = { minimized: cells.filter(cell => cell.length === 1 && layout.minimized.includes(cell[0])).map(cell => cell[0]) };
-  // How many bar widths an element moves in from its left and right column edge: a bar is narrower than a column, so
-  // the bars close up towards their open window and that window reaches over the rest (see nebula-grid.css).
-  const pull: Partial<Record<PanelId, [number, number]>> = {};
+  // How many bars an open window took the columns of: they stand at their own narrow width, the window takes the rest of
+  // those columns (see nebula-grid.css).
+  const bars: Partial<Record<PanelId, number>> = {};
   for (const row of rowsOf(layout, ids, family)) {
     for (const id of row) spans[id] = spanOf(layout, id);
     const open = row.filter(id => !view.minimized.includes(id));
@@ -300,23 +387,14 @@ export function displaySpans(layout: NebulaLayout, ids: readonly PanelId[], fami
       if (!view.minimized.includes(id)) return;
       const taker = row.slice(at + 1).find(other => open.includes(other)) ?? row.slice(0, at).reverse().find(other => open.includes(other))!;
       spans[taker] = (spans[taker] ?? 0) + spanOf(layout, id) - 1;
+      bars[taker] = (bars[taker] ?? 0) + 1;
       spans[id] = 1;
       upright.push(id);
-    });
-    row.forEach((id, at) => {
-      if (view.minimized.includes(id)) return;
-      let left = 0, right = 0;
-      while (at - left - 1 >= 0 && view.minimized.includes(row[at - left - 1])) left++;
-      if (row.slice(at + 1).every(other => view.minimized.includes(other))) right = row.length - at - 1;
-      if (!left && !right) return;
-      pull[id] = [left, right];
-      for (let i = 0; i < left; i++) pull[row[at - left + i]] = [i, -1];
-      for (let i = 0; i < right; i++) pull[row[at + right - i]] = [-1, i];
     });
   }
   // The windows stacked in a cell take its width.
   for (const cell of cells) for (const id of cell.slice(1)) spans[id] = spans[cell[0]];
-  return { spans, upright, pull };
+  return { spans, upright, bars, rest: restOf(layout, ids, family) };
 }
 
 

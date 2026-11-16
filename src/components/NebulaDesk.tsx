@@ -25,7 +25,7 @@ import { contextMenu } from './ContextMenu';
 import type { MenuItem } from './ContextMenu';
 import { useFloatingWindow, windowGrips, writeWindowRect } from './useFloatingWindow';
 import type { FloatingDrag } from './useFloatingWindow';
-import { cellsOf, columns, defaultLayout, displaySpans, dropTarget, floatPanel, headOf, leaveRow, minSpan, minPanelHeight, normalizeLayout, normalizeSaved, normalizeViewLayouts, own, placePanel, removeLayout, resizeInRow, rowsOf, sameLayout, saveLayout, setHeight, setSpan, spanOf, toggleHalf, toggleMinimized, visiblePanels } from '../nebulaLayout';
+import { cellsOf, columns, defaultLayout, displaySpans, dropTarget, floatPanel, headOf, leaveRow, minSpan, minPanelHeight, normalizeLayout, normalizeSaved, normalizeViewLayouts, own, placePanel, roomOf, roundSpan, wholeRow, removeLayout, resizeInRow, rowsOf, sameLayout, saveLayout, setHeight, spanOf, toggleHalf, toggleMinimized, visiblePanels } from '../nebulaLayout';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { detachable } from './DetachedPanel';
@@ -245,15 +245,17 @@ function DeskWindow({ id, stage, open, front, focused, dimmed = false, command, 
  * minimize it to the bar, switch between half and whole row, let a calendar or notebook float again, or close it. Its
  * right edge sets its width in columns, its lower edge its height (a double click there: back to the default).
  */
-function Panel({ id, command, label, note, minimized, span, shownSpan = span, upright = false, pull, rowStart = false, height, held, dropBefore, pair, focused = false, dimmed = false, onFocus, onGrab, onMinimize, onHalf, onSpan, onHeight, onFloat, onClose, children }: {
+function Panel({ id, command, label, note, minimized, span, shownSpan = span, upright = false, bars = 0, rest = 0, room, height, held, dropBefore, pair, focused = false, dimmed = false, onFocus, onGrab, onMinimize, onHalf, onSpan, onHeight, onFloat, onClose, children }: {
   id: PanelId; command: string; label: string; minimized: boolean; span: number;
   /** The small word on the label in the journal look (the day or period shown). */
   note?: string;
-  /** The width as shown (a minimized neighbour may give its columns to this one) and whether this one stands upright as
-   *  a narrow bar beside an open window (nebulaLayout: displaySpans). */
-  shownSpan?: number; upright?: boolean; pull?: [number, number];
-  /** The first window of its row: it starts at the grid's first column, so the rows stay as nebulaLayout lays them out. */
-  rowStart?: boolean; height?: number; held: { dx: number; dy: number } | null;
+  /** The width as shown (a minimized neighbour may give its columns to this one: `bars` of them) and whether this one
+   *  stands upright as a narrow bar beside an open window (nebulaLayout: displaySpans). */
+  shownSpan?: number; upright?: boolean; bars?: number;
+  /** The room left after it when it is its row's last window (columns), and for resizing without a pair: how wide it may
+   *  get, and which window of the row carries the room left (and how much). */
+  rest?: number; room?: { max: number; owner: PanelId; rest: number };
+  height?: number; held: { dx: number; dy: number } | null;
   /** Where a dragged window would land: above this one, beside it (sharing its width; the half it would take is shown), or
    *  in its stack above or below it. */
   dropBefore: 'top' | 'split-left' | 'split-right' | 'stack-above' | 'stack-below' | null;
@@ -276,47 +278,62 @@ function Panel({ id, command, label, note, minimized, span, shownSpan = span, up
     // From the first move the window counts as sized (its own height, not its row's), so it and a board inside follow
     // the pointer at once instead of only after letting go.
     const sized = body.current.classList.contains('has-height');
-    const move = (moved: PointerEvent) => {
-      last = Math.max(minPanelHeight(id), origin + moved.clientY - start);
+    let animation = 0, pointer = start;
+    const apply = () => {
+      animation = 0;
+      last = Math.max(minPanelHeight(id), origin + pointer - start);
       if (body.current) { body.current.style.height = `${last}px`; body.current.classList.add('has-height'); }
       root.current?.classList.add('is-custom-height');
     };
+    const move = (moved: PointerEvent) => { pointer = moved.clientY; if (!animation) animation = requestAnimationFrame(apply); };
     const end = () => {
+      if (animation) { cancelAnimationFrame(animation); apply(); }
       window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', end); window.removeEventListener('pointercancel', end);
       if (last !== origin) onHeight(last);
       else if (!sized) { body.current?.classList.remove('has-height'); root.current?.classList.remove('is-custom-height'); }
     };
     window.addEventListener('pointermove', move); window.addEventListener('pointerup', end); window.addEventListener('pointercancel', end);
   }
-  // The width snaps to the grid's columns while it is dragged (shown at once, stored on release). In a stack the whole
-  // stack takes the width.
+  // The width follows the pointer like the height does (no steps; near a whole column it settles on it), shown at once
+  // and stored on release. Only the edge moves: the next window in the row gives or takes the difference, or the room left
+  // in the row does; nothing changes rows. In a stack the whole stack takes the width.
   function resizeWidth(event: React.PointerEvent<HTMLElement>) {
     const element = root.current?.closest<HTMLElement>('.nebula-stack') ?? root.current, grid = element?.parentElement;
     if (event.button !== 0 || !element || !grid) return;
     event.preventDefault();
-    const gap = parseFloat(getComputedStyle(grid).columnGap) || 0, column = (grid.clientWidth - gap * (columns - 1)) / columns;
-    const start = event.clientX, origin = element.getBoundingClientRect().width;
-    // With a neighbour in the row, the two share their width: it shrinks or grows as this one changes, at once.
-    const neighbour = pair ? grid.querySelector<HTMLElement>(`:scope > [data-panel="${pair.id}"], :scope > [data-stack="${pair.id}"]`) : null;
-    const most = pair ? pair.total - minSpan : columns;
+    const gap = parseFloat(getComputedStyle(grid).columnGap) || 0, step = (grid.clientWidth - gap * (columns - 1)) / columns + gap;
+    const start = event.clientX;
+    const find = (other: PanelId) => grid.querySelector<HTMLElement>(`:scope > [data-panel="${other}"], :scope > [data-stack="${other}"]`);
+    const neighbour = pair ? find(pair.id) : null;
+    // Without a pair the room left in the row is carried by its last window; it shrinks or grows by what this one takes.
+    const owner = !pair && room ? find(room.owner) : null;
+    const most = pair ? pair.total - minSpan : room?.max ?? columns;
     const lent = shownSpan - span;
-    let last = shownSpan;
+    let last = span;
     element.classList.add('is-sizing'); neighbour?.classList.add('is-sizing'); root.current?.classList.add('is-sizing');
-    const move = (moved: PointerEvent) => {
-      last = Math.max(minSpan, Math.min(most, Math.round((origin + moved.clientX - start + gap) / (column + gap))));
-      element.style.setProperty('--span', String(last));
+    let frame = 0, pointer = start;
+    const apply = () => {
+      frame = 0;
+      let value = Math.max(minSpan, Math.min(most, span + (pointer - start) / step));
+      const whole = Math.round(value);
+      if (Math.abs(value - whole) < .12 && whole >= minSpan && whole <= most) value = whole;
+      last = roundSpan(value);
+      element.style.setProperty('--span', String(last + lent + bars));
       if (pair) neighbour?.style.setProperty('--span', String(pair.total - last));
+      else if (owner && room) owner.style.setProperty('--rest', String(Math.max(0, room.rest + span - last)));
     };
+    const move = (moved: PointerEvent) => { pointer = moved.clientX; if (!frame) frame = requestAnimationFrame(apply); };
     const end = () => {
       window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', end); window.removeEventListener('pointercancel', end);
+      if (frame) { cancelAnimationFrame(frame); apply(); }
       element.classList.remove('is-sizing'); element.style.removeProperty('--span'); root.current?.classList.remove('is-sizing');
-      neighbour?.classList.remove('is-sizing'); neighbour?.style.removeProperty('--span');
-      if (last !== shownSpan) onSpan(Math.max(minSpan, last - lent));
+      neighbour?.classList.remove('is-sizing'); neighbour?.style.removeProperty('--span'); owner?.style.removeProperty('--rest');
+      if (last !== span) onSpan(last);
     };
     window.addEventListener('pointermove', move); window.addEventListener('pointerup', end); window.addEventListener('pointercancel', end);
   }
-  return <section ref={root} className={`nebula-terminal nebula-panel is-${id}${height ? ' is-custom-height' : ''}${shownSpan < columns ? ' is-part' : ''}${shownSpan === columns / 2 ? ' is-half' : ''}${minimized ? ' is-minimized' : ''}${upright ? ` is-upright${pull && pull[1] >= 0 ? ' is-before' : ''}` : ''}${rowStart ? ' is-row-start' : ''}${held ? ' is-held' : ''}${dropBefore ? ` is-drop-${dropBefore}` : ''}${focused ? ' is-focused' : ''}${dimmed ? ' is-dimmed' : ''}`}
-    data-panel={id} data-span={shownSpan} aria-label={label} style={{ '--span': shownSpan, ...pull ? { '--pull-left': Math.max(0, pull[0]), '--pull-right': Math.max(0, pull[1]) } : {}, ...held ? { transform: `translate(${held.dx}px, ${held.dy}px) rotate(-.6deg)` } : {} } as CSSProperties}>
+  return <section ref={root} className={`nebula-terminal nebula-panel is-${id}${height ? ' is-custom-height' : ''}${shownSpan < columns ? ' is-part' : ''}${shownSpan === columns / 2 ? ' is-half' : ''}${minimized ? ' is-minimized' : ''}${upright ? ' is-upright' : ''}${held ? ' is-held' : ''}${dropBefore ? ` is-drop-${dropBefore}` : ''}${focused ? ' is-focused' : ''}${dimmed ? ' is-dimmed' : ''}`}
+    data-panel={id} data-span={shownSpan} aria-label={label} style={{ '--span': shownSpan + bars, ...bars ? { '--bars': bars } : {}, ...rest ? { '--rest': rest } : {}, ...held ? { transform: `translate(${held.dx}px, ${held.dy}px) rotate(-.6deg)` } : {} } as CSSProperties}>
     <header className="nebula-terminal-head nebula-panel-head" onPointerDown={onGrab} onDoubleClick={event => { if (!(event.target as Element).closest('button')) onMinimize(); }}
       onContextMenu={contextMenu(() => ({ title: label, command: command.replace(/^\.\//, '').replace(/\.sh.*$/, '') || 'window', items: [
         ...(!minimized && onFocus ? [{ id: 'focus', command: 'focus', label: focused ? t('Fokus beenden') : t('Fokus: Hintergrund abdunkeln'), icon: 'focus', checked: focused, run: onFocus } as MenuItem] : []),
@@ -659,12 +676,15 @@ export function NebulaDesk({ mode, date, today, modes, modeLabels, dirty, title,
       <div className="nebula-terminals">
         {/* The grid of windows (twelve columns). A carried window follows the pointer; a violet bar marks where it lands. */}
         <div ref={gridRef} className={`nebula-grid${drop ? ' is-dragging' : ''}${drop && !drop.out && !drop.target.beside && !drop.target.stack && drop.target.index === shown.filter(id => id !== drop.id).length && (!drop.floating || drop.shift) ? ' is-drop-end' : ''}`}>
-          {(display => cellsOf(layout, shown, family).map((cell, index) => {
+          {(display => { const rows = rowsOf(layout, shown, family); return cellsOf(layout, shown, family).map((cell, index) => {
             const others = drop ? shown.filter(other => other !== drop.id) : shown;
             const head = cell[0];
-            const row = rowsOf(layout, shown, family).find(list => list.includes(head)) ?? [];
-            // With an upright bar in the row the open window there takes its columns; width is not shared with it then.
-            const neighbour = row.some(other => display.upright.includes(other)) ? undefined : row[row.indexOf(head) + 1] ?? row[row.indexOf(head) - 1];
+            const row = rows.find(list => list.includes(head)) ?? [];
+            // The edge on the right moves between this cell and the next one; the last cell of a row grows into the room
+            // left in it. With an upright bar in the row the open window there takes its columns; width is not shared then.
+            const neighbour = row.some(other => display.upright.includes(other)) ? undefined : row[row.indexOf(head) + 1];
+            const last = row[row.length - 1];
+            const room = { max: roomOf(layout, shown, head, family), owner: last, rest: display.rest[last] ?? 0 };
             const stacked = cell.length > 1;
             const panels = cell.map(id => {
               const marking = drop && !drop.out && (!drop.floating || drop.shift) && drop.id !== id;
@@ -672,21 +692,21 @@ export function NebulaDesk({ mode, date, today, modes, modeLabels, dirty, title,
                 : drop.target.stack?.id === id ? (drop.target.stack.side === 'above' ? 'stack-above' : 'stack-below')
                 : !drop.target.beside && !drop.target.stack && others.indexOf(id) === drop.target.index && id === head && !stacked ? 'top' : null;
               const window = id === 'calendar' || id === 'notebook' ? id : null;
-              return <Panel key={id} id={id} command={commandOf(id)} label={panelLabels[id]} note={noteOf(id)} minimized={layout.minimized.includes(id)} span={spanOf(layout, head)} shownSpan={display.spans[id] ?? spanOf(layout, head)} upright={display.upright.includes(id)} pull={stacked ? undefined : display.pull[id]} rowStart={!stacked && row[0] === id} height={layout.heights[id] ?? (window ? 560 : undefined)}
+              return <Panel key={id} id={id} command={commandOf(id)} label={panelLabels[id]} note={noteOf(id)} minimized={layout.minimized.includes(id)} span={spanOf(layout, head)} shownSpan={display.spans[id] ?? spanOf(layout, head)} upright={display.upright.includes(id)} bars={stacked ? 0 : display.bars[id] ?? 0} rest={stacked ? 0 : display.rest[id] ?? 0} room={room} height={layout.heights[id] ?? (window ? 560 : undefined)}
                 held={held?.id === id ? held : null} dropBefore={mark} focused={isFocused(id)} dimmed={dimmedNow(id)} onFocus={() => toggleFocus(id)} pair={neighbour ? { id: neighbour, total: spanOf(layout, head) + spanOf(layout, neighbour) } : null}
-                onGrab={event => grab(id, event)} onMinimize={() => changeLayout(current => toggleMinimized(current, id))} onHalf={() => changeLayout(current => toggleHalf(current, headOf(current, shown, id, family)))}
-                onSpan={span => changeLayout(current => span == null ? setSpan(current, headOf(current, shown, id, family), columns) : resizeInRow(current, shown, id, span, family))} onHeight={height => changeLayout(current => setHeight(current, id, height))}
+                onGrab={event => grab(id, event)} onMinimize={() => changeLayout(current => toggleMinimized(current, id))} onHalf={() => changeLayout(current => toggleHalf(current, headOf(current, shown, id, family), shown, family))}
+                onSpan={span => changeLayout(current => span == null ? wholeRow(current, headOf(current, shown, id, family), shown, family) : resizeInRow(current, shown, id, span, family))} onHeight={height => changeLayout(current => setHeight(current, id, height))}
                 onFloat={() => float(id)} onClose={window === 'calendar' ? onCalendarClose : window === 'notebook' ? onNotebookClose : undefined}>
                 <div className={window === 'calendar' ? 'nebula-calendar-body' : window === 'notebook' ? 'nebula-notebook-body' : 'nebula-panel-content'}
                   ref={window === 'calendar' ? calendarRef as React.RefObject<HTMLDivElement> : window === 'notebook' ? notebookRef as React.RefObject<HTMLDivElement> : undefined}>{panelContent[id]}</div>
               </Panel>;
             });
             // A stack: its windows one above the other in one column (the head's width); the windows beside it stretch to it.
-            const pull = display.pull[head];
-            return [stacked ? <div key={`stack:${head}`} className={`nebula-stack${row[0] === head ? ' is-row-start' : ''}${others.indexOf(head) === drop?.target.index && !drop.target.beside && !drop.target.stack && drop.id !== head && !drop.out && (!drop.floating || drop.shift) ? ' is-drop-top' : ''}`}
-              data-stack={head} data-span={display.spans[head] ?? spanOf(layout, head)} style={{ '--span': display.spans[head] ?? spanOf(layout, head), ...pull ? { '--pull-left': Math.max(0, pull[0]), '--pull-right': Math.max(0, pull[1]) } : {} } as CSSProperties}>{panels}</div> : panels[0],
+            const bars = display.bars[head] ?? 0;
+            return [stacked ? <div key={`stack:${head}`} className={`nebula-stack${others.indexOf(head) === drop?.target.index && !drop.target.beside && !drop.target.stack && drop.id !== head && !drop.out && (!drop.floating || drop.shift) ? ' is-drop-top' : ''}`}
+              data-stack={head} data-span={display.spans[head] ?? spanOf(layout, head)} style={{ '--span': (display.spans[head] ?? spanOf(layout, head)) + bars, ...bars ? { '--bars': bars } : {}, ...display.rest[head] ? { '--rest': display.rest[head] } : {} } as CSSProperties}>{panels}</div> : panels[0],
               showMarquee && index === 0 ? <Marquee key="marquee" words={mode === 'day' ? [word, word, title.trim() || word] : [word, word, periodTitle(date, mode)]} /> : null];
-          }))(displaySpans(layout, shown, family))}
+          }); })(displaySpans(layout, shown, family))}
           {drop?.floating && !drop.shift && !drop.out && <p className="nebula-dock-hint" role="status">{t('⇧ halten und loslassen: hier andocken')}</p>}
         </div>
         {drop?.out && <p className="nebula-detach-hint" role="status">{t('Loslassen: als eigenes Fenster')}</p>}

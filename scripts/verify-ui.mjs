@@ -12,7 +12,7 @@ const root = process.cwd();
 const dist = resolve(root, 'dist');
 const artifacts = resolve(root, 'src-tauri/target/ui-validation');
 await mkdir(artifacts, { recursive: true });
-const edge = join(process.env['ProgramFiles(x86)'] ?? 'C:/Program Files (x86)', 'Microsoft/Edge/Application/msedge.exe');
+const edge = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
 assert(existsSync(edge), 'Microsoft Edge is required for this Windows UI check.');
 const indexHtml = await readFile(join(dist, 'index.html'), 'utf8');
 const entryScript = indexHtml.match(/<script[^>]*src="([^"]+)"[^>]*><\/script>/)?.[1];
@@ -2255,7 +2255,8 @@ async function checkNebulaTheme() {
   await screenshot('nebula-grid-moving.png');
   await release(top);
   await until("[...document.querySelectorAll('.nebula-grid > .nebula-panel')].map(p => p.dataset.panel).join()==='rating,entries,board,scales,activities,calendar'");
-  assert.deepEqual(await evaluate("['rating','board'].map(id => document.querySelector(`.nebula-panel.is-${id}`).dataset.span)"), ['12', '12'], 'A row of its own; the board takes the whole row it is left alone in.');
+  assert.deepEqual(await evaluate("['rating','board'].map(id => document.querySelector(`.nebula-panel.is-${id}`).dataset.span)"), ['6', '6'], 'A row of its own; both keep their widths (no window grows to the whole row by itself).');
+  assert(await evaluate("(() => { const r=document.querySelector('.nebula-panel.is-rating').getBoundingClientRect(), e=document.querySelector('.nebula-panel.is-entries').getBoundingClientRect(); return r.bottom < e.top; })()"), 'The rating stands in a row of its own above the entries.');
   // The board dropped on the right edge of the entries: the two share that row (scrolled so both bars are in view).
   await evaluate("(() => { const d=document.querySelector('.nebula-desk'); d.scrollTop += document.querySelector('.nebula-panel.is-entries').getBoundingClientRect().top - 80; })()"); await pause(250);
   const boardFrom = await barOf('board');
@@ -2280,7 +2281,7 @@ async function checkNebulaTheme() {
   await pull(calendarBar, outside); await release(outside);
   await until("Boolean(document.querySelector('section.nebula-calendar.is-open.is-floating')) && !document.querySelector('.nebula-grid > .nebula-panel.is-calendar')");
   // Back in with Shift, before the board: the hint without Shift, the bar with it.
-  await evaluate("document.querySelector('.nebula-desk').scrollTop=0"); await pause(200);
+  await evaluate("document.querySelector('.nebula-panel.is-board').scrollIntoView({block:'center'})"); await pause(200);
   const floatBar = await evaluate("(() => { const r=document.querySelector('section.nebula-calendar .nebula-prompt').getBoundingClientRect(); return { x:r.left+30, y:r.top+r.height/2 }; })()");
   const board = await evaluate("(() => { const r=document.querySelector('.nebula-panel.is-board').getBoundingClientRect(); return { x:r.left+20, y:r.top+r.height/2 }; })()");
   await pull(floatBar, board);
@@ -5435,7 +5436,7 @@ try {
     await key('Enter');
     await until("JSON.parse(sessionStorage.boardCards).filter(c=>c.links?.length).length===2");
     // A third, unrelated card must fade the thread too; all card surfaces, not just their pins, mask it.
-    assert(await evaluate("(() => { const svg=document.querySelector('.board-threads'), cards=[...document.querySelectorAll('.board-card')]; return cards.length===3 && cards.every(card=>{const mask=svg.querySelector('[data-thread-card=\"'+card.dataset.boardId+'\"]'); return mask && Math.abs(Number(mask.getAttribute('width'))-card.offsetWidth)<2 && Math.abs(Number(mask.getAttribute('height'))-card.offsetHeight)<2;}) && [...svg.querySelectorAll('.board-thread')].every(path=>path.getAttribute('mask')?.startsWith('url(#board-threads-')); })()"), 'Threads fade over the complete surface of every card, including unrelated cards.');
+    assert(await evaluate("(() => { const svg=document.querySelector('.board-threads'), cards=[...document.querySelectorAll('.board-card')]; return cards.length===3 && cards.every(card=>{const mask=svg.querySelector('[data-thread-card=\"'+card.dataset.boardId+'\"]'); return mask && Math.abs(Number(mask.getAttribute('width'))-card.offsetWidth)<2 && Math.abs(Number(mask.getAttribute('height'))-card.offsetHeight)<2;}) && [...svg.querySelectorAll('.board-thread')].every(path=>path.getAttribute('clip-path')?.startsWith('url(#board-threads-')); })()"), 'Threads fade over the complete surface of every card, including unrelated cards.');
     await screenshot('board-thread-card-masking.png');
     await evaluate("document.querySelector('.board-note .cm-content').focus()");
     const blankBoardPoint = await evaluate("(() => { const v=document.querySelector('.board-viewport'),r=v.getBoundingClientRect(); for(let y=Math.max(0,r.top)+15;y<Math.min(innerHeight,r.bottom)-10;y+=25)for(let x=Math.max(0,r.left)+15;x<Math.min(innerWidth,r.right)-10;x+=25){const el=document.elementFromPoint(x,y);if(el?.closest('.board-viewport')===v&&!el.closest('.board-card,.board-thread-hit'))return {x,y};}throw Error('No free board area'); })()");
@@ -5502,7 +5503,7 @@ try {
     await evaluate("document.querySelector('.board-library-copy button').click()");
     await until("document.querySelectorAll('.board-card').length===2");
     assert.deepEqual(await evaluate("JSON.parse(sessionStorage.boardCards).filter(c=>c.dates.includes(window.__uiTest.date)).sort((a,b)=>a.order-b.order).map(c=>[c.boardX,c.y,c.w,c.h,c.links.length])"),[[40,60,300,240,1],[390,190,200,310,1]]);
-    assert.equal(await evaluate("document.querySelectorAll('.board-thread-direction').length"),1,'Note-to-note threads have a direction arrow.');
+    assert.equal(await evaluate("document.querySelectorAll('.board-threads:not(.is-under) .board-thread-direction').length"),1,'Note-to-note threads have a direction arrow.');
     assert.equal(await evaluate("document.querySelectorAll('.board-primary').length"),0,'The main-note button has been replaced by thread directions.');
     await evaluate("document.querySelector('.board-thread-hit').focus()");await key('Enter','Enter');
     await until("Boolean(document.querySelector('.board-thread-reverse'))");
@@ -5796,6 +5797,64 @@ try {
     assert(await evaluate("document.querySelector('.main').scrollWidth<=document.querySelector('.main').clientWidth+1"));
     assert.deepEqual(errors,[]);
     console.log('Period UI checks passed: slider save, icons, layouts and monthly/yearly charts.');
+  } else if (process.env.JOURNAL_UI_SCOPE === 'sticker-colors') {
+    const origin = `http://127.0.0.1:${server.address().port}`;
+    await evaluate("localStorage.setItem('journal.settings',JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'),layout:'desk',look:'journal',pixel:false,colorTheme:'green',customColors:{}}))");
+    await command('Page.navigate', {url:origin});
+    await until("Boolean(document.querySelector('.nebula-poster')) && document.documentElement.dataset.look==='journal'");
+    const style = (selector, property) => evaluate(`getComputedStyle(document.querySelector(${JSON.stringify(selector)}))[${JSON.stringify(property)}]`);
+    const defaults = await Promise.all([style('.nebula-poster','backgroundColor'),style('.nebula-date','color'),style('.nebula-window-tools button','backgroundColor')]);
+    const settings = async () => {
+      await evaluate("document.querySelector('.settings-button').click()");
+      await until("Boolean(document.querySelector('#settings-colors-tab'))");
+      await evaluate("document.querySelector('#settings-colors-tab').click()");
+      await until("Boolean(document.querySelector('[data-color-group=sticker]'))");
+      await evaluate("document.querySelector('[data-color-group=sticker]').open=true");
+    };
+    const fill = (token, value) => evaluate(`(() => {const input=document.querySelector('[data-color-field="${token}"] .color-hex');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,${JSON.stringify(value)});input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+    await settings();
+    assert.equal(await evaluate("document.querySelectorAll('[data-color-group=sticker] [data-color-field]').length"),13);
+    await fill('text','#abcdef');
+    await until("document.documentElement.style.getPropertyValue('--poster-text')==='#abcdef'");
+    await until("getComputedStyle(document.querySelector('.nebula-date')).color==='rgb(171, 205, 239)'");
+    assert.equal(await style('.nebula-date','color'),'rgb(171, 205, 239)','General text reaches the date card');
+    assert.equal(await style('.nebula-panel-head','color'),'rgb(171, 205, 239)','General text reaches sticker window heads');
+    await fill('strong','#fedcba');
+    await fill('muted','#aabbcc');
+    await until("getComputedStyle(document.querySelector('.nebula-poster-prose')).color==='rgb(170, 187, 204)'");
+    assert.equal(await style('.nebula-poster-prose','color'),'rgb(170, 187, 204)');
+    const overrides = {ink:'#badaee','ink-fixed':'#123456','key-bg':'#314159','key-backdrop':'#cddcaa','tint-base':'#eeeecc',pink:'#dd7799',mint:'#77dd99',violet:'#9977dd','poster-background':'#203040','poster-text':'#eeeeff','poster-muted':'#bbbbcc'};
+    for (const [token,value] of Object.entries(overrides)) await fill(token,value);
+    await pause(250);
+    assert.equal(await style('.nebula-panel-head','color'),'rgb(186, 218, 238)');
+    assert.equal(await style('.desk-label','color'),'rgb(18, 52, 86)');
+    assert.equal(await style('.nebula-window-tools button','backgroundColor'),'rgb(49, 65, 89)');
+    assert.equal(await style('.nebula-poster','backgroundColor'),'rgb(32, 48, 64)');
+    assert.equal(await style('.nebula-date','color'),'rgb(238, 238, 255)');
+    assert.equal(await style('.nebula-poster-prose','color'),'rgb(187, 187, 204)');
+    await evaluate("document.querySelector('.settings-close').click()");
+    await screenshot('sticker-custom-colors.png');
+    await command('Page.reload');
+    await until("Boolean(document.querySelector('.nebula-date'))");
+    assert.equal(await style('.nebula-date','color'),'rgb(238, 238, 255)','Custom sticker text survives reload');
+    await settings();
+    await evaluate("document.querySelector('[data-color-theme-choice=paper]').click()");
+    assert.equal(await evaluate("document.documentElement.style.getPropertyValue('--key-bg')"),'','Another palette uses its own CSS defaults');
+    await evaluate("document.querySelector('[data-color-theme-choice=green]').click()");
+    await pause(250);
+    assert.equal(await style('.nebula-poster','backgroundColor'),'rgb(32, 48, 64)');
+    // Per-field reset restores the inherited general text; choosing the original sticker ink explicitly must still work.
+    await evaluate("document.querySelector('[data-color-field=ink-fixed] .color-reset').click()");
+    await pause(250);
+    assert.equal(await style('.desk-label','color'),'rgb(171, 205, 239)');
+    await fill('ink-fixed','#2b2140');
+    await pause(250);
+    assert.equal(await style('.desk-label','color'),'rgb(43, 33, 64)');
+    await evaluate("document.querySelector('.color-reset-all').click();document.querySelector('.settings-close').click()");
+    await pause(250);
+    assert.deepEqual(await Promise.all([style('.nebula-poster','backgroundColor'),style('.nebula-date','color'),style('.nebula-window-tools button','backgroundColor')]),defaults,'Reset restores the original design exactly');
+    assert.deepEqual(errors,[]);
+    console.log('Sticker colours passed: general text, independent ink, buttons, date card, accents, persistence, palette isolation and reset.');
   } else if (process.env.JOURNAL_UI_SCOPE === 'drive') { await checkDrive(); } else if (process.env.JOURNAL_UI_SCOPE === 'colors') {
     await checkColors();
   } else if (process.env.JOURNAL_UI_SCOPE === 'tags') {
@@ -6127,6 +6186,69 @@ try {
     await evaluate("document.querySelector('.nebula-tickets').scrollIntoView()"); await pause(200);
     await screenshot('desk-ticket-icon.png');
     console.log('Desk checks passed: switching off the view on screen in every layout, an arrangement per view with three saved places (save, apply, replace, remove, reset), tag icons on tickets.');
+  } else if (process.env.JOURNAL_UI_SCOPE === 'perf') {
+    // Fixed interactions on the desk (each look) and in the normal layout, each measured on its own: the time the page
+    // spends on scripts, styles and layout, and how even the frames are. Prints a table (JOURNAL_PERF_JSON: also a file).
+    const origin = `http://127.0.0.1:${server.address().port}`;
+    await command('Emulation.setDeviceMetricsOverride',{width:1600,height:950,deviceScaleFactor:1,mobile:false});
+    await command('Performance.enable', {});
+    const metric = async () => Object.fromEntries((await command('Performance.getMetrics', {})).metrics.map(item => [item.name, item.value]));
+    const results = [];
+    const measure = async (name, action) => {
+      await pause(300);
+      await evaluate("window.__frames = []; window.__framesOn = true; (function tick(time) { if (!window.__framesOn) return; window.__frames.push(time); requestAnimationFrame(tick); })(performance.now())");
+      const before = await metric(), started = Date.now();
+      await action();
+      await pause(250);
+      const after = await metric(), wall = Date.now() - started;
+      const frames = await evaluate("(window.__framesOn = false, (f => f.slice(1).map((time, i) => time - f[i]))(window.__frames.splice(0)))");
+      frames.sort((a, b) => a - b);
+      const ms = key => Math.round((after[key] - before[key]) * 1000);
+      results.push({ case: name, script: ms('ScriptDuration'), style: ms('RecalcStyleDuration'), layout: ms('LayoutDuration'), task: ms('TaskDuration'), wall,
+        p95: Math.round(frames[Math.floor(frames.length * .95)] ?? 0), worst: Math.round(frames.at(-1) ?? 0), long: frames.filter(f => f > 34).length });
+    };
+    const drag = async (from, to, steps, buttons = 1) => {
+      await command('Input.dispatchMouseEvent',{type:'mouseMoved',...from});
+      await command('Input.dispatchMouseEvent',{type:'mousePressed',...from,button:'left',buttons,clickCount:1});
+      for (let step = 1; step <= steps; step++) { await command('Input.dispatchMouseEvent',{type:'mouseMoved',x:from.x+(to.x-from.x)*step/steps,y:from.y+(to.y-from.y)*step/steps,button:'left',buttons}); await pause(8); }
+      await command('Input.dispatchMouseEvent',{type:'mouseReleased',...to,button:'left',buttons:0,clickCount:1});
+    };
+    const center = selector => evaluate(`(r => r ? ({ x: r.left + r.width / 2, y: r.top + r.height / 2 }) : null)(document.querySelector(${JSON.stringify(selector)})?.getBoundingClientRect())`);
+    // Twelve notes on the day's board, every other one tied to the next (threads).
+    const cards = `(() => { const date = window.__uiTest.date; return Array.from({ length: 12 }, (_, i) => ({ id: 'perf-' + i, kind: 'note', title: 'Zettel ' + (i + 1), text: '**Notiz** ' + i + '\\n- eins\\n- zwei', dates: [date], order: i + 1,
+      boardX: 20 + (i % 4) * 250, y: 20 + Math.floor(i / 4) * 230, w: 220, h: 170, links: i % 2 === 0 && i < 11 ? ['perf-' + (i + 1)] : i % 2 === 1 ? ['perf-' + (i - 1)] : [] })); })()`;
+    for (const [layout, look] of [['desk', 'nebula'], ['desk', 'classic'], ['desk', 'journal'], ['classic', 'classic']]) {
+      const palette = look === 'journal' ? 'paper' : 'original';
+      await evaluate(`localStorage.setItem('journal.settings', JSON.stringify((({theme, features, ...rest}) => ({...rest, layout:'${layout}', look:'${look}', pixel:false, colorTheme:'${palette}'}))(JSON.parse(localStorage.getItem('journal.settings')||'{}')))); localStorage.setItem('journal.calendarDrawer','0'); localStorage.removeItem('journal.nebulaLayout.v1'); sessionStorage.setItem('boardCards', JSON.stringify(${cards}))`);
+      await command('Page.navigate', { url:origin });
+      await until("document.querySelectorAll('.entry').length>=1 && document.querySelectorAll('.board-card').length === 12");
+      await evaluate("document.fonts.ready.then(() => true)"); await pause(600);
+      const tag = `${layout}/${look}`;
+      // Typing into an entry.
+      await evaluate("(e => { e.scrollIntoView({ block: 'center' }); e.focus(); })(document.querySelector('.entry .entry-text'))");
+      await measure(`${tag} type 30`, async () => { for (let i = 0; i < 30; i++) { await command('Input.insertText', { text: 'a' }); await pause(20); } });
+      await evaluate("document.activeElement?.blur()");
+      // The board: drag a card, pan the cork, zoom.
+      await evaluate("document.querySelector('.bulletin-board').scrollIntoView({ block: 'center' })"); await pause(200);
+      const card = await evaluate("(r => ({ x: r.left + 30, y: r.top + r.height - 12 }))(document.querySelector('[data-board-id=perf-5]').getBoundingClientRect())");
+      await measure(`${tag} board drag`, () => drag(card, { x: card.x + 220, y: card.y + 90 }, 50));
+      const cork = await evaluate("(r => ({ x: r.right - 30, y: r.bottom - 30 }))(document.querySelector('.board-viewport').getBoundingClientRect())");
+      await measure(`${tag} board pan`, () => drag(cork, { x: cork.x - 200, y: cork.y - 60 }, 50));
+      await measure(`${tag} board zoom`, async () => { for (let i = 0; i < 20; i++) { await command('Input.dispatchMouseEvent', { type:'mouseWheel', x:cork.x, y:cork.y, deltaX:0, deltaY:i < 10 ? -60 : 60, modifiers:2 }); await pause(16); } });
+      if (layout === 'desk') {
+        await evaluate("document.querySelector('.nebula-desk').scrollTop = 0"); await pause(200);
+        const width = await center('.nebula-panel.is-entries .nebula-panel-width');
+        await measure(`${tag} window width`, () => drag(width, { x: width.x - 260, y: width.y }, 40));
+        const height = await center('.nebula-panel.is-entries .nebula-panel-resize');
+        await measure(`${tag} window height`, () => drag(height, { x: height.x, y: height.y + 160 }, 40));
+        const point = await center('.nebula-terminals');
+        await measure(`${tag} scroll`, async () => { for (const delta of [100, -100]) for (let i = 0; i < 12; i++) { await command('Input.dispatchMouseEvent', { type:'mouseWheel', x:point.x, y:point.y, deltaX:0, deltaY:delta }); await pause(16); } });
+      }
+      await measure(`${tag} next day x4`, async () => { for (let i = 0; i < 4; i++) { await key('ArrowRight', 'ArrowRight', 1); await pause(120); } });
+    }
+    console.table(results);
+    if (process.env.JOURNAL_PERF_JSON) await writeFile(process.env.JOURNAL_PERF_JSON, JSON.stringify(results, null, 1));
+    console.log('Performance measured.');
   } else if (process.env.JOURNAL_UI_SCOPE === 'combos') {
     // Layout (what is where) and look (type, colours, shapes) are chosen apart: all nine pairs open, show their own
     // structure with the look's attributes, stay usable (settings open, a day turns) and throw nothing.

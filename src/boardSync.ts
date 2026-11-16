@@ -1,6 +1,19 @@
 import type { Card, Patches } from './notebook';
 import { cardGroups, copyLayout, isOnBoard, isPeriodBoard, layoutBoard } from './boardPlacement.ts';
 
+/** A copy's own switch and its direct copies determine the switch shown on its card. */
+export function copySyncStates(cards: readonly Card[]): Map<string, 'on' | 'off'> {
+  const ids = new Set(cards.map(card => card.id));
+  const states = new Map<string, 'on' | 'off'>();
+  for (const card of cards) {
+    if (!card.copyOf || !ids.has(card.copyOf)) continue;
+    for (const id of [card.id, card.copyOf]) {
+      states.set(id, states.get(id) === 'off' || !card.copySync ? 'off' : 'on');
+    }
+  }
+  return states;
+}
+
 const shared = ['title', 'text', 'mode', 'ink', 'inkPaper', 'paper', 'tag', 'url', 'pixel', 'groupName'] as const;
 const geometry = ['boardX', 'x', 'y', 'w', 'h'] as const;
 const positions = ['boardX', 'x', 'y'] as const;

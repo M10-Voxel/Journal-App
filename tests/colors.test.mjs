@@ -40,7 +40,7 @@ test('image palettes have readable text and their own coordinated Markdown colou
 test('applying a palette updates existing inherited styles and derives readable button text', () => {
   const properties = new Map();
   const previous = globalThis.document;
-  globalThis.document = {documentElement:{dataset:{},style:{setProperty:(key,value)=>properties.set(key,value)}}};
+  globalThis.document = {documentElement:{dataset:{},style:{setProperty:(key,value)=>properties.set(key,value),removeProperty:key=>properties.delete(key)}}};
   try {
     applyColors({colorTheme:'green',customColors:{green:{accent:'#080808','md-red':'#ffaaaa'}}});
     assert.equal(document.documentElement.dataset.colorTheme,'green');
@@ -51,6 +51,34 @@ test('applying a palette updates existing inherited styles and derives readable 
     assert.equal(properties.get('--on-accent'),'#06101f');
     assert.equal(properties.get('--surface'),'#292929');
   } finally {globalThis.document=previous;}
+});
+
+test('sticker colours follow general text overrides, allow independent choices, and clear on theme switch/reset', () => {
+  const properties = new Map(), previous = globalThis.document;
+  globalThis.document = {documentElement:{dataset:{},style:{setProperty:(key,value)=>properties.set(key,value),removeProperty:key=>properties.delete(key)}}};
+  try {
+    const settings = normalizeColorSettings({ colorTheme:'green', customColors:{ green:{ text:'#ABCDEF', strong:'#fedcba', muted:'#879abc', 'key-bg':'#124578', 'key-backdrop':'#abcdef80', 'poster-background':'#123456', pink:'#ff8899', mint:'#99ffbb', violet:'#aabbff', 'tint-base':'#eeeedd' } } });
+    const palette = resolvePalette(settings);
+    assert.equal(palette.ink, '#abcdef');
+    assert.equal(palette['ink-fixed'], '#abcdef');
+    assert.equal(palette['poster-text'], '#abcdef');
+    applyColors(settings);
+    for (const [token, value] of Object.entries(settings.customColors.green)) assert.equal(properties.get('--'+token), value);
+    assert.equal(properties.get('--ink'), '#abcdef');
+    assert.equal(properties.get('--ink-fixed'), '#abcdef');
+    assert.equal(properties.get('--poster-text'), '#abcdef');
+    assert.equal(properties.get('--poster-muted'), '#879abc');
+    assert.equal(properties.get('--poster-strong'), '#fedcba');
+    applyColors({...settings, customColors:{green:{...settings.customColors.green, ink:'#112233', 'ink-fixed':'#223344', 'poster-text':'#334455', 'poster-muted':'#445566'}}});
+    assert.equal(properties.get('--ink'), '#112233');
+    assert.equal(properties.get('--ink-fixed'), '#223344');
+    assert.equal(properties.get('--poster-text'), '#334455');
+    assert.equal(properties.get('--poster-muted'), '#445566');
+    for (const reset of [{...settings,colorTheme:'lavender'}, {...settings,customColors:{}}]) {
+      applyColors(reset);
+      for (const token of ['ink','ink-fixed','key-bg','key-backdrop','pink','mint','violet','tint-base','poster-background','poster-text','poster-muted','poster-strong']) assert.equal(properties.has('--'+token), false, token+' falls back to the unchanged CSS default');
+    }
+  } finally { globalThis.document = previous; }
 });
 
 test('the journal look\'s lavender palettes: light and dark, readable, among the journal palettes (lavender first)', async () => {

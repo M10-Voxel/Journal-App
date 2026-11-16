@@ -1108,6 +1108,17 @@ const english: Record<string, string> = {
   "Sticker (Journal-Optik)": "Stickers (journal look)",
   "Weißer Rand der Sticker": "White edge of the stickers",
   "Tintenlinie um die Sticker": "Ink line around the stickers",
+  "Text und Linien im Sticker-Stil": "Sticker text and lines",
+  "Text auf hellen Stickern": "Text on light stickers",
+  "Button-Fläche": "Button background",
+  "Heller Button-Rand": "Light button edge",
+  "Grundfläche der hellen Sticker": "Base of light stickers",
+  "Rosa Sticker-Akzent": "Pink sticker accent",
+  "Mintgrüner Sticker-Akzent": "Mint sticker accent",
+  "Violetter Sticker-Akzent": "Violet sticker accent",
+  "Datumsbox: Hintergrund": "Date card: background",
+  "Datumsbox: Text": "Date card: text",
+  "Datumsbox: sekundärer Text": "Date card: secondary text",
 
   // Formerly inline English/German choices, now central.
   "Das vollständige Kalenderfenster mit seinen verschiedenen Ansichten.": "The complete calendar with its different views.",

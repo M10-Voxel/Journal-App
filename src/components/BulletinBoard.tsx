@@ -1,6 +1,6 @@
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
+import type { CSSProperties, FocusEvent as ReactFocusEvent, KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { Icon } from './Icon';
@@ -13,6 +13,8 @@ import type { MenuEntry, MenuItem, MenuSpec } from './ContextMenu';
 import { useLanguage, t } from '../i18n';
 import { BoardImage, Lightbox, Note, connectCards, disconnectCards, patchCards, removeCard, removeCards, hostOf, httpsLink, linkPreview, nextOrder, source, storeImage, useCards, useFolders, usePixelTheme, waitForCard } from '../boardCards';
 import type { Card, Paper } from '../boardCards';
+import type { BoardPlacement } from '../notebook';
+import type { Tag } from '../tags';
 import { folderPath, pageDirections, reversePagePatches, threadKind, threads } from '../notebook';
 import { resizeBoardView } from '../boardViewport';
 import { TagPicker } from './TagPicker';
@@ -21,7 +23,7 @@ import { useHiddenTags, useTags } from '../tagStore';
 import type { TagScope } from '../tagStore';
 import { boardKey, cardGroups, cardWidth, copyCards, copyLayout, copyableCard, groupFrames, layoutBoard, libraryNotes, scopedBoardPatch } from '../boardPlacement';
 import type { BoardPeriod, BoardBox } from '../boardPlacement';
-import { copySyncPatches } from '../boardSync';
+import { copySyncPatches, copySyncStates } from '../boardSync';
 import './bulletinBoard.css';
 
 // The board under the checklist: notes (small paper slips with Markdown), images (compressed to AVIF, as polaroids)
@@ -70,6 +72,81 @@ function GroupName({ value, label, placeholder, onSave }: { value: string; label
     }} />;
 }
 
+/** An object whose functions always call the latest ones given (a stable identity for memoized children). */
+function useStable<T extends object>(value: T): T {
+  const ref = useRef(value); ref.current = value;
+  return useMemo(() => new Proxy({} as T, { get: (_, name) => (...args: unknown[]) => (ref.current as Record<string | symbol, (...args: unknown[]) => unknown>)[name](...args) }), []);
+}
+
+/** The switch that keeps copies in sync with their original (a card's, or a group's). */
+function SyncToggle({ enabled, group = false, busy, onToggle }: { enabled: boolean; group?: boolean; busy: boolean; onToggle: () => void }) {
+  const label = group ? t("Gruppe synchronisieren") : t("Notiz synchronisieren");
+  return <button type="button" className={`board-copy-sync${enabled ? ' is-on' : ''}`} role="switch" aria-checked={enabled} aria-label={label} disabled={busy}
+    title={t("Inhalt, Stil und Größe synchronisieren; bei Gruppen auch die Anordnung untereinander. Die Position der Karte oder Gruppe bleibt auf jeder Pinnwand unabhängig.")}
+    onPointerDown={event => event.stopPropagation()} onClick={onToggle}><Icon name="repeat" /><span>{group ? '' : 'Sync'}</span><i aria-hidden="true" /></button>;
+}
+
+/** What a card asks of its board (BulletinBoard keeps them current; the object itself stays the same). */
+interface CardActions {
+  grab(event: ReactPointerEvent<HTMLElement>, card: Card, x: number, y: number): void;
+  menu(card: Card, x: number): MenuSpec;
+  edit(id: string): void;
+  blur(event: ReactFocusEvent<HTMLElement>, id: string): void;
+  key(event: ReactKeyboardEvent<HTMLElement>, card: Card, x: number, y: number): void;
+  thread(event: ReactPointerEvent<HTMLElement>, card: Card): void;
+  resize(event: ReactPointerEvent<HTMLElement>, card: Card, x: number): void;
+  patch(id: string, changes: Partial<Card>): Promise<unknown> | void;
+  tag(id: string, anchor: HTMLElement): void;
+  run(action: () => Promise<unknown>, quiet?: boolean): void;
+  open(card: Card): void;
+  takeDown(card: Card): void;
+  toggleSync(ids: string[]): void;
+  positions(): Record<string, BoardPlacement>;
+}
+/**
+ * A card on the board. Memoized: while one card is dragged (or the board panned), the others keep their rendering. Its
+ * saved place is `x`/`y`; a drag moves it by `dx`/`dy` (`translate`, so the browser only moves its picture).
+ */
+const BoardCard = memo(function BoardCard({ card, x, y, z, dx, dy, w, h, moving, sizing, target, source, grouped, sync, tag, tagOpen, pixel, busy, date, boardKey: key, actions }: {
+  card: Card; x: number; y: number; z: number; dx: number; dy: number; w: number; h: number | undefined; moving: boolean; sizing: boolean; target: boolean; source: boolean; grouped: boolean;
+  sync: 'on' | 'off' | null; tag: Tag | null; tagOpen: boolean; pixel: boolean; busy: boolean; date: string; boardKey: string; actions: CardActions;
+}) {
+  const shownX = x + dx, shownY = y + dy, dragged = dx !== 0 || dy !== 0;
+  return <article data-board-id={card.id} tabIndex={0}
+    className={`board-card is-${card.kind}${card.kind === 'note' ? ` paper-${card.paper ?? 'yellow'}` : ''}${moving ? ' is-moving' : ''}${dragged ? ' is-dragged' : ''}${sizing ? ' is-sizing' : ''}${card.h ? ' has-height' : ''}${target ? ' is-link-target' : ''}${source ? ' is-link-source' : ''}`}
+    style={{ left: x, top: y, zIndex: 1 + z, width: w, height: h, '--tilt': `${tiltOf(card.id)}deg`, ...dragged ? { translate: `${dx}px ${dy}px` } : {} } as CSSProperties}
+    aria-label={`${card.kind === 'note' ? t("Zettel") : card.kind === 'image' ? t("Bild") : 'Link'}: ${card.title}`}
+    onPointerDown={e => actions.grab(e, card, shownX, shownY)} onContextMenu={contextMenu(() => actions.menu(card, shownX))}
+    onFocus={e => { if (e.target !== e.currentTarget && e.target.closest('input, textarea, [contenteditable="true"]')) actions.edit(card.id); }}
+    onBlur={e => actions.blur(e, card.id)}
+    onKeyDown={e => actions.key(e, card, shownX, shownY)}>
+    {!grouped && sync && <SyncToggle enabled={sync === 'on'} busy={busy} onToggle={() => actions.toggleSync([card.id])} />}
+    <span className="board-pin" aria-hidden="true" title={t("Zu einer anderen Karte ziehen: verbinden · Alt L")} onPointerDown={e => actions.thread(e, card)} />
+    <span className="board-resize" aria-hidden="true" title={t("Größe ändern · Doppelklick: zurücksetzen")}
+      onPointerDown={e => actions.resize(e, card, shownX)} onDoubleClick={e => { e.stopPropagation(); void actions.patch(card.id, { w: defaultWidth(card.kind), h: 0 }); }} />
+    <header>
+      <input aria-label={t("Titel")} value={card.title} placeholder={t("Titel")} onChange={e => void actions.patch(card.id, { title: e.target.value })} />
+      {/* The tools (and the tag) lie over the title's end while the card is pointed at, so the title keeps its width. */}
+      <div className="board-tools">
+        {card.kind === 'note' && <button type="button" className={`board-tag${tag ? ' is-set' : ''}`} style={tag ? { '--tag': tag.color } as CSSProperties : undefined} aria-label={tag ? t("Tag {0} ändern").replace('{0}', tag.name) : t("Tag zuweisen")}
+          title={tag ? tag.name : t("Tag zuweisen")} aria-haspopup="dialog" aria-expanded={tagOpen} onClick={e => actions.tag(card.id, e.currentTarget)}><span className={`tag-dot${tag ? '' : ' is-empty'}`} /></button>}
+        {card.kind === 'note' && <NoteModeButton card={card} patch={actions.patch} />}
+        {card.kind === 'note' && <button type="button" className="board-paper" aria-label={t("Papierfarbe")} title={t("Papierfarbe")} onClick={() => void actions.patch(card.id, { paper: papers[(papers.indexOf(card.paper ?? 'yellow') + 1) % papers.length] })}><i /></button>}
+        {card.kind === 'image' && pixel && <button type="button" className="board-pixel-switch" aria-pressed={!!card.pixel} title={card.pixel ? t("Normal zeigen") : t("Verpixelt zeigen")} onClick={() => void actions.patch(card.id, { pixel: !card.pixel })}><Icon name="month" /></button>}
+        {card.kind === 'note' && <button type="button" className="board-detach" title={t("Als schwebende Notiz öffnen")} aria-label={t("Als schwebende Notiz öffnen")} onClick={() => actions.run(() => invoke('board_detach', { id: card.id }))}><Icon name="pin" /></button>}
+        <BoardScopePicker id={card.id} date={date} source={key} positions={actions.positions} />
+        <button type="button" className="board-remove" title={t("Karte und Notiz löschen")} aria-label={t("Löschen")} onClick={() => actions.takeDown(card)}><Icon name="trash" /></button>
+      </div>
+    </header>
+    {card.kind === 'note' ? <div className={`board-note${card.mode === 'ink' ? ' is-ink' : ''}`}><Note card={card} patch={actions.patch} /></div>
+      : card.kind === 'image' ? <><BoardImage card={card} onOpen={() => actions.open(card)} /><div className="board-caption"><small>AVIF · {Math.round((card.size ?? 0) / 1024)} KB</small></div></>
+      : <button type="button" className="board-link" onClick={() => actions.run(() => invoke('board_open_link', { url: card.url }))}>
+        {card.image && <img src={card.image} alt="" loading="lazy" onError={e => { e.currentTarget.style.display = 'none'; }} />}
+        <strong>{card.title}</strong>{card.text && <span>{card.text}</span>}<small><Icon name="jump" />{hostOf(card.url)}</small>
+      </button>}
+  </article>;
+});
+
 /** A board in a frame of its own size (a Nebula window with a set height, a desktop widget): it does not grow with its
  *  cards and resizing the frame zooms the view. In a widget (`.board-framed`, nothing around it to scroll) the plain wheel
  *  also moves the board. */
@@ -79,9 +156,9 @@ const framed = '.nebula-panel-body.has-height, .board-framed';
  * `tagScope`: whose tag filter hides notes (the journal's, or a widget's). `toolsSlot`: elsewhere for adding (a desktop
  * widget's header); the board then has no head of its own, only a "+" there that opens the same menu as a right click.
  */
-export function BulletinBoard({ date, period = 'day', tagScope = 'journal', toolsSlot }: { date: string; period?: BoardPeriod; tagScope?: TagScope; toolsSlot?: Element | null }) {
+export const BulletinBoard = memo(function BulletinBoard({ date, period = 'day', tagScope = 'journal', toolsSlot }: { date: string; period?: BoardPeriod; tagScope?: TagScope; toolsSlot?: Element | null }) {
   const threadMaskId = `board-threads-${useId().replace(/:/g, '')}`;
-  const { cards, patch: savePatch, error } = useCards(); useLanguage();
+  const { cards, patch: savePatch, error } = useCards(); const language = useLanguage();
   const key = boardKey(date, period);
   // The notebook switched off (Einstellungen → Funktionen): cards do not offer to open there.
   const withNotebook = useFeatures().notebook;
@@ -116,6 +193,21 @@ export function BulletinBoard({ date, period = 'day', tagScope = 'journal', tool
   useEffect(() => () => cardDragCleanup.current?.(), []);
   const scale = zoom;
   const camera = useRef({ zoom, scale, pan }); camera.current = { zoom, scale, pan };
+  // Panning and zooming change the view at most once per frame (wheels and pointers send more events than frames); the
+  // newest view wins. `camera` follows at once, so the next event builds on it.
+  const viewFrame = useRef(0), pendingView = useRef<{ pan: Point; zoom?: number } | null>(null);
+  const moveView = (next: Point, nextZoom?: number) => {
+    camera.current = { ...camera.current, pan: next, ...nextZoom == null ? {} : { zoom: nextZoom, scale: nextZoom } };
+    pendingView.current = { pan: next, zoom: nextZoom ?? pendingView.current?.zoom };
+    if (viewFrame.current) return;
+    viewFrame.current = requestAnimationFrame(() => {
+      viewFrame.current = 0;
+      const view = pendingView.current; pendingView.current = null;
+      if (!view) return;
+      setPan(view.pan); if (view.zoom != null) setZoom(view.zoom);
+    });
+  };
+  useEffect(() => () => cancelAnimationFrame(viewFrame.current), []);
   useEffect(() => {
     const viewport = viewportRef.current; if (!viewport) return;
     // Over the board the page scrolls on as usual; Ctrl+wheel zooms the board, Shift+wheel moves it sideways.
@@ -123,22 +215,21 @@ export function BulletinBoard({ date, period = 'day', tagScope = 'journal', tool
       if (event.shiftKey && !event.ctrlKey) {
         event.preventDefault(); event.stopPropagation();
         const current = camera.current, delta = event.deltaX || event.deltaY;
-        setPan({ x: current.pan.x - delta, y: current.pan.y });
+        moveView({ x: current.pan.x - delta, y: current.pan.y });
         return;
       }
       if (!event.ctrlKey) {
         if (!viewport.closest('.board-framed')) return;
         event.preventDefault(); event.stopPropagation();
         const current = camera.current;
-        setPan({ x: current.pan.x - event.deltaX, y: current.pan.y - event.deltaY });
+        moveView({ x: current.pan.x - event.deltaX, y: current.pan.y - event.deltaY });
         return;
       }
       event.preventDefault(); event.stopPropagation();
       const current = camera.current, next = Math.max(.02, Math.min(8, current.zoom * Math.exp(-event.deltaY * .002)));
       const rect = viewport.getBoundingClientRect(), ratio = viewport.clientWidth / rect.width;
       const point = { x: (event.clientX - rect.left) * ratio, y: (event.clientY - rect.top) * ratio };
-      setPan({ x: point.x - (point.x - current.pan.x) * next / current.zoom, y: point.y - (point.y - current.pan.y) * next / current.zoom });
-      setZoom(next);
+      moveView({ x: point.x - (point.x - current.pan.x) * next / current.zoom, y: point.y - (point.y - current.pan.y) * next / current.zoom }, next);
       resizeReference.current = { ...viewportSize.current, scale: next };
     };
     viewport.addEventListener('wheel', wheel, { passive: false });
@@ -151,7 +242,7 @@ export function BulletinBoard({ date, period = 'day', tagScope = 'journal', tool
     const ratio = element.clientWidth / element.getBoundingClientRect().width;
     const started = performance.now(); let moved = false;
     element.setPointerCapture(event.pointerId); setPanning(true);
-    const move = (e: PointerEvent) => { if (e.pointerId === event.pointerId) { if (Math.hypot(e.clientX - x, e.clientY - y) > 5) moved = true; if (moved) setPan({ x: origin.x + (e.clientX - x) * ratio, y: origin.y + (e.clientY - y) * ratio }); } };
+    const move = (e: PointerEvent) => { if (e.pointerId === event.pointerId) { if (Math.hypot(e.clientX - x, e.clientY - y) > 5) moved = true; if (moved) moveView({ x: origin.x + (e.clientX - x) * ratio, y: origin.y + (e.clientY - y) * ratio }); } };
     const end = (e: PointerEvent) => {
       if (e.pointerId !== event.pointerId) return;
       if (e.type === 'pointerup' && !moved && performance.now() - started < 400) {
@@ -167,21 +258,23 @@ export function BulletinBoard({ date, period = 'day', tagScope = 'journal', tool
   // A note whose tag is hidden in the journal (its tag filter) is left off the board, with its threads.
   const [hiddenTags] = useHiddenTags(tagScope);
   const laidOut = useMemo(()=>layoutBoard(cards, key, width),[cards,key,width]);
-  const layout = laidOut.filter(item => !item.card.tag || isShown(hiddenTags, item.card.tag));
+  const layout = useMemo(() => laidOut.filter(item => !item.card.tag || isShown(hiddenTags, item.card.tag)), [laidOut, hiddenTags]);
   const hiddenByTag = laidOut.length - layout.length;
-  const visible = layout.map(item => item.card);
-  const topZ = Math.max(0, ...visible.map(c => c.z ?? 0));
+  const visible = useMemo(() => layout.map(item => item.card), [layout]);
+  const topZ = useMemo(() => visible.reduce((z, card) => Math.max(z, card.z ?? 0), 0), [visible]);
   // Cards pinned before positions existed (or new ones) are laid out in a loose grid.
-  const placed = layout.map(({ card, x: savedX, y: savedY }) => {
+  const placed = useMemo(() => layout.map(({ card, x: savedX, y: savedY }) => {
     const inGroup = groupDragging?.ids.indexOf(card.id) ?? -1;
     const x = dragging?.id === card.id ? dragging.x : savedX + (inGroup >= 0 ? groupDragging!.dx : 0);
     const y = dragging?.id === card.id ? dragging.y : savedY + (inGroup >= 0 ? groupDragging!.dy : 0);
     return { card, x, y, z: dragging?.id === card.id ? topZ + 1 : inGroup >= 0 ? topZ + 1 + inGroup : card.z ?? 0 };
-  });
+  }), [layout, dragging, groupDragging, topZ]);
   const boardHeight = Math.max(380, ...placed.map(p => p.y + (heights[p.card.id] ?? 220) + 36));
+  // Reconnect only when the mounted cards change. Text edits and dragging keep the same observers.
+  const measuredIds = JSON.stringify(visible.map(card => card.id));
   useLayoutEffect(() => {
     const board = boardRef.current; if (!board) return;
-    const measure = () => {
+    const measure = (entries?: ResizeObserverEntry[]) => {
       const viewport = viewportRef.current!;
       const size = { width: viewport.clientWidth, height: viewport.clientHeight };
       if (size.width <= 0 || size.height <= 0) return;
@@ -201,15 +294,22 @@ export function BulletinBoard({ date, period = 'day', tagScope = 'journal', tool
         }
       }
       viewportSize.current = size;
-      const next: Record<string, number> = {};
-      board.querySelectorAll<HTMLElement>('.board-card').forEach(el => { next[el.dataset.boardId!] = el.offsetHeight; });
-      setHeights(old => Object.keys(next).length === Object.keys(old).length && Object.entries(next).every(([k, v]) => old[k] === v) ? old : next);
+      // Observer entries already contain untransformed border sizes. Reading every card's offsetHeight here
+      // forced layout again during window resizing, including cards whose size had not changed.
+      const changed: Record<string, number> = {};
+      if (entries) {
+        for (const entry of entries) {
+          const el = entry.target as HTMLElement;
+          if (el.dataset.boardId) changed[el.dataset.boardId] = Math.round(entry.borderBoxSize[0]?.blockSize ?? el.offsetHeight);
+        }
+      } else board.querySelectorAll<HTMLElement>('.board-card').forEach(el => { changed[el.dataset.boardId!] = el.offsetHeight; });
+      setHeights(old => Object.entries(changed).every(([id, height]) => old[id] === height) && (entries || Object.keys(old).length === Object.keys(changed).length) ? old : entries ? { ...old, ...changed } : changed);
     };
     measure();
     const observer = new ResizeObserver(measure); observer.observe(board); if (viewportRef.current) observer.observe(viewportRef.current);
-    board.querySelectorAll('.board-card').forEach(el => observer.observe(el));
+    board.querySelectorAll('.board-card').forEach(el => observer.observe(el, { box: 'border-box' }));
     return () => observer.disconnect();
-  }, [visible.length, cards]);
+  }, [measuredIds]);
 
   async function run(action: () => Promise<unknown>, quiet = false) { setBusy(true); setProcessing(!quiet); if (!quiet) setMessage(''); try { await action(); } catch (e) { setMessage(String(e)); } finally { setBusy(false); setProcessing(false); } }
   // A new card lands in the middle of what is on screen (the board can be panned and zoomed), moved aside to the nearest
@@ -260,15 +360,18 @@ export function BulletinBoard({ date, period = 'day', tagScope = 'journal', tool
 
   // Threads: where a card's pin is (the top middle of the card, turned with it).
   const nebula = document.documentElement.dataset.look === 'nebula';
-  const pinOf = (id: string): Point | null => {
-    const at = placed.find(p => p.card.id === id); if (!at) return null;
+  const pins = useMemo(() => new Map(placed.map(at => {
+    const id = at.card.id;
     const w = sizing?.id === id ? sizing.w : widthOf(at.card), h = heights[id] ?? 200, tilt = nebula || at.card.kind === 'note' ? 0 : tiltOf(id) * Math.PI / 180;
-    return { x: at.x + w / 2 + h / 2 * Math.sin(tilt), y: at.y + h / 2 - h / 2 * Math.cos(tilt) + 1 };
-  };
-  const shown = new Set(visible.map(c => c.id));
+    return [id, { x: at.x + w / 2 + h / 2 * Math.sin(tilt), y: at.y + h / 2 - h / 2 * Math.cos(tilt) + 1 }];
+  })), [placed, sizing, heights, nebula]);
+  const pinOf = (id: string): Point | null => pins.get(id) ?? null;
+  const cardsById = useMemo(() => new Map(cards.map(card => [card.id, card])), [cards]);
+  const shown = useMemo(() => new Set(visible.map(c => c.id)), [visible]);
   const allThreads=useMemo(()=>threads(cards),[cards]);
-  const boardThreads = allThreads.filter(([a, b]) => shown.has(a) && shown.has(b));
+  const boardThreads = useMemo(() => allThreads.filter(([a, b]) => shown.has(a) && shown.has(b)), [allThreads, shown]);
   const directed=useMemo(()=>new Map(pageDirections(cards).map(edge=>[[...edge].sort().join(':'),edge])),[cards]);
+  const [activeThread, setActiveThread] = useState<string | null>(null);
   const titleOf = (card?: Card) => card?.title || (card?.kind === 'note' ? t("Ohne Titel") : card?.kind === 'image' ? t("Bild") : 'Link');
   /** Ties two cards and says what came of it (an attachment or another page in the notebook). */
   function tie(a: string, b: string) {
@@ -321,6 +424,12 @@ export function BulletinBoard({ date, period = 'day', tagScope = 'journal', tool
   }
   const drawing = linking ? { from: pinOf(linking.from), to: linking.over ? pinOf(linking.over) ?? linking : linking } : picking && picked ? { from: pinOf(picking.from), to: pinOf(picked.id) } : null;
   const target = linking?.over ?? picked?.id ?? null;
+  const threadShapes = useMemo(() => boardThreads.flatMap(([a, b]) => {
+    const direction = directed.get([a, b].join(':'));
+    const from = pinOf(direction?.[0] ?? a), to = pinOf(direction?.[1] ?? b); if (!from || !to) return [];
+    const label = direction ? `${t("Faden")}: ${titleOf(cardsById.get(direction[0]))} → ${titleOf(cardsById.get(direction[1]))}` : `${t("Faden")}: ${titleOf(cardsById.get(a))} – ${titleOf(cardsById.get(b))}`;
+    return [{ a, b, from, to, path: threadPath(from, to, pixelTheme), arrow: direction ? threadArrow(from, to) : null, label }];
+  }), [boardThreads, directed, pins, cardsById, pixelTheme, language]);
   // Dragging a card by its paper (not by its text, buttons or image); it comes to the top and stays where it is let go.
   function grab(event: ReactPointerEvent<HTMLElement>, card: Card, x: number, y: number, groupIds?: string[]) {
     // The drawing area belongs to the pen and the mouse; a finger on it still moves the card.
@@ -338,11 +447,15 @@ export function BulletinBoard({ date, period = 'day', tagScope = 'journal', tool
     const initial = worldPoint(), offset = { x: initial.x - x, y: initial.y - y };
     const start = { px: event.clientX, py: event.clientY };
     const members = groupIds ? laidOut.filter(item => groupIds.includes(item.card.id)) : [];
-    let last = { x, y }, moved = false;
+    // `pending`: the pointer moved since the last frame; the card follows once per frame, not per pointer event.
+    let last = { x, y }, moved = false, shown = false, pending = false;
     let frame = 0, previousFrame = performance.now();
     const update = () => {
       const at = worldPoint();
-      last = { x: at.x - offset.x, y: at.y - offset.y };
+      const next = { x: at.x - offset.x, y: at.y - offset.y };
+      // Nothing to show while the card stays where it is.
+      if (shown && next.x === last.x && next.y === last.y) return;
+      shown = true; last = next;
       if (groupIds) setGroupDragging({ ids: groupIds, dx: last.x - x, dy: last.y - y });
       else setDragging({ id: card.id, ...last });
       // Ordinary boards grow with the card. A deliberately sized window keeps its
@@ -364,11 +477,8 @@ export function BulletinBoard({ date, period = 'day', tagScope = 'journal', tool
         const speed = (value: number, min: number, max: number) => value < min ? Math.min(700, (min - value) * 5 + 100) : value > max ? -Math.min(700, (value - max) * 5 + 100) : 0;
         const dx = speed(point.x, box.left, box.right) * ratio * seconds;
         const dy = point.y < box.top || viewport.closest(framed) ? speed(point.y, box.top, box.bottom) * ratio * seconds : 0;
-        if (dx || dy) {
-          const pan = { x: camera.current.pan.x + dx, y: camera.current.pan.y + dy };
-          camera.current = { ...camera.current, pan }; setPan(pan);
-        }
-        update();
+        if (dx || dy) moveView({ x: camera.current.pan.x + dx, y: camera.current.pan.y + dy });
+        if (dx || dy || pending) { pending = false; update(); }
       }
       frame = requestAnimationFrame(animate);
     };
@@ -376,7 +486,7 @@ export function BulletinBoard({ date, period = 'day', tagScope = 'journal', tool
       if (e.pointerId !== event.pointerId) return;
       point.x = e.clientX; point.y = e.clientY;
       moved ||= Math.hypot(e.clientX - start.px, e.clientY - start.py) > 3;
-      if (moved) update();
+      pending = true;
     };
     const cleanup = () => {
       cancelAnimationFrame(frame);
@@ -489,16 +599,18 @@ export function BulletinBoard({ date, period = 'day', tagScope = 'journal', tool
 
   const boardTitle = ({ day: t("Pinnwand"), week: t("Wochenpinnwand"), month: t("Monatspinnwand"), quarter: t("Quartalspinnwand"), year: t("Jahrespinnwand") })[period];
   const positions = Object.fromEntries(placed.map(({ card, x, y, z }) => [card.id, { boardX: x, y, z, w: widthOf(card), h: sizing?.id === card.id ? sizing.h : card.h }]));
-  const boxes: Record<string, BoardBox> = Object.fromEntries(placed.map(({ card, x, y }) => {
+  const boxes: Record<string, BoardBox> = useMemo(() => Object.fromEntries(placed.map(({ card, x, y }) => {
     const w = sizing?.id === card.id ? sizing.w : widthOf(card), h = sizing?.id === card.id ? sizing.h ?? heights[card.id] ?? 220 : heights[card.id] ?? 220;
     const angle = nebula || card.kind === 'note' ? 0 : tiltOf(card.id) * Math.PI / 180;
     const rotatedW = Math.abs(w * Math.cos(angle)) + Math.abs(h * Math.sin(angle)), rotatedH = Math.abs(h * Math.cos(angle)) + Math.abs(w * Math.sin(angle));
     return [card.id, { left: x + (w - rotatedW) / 2, top: y + (h - rotatedH) / 2, width: rotatedW, height: rotatedH }];
-  }));
+  })), [placed, sizing, heights, nebula]);
   const connectedGroups = useMemo(()=>cardGroups(cards),[cards]);
+  const savedAt = useMemo(() => new Map(layout.map(item => [item.card.id, { x: item.x, y: item.y }])), [layout]);
+  // Whether a card's copies are kept in sync with their original (per card; groups ask syncToggle).
+  const syncOf = useMemo(() => copySyncStates(cards), [cards]);
   const groupByCard=useMemo(()=>new Map(connectedGroups.flatMap(group=>group.map(id=>[id,group] as const))),[connectedGroups]);
-  const cardsById=useMemo(()=>new Map(cards.map(card=>[card.id,card])),[cards]);
-  const groups = groupFrames(connectedGroups, boxes);
+  const groups = useMemo(() => groupFrames(connectedGroups, boxes), [connectedGroups, boxes]);
   const membersOf = (ids: string[]) => connectedGroups.find(group => group.includes(ids[0])) ?? ids;
   const takeDownGroup = (ids: string[]) => void run(() => removeCards(membersOf(ids)), true);
   const nameGroup = (ids: string[], groupName: string) => void run(() => patchCards(Object.fromEntries(membersOf(ids).map(id => [id, { groupName }]))), true);
@@ -507,16 +619,93 @@ export function BulletinBoard({ date, period = 'day', tagScope = 'journal', tool
   const groupMenu = (ids: string[]): MenuSpec => ({ title: t("Gruppe"), command: 'group', items: [
     { id: 'delete', command: 'rm', label: t("Alle Karten der Gruppe dauerhaft löschen"), icon: 'trash', danger: true, run: () => void run(() => removeCards(membersOf(ids)), true) },
   ] });
-  function syncToggle(ids: string[], group = false) {
+  const copiesOf = (ids: string[]) => {
     const selected = new Set(ids);
-    const copies = cards.filter(card => !!card.copyOf && (selected.has(card.id) || selected.has(card.copyOf)) && cards.some(source => source.id === card.copyOf));
-    if (!copies.length) return null;
+    return cards.filter(card => !!card.copyOf && (selected.has(card.id) || selected.has(card.copyOf)) && cards.some(source => source.id === card.copyOf));
+  };
+  const toggleSync = (ids: string[]) => {
+    const copies = copiesOf(ids); if (!copies.length) return;
     const enabled = copies.every(card => card.copySync);
-    const label = group ? t("Gruppe synchronisieren") : t("Notiz synchronisieren");
-    return <button type="button" className={`board-copy-sync${enabled ? ' is-on' : ''}`} role="switch" aria-checked={enabled} aria-label={label} disabled={busy}
-      title={t("Inhalt, Stil und Größe synchronisieren; bei Gruppen auch die Anordnung untereinander. Die Position der Karte oder Gruppe bleibt auf jeder Pinnwand unabhängig.")}
-      onPointerDown={event => event.stopPropagation()} onClick={() => void run(() => patchCards(copySyncPatches(cards, copies.map(card => card.id), !enabled, width, key)), true)}><Icon name="repeat" /><span>{group ? '' : 'Sync'}</span><i aria-hidden="true" /></button>;
+    void run(() => patchCards(copySyncPatches(cards, copies.map(card => card.id), !enabled, width, key)), true);
+  };
+  function syncToggle(ids: string[], group = false) {
+    const copies = copiesOf(ids);
+    if (!copies.length) return null;
+    return <SyncToggle enabled={copies.every(card => card.copySync)} group={group} busy={busy} onToggle={() => toggleSync(ids)} />;
   }
+  const groupedIds = new Set(groups.flatMap(group => group.ids));
+  const cardActions = useStable<CardActions>({
+    grab: (event, card, x, y) => grab(event, card, x, y),
+    menu: (card, x) => cardMenu(card, x),
+    edit: id => setEditing(id),
+    blur: (event, id) => {
+      if (event.currentTarget.contains(event.relatedTarget as Node)) return;
+      setEditing(current => current === id ? null : current);
+      if (picking?.from === id) setPicking(null);
+    },
+    key: (e, card, x, y) => {
+      if (e.target !== e.currentTarget) return;
+      if (pickKey(e, card)) return;
+      if (card.kind === 'note' && card.mode === 'ink' && inkKey(e)) return;
+      if (e.altKey && e.shiftKey) {
+        const sizesBy: Record<string, [number, number]> = { ArrowLeft: [-24, 0], ArrowRight: [24, 0], ArrowUp: [0, -24], ArrowDown: [0, 24] };
+        if (sizesBy[e.key]) { e.preventDefault(); grow(card, x, ...sizesBy[e.key]); }
+        return;
+      }
+      const step = e.shiftKey ? 40 : 8, moves: Record<string, [number, number]> = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
+      if (moves[e.key]) { e.preventDefault(); nudge(card, x, y, ...moves[e.key]); }
+    },
+    thread: (event, card) => startThread(event, card),
+    resize: (event, card, x) => resize(event, card, x),
+    patch: (id, changes) => patch(id, changes),
+    tag: (id, anchor) => setTagging({ id, anchor }),
+    run: (action, quiet) => void run(action, quiet),
+    open: card => setOpen(card),
+    takeDown: card => takeDown(card),
+    toggleSync: ids => toggleSync(ids),
+    positions: () => positions,
+  });
+  // Pan/zoom transforms the world without rebuilding its unchanged SVG geometry.
+  const threadActions = useStable({ items: threadItems });
+  const threadLayers = useMemo(() => <>
+      {(boardThreads.length > 0 || drawing) && <svg className="board-threads" width={width} height={boardHeight} style={{ zIndex: topZ + 4 }} aria-label={t("Fäden")}>
+        <defs>
+          <clipPath id={threadMaskId} clipPathUnits="userSpaceOnUse">
+            {placed.filter(({ card }) => card.id !== editing).map(({ card, x, y }) => {
+              const w = sizing?.id === card.id ? sizing.w : widthOf(card);
+              const h = sizing?.id === card.id ? sizing.h ?? heights[card.id] ?? 220 : heights[card.id] ?? 220;
+              const angle = nebula || card.kind === 'note' ? 0 : tiltOf(card.id);
+              return <rect key={card.id} data-thread-card={card.id} x={x} y={y} width={w} height={h}
+                transform={angle ? `rotate(${angle} ${x + w / 2} ${y + h / 2})` : undefined} />;
+            })}
+          </clipPath>
+        </defs>
+        {threadShapes.map(({ a, b, from, to, path, arrow, label }) => {
+          const openMenu = (element: Element) => setThreadMenu({ a, b, anchor: element as HTMLElement });
+          const faded = { clipPath: `url(#${threadMaskId})`, opacity: .2 };
+          return <g key={`${a}:${b}`} className={`board-thread-group${threadMenu?.a === a && threadMenu.b === b ? ' is-open' : ''}`} data-thread={`${a}:${b}`}>
+            <path className="board-thread" d={path} {...faded} />
+            {arrow && <path className="board-thread-direction" d={arrow} {...faded} aria-hidden="true" />}
+            <circle className="board-thread-knot" cx={from.x} cy={from.y} r={2.4} {...faded} /><circle className="board-thread-knot" cx={to.x} cy={to.y} r={2.4} {...faded} />
+            <path className="board-thread-hit" d={path} style={editing ? { pointerEvents: 'none' } : undefined} tabIndex={0} role="button" aria-label={label} onClick={e => openMenu(e.currentTarget)}
+              onPointerEnter={() => setActiveThread(`${a}:${b}`)} onPointerLeave={() => setActiveThread(current => current === `${a}:${b}` ? null : current)}
+              onFocus={() => setActiveThread(`${a}:${b}`)} onBlur={() => setActiveThread(current => current === `${a}:${b}` ? null : current)}
+              onContextMenu={contextMenu(() => threadActions.items(a, b))}
+              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openMenu(e.currentTarget); } }}><title>{label}</title></path>
+          </g>;
+        })}
+        {drawing?.from && drawing.to && <path className="board-thread is-drawing" d={threadPath(drawing.from, drawing.to, pixelTheme, true)} clipPath={`url(#${threadMaskId})`} opacity={.2} />}
+      </svg>}
+      {(boardThreads.length > 0 || drawing) && <svg className="board-threads is-under" width={width} height={boardHeight} style={{ zIndex: 0 }} aria-hidden="true">
+        {threadShapes.map(({ a, b, from, to, path, arrow }) => <g key={`${a}:${b}`} className={`board-thread-under${activeThread === `${a}:${b}` || (threadMenu?.a === a && threadMenu.b === b) ? ' is-active' : ''}`}>
+          <path className="board-thread" d={path} />
+          {arrow && <path className="board-thread-direction" d={arrow} />}
+          <circle className="board-thread-knot" cx={from.x} cy={from.y} r={2.4} /><circle className="board-thread-knot" cx={to.x} cy={to.y} r={2.4} />
+        </g>)}
+        {drawing?.from && drawing.to && <path className="board-thread is-drawing" d={threadPath(drawing.from, drawing.to, pixelTheme, true)} />}
+      </svg>}
+  </>, [boardThreads, drawing, width, boardHeight, topZ, threadMaskId, placed, editing, sizing,
+    heights, nebula, threadShapes, threadMenu, activeThread, pixelTheme, language, threadActions]);
   return <section className={`bulletin-board${pixelTheme ? ' is-pixel' : ''}`} data-board-key={key} aria-label={boardTitle} onKeyDown={e => { if (!(e.ctrlKey && e.shiftKey && e.code === 'KeyN')) e.stopPropagation(); }}>
     {toolsSlot ? createPortal(<button type="button" className="board-add-menu" disabled={busy} aria-label={t("Anpinnen")} title={t("Zettel, Bild oder Link anpinnen · Rechtsklick auf die Fläche")} onClick={surfaceMenu}><span aria-hidden="true">+</span></button>, toolsSlot)
     : <div className="board-head">
@@ -570,88 +759,19 @@ export function BulletinBoard({ date, period = 'day', tagScope = 'journal', tool
         <GroupName value={membersOf(group.ids).map(id => cards.find(card => card.id === id)?.groupName).find(Boolean) ?? ''} label={t("Gruppenname")} placeholder={t("Gruppe benennen …")} onSave={value => nameGroup(group.ids, value)} />
         <div className="board-group-actions">{syncToggle(group.ids, true)}<button type="button" className="board-group-remove" disabled={busy} aria-label={t("Gruppe löschen")} title={t("Gruppe und ihre Notizen löschen")} onClick={() => takeDownGroup(group.ids)}><Icon name="trash" /></button></div>
       </div>)}
-      {placed.map(({ card, x, y, z }) => <article key={card.id} data-board-id={card.id} tabIndex={0}
-        className={`board-card is-${card.kind}${card.kind === 'note' ? ` paper-${card.paper ?? 'yellow'}` : ''}${dragging?.id === card.id ? ' is-moving' : ''}${sizing?.id === card.id ? ' is-sizing' : ''}${card.h ? ' has-height' : ''}${target === card.id ? ' is-link-target' : ''}${linking?.from === card.id || picking?.from === card.id ? ' is-link-source' : ''}`}
-        style={{ left: x, top: y, zIndex: 1 + z, width: sizing?.id === card.id ? sizing.w : widthOf(card), height: card.kind === 'note' ? (sizing?.id === card.id ? sizing.h : card.h || undefined) : undefined, '--tilt': `${tiltOf(card.id)}deg` } as CSSProperties}
-        aria-label={`${card.kind === 'note' ? t("Zettel") : card.kind === 'image' ? t("Bild") : 'Link'}: ${card.title}`}
-        onPointerDown={e => grab(e, card, x, y)} onContextMenu={contextMenu(() => cardMenu(card, x))}
-        onFocus={e => { if (e.target !== e.currentTarget && e.target.closest('input, textarea, [contenteditable="true"]')) setEditing(card.id); }}
-        onBlur={e => {
-          if (e.currentTarget.contains(e.relatedTarget as Node)) return;
-          setEditing(current => current === card.id ? null : current);
-          if (picking?.from === card.id) setPicking(null);
-        }}
-        onKeyDown={e => {
-          if (e.target !== e.currentTarget) return;
-          if (pickKey(e, card)) return;
-          if (card.kind === 'note' && card.mode === 'ink' && inkKey(e)) return;
-          if (e.altKey && e.shiftKey) {
-            const sizesBy: Record<string, [number, number]> = { ArrowLeft: [-24, 0], ArrowRight: [24, 0], ArrowUp: [0, -24], ArrowDown: [0, 24] };
-            if (sizesBy[e.key]) { e.preventDefault(); grow(card, x, ...sizesBy[e.key]); }
-            return;
-          }
-          const step = e.shiftKey ? 40 : 8, moves: Record<string, [number, number]> = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
-          if (moves[e.key]) { e.preventDefault(); nudge(card, x, y, ...moves[e.key]); }
-        }}>
-        {!groups.some(group => group.ids.includes(card.id)) && syncToggle([card.id])}
-        <span className="board-pin" aria-hidden="true" title={t("Zu einer anderen Karte ziehen: verbinden · Alt L")} onPointerDown={e => startThread(e, card)} />
-        <span className="board-resize" aria-hidden="true" title={t("Größe ändern · Doppelklick: zurücksetzen")}
-          onPointerDown={e => resize(e, card, x)} onDoubleClick={e => { e.stopPropagation(); void patch(card.id, { w: defaultWidth(card.kind), h: 0 }); }} />
-        <header>
-          <input aria-label={t("Titel")} value={card.title} placeholder={t("Titel")} onChange={e => void patch(card.id, { title: e.target.value })} />
-          {/* The tools (and the tag) lie over the title's end while the card is pointed at, so the title keeps its width. */}
-          <div className="board-tools">
-            {card.kind === 'note' && (() => { const tag = tagOf(allTags, card.tag); return <button type="button" className={`board-tag${tag ? ' is-set' : ''}`} style={tag ? { '--tag': tag.color } as CSSProperties : undefined} aria-label={tag ? t("Tag {0} ändern").replace('{0}', tag.name) : t("Tag zuweisen")}
-              title={tag ? tag.name : t("Tag zuweisen")} aria-haspopup="dialog" aria-expanded={tagging?.id === card.id} onClick={e => setTagging({ id: card.id, anchor: e.currentTarget })}><span className={`tag-dot${tag ? '' : ' is-empty'}`} /></button>; })()}
-            {card.kind === 'note' && <NoteModeButton card={card} patch={patch} />}
-            {card.kind === 'note' && <button type="button" className="board-paper" aria-label={t("Papierfarbe")} title={t("Papierfarbe")} onClick={() => void patch(card.id, { paper: papers[(papers.indexOf(card.paper ?? 'yellow') + 1) % papers.length] })}><i /></button>}
-            {card.kind === 'image' && pixelTheme && <button type="button" className="board-pixel-switch" aria-pressed={!!card.pixel} title={card.pixel ? t("Normal zeigen") : t("Verpixelt zeigen")} onClick={() => void patch(card.id, { pixel: !card.pixel })}><Icon name="month" /></button>}
-            {card.kind === 'note' && <button type="button" className="board-detach" title={t("Als schwebende Notiz öffnen")} aria-label={t("Als schwebende Notiz öffnen")} onClick={() => void run(() => invoke('board_detach', { id: card.id }))}><Icon name="pin" /></button>}
-            <BoardScopePicker cards={cards} id={card.id} date={date} source={key} positions={positions} />
-            <button type="button" className="board-remove" title={t("Karte und Notiz löschen")} aria-label={t("Löschen")} onClick={() => takeDown(card)}><Icon name="trash" /></button>
-          </div>
-        </header>
-        {card.kind === 'note' ? <div className={`board-note${card.mode === 'ink' ? ' is-ink' : ''}`}><Note card={card} patch={patch} /></div>
-          : card.kind === 'image' ? <><BoardImage card={card} onOpen={() => setOpen(card)} /><div className="board-caption"><small>AVIF · {Math.round((card.size ?? 0) / 1024)} KB</small></div></>
-          : <button type="button" className="board-link" onClick={() => void run(() => invoke('board_open_link', { url: card.url }))}>
-            {card.image && <img src={card.image} alt="" loading="lazy" onError={e => { e.currentTarget.style.display = 'none'; }} />}
-            <strong>{card.title}</strong>{card.text && <span>{card.text}</span>}<small><Icon name="jump" />{hostOf(card.url)}</small>
-          </button>}
-      </article>)}
-      {/* Threads hang over the cards from pin to pin; only the line itself takes the pointer (a click opens its menu). */}
-      {(boardThreads.length > 0 || drawing) && <svg className="board-threads" width={width} height={boardHeight} style={{ zIndex: topZ + 4 }} aria-label={t("Fäden")}>
-        <defs>
-          {/* One mask for the whole board: every card fades every thread, including its own group's threads.
-              Opaque grey keeps overlapping cards from progressively darkening the same segment. */}
-          <mask id={threadMaskId} maskUnits="userSpaceOnUse" x={-5000} y={-5000} width={10000} height={10000} style={{ maskType: 'luminance' }}>
-            <rect x={-5000} y={-5000} width={10000} height={10000} fill="#fff" />
-            {placed.map(({ card, x, y }) => {
-              const w = sizing?.id === card.id ? sizing.w : widthOf(card);
-              const h = sizing?.id === card.id ? sizing.h ?? heights[card.id] ?? 220 : heights[card.id] ?? 220;
-              const angle = nebula || card.kind === 'note' ? 0 : tiltOf(card.id);
-              return <rect key={card.id} data-thread-card={card.id} x={x} y={y} width={w} height={h} fill="#333"
-                transform={angle ? `rotate(${angle} ${x + w / 2} ${y + h / 2})` : undefined} />;
-            })}
-            {editing && boxes[editing] && <rect x={boxes[editing].left} y={boxes[editing].top} width={boxes[editing].width} height={boxes[editing].height} fill="#000" />}
-          </mask>
-        </defs>
-        {boardThreads.map(([a, b]) => {
-          const direction=directed.get([a,b].join(':'));
-          const from = pinOf(direction?.[0]??a), to = pinOf(direction?.[1]??b); if (!from || !to) return null;
-          const path = threadPath(from, to, pixelTheme), first = cards.find(c => c.id === a), second = cards.find(c => c.id === b);
-          const label = direction ? `${t("Faden")}: ${titleOf(cards.find(c=>c.id===direction[0]))} → ${titleOf(cards.find(c=>c.id===direction[1]))}` : `${t("Faden")}: ${titleOf(first)} – ${titleOf(second)}`;
-          const openMenu = (element: Element) => setThreadMenu({ a, b, anchor: element as HTMLElement });
-          return <g key={`${a}:${b}`} className={`board-thread-group${threadMenu?.a === a && threadMenu.b === b ? ' is-open' : ''}`} data-thread={`${a}:${b}`}>
-            <path className="board-thread" d={path} mask={`url(#${threadMaskId})`} />
-            {direction&&<path className="board-thread-direction" d={threadArrow(from,to)} mask={`url(#${threadMaskId})`} aria-hidden="true" />}
-            <circle className="board-thread-knot" cx={from.x} cy={from.y} r={2.4} /><circle className="board-thread-knot" cx={to.x} cy={to.y} r={2.4} />
-            <path className="board-thread-hit" d={path} style={editing ? { pointerEvents: 'none' } : undefined} tabIndex={0} role="button" aria-label={label} onClick={e => openMenu(e.currentTarget)}
-              onContextMenu={contextMenu(() => threadItems(a, b))}
-              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openMenu(e.currentTarget); } }}><title>{label}</title></path>
-          </g>;
-        })}
-        {drawing?.from && drawing.to && <path className="board-thread is-drawing" d={threadPath(drawing.from, drawing.to, pixelTheme, true)} mask={`url(#${threadMaskId})`} />}
-      </svg>}
+      {placed.map(({ card, x, y, z }) => {
+        const own = savedAt.get(card.id) ?? { x, y };
+        return <BoardCard key={card.id} card={card} x={own.x} y={own.y} z={z} dx={x - own.x} dy={y - own.y}
+          w={sizing?.id === card.id ? sizing.w : widthOf(card)} h={card.kind === 'note' ? (sizing?.id === card.id ? sizing.h : card.h || undefined) : undefined}
+          moving={dragging?.id === card.id} sizing={sizing?.id === card.id} target={target === card.id} source={linking?.from === card.id || picking?.from === card.id}
+          grouped={groupedIds.has(card.id)} sync={syncOf.get(card.id) ?? null} tag={card.kind === 'note' ? tagOf(allTags, card.tag) : null} tagOpen={tagging?.id === card.id}
+          pixel={pixelTheme} busy={busy} date={date} boardKey={key} actions={cardActions} />;
+      })}
+      {/* Threads hang from pin to pin. Under the cards they are drawn in full; over the cards a second time, clipped to the
+          cards' surfaces at a fifth of their strength: the cards fade every thread that crosses them (also unrelated ones),
+          the card being edited hides them. (One luminance mask over the whole board did the same, but every move redrew it.)
+          Only the line itself takes the pointer (a click opens its menu). */}
+      {threadLayers}
     </div>
     </div>
     {tagging && <TagPicker anchor={tagging.anchor} value={cards.find(c => c.id === tagging.id)?.tag ?? null} onPick={id => void run(() => patch(tagging.id, { tag: id }))} onClose={() => setTagging(null)} />}
@@ -664,7 +784,7 @@ export function BulletinBoard({ date, period = 'day', tagScope = 'journal', tool
     </Popover>}
     {open && <Lightbox card={open} onClose={() => setOpen(null)} />}
   </section>;
-}
+});
 
 export function FloatingNote() {
   const { cards, patch, error } = useCards(); useLanguage(); const [pinned, setPinned] = useState(true), [windowError, setWindowError] = useState('');
