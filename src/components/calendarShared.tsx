@@ -1,3 +1,4 @@
+import { appContextMenu } from './ContextMenu';
 import { calendarDaysWithSpans } from '../calendarSpans';
 import type { SpanEntry } from '../calendarSpans';
 import { decodeMailContent } from '../mailContent';
@@ -235,7 +236,7 @@ export function CalendarItem({ entry, date, variant = 'line', short = false, sty
     {error && <Popover anchor={noteRef.current} label={t("Fehler")} onClose={()=>setError('')}><p role="alert">{error}</p></Popover>}
     {details && <Popover anchor={noteRef.current} className={`cal-details${mail ? ' has-mail' : ''}`} label={t("Beschreibung")} onClose={() => setDetails(false)}>
       {/* Clicks in here stay here: the entry around it would otherwise open the journal. */}
-      <div className="cal-details-body" onClick={event => event.stopPropagation()} onDoubleClick={event => event.stopPropagation()} onContextMenu={event => event.stopPropagation()} style={tag ? { '--tag': tag.color } as CSSProperties : undefined}>
+      <div className="cal-details-body" onClick={event => event.stopPropagation()} onDoubleClick={event => event.stopPropagation()} onContextMenu={event => { event.stopPropagation(); appContextMenu(event.nativeEvent); }} style={tag ? { '--tag': tag.color } as CSSProperties : undefined}>
         {mail ? <MailContent mail={mail} heading={overview} entryTitle={detailTitle}/> : <>{overview}{entry.description && <MarkdownField className="cal-details-text" label={t("Beschreibung")} value={entry.description} onCheck={change ? description => { change(entry, date, { description }).catch(reason => setError(String(reason))); } : undefined} />}</>}
         <div className="tag-picker-foot cal-details-actions"><button type="button" onClick={() => copyCalendarEntry(entry)}><Icon name="copy" />{t("Kopieren")}<kbd>{t("Strg")} C</kbd></button><button type="button" onClick={() => {setDetails(false);if(noteRef.current)edit?.(entry,date,noteRef.current);}}><Icon name="pencil" />{t("Bearbeiten")}</button><span className="cal-details-escape"><kbd>Esc</kbd></span><button type="button" onClick={() => { setDetails(false); open(date, entry.id); }}><Icon name="journal" />{t("Im Journal zeigen")}</button></div>
       </div>

@@ -849,6 +849,8 @@ const english: Record<string, string> = {
   "Zeile hinzufügen": "Add row",
   "Code": "Code",
   "Kopieren": "Copy",
+  "Ausschneiden": "Cut",
+  "Alles auswählen": "Select all",
   "Kopiert ✓": "Copied ✓",
   "Spalte 1": "Column 1",
   "Spalte 2": "Column 2",

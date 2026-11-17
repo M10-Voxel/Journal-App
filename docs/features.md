@@ -41,3 +41,11 @@ Zeitraum-Werte und Zeitraum-Einträge liegen in den Periodendaten (`src/periodDa
 Beides sind Objekte statt Listen, damit ein Drive-Abgleich Einträge einzeln zusammenführt. Ältere Datenstände haben diese Felder nicht; `normalizePeriodData` ergänzt nichts und verwirft ungültige Werte. Eine Datenbank-Migration ist nicht nötig, weil die Periodendaten als JSON gespeichert werden.
 
 Prüfungen: `tests/features.test.mjs`, `tests/featureViews.test.mjs`, `tests/nebulaLayout.test.mjs`; UI-Bereich `features` in `scripts/verify-ui.mjs` (alle neun Kombinationen aus Aufbau und Optik).
+
+## Rechtsklick
+
+Das Browser-Menü (Zurück, Neu laden, Speichern unter, Drucken …) erscheint nie: WebView2s eigene Menüs sind abgeschaltet (`main.rs`), und jeder Rechtsklick, den kein App-Menü nimmt, landet in `appContextMenu` (`ContextMenu.tsx`):
+- in Textfeldern (Eingaben, Textbereiche, Editoren ohne Auswahl) das App-Textmenü im Popup-Stil: Ausschneiden, Kopieren, Einfügen, Alles auswählen (Einfügen liest die Zwischenablage; für die eigenen Seiten ohne WebView2-Abfrage erlaubt);
+- auf einem Eintrag (außerhalb seines Textes) öffnen sich dessen Aktionen;
+- überall sonst passiert nichts.
+Eigene Menüs gibt es weiterhin für Fensterköpfe, Pinnwand, Notizen, Kalender, Widgets und markierten Text (Formatieren). Prüfung: `JOURNAL_UI_SCOPE=context-menus-all`.

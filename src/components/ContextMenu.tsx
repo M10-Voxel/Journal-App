@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent } from 'react';
 import { createPortal } from 'react-dom';
-import { useLanguage } from '../i18n';
+import { t, useLanguage } from '../i18n';
 import { usePopupLook } from '../popupLook';
 import type { PopupLook } from '../popupLook';
 import { Icon } from './Icon';
@@ -78,6 +78,59 @@ export function contextMenu(spec: (event: ReactMouseEvent<Element>) => MenuSpec 
     openContextMenu(made, byKey ? { x: rect.left + 12, y: rect.top + Math.min(rect.height, 30) } : { x: event.clientX, y: event.clientY }, { byKey, owner });
   };
 }
+type Field = HTMLInputElement | HTMLTextAreaElement | HTMLElement;
+const textInputs = /^(text|search|url|email|tel|password|number|)$/;
+/** The text field under a right click: an input or text area, a CodeMirror editor or any other editable element. */
+function editableAt(target: Element): Field | null {
+  const input = target.closest<HTMLInputElement | HTMLTextAreaElement>('input, textarea');
+  if (input && (input instanceof HTMLTextAreaElement || textInputs.test(input.type))) return input;
+  return target.closest<HTMLElement>('.cm-content, [contenteditable="true"], [contenteditable=""]');
+}
+/** Cut, copy, paste and select all for the field, in the app's menu. The selection is kept and restored before each. */
+function textMenu(field: Field): MenuSpec {
+  const plain = field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement;
+  const readOnly = plain ? field.readOnly || field.disabled : !(field as HTMLElement).isContentEditable;
+  const range = plain ? [field.selectionStart ?? 0, field.selectionEnd ?? 0] as const : null;
+  const selection = window.getSelection();
+  const kept = !plain && selection && selection.rangeCount && field.contains(selection.anchorNode) ? selection.getRangeAt(0).cloneRange() : null;
+  const selected = plain ? (range![0] !== range![1] && field.type !== 'password') : Boolean(kept && !kept.collapsed);
+  const back = () => {
+    field.focus({ preventScroll: true });
+    if (plain && range) field.setSelectionRange(range[0], range[1]);
+    else if (kept) { const now = window.getSelection(); now?.removeAllRanges(); now?.addRange(kept); }
+  };
+  const run = (command: 'cut' | 'copy') => () => { back(); document.execCommand(command); };
+  return { title: t('Text'), command: 'edit', items: [
+    { id: 'cut', command: 'cut', label: t('Ausschneiden'), icon: 'transfer', keys: 'Strg X', disabled: !selected || readOnly, run: run('cut') },
+    { id: 'copy', command: 'copy', label: t('Kopieren'), icon: 'copy', keys: 'Strg C', disabled: !selected, run: run('copy') },
+    { id: 'paste', command: 'paste', label: t('Einfügen'), icon: 'down', keys: 'Strg V', disabled: readOnly, run: () => {
+      void navigator.clipboard.readText().then(text => { back(); if (text) document.execCommand('insertText', false, text); }, () => back());
+    } },
+    '-',
+    { id: 'all', command: 'select --all', label: t('Alles auswählen'), icon: 'check', keys: 'Strg A', run: () => {
+      field.focus({ preventScroll: true });
+      if (plain) field.select(); else { const all = document.createRange(); all.selectNodeContents(field); const now = window.getSelection(); now?.removeAllRanges(); now?.addRange(all); }
+    } },
+  ] };
+}
+
+/**
+ * A right click nobody took: never the browser's own menu (Zurück, Neu laden, Speichern unter, Drucken …). In text it
+ * opens the app's text menu, on a journal entry its actions; elsewhere there is nothing to offer. Areas that stop the
+ * event from bubbling on (popovers) call it themselves.
+ */
+export function appContextMenu(event: MouseEvent) {
+  if (event.defaultPrevented) return;
+  event.preventDefault();
+  const target = event.target instanceof Element ? event.target : null;
+  if (!target || target.closest('.ctx-menu')) return;
+  const at = event.button === 2 ? { x: event.clientX, y: event.clientY } : (() => { const r = target.getBoundingClientRect(); return { x: r.left + 12, y: r.top + Math.min(r.height, 30) }; })();
+  const field = editableAt(target);
+  if (field) { openContextMenu(textMenu(field), at, { byKey: event.button !== 2, owner: field }); return; }
+  const symbol = target.closest('.entry')?.querySelector<HTMLButtonElement>(':scope > .entry-main .entry-symbol, .entry-symbol');
+  if (symbol && symbol.getAttribute('aria-expanded') !== 'true' && !symbol.disabled) symbol.click();
+}
+
 /** The same menu from a button (the pinboard's ⋯): under the button, keyboard-ready. */
 export function openMenuAt(element: HTMLElement, spec: MenuSpec, byKey = false) {
   const rect = element.getBoundingClientRect();
@@ -88,6 +141,14 @@ export function ContextMenuHost() {
   const open = useSyncExternalStore(subscribe, () => opened, () => null);
   const look = usePopupLook();
   useLanguage();
+  useEffect(() => {
+    // Every right click nobody took: never the browser's own menu (Zurück, Neu laden, Speichern unter, Drucken …).
+    // In text it opens the app's text menu, on a journal entry its actions; elsewhere there is nothing to offer.
+    // Listening on the window, after the app's own menus (they prevent the default) had their turn.
+    const fallback = (event: MouseEvent) => appContextMenu(event);
+    window.addEventListener('contextmenu', fallback);
+    return () => window.removeEventListener('contextmenu', fallback);
+  }, []);
   useDismissLayer({element:()=>document.querySelector<HTMLElement>('.ctx-menu'),inside:target=>!!target.closest('.ctx-menu'),onDismiss:closeContextMenu},!!open);
   useEffect(() => {
     if (!open) return;

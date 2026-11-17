@@ -295,16 +295,36 @@ Ist die Datenbank von einer neueren Version angelegt, bitte Journal aktualisiere
     }
     tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .on_page_load(|webview, _| {
+        .on_page_load(|webview, _payload| {
             if widget_smoke_root().is_some(){eprintln!("Native smoke page load: {}",webview.label());}
             // Disable only WebView2's built-in menus, including those inside sandboxed mail frames.
             // DOM contextmenu events still reach the app's own menus and editors.
             #[cfg(windows)]
-            if let Err(error) = webview.with_webview(|platform| unsafe {
+            let started = matches!(_payload.event(), tauri::webview::PageLoadEvent::Started);
+            #[cfg(windows)]
+            if let Err(error) = webview.with_webview(move |platform| unsafe {
                 let result = platform.controller().CoreWebView2()
                     .and_then(|view| view.Settings())
                     .and_then(|settings| settings.SetAreDefaultContextMenusEnabled(false));
                 if let Err(error) = result { eprintln!("Could not disable default context menus: {error}"); }
+                // The app's own text menu pastes from the clipboard: reading it is allowed for the app's pages without
+                // WebView2's prompt (mail and other foreign content keep the default). Registered once per page load.
+                if started {
+                    use webview2_com::Microsoft::Web::WebView2::Win32::{COREWEBVIEW2_PERMISSION_KIND, COREWEBVIEW2_PERMISSION_KIND_CLIPBOARD_READ, COREWEBVIEW2_PERMISSION_STATE_ALLOW};
+                    let handler = webview2_com::PermissionRequestedEventHandler::create(Box::new(|_, args| {
+                        let Some(args) = args else { return Ok(()) };
+                        let mut kind = COREWEBVIEW2_PERMISSION_KIND::default();
+                        args.PermissionKind(&mut kind)?;
+                        if kind != COREWEBVIEW2_PERMISSION_KIND_CLIPBOARD_READ { return Ok(()); }
+                        let mut uri = windows::core::PWSTR::null();
+                        args.Uri(&mut uri)?;
+                        let own = { let text = uri.to_string().unwrap_or_default(); windows::Win32::System::Com::CoTaskMemFree(Some(uri.0 as _)); text.starts_with("http://tauri.localhost") || text.starts_with("tauri://localhost") || text.starts_with("http://localhost:") };
+                        if own { args.SetState(COREWEBVIEW2_PERMISSION_STATE_ALLOW)?; }
+                        Ok(())
+                    }));
+                    let mut token = 0i64;
+                    if let Err(error) = platform.controller().CoreWebView2().and_then(|view| view.add_PermissionRequested(&handler, &mut token)) { eprintln!("Could not allow clipboard reading: {error}"); }
+                }
             }) { eprintln!("Could not configure webview context menus: {error}"); }
         })
         // Started again, Journal brings back the running one instead of opening the database twice.

@@ -1,3 +1,4 @@
+import { appContextMenu } from './ContextMenu';
 import { useLayoutEffect, useRef, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { createPortal } from 'react-dom';
@@ -62,7 +63,7 @@ export function Popover({ anchor, onClose, className = '', label, children, alig
     onPointerDown={event => event.stopPropagation()}
     onClick={event => event.stopPropagation()}
     onDoubleClick={event => event.stopPropagation()}
-    onContextMenu={event => event.stopPropagation()}
+    onContextMenu={event => { event.stopPropagation(); appContextMenu(event.nativeEvent); }}
     onWheel={event => event.stopPropagation()}
     onKeyDown={event => {
       if (event.key === 'Escape' && !event.defaultPrevented) { event.preventDefault(); close.current(true); }

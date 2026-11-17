@@ -4081,6 +4081,34 @@ try {
       const shot = await command('Page.captureScreenshot',{format:'png',clip:{...clip,width:1000}});await writeFile(join(artifacts,`nlook-${look}-zoom.png`),Buffer.from(shot.data,'base64'));
       await evaluate("document.querySelector('.nebula-calendar-toggle').click()");await pause(500);
     }
+  } else if (process.env.JOURNAL_UI_SCOPE === 'context-menus-all') {
+    // No right click ever reaches the browser's own menu: the app's menus, the text menu in fields, an entry's actions,
+    // or nothing at all.
+    await command('Emulation.setFocusEmulationEnabled',{enabled:true});
+    await command('Emulation.setDeviceMetricsOverride',{width:1500,height:900,deviceScaleFactor:1,mobile:false});
+    await evaluate("localStorage.setItem('journal.settings',JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'),theme:'nebula'}))");
+    await command('Page.reload');await until("Boolean(document.querySelector('.nebula-desk .entry'))");
+    await evaluate("window.__ctx=[];window.addEventListener('contextmenu',e=>window.__ctx.push(e.defaultPrevented))");
+    const right = async (selector) => {
+      const point = await evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});if(!e)return null;e.scrollIntoView({block:'center'});const r=e.getBoundingClientRect();return {x:r.left+Math.min(8,r.width/2),y:r.top+Math.min(8,r.height/2)};})()`);
+      if (!point) return 'missing';
+      await evaluate("window.__ctx=[]");
+      await command('Input.dispatchMouseEvent',{type:'mouseMoved',...point});
+      await command('Input.dispatchMouseEvent',{type:'mousePressed',...point,button:'right',buttons:2,clickCount:1});
+      await command('Input.dispatchMouseEvent',{type:'mouseReleased',...point,button:'right',buttons:0,clickCount:1});
+      await pause(200);
+      const result = await evaluate("({prevented:window.__ctx.every(Boolean)&&window.__ctx.length>0,menu:document.querySelector('.ctx-menu')?.innerText.split(String.fromCharCode(10)).filter(Boolean).slice(0,6).join('|')??null,dock:Boolean(document.querySelector('.entry-open'))})");
+      await key('Escape');await pause(150);
+      return result;
+    };
+    const places = ['.nebula-window-bar','.nebula-poster-figure','.nebula-poster-prose','.nebula-label','.nebula-terminals','.nebula-panel.is-rating .nebula-panel-body','.nebula-panel.is-activities .nebula-panel-body',
+      '.entry .entry-main','input.nebula-poster-title','.nebula-panel.is-entries .nebula-panel-head','.cal-compact-day','.search-field, .search input','.board-viewport'];
+    for (const look of ['journal','classic','nebula']) {
+      await evaluate(`window.__uiTest.emit('journal:theme',{layout:'desk',look:'${look}',pixel:false,popupStyle:'a'})`);await pause(500);
+      for (const place of places) { const r = await right(place); console.log('ctx', look, place, JSON.stringify(r)); assert(r === 'missing' || r.prevented || r.menu, `${look} ${place}: the browser's menu stays shut`); }
+    }
+    assert.match((await right('input.nebula-poster-title')).menu ?? '', /Ausschneiden/, 'A text field gets the text menu.');
+    console.log('Context menu fallback passed.');
   } else if (process.env.JOURNAL_UI_SCOPE === 'widget-space-probe') {
     await command('Emulation.setFocusEmulationEnabled',{enabled:true});
     await command('Emulation.setDeviceMetricsOverride',{width:460,height:520,deviceScaleFactor:1,mobile:false});
