@@ -100,11 +100,11 @@
      spans the whole row so the calendar can stick all the way down. */
   .nebula-side { align-self: stretch; }
   .nebula-side .nebula-poster { flex: none; }
-  .nebula-side .nebula-cal-panel:is(.is-day, .is-month) { position: sticky; top: 0; height: calc(100dvh - 32px - 36px - var(--nb-poster-shown, 0px)); min-height: 0; }
+  .nebula-side .nebula-cal-panel:is(.is-day, .is-month) { position: sticky; top: 0; height: calc(100dvh - var(--nb-bar-h, 32px) - 36px - var(--nb-poster-shown, 0px)); min-height: 0; }
   /* With the month open the poster stays: it sticks to the top and the month (at its own height) right below it. Only
      the day view lets the poster scroll away and grows into its room. */
   .nebula-side:has(.nebula-cal-panel.is-month) .nebula-poster { position: sticky; top: 0; z-index: 1; }
-  .nebula-side .nebula-cal-panel.is-month { top: calc(var(--nb-poster-h, 0px) + 18px); height: auto; max-height: calc(100dvh - 32px - 36px - var(--nb-poster-h, 0px) - 18px); }
+  .nebula-side .nebula-cal-panel.is-month { top: calc(var(--nb-poster-h, 0px) + 18px); height: auto; max-height: calc(100dvh - var(--nb-bar-h, 32px) - 36px - var(--nb-poster-h, 0px) - 18px); }
 }
 .nebula-poster { position: relative; }
 /* The mini calendar opened from the date lies over the calendar window below the poster. */
@@ -227,7 +227,7 @@
 @keyframes nebula-spin { to { transform: rotate(360deg); } }
 
 /* ── The calendar window ──────────────────────────────────────────────────────────────────────────────────────── */
-.nebula-calendar { position: absolute; top: 18px; bottom: 26px; left: calc(var(--nb-rail-w) + var(--nb-gap) * 2); right: var(--nb-gap); z-index: 20; display: flex; flex-direction: column; min-width: 0;
+.nebula-calendar { position: absolute; top: 18px; bottom: 18px; left: calc(var(--nb-rail-w) + var(--nb-gap) * 2); right: var(--nb-gap); z-index: 20; display: flex; flex-direction: column; min-width: 0;
   border: 1px solid var(--nb-line); background: var(--surface); box-shadow: 5px 5px 0 var(--nb-offset);
   visibility: hidden; opacity: 0; transform: translateY(14px); transition: opacity 160ms ease, transform 220ms var(--ease), visibility 0s linear 220ms; }
 .nebula-calendar.is-open { visibility: visible; opacity: 1; transform: none; transition: opacity 160ms ease, transform 220ms var(--ease), visibility 0s; }
@@ -394,7 +394,7 @@
 
 /* ── The notebook: a window like the calendar's (switched in the window bar). With both open the calendar takes the
    left half of the middle and the notebook the right one (one column: top and bottom). ────────────────────────── */
-.nebula-notebook { --nb-half: calc((100% - var(--nb-rail-w) - var(--nb-gap) * 3) / 2); position: absolute; top: 18px; bottom: 26px; left: calc(var(--nb-rail-w) + var(--nb-gap) * 2); right: var(--nb-gap); z-index: 21; display: flex; flex-direction: column; min-width: 0;
+.nebula-notebook { --nb-half: calc((100% - var(--nb-rail-w) - var(--nb-gap) * 3) / 2); position: absolute; top: 18px; bottom: 18px; left: calc(var(--nb-rail-w) + var(--nb-gap) * 2); right: var(--nb-gap); z-index: 21; display: flex; flex-direction: column; min-width: 0;
   border: 1px solid var(--nb-line); background: var(--surface); box-shadow: 5px 5px 0 var(--nb-offset);
   visibility: hidden; opacity: 0; transform: translateY(14px); transition: opacity 160ms ease, transform 220ms var(--ease), visibility 0s linear 220ms; }
 .nebula-notebook.is-open { visibility: visible; opacity: 1; transform: none; transition: opacity 160ms ease, transform 220ms var(--ease), visibility 0s; }

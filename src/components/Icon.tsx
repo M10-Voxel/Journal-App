@@ -2,7 +2,7 @@ import type { Entry, EntryKind } from '../journal';
 import { PixelIcon } from './PixelIcon';
 
 export type IconName = 'play' | 'pause' | 'stop' | 'week' | 'quarter' | 'year' | 'journal' | 'calendar' | 'plan-tomorrow' | 'plan-days' | 'date-range' | 'left' | 'right' | 'up' | 'down' | 'grip' | 'offline' | 'save' | 'task' | 'note' | 'event' | 'done' | 'cancel' | 'trash' | 'tomorrow' | 'priority' | 'priority-event' | 'priority-note'
-  | 'migrated' | 'migrated-event' | 'scheduled' | 'scheduled-event' | 'scheduled-multi' | 'scheduled-multi-event' | 'clock' | 'bell' | 'check' | 'undo' | 'jump' | 'settings' | 'search' | 'pin' | 'month' | 'transfer' | 'repeat' | 'mail' | 'layout' | 'pencil' | 'tag' | 'pipette' | 'details' | 'copy' | 'icon' | 'focus';
+  | 'migrated' | 'migrated-event' | 'scheduled' | 'scheduled-event' | 'scheduled-multi' | 'scheduled-multi-event' | 'clock' | 'bell' | 'check' | 'undo' | 'jump' | 'dock' | 'settings' | 'search' | 'pin' | 'month' | 'transfer' | 'repeat' | 'mail' | 'layout' | 'pencil' | 'tag' | 'pipette' | 'details' | 'copy' | 'icon' | 'focus';
 
 export const priorityIcon = (kind: EntryKind): IconName => kind === 'event' ? 'priority-event' : kind === 'note' ? 'priority-note' : 'priority';
 
@@ -60,6 +60,7 @@ export function Icon({ name, className = '' }: { name: IconName; className?: str
     {name === 'bell' && <><path d="M4 11V7.5a4 4 0 0 1 8 0V11l1 1.5H3Z" /><path d="M6.5 14h3" /></>}
     {name === 'check' && <path d="m3.5 8.5 3 3 6-7" strokeWidth="1.6" />}
     {name === 'undo' && <><path d="M5.5 4 2.5 7l3 3" /><path d="M2.5 7h7a3.5 3.5 0 0 1 0 7H7" /></>}
+    {name === 'dock' && <><path d="M6.5 3.5h-3v9h9v-3" /><path d="M13 3 8 8M8 5v3h3" /></>}
     {name === 'jump' && <><path d="M6.5 3.5h-3v9h9v-3" /><path d="M9 3h4v4M13 3 7.5 8.5" /></>}
     {/* A cog with eight teeth (not a sun): settings. */}
     {name === 'settings' && <><path d="M6.54 3.22 L6.85 1.50 L9.15 1.50 L9.46 3.22 L10.35 3.59 L11.79 2.59 L13.41 4.21 L12.41 5.65 L12.78 6.54 L14.50 6.85 L14.50 9.15 L12.78 9.46 L12.41 10.35 L13.41 11.79 L11.79 13.41 L10.35 12.41 L9.46 12.78 L9.15 14.50 L6.85 14.50 L6.54 12.78 L5.65 12.41 L4.21 13.41 L2.59 11.79 L3.59 10.35 L3.22 9.46 L1.50 9.15 L1.50 6.85 L3.22 6.54 L3.59 5.65 L2.59 4.21 L4.21 2.59 L5.65 3.59Z" strokeWidth="1.2" /><circle cx="8" cy="8" r="2.1" /></>}

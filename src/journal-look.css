@@ -221,10 +221,10 @@
   background-image: radial-gradient(color-mix(in srgb, var(--accent) 22%, transparent) 1px, transparent 1.5px), var(--paper-grain); background-size: 22px 22px, auto; }
 :root[data-look='journal'] .board-card { --paper-ink: var(--ink-fixed); border-radius: 4px 8px 5px 9px / 9px 5px 8px 4px; box-shadow: var(--sticker-sm); }
 :root[data-look='journal'] .board-card:hover { box-shadow: var(--sticker); }
-:root[data-look='journal'] :is(.board-card, .floating-note).paper-yellow { --paper: #f6eab0; --pin: var(--violet); }
-:root[data-look='journal'] :is(.board-card, .floating-note).paper-blue { --paper: #ddd2f7; --pin: var(--pink); }
-:root[data-look='journal'] :is(.board-card, .floating-note).paper-green { --paper: #c9ecdf; --pin: var(--pink); }
-:root[data-look='journal'] :is(.board-card, .floating-note).paper-pink { --paper: #f7d0dd; --pin: var(--mint); }
+:root[data-look='journal'] :is(.board-card, .floating-note, .notebook-note).paper-yellow { --paper: #f6eab0; --pin: var(--violet); }
+:root[data-look='journal'] :is(.board-card, .floating-note, .notebook-note).paper-blue { --paper: #ddd2f7; --pin: var(--pink); }
+:root[data-look='journal'] :is(.board-card, .floating-note, .notebook-note).paper-green { --paper: #c9ecdf; --pin: var(--pink); }
+:root[data-look='journal'] :is(.board-card, .floating-note, .notebook-note).paper-pink { --paper: #f7d0dd; --pin: var(--mint); }
 :root[data-look='journal'] .board-card.is-image { --paper: var(--sticker-edge); --pin: var(--mint); }
 :root[data-look='journal'] .board-card.is-link { --paper: #f4f0fb; --pin: var(--violet); background: linear-gradient(color-mix(in srgb, var(--violet) 60%, transparent), color-mix(in srgb, var(--violet) 60%, transparent)) 0 34px / 100% 1.5px no-repeat, var(--paper); }
 :root[data-look='journal'] .board-link strong { color: #4a33a0; font: 700 15px var(--hand); }

@@ -817,6 +817,9 @@ html.is-popup, html.is-popup body, html.is-popup #root { background: transparent
 /* Cards that arrive while the window is not in front (reminders come in a popup that never takes the focus, mail and
    update notes in a window behind others) still play: their entrance starts invisible and would stay there. */
 :root[data-window-idle] :is(.reminder, .reminder *, .mail-import-toast, .mail-import-toast *, .app-notices, .app-notices *) { animation-play-state: running !important; }
+/* So do views that open while the window is behind (a window handed back from its own window, a calendar turned by the
+   journal): their fade-in starts at opacity 0. They are short, so letting them run costs nothing. */
+:root[data-window-idle] :is(.cal-body, .cal-month-grid, .cal-compact-grid, .cal-title, .slide-next, .slide-prev) { animation-play-state: running !important; }
 
 /* Sorting by dragging (sortable.ts): the held row follows the pointer and lies above, the others slide aside. */
 [data-sorting], [data-sorting] * { cursor: grabbing !important; user-select: none !important; -webkit-user-select: none !important; }
@@ -836,3 +839,19 @@ html.is-popup, html.is-popup body, html.is-popup #root { background: transparent
 .cm-focused:not(.cm-readonly) .md-link:hover { cursor: pointer; }
 
 .format-code { font-family: var(--mono) !important; }
+
+/* A closed entry dock (orbit, sheet, swipe) is gone (display: none) once its closing has played. Hidden but present, it
+   reached past the last entry (orbit ring, clusters, the sheet below the row) and made panels and widgets scroll although
+   everything fit. `display` switches with the visibility's delay (allow-discrete); opening starts from the closed look. */
+:root :is(.actions-orbit, .actions-sheet, .actions-swipe) .entry-dock-shell:not(.is-open) { display: none; }
+:root .actions-orbit .entry-dock-shell { transition: visibility 0s 220ms, display 0s 220ms allow-discrete; }
+:root .actions-sheet .entry-dock-shell { transition: visibility 0s 180ms, display 0s 180ms allow-discrete; }
+:root .actions-swipe .entry-dock-shell { transition: visibility 0s 160ms, display 0s 160ms allow-discrete; }
+:root :is(.actions-orbit, .actions-sheet, .actions-swipe) .entry-dock-shell.is-open { transition-delay: 0s; }
+@starting-style {
+  :root .actions-sheet .entry-dock-shell.is-open > .sheet { opacity: 0; transform: translateY(-6px) scale(.98); }
+  :root .actions-orbit .is-open .dock-satellite { opacity: 0; transform: translate(0, 0) scale(.3); }
+  :root .actions-orbit .is-open :is(.dock-planning, .dock-kind) { opacity: 0; transform: translateX(10px) scale(.9); }
+  :root .actions-orbit .is-open .dock-orbit circle { stroke-dashoffset: 1; }
+  :root[data-pixel] .actions-orbit .is-open .dock-orbit-pixel path { opacity: 0; }
+}

@@ -206,11 +206,16 @@
 .period-rating .scale-input { margin: -6px 0 0; }
 .rating-heading > span { font:13px var(--write); }
 .period-scales { padding-bottom: 8px; }
-.scale-list { display:grid; gap:6px; margin-top:4px; }
-.scale-row { display:grid; grid-template-columns:minmax(70px, 28%) minmax(0, 1fr) 24px; align-items:center; gap:12px; min-height:38px; }
+.scale-list { display:grid; grid-template-columns:fit-content(34%) minmax(0, 1fr) auto; column-gap:12px; row-gap:6px; margin-top:4px; }
+/* The names' column is as wide as the longest name (at most a third), so the scales get the rest; the rows share the
+   list's columns (subgrid), so the scales still start and end together. */
+.scale-row { display:grid; grid-column:1 / -1; grid-template-columns:subgrid; align-items:center; gap:inherit; min-height:38px; }
+.scale-name { min-width:48px; }
 .scale-name { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text); font:14px/24px var(--write); }
 .scale-clear { width:24px; height:24px; padding:0; border:0; border-radius:5px; background:transparent; color:var(--muted); font:16px/1 var(--sans); cursor:pointer; }
 .scale-clear:hover:not(:disabled) { background:var(--surface); color:var(--text); } .scale-clear:disabled { opacity:0; cursor:default; }
+/* Without a value there is nothing to reset: the button takes no room, so the scales reach further right. */
+.scale-list .scale-clear:disabled { width:0; overflow:hidden; }
 @container journal (max-width:600px) { .scale-row { grid-template-columns:1fr 24px; } .scale-row .scale-input { grid-column:1 / -1; grid-row:2; } }
 
 /* The overview's chart (ValueChart.tsx): a summary per shown line, its filter, then the lines with their points. */

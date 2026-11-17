@@ -104,6 +104,8 @@ export function useNow(): Date {
 
 /** From a separate window, the journal window is asked to show the day; in the sidebar the journal provides its own. */
 export const openInJournal = (date: string, entry?: string) => { void invoke('show_day', { date, entry: entry ?? null }).catch(() => {}); };
+/** Where a desk window wants the calendar's view tabs (in its head, beside the title). Without one the calendar has its own bar. */
+export const CalendarTabsSlot = createContext<HTMLElement | null>(null);
 export const OpenInJournal = createContext<(date: string, entry?: string) => void>(openInJournal);
 /** Right-clicking an entry edits it in place (in the sidebar, where the calendar may change the journal). */
 export const EditInCalendar = createContext<{ edit: ((entry: Entry, date: string, element: HTMLElement) => void) | null; editingId: string | null; change?: (entry: Entry, date: string, change: EntryEdit) => Promise<void>; move?: (entry: Entry, from: string, to: string, time: string | null, end: string | null) => Promise<void>; remove?: (entry: Entry, date: string, others: ScopeOption['others']) => Promise<void> }>({ edit: null, editingId: null });

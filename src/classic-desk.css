@@ -172,8 +172,8 @@
 :root[data-layout='desk'][data-look='classic'] :is(.nebula-calendar, .nebula-notebook).is-floating .nebula-grip.is-se::after { background: linear-gradient(135deg, transparent 0 50%, var(--divider) 50% 62%, transparent 62% 75%, var(--divider) 75% 87%, transparent 87%); }
 
 /* A window pulled out of the journal: the same card in its own window. */
-:root[data-look='classic'] .nebula-detached { background: var(--background); padding: 8px; inset: 0; }
-:root[data-look='classic'] .nebula-panel.is-detached { flex: 1; border: 1px solid var(--divider); border-radius: var(--desk-radius, 10px); background: var(--surface); box-shadow: none; }
+:root[data-look='classic'] .nebula-detached { background: transparent; padding: 8px; inset: 0; }
+:root[data-look='classic'] .nebula-panel.is-detached { flex: 1; border: 1px solid var(--divider); border-radius: var(--desk-radius, 10px); background: var(--surface); box-shadow: 0 1px 2px color-mix(in srgb, #000 12%, transparent); }
 :root[data-look='classic'] .nebula-panel.is-detached .nebula-terminal-head { min-height: 38px; padding: 0 6px 0 14px; color: var(--strong); }
 :root[data-look='classic'] .nebula-panel.is-detached .nebula-window-tools { display: flex; align-items: center; gap: 2px; margin-left: auto; }
 :root[data-look='classic'] .nebula-panel.is-detached .nebula-window-tools button { display: grid; place-items: center; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--muted); }
@@ -181,3 +181,12 @@
 :root[data-look='classic'] .nebula-panel.is-detached .nebula-window-tools button .icon { width: 14px; height: 14px; }
 :root[data-layout='desk'][data-look='classic'] .nebula-cal-panel > .nebula-terminal-head > :is(.nebula-window-focus, .nebula-calendar-toggle) { align-self: center; margin-top: 0; margin-bottom: 0; }
 :root[data-layout='desk'][data-look='classic'] .nebula-layout-slot[aria-pressed='true'] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--strong); box-shadow: none; }
+
+/* The bar is 40px here (Nebula's 32px): the side column's sticky calendar reckons with it, so it ends 18px above the
+   window's edge like the calendar and notes windows. */
+:root[data-layout='desk'][data-look='classic'] { --nb-bar-h: 40px; }
+/* Calendar and notes open together (in their places): one card, like Nebula's joined terminals. */
+:root[data-layout='desk'][data-look='classic'] .nebula-stage.is-calendar-open.is-notebook-open .nebula-calendar:not(.is-floating) {
+  border-right: 0; border-top-right-radius: 0; border-bottom-right-radius: 0; }
+:root[data-layout='desk'][data-look='classic'] .nebula-stage.is-calendar-open.is-notebook-open .nebula-notebook:not(.is-floating) {
+  border-top-left-radius: 0; border-bottom-left-radius: 0; }

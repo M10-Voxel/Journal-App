@@ -85,7 +85,7 @@
 :root[data-layout='desk'][data-look='journal'] :is(.nebula-window-tools button, .nebula-cal-panel > .nebula-terminal-head > :is(.nebula-window-focus, .nebula-calendar-toggle), .nebula-day-nav .nebula-step, .nebula-cal-step, .nebula-layout-reset, .nebula-panel.is-detached .nebula-window-tools button) { background-color: var(--key-bg); background-image: var(--key-face); box-shadow: var(--key); }
 /* The body: the card's paper. */
 :root[data-layout='desk'][data-look='journal'] :is(.nebula-terminal-body, .nebula-calendar-body, .nebula-notebook-body, .nebula-cal-body, .nebula-cal-day) { background: transparent; }
-:root[data-layout='desk'][data-look='journal'] .nebula-terminal-body { padding-top: 10px; }
+:root[data-layout='desk'][data-look='journal'] .nebula-terminal-body { padding: 10px 22px 20px 24px; }
 :root[data-layout='desk'][data-look='journal'] .nebula-panel-resize::after, :root[data-layout='desk'][data-look='journal'] .nebula-panel-width::after { background: repeating-linear-gradient(90deg, var(--ink-soft) 0 3px, transparent 3px 6px); }
 
 /* What runs inside the cards: the look's own type, not the terminal's. */
@@ -194,8 +194,8 @@
 :root[data-layout='desk'][data-look='journal'] .nebula-stage.is-calendar-open.is-notebook-open .nebula-calendar:not(.is-floating) { box-shadow: var(--sticker); }
 
 /* A window pulled out of the journal: the same paper card in its own window. */
-:root[data-look='journal'] .nebula-detached { background: var(--background); background-image: var(--paper-grain); padding: 8px; inset: 0; }
-:root[data-look='journal'] .nebula-panel.is-detached { flex: 1; border: 0; border-radius: var(--wobble-lg); background-color: var(--surface); background-image: var(--paper-grain); box-shadow: inset 0 0 0 2px var(--ink); }
+:root[data-look='journal'] .nebula-detached { background: transparent; padding: 10px; inset: 0; }
+:root[data-look='journal'] .nebula-panel.is-detached { flex: 1; border: 0; border-radius: var(--wobble-lg); background-color: var(--surface); background-image: var(--paper-grain); box-shadow: var(--sticker); --label-tint: color-mix(in srgb, var(--pink) 40%, var(--surface)); }
 :root[data-look='journal'] .nebula-panel.is-detached .nebula-terminal-head { min-height: 38px; padding: 6px 6px 0 14px; border: 0; background: transparent; color: var(--ink); }
 :root[data-look='journal'] .nebula-panel.is-detached .desk-label { margin-top: 0; }
 :root[data-look='journal'] .nebula-panel.is-detached .nebula-window-tools { display: flex; align-items: center; gap: 6px; margin-left: auto; }
@@ -212,3 +212,14 @@
    are dark on dark palettes, so dark print would vanish on them). */
 :root[data-layout='desk'][data-look='journal'] .nebula-paper :is(.popover, .planner, .format-menu, .mini-picker-panel, .tag-filter-list, .color-picker-panel) {
   --hover: color-mix(in srgb, var(--violet) 22%, var(--surface)); --selected: color-mix(in srgb, var(--violet) 36%, var(--surface)); --focus: color-mix(in srgb, var(--violet) 30%, var(--surface)); }
+
+/* The bar is 40px here (Nebula's 32px): the side column's sticky calendar reckons with it, so it ends 18px above the
+   window's edge like the calendar and notes windows. */
+:root[data-layout='desk'][data-look='journal'] { --nb-bar-h: 40px; }
+/* Calendar and notes open together (in their places): one card, like Nebula's joined terminals. The seam has no edge,
+   no rounding and no shadow from the other side; a quiet solid line divides them (a dashed one broke up
+   unevenly beside the calendar's scrollbar). */
+:root[data-layout='desk'][data-look='journal'] .nebula-stage.is-calendar-open.is-notebook-open .nebula-calendar:not(.is-floating) {
+  border-top-right-radius: 0; border-bottom-right-radius: 0; clip-path: inset(-40px 0 -40px -40px); }
+:root[data-layout='desk'][data-look='journal'] .nebula-stage.is-calendar-open.is-notebook-open .nebula-notebook:not(.is-floating) {
+  border-top-left-radius: 0; border-bottom-left-radius: 0; clip-path: inset(-40px -40px -40px 0); border-left: 1.5px solid color-mix(in srgb, var(--ink-soft) 70%, transparent); }

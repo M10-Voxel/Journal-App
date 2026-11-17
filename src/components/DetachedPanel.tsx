@@ -5,7 +5,7 @@ import { t, useLanguage } from '../i18n';
 import { localDate } from '../dates';
 import { BulletinBoard } from './BulletinBoard';
 import { Calendar } from './CalendarWindow';
-import { openInJournal, useJournalDate } from './calendarShared';
+import { CalendarTabsSlot, openInJournal, useJournalDate } from './calendarShared';
 import { Notebook } from './Notebook';
 import { windowGrips } from './useFloatingWindow';
 import { Icon } from './Icon';
@@ -29,6 +29,7 @@ export function DetachedPanel({ kind }: { kind: DetachedKind }) {
   useLanguage();
   const look = useLook(), sticker = look !== 'nebula';
   const window = getCurrentWindow();
+  const [tabsSlot, setTabsSlot] = useState<HTMLElement | null>(null);
   const date = useJournalDate() ?? localDate();
   const [boardContext, setBoardContext] = useState<{ date: string; period: BoardPeriod } | null>(null);
   useEffect(() => {
@@ -43,7 +44,7 @@ export function DetachedPanel({ kind }: { kind: DetachedKind }) {
   const back = async () => { await emit('nebula:panel-return', kind).catch(() => {}); await window.close(); };
   return <div className="nebula-detached">
     <section className={`nebula-terminal nebula-panel is-${kind} is-detached`} aria-label={label}>
-      <header className="nebula-terminal-head nebula-panel-head" onMouseDown={event => {
+      <header className={`nebula-terminal-head nebula-panel-head${kind === 'calendar' ? ' has-tabs' : ''}`} onMouseDown={event => {
         if (event.button !== 0 || (event.target as Element).closest('button')) return;
         event.preventDefault();
         void (event.detail === 2 ? window.toggleMaximize() : window.startDragging());
@@ -51,14 +52,15 @@ export function DetachedPanel({ kind }: { kind: DetachedKind }) {
         {sticker ? <span className="desk-label" aria-hidden="true"><b>{label}</b>{boardContext && kind === 'board' && <small>{boardContext.date.slice(8)}.{boardContext.date.slice(5, 7)}.</small>}</span>
           : <span className="nebula-prompt" aria-hidden="true"><b>[journal@~]$</b> {command}</span>}
         <span className="visually-hidden">{label}</span>
+        {kind === 'calendar' && <span className="nebula-window-tabs" ref={setTabsSlot} />}
         <span className="nebula-window-tools">
-          <button type="button" className="nebula-panel-return" aria-label={t('{0} zurück in die App', label)} title={t('Zurück in die App')} onClick={() => void back()}>{sticker ? <Icon name="jump" /> : '⇲'}</button>
+          <button type="button" className="nebula-panel-return" aria-label={t('{0} zurück in die App', label)} title={t('Zurück in die App')} onClick={() => void back()}>{sticker ? <Icon name="dock" /> : '⇲'}</button>
           <button type="button" className="nebula-panel-minimize" aria-label={t('{0} minimieren', label)} title={t('Minimieren')} onClick={() => void window.minimize()}>{sticker ? <Icon name="down" /> : '_'}</button>
           <button type="button" className="nebula-calendar-close" aria-label={t('{0} schließen', label)} title={t('Schließen')} onClick={() => void window.close()}>{sticker ? <Icon name="done" /> : '×'}</button>
         </span>
       </header>
       <div className="nebula-terminal-body nebula-panel-body nebula-detached-body">
-        {kind === 'calendar' ? <Calendar embedded withoutDay journalDate={date} onOpen={openInJournal} onCreate={requestCalendarCreate} onMove={requestCalendarMove} /> : kind === 'notebook' ? <Notebook /> : boardContext ? <BulletinBoard key={`${boardContext.period}:${boardContext.date}`} date={boardContext.date} period={boardContext.period} /> : <p role="status">{t('Wird geladen …')}</p>}
+        {kind === 'calendar' ? <CalendarTabsSlot.Provider value={tabsSlot}><Calendar embedded withoutDay journalDate={date} onOpen={openInJournal} onCreate={requestCalendarCreate} onMove={requestCalendarMove} /></CalendarTabsSlot.Provider> : kind === 'notebook' ? <Notebook /> : boardContext ? <BulletinBoard key={`${boardContext.period}:${boardContext.date}`} date={boardContext.date} period={boardContext.period} /> : <p role="status">{t('Wird geladen …')}</p>}
       </div>
       {windowGrips.map(grip => <span key={grip.name} className={`nebula-grip is-${grip.name}`} aria-hidden="true"
         onMouseDown={event => { if (event.button === 0) { event.preventDefault(); void window.startResizeDragging(directions[grip.name]); } }} />)}

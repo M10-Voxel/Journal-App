@@ -5,7 +5,7 @@
 .scale-input:focus-visible { outline: 1px solid var(--scale-color); outline-offset: 3px; }
 .scale-track { position: relative; display: grid; grid-template-columns: repeat(var(--scale-cells), minmax(0, 1fr)); flex: 1; min-width: 0; height: 26px; align-items: center; cursor: pointer; touch-action: none; }
 .scale-bracket, .scale-term, .scale-ink, .scale-tick { display: none; }
-.scale-value { display: flex; flex: none; align-items: baseline; gap: 4px; min-width: 52px; justify-content: flex-end; color: var(--scale-color); font-variant-numeric: tabular-nums; }
+.scale-value { display: flex; flex: none; align-items: baseline; gap: 4px; min-width: 44px; justify-content: flex-end; color: var(--scale-color); font-variant-numeric: tabular-nums; }
 .scale-number { font: 600 20px var(--sans); }
 .scale-max { color: var(--muted); font: 11px var(--mono); }
 .scale-input.is-empty .scale-number { color: var(--placeholder); }

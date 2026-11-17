@@ -249,6 +249,8 @@
 .cm-line.md-code-line { padding: 0 10px !important; background: color-mix(in srgb, var(--paper-ink, #000) 86%, transparent); color: #e6e2d6; font: 12.5px/20px var(--mono) !important; }
 .cm-line.md-code-top { border-radius: 6px 6px 0 0; padding-top: 4px !important; }
 .cm-line.md-code-bottom { border-radius: 0 0 6px 6px; padding-bottom: 4px !important; min-height: 6px; }
+/* A block of one line is top and bottom at once: rounded all round. */
+.cm-line.md-code-top.md-code-bottom { border-radius: 6px; }
 .cm-line.md-code-line.is-editing { color: #f3efe3; }
 /* Quotes: a bar at the left, the text a little softer. */
 .cm-line.md-quote { padding-left: calc(var(--indent, 0) * 18px + 12px) !important; border-left: 3px solid color-mix(in srgb, currentColor 32%, transparent); color: color-mix(in srgb, currentColor 78%, transparent); font-style: italic; }

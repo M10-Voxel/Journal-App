@@ -15,7 +15,7 @@ import { formatEnd, timeOfMinutes } from '../planning';
 import type { ScopeOption } from '../planning';
 import { CalendarComposer } from './CalendarComposer';
 import type { Draft, EntryEdit, NewEntry } from './CalendarComposer';
-import { CalendarItem, CompactMonth, EditInCalendar, OpenInJournal, dayLabel, hasJournalContent, entrySymbol, openInJournal, useCalendarData, useJournalDate, useNow } from './calendarShared';
+import { CalendarItem, CalendarTabsSlot, CompactMonth, EditInCalendar, OpenInJournal, dayLabel, hasJournalContent, entrySymbol, openInJournal, useCalendarData, useJournalDate, useNow } from './calendarShared';
 import { NavCluster } from './NavCluster';
 import { calendarSelection, clearCalendarSelection, selectInFrame } from '../calendarSelection';
 import { Icon } from './Icon';
@@ -78,6 +78,7 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
   useLanguage();
   const [prefs, setPrefs] = useState(() => loadCalendarPreferences(preferencesKey));
   const { kinds } = prefs;
+  const tabsSlot = useContext(CalendarTabsSlot);
   const views = calendarViews().filter(item => !withoutDay || item.view !== 'day');
   const view = fixedView ?? (withoutDay && prefs.view === 'day' ? 'week' : prefs.view);
   const now = useNow();
@@ -255,12 +256,14 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
       {(['event', 'task', 'note'] as EntryKind[]).map(kind => <button key={kind} type="button" className={`cal-filter-${kind}`} aria-pressed={kinds[kind]} title={`${kindPlurals()[kind]} ${kinds[kind] ? 'ausblenden' : 'zeigen'}`}
         onClick={() => setPrefs(current => ({ ...current, kinds: { ...current.kinds, [kind]: !current.kinds[kind] } }))}><Icon name={kind} /></button>)}
     </div>
+    {/* A desk window carries the view tabs in its head; the import/export button then sits here, at the far right. */}
+    {tabsSlot && onExport && onImport && <CalendarTransfer onExport={onExport} onImport={onImport} />}
   </div>;
   // Long, short and one-letter names; which one shows is up to the space (the letter only in a narrow widget header).
   const viewTabs = <div className="cal-views" role="tablist" aria-label={t("Ansicht")} style={{ '--index': selectedIndex, '--count': views.length } as CSSProperties}>
     <span className="cal-views-indicator" aria-hidden="true" />
     {views.map((item, index) => <button key={item.view} type="button" role="tab" aria-selected={item.view === view} aria-label={item.label} title={`${item.label} · ${item.key} ${t('oder')} ${index + 1}`} onClick={() => setView(item.view)}>
-      <span className="cal-view-long">{item.label}</span><span className="cal-view-short" aria-hidden="true">{item.short}</span><span className="cal-view-key" aria-hidden="true">{item.key}</span>
+      <span className="cal-view-long">{item.label}</span><span className="cal-view-short" aria-hidden="true">{item.short}</span><span className="cal-view-letter" aria-hidden="true">{item.letter}</span><span className="cal-view-key" aria-hidden="true">{item.key}</span>
     </button>)}
   </div>;
   return <OpenInJournal.Provider value={onOpen}><EditInCalendar.Provider value={editContext}>
@@ -279,7 +282,8 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
       {rangeDraw && <div className="cal-action-notice">{formatDate(rangeDraw.start)} – {formatDate(rangeDraw.end)}</div>}
       {notice && <div className="cal-action-notice" role="status">{notice}</div>}
       {pasting && <Popover anchor={rootRef.current} label={t('Einfügen')} onClose={()=>setPasting(null)}><div className="cal-paste-choice"><p>{t('Wiederholung einfügen')}</p><button type="button" onClick={()=>void paste(pasting.entry,pasting.date,false)}>{t('Nur diesen Tag')}</button><button type="button" onClick={()=>void paste(pasting.entry,pasting.date,true)}>{t('Mit Wiederholung')}</button></div></Popover>}
-      {!fixedView && !headerSlot && <nav className="cal-viewbar" aria-label={t("Kalenderansicht")}>
+      {tabsSlot && !fixedView && !headerSlot && createPortal(viewTabs, tabsSlot)}
+      {!fixedView && !headerSlot && !tabsSlot && <nav className="cal-viewbar" aria-label={t("Kalenderansicht")}>
         {viewTabs}
         {onExport && onImport && <CalendarTransfer onExport={onExport} onImport={onImport} />}
       </nav>}

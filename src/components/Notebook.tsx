@@ -6,7 +6,7 @@ import { useHiddenTags, useTags } from '../tagStore';
 import type { TagScope } from '../tagStore';
 import { invoke } from '@tauri-apps/api/core';
 import { t, useLanguage } from '../i18n';
-import { formatDate, formatShortDate, localDate } from '../dates';
+import { formatShortDate, localDate } from '../dates';
 import { NoteModeButton } from './InkCanvas';
 import { BoardImage, Lightbox, Note, connectCards, disconnectCards, hostOf, httpsLink, linkPreview, nextOrder, patchCards, removeCard, removeCards, storeImage, useCards, useFolders } from '../boardCards';
 import { BoardScopePicker } from './BoardScopePicker';
@@ -14,6 +14,7 @@ import type { Card, Folder } from '../boardCards';
 import { attachmentsOf, canMoveFolder, flatTree, folderPath, nextFolderOrder, notebookGroups, noteSorts, notesIn, onDayPatch, sortNotes, visibleTree } from '../notebook';
 import type { NoteSort } from '../notebook';
 import { Icon } from './Icon';
+import { useWheelSwipe } from './useWheelSwipe';
 import { Popover } from './Popover';
 import { contextMenu } from './ContextMenu';
 import type { MenuEntry, MenuItem } from './ContextMenu';
@@ -208,13 +209,34 @@ function NotebookView({ onClose, onOpenDay, tagScope = 'journal', widget }: { on
     // The window's own keys still reach the app: this notebook (Ctrl+Shift+N), the calendar, settings, help, Escape.
     const own = event.key === 'Escape' || event.key === 'F1' || (event.ctrlKey && (event.code === 'KeyK' || event.key === ',' || (event.shiftKey && event.code === 'KeyN')));
     const typing = (event.target as Element).closest('input, textarea, select, [contenteditable="true"], .cm-editor');
-    if (pages.length > 1 && (event.key === 'PageDown' || event.key === 'PageUp') && (event.ctrlKey || !typing)) {
-      event.preventDefault(); event.stopPropagation();
-      setPageIndex(Math.max(0, Math.min(pages.length - 1, index + (event.key === 'PageDown' ? 1 : -1))));
-      return;
-    }
+    // Bild↑/↓ turn the pages (keyTurn below, on the window); they are not passed on.
+    if ((event.key === 'PageDown' || event.key === 'PageUp') && (event.ctrlKey || !typing)) return;
     if (!own) event.stopPropagation();
   }
+
+  // Turning the note's pages: Bild↑/↓ (Strg as well, which also works while writing), Shift + wheel or a sideways swipe
+  // over the page. The keys are taken on the window before the editor sees them, wherever the focus is in the notebook –
+  // or nowhere (a page button that became disabled drops it) while the pointer is over it.
+  const rootRef = useRef<HTMLElement>(null), pageRef = useRef<HTMLElement>(null);
+  const pageCount = useRef(0); pageCount.current = pages.length;
+  const turn = (step: 1 | -1) => setPageIndex(current => Math.max(0, Math.min(pageCount.current - 1, Math.min(current, pageCount.current - 1) + step)));
+  const turnRef = useRef(turn); turnRef.current = turn;
+  useWheelSwipe(step => { if (pageCount.current > 1) turnRef.current(step); }, { root: pageRef, ignore: '.notebook-attachments, .ink-canvas' });
+  useEffect(() => {
+    const keyTurn = (event: globalThis.KeyboardEvent) => {
+      if ((event.key !== 'PageDown' && event.key !== 'PageUp') || event.altKey || event.metaKey || event.shiftKey) return;
+      const root = rootRef.current;
+      if (!root || pageCount.current < 2 || !root.checkVisibility()) return;
+      const target = event.target instanceof Element ? event.target : null;
+      const inside = Boolean(target && root.contains(target)), idle = !target || target === document.body || target === document.documentElement;
+      if (!inside && !(idle && root.matches(':hover'))) return;
+      if (target?.closest('input, textarea, select, [contenteditable="true"], .cm-editor') && !event.ctrlKey) return;
+      event.preventDefault(); event.stopPropagation();
+      turnRef.current(event.key === 'PageDown' ? 1 : -1);
+    };
+    window.addEventListener('keydown', keyTurn, true);
+    return () => window.removeEventListener('keydown', keyTurn, true);
+  }, []);
 
   useEffect(() => {
     const key = (event: globalThis.KeyboardEvent) => {
@@ -300,7 +322,7 @@ function NotebookView({ onClose, onOpenDay, tagScope = 'journal', widget }: { on
   const onDay = page ? page.dates.length > 0 : false;
   const status = busy ? t('Wird verarbeitet …') : message || error || folderError;
 
-  return <section className={`notebook${compact ? ' is-compact' : ''}`} aria-label={t('Notizen')} onKeyDown={onKey}>
+  return <section ref={rootRef} className={`notebook${compact ? ' is-compact' : ''}`} aria-label={t('Notizen')} onKeyDown={onKey}>
     {widget?.nav && createPortal(<NoteSwitcher notes={notes} current={current} folders={folders} onPick={id => select(id)} />, widget.nav)}
     {widget?.tools && createPortal(<button type="button" className="notebook-widget-new" disabled={busy} aria-label={t('Neuer Zettel')} title={t('Neuer Zettel')} onClick={() => newNote()}><span aria-hidden="true">+</span></button>, widget.tools)}
     {!compact && <header className="notebook-head">
@@ -362,24 +384,31 @@ function NotebookView({ onClose, onOpenDay, tagScope = 'journal', widget }: { on
           </div>
           {notes.map(note => {
             const path = shownChoice === 'all' || query ? folderPath(folders, note.folder).join(' / ') : '';
-            return <div className="notebook-note-group" key={note.id}><button type="button" role="listitem" data-note-id={note.id} className={`notebook-note paper-${note.paper ?? 'yellow'}${note.id === current?.id ? ' is-current' : ''}${chosen.includes(note.id) ? ' is-chosen' : ''}`}
+            return <div className={`notebook-note-group${chosen.includes(note.id) ? ' is-chosen' : ''}`} key={note.id}><button type="button" role="listitem" data-note-id={note.id} className={`notebook-note paper-${note.paper ?? 'yellow'}${note.id === current?.id ? ' is-current' : ''}${chosen.includes(note.id) ? ' is-chosen' : ''}`}
               aria-current={note.id === current?.id || undefined} aria-pressed={chosen.length ? chosen.includes(note.id) : undefined} draggable
               onDragStart={e => { e.dataTransfer.setData(noteType, chosen.includes(note.id) && chosen.length > 1 ? chosen.join(',') : note.id); e.dataTransfer.effectAllowed = 'move'; }}
               onPointerEnter={() => { hoverNote.current = note.id; }} onPointerLeave={() => { hoverNote.current = null; }} onClick={e => clickNote(e, note.id)} onContextMenu={noteMenu(note)}>
               <strong>{noteTitle(note)}</strong>
               <small>{note.mode === 'ink' ? t('Handschrift') : note.text.replace(/[#*_`>|[\]-]+/g, ' ').trim().slice(0, 70) || t('leer')}</small>
               <span className="notebook-note-meta">{tagOf(tags, note.tag) && <span title={tagOf(tags, note.tag)!.name} style={{ '--tag': tagOf(tags, note.tag)!.color } as CSSProperties}><i className="tag-dot" />{tagOf(tags, note.tag)!.name}</span>}{path && <span>{path}</span>}{(note.links ?? []).length > 0 && <span title={t('Verbunden')}><Icon name="jump" />{(note.links ?? []).length}</span>}{note.dates.length > 0 && <span title={t('Auf dem Tag')}><Icon name="calendar" /></span>}</span>
-            </button>{(bookPages.get(note.id)??[note]).slice(1).map((child,at)=><button type="button" key={child.id} className={`notebook-subpage${page?.id===child.id?' is-current':''}`} data-subpage-id={child.id} onClick={()=>select(child.id)} onContextMenu={noteMenu(child)}><Icon name="right"/><small>{at+2}</small><span>{noteTitle(child)}</span></button>)}</div>;
+            </button>{(bookPages.get(note.id)??[note]).slice(1).map((child,at)=><button type="button" key={child.id} className={`notebook-subpage${page?.id===child.id?' is-current':''}${chosen.includes(note.id)?' is-chosen':''}`} data-subpage-id={child.id} onClick={()=>select(child.id)} onContextMenu={noteMenu(child)}><Icon name="right"/><small>{at+2}</small><span>{noteTitle(child)}</span></button>)}</div>;
           })}
           {!notes.length && <p className="notebook-empty">{query ? t('Kein Zettel passt.') : t('Hier liegt noch kein Zettel.')}</p>}
         </div>
       </aside>}
 
-      {page ? <article className={`notebook-page paper-${page.paper ?? 'yellow'}${pages.length > 1 ? ' has-pages' : ''}`} aria-label={t('Zettel: {0}', noteTitle(page))} data-page-id={page.id} key={page.id} onContextMenu={noteMenu(page)}>
+      {page ? <article ref={pageRef} className={`notebook-page paper-${page.paper ?? 'yellow'}${pages.length > 1 ? ' has-pages' : ''}`} aria-label={t('Zettel: {0}', noteTitle(page))} data-page-id={page.id} key={page.id} onContextMenu={noteMenu(page)}>
         <header className="notebook-page-head">
           <input ref={titleRef} className="notebook-title" aria-label={t('Titel')} placeholder={t('Titel')} value={page.title} onChange={e => void patch(page.id, { title: e.target.value })} />
           {/* The widget keeps only the switch between writing and handwriting beside the title. */}
           {compact && <NoteModeButton card={page} patch={patch} className="notebook-mode" />}
+          {/* On the day: a small switch with its date, in the title's row (the date opens the day once it is on). */}
+          {!compact && <div className={`notebook-day${onDay ? ' is-on' : ''}`} title={t('Auf dem Tag zeigen')}>
+            <button type="button" role="switch" className="switch" aria-checked={onDay} aria-labelledby="notebook-on-day" onClick={() => void run(() => patch(page.id, onDayPatch(page, !onDay, today)))}><span /></button>
+            <label id="notebook-on-day" className="visually-hidden">{t('Auf dem Tag zeigen')}</label>
+            <Icon name="calendar" />
+            {onDay ? <button type="button" className="notebook-day-link" onClick={() => openDay(page)} title={t('Tag mit dieser Notiz öffnen')}>{page.dates.length > 1 ? t('auf {0} Tagen', page.dates.length) : formatShortDate(page.dates[0])}</button> : <small>{formatShortDate(created)}</small>}
+          </div>}
           {!compact && <div className="notebook-page-tools">
             <NoteModeButton card={page} patch={patch} className="notebook-mode" />
             <BoardScopePicker cards={cards} id={page.id} date={page.created ?? page.dates[0] ?? today} />
@@ -388,11 +417,6 @@ function NotebookView({ onClose, onOpenDay, tagScope = 'journal', widget }: { on
             {chosen.length > 1 && <button type="button" className="notebook-delete" disabled={busy} title={t('Alle ausgewählten Zettel löschen')} aria-label={t('Alle ausgewählten Zettel löschen')} onClick={() => void run(() => deleteNotes(chosen))}><Icon name="trash" /><span>{chosen.length}</span></button>}
           </div>}
         </header>
-        {!compact && <div className="notebook-day">
-          <button type="button" role="switch" className="switch" aria-checked={onDay} aria-labelledby="notebook-on-day" onClick={() => void run(() => patch(page.id, onDayPatch(page, !onDay, today)))}><span /></button>
-          <label id="notebook-on-day">{t('Auf dem Tag zeigen')}</label>
-          {onDay ? <button type="button" className="notebook-day-link" onClick={() => openDay(page)} title={t('Tag mit dieser Notiz öffnen')}>{page.dates.length > 1 ? t('auf {0} Tagen', page.dates.length) : formatDate(page.dates[0])}</button> : <small>{formatDate(created)}</small>}
-        </div>}
         <div className={`notebook-text board-note${page.mode === 'ink' ? ' is-ink' : ''}`}><Note card={page} patch={patch} label={noteTitle(page)} /></div>
         {(!compact || attachments.length > 0 || link !== null) && <section className="notebook-attachments" aria-label={t('Anhänge')}>
           {!compact && <div className="notebook-attachments-head">

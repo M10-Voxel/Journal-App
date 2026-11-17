@@ -60,8 +60,11 @@
 .notebook-rename ~ .notebook-folder-tools { display: none !important; }
 
 .notebook-notes { display: flex; flex-direction: column; gap: 3px; min-height: 0; }
-.notebook-note { --paper: #e9d98c; display: flex; flex-direction: column; gap: 2px; padding: 7px 9px 7px 12px; border: 0; border-radius: 6px; background: transparent; color: var(--text); text-align: left; cursor: pointer;
-  box-shadow: inset 3px 0 0 var(--paper); transition: background-color var(--fast) ease; }
+.notebook-note { display: flex; flex-direction: column; gap: 2px; padding: 7px 9px 7px 12px; border: 0; border-radius: 6px; background: transparent; color: var(--text); text-align: left; cursor: pointer;
+  position: relative; transition: background-color var(--fast) ease; }
+/* The strip at the left: the note's paper colour on the pinboard (yellow, blue, green, pink), so a note can be found
+   there by its colour. Each look draws it its own way. */
+.notebook-note::before { content: ''; position: absolute; left: 3px; top: 8px; bottom: 8px; width: 3px; border-radius: 2px; background: var(--paper); }
 .notebook-note strong { overflow: hidden; color: var(--strong); font: 600 12.5px var(--sans); text-overflow: ellipsis; white-space: nowrap; }
 .notebook-note small { overflow: hidden; color: var(--muted); font: 11.5px var(--sans); text-overflow: ellipsis; white-space: nowrap; }
 .notebook-note-meta { display: flex; flex-wrap: wrap; gap: 3px 9px; color: var(--muted); font: 10.5px var(--sans); }
@@ -85,8 +88,8 @@
 .notebook-page { position: relative; display: flex; flex-direction: column; gap: 12px; min-width: 0; min-height: 0; overflow: auto; padding: 18px 24px 14px; }
 .notebook-page.is-empty { align-items: flex-start; justify-content: center; padding: 30px; color: var(--muted); }
 .notebook-page.is-empty p { max-width: 36ch; margin: 0; }
-.notebook-page-head { display: flex; align-items: center; gap: 10px; }
-.notebook-title { flex: 1; min-width: 0; padding: 2px 0 4px; border: 0; border-bottom: 1px solid transparent; background: transparent; color: var(--strong); font: 600 21px var(--sans); outline: 0; }
+.notebook-page-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.notebook-title { flex: 1 1 220px; min-width: 0; padding: 2px 0 4px; border: 0; border-bottom: 1px solid transparent; background: transparent; color: var(--strong); font: 600 21px var(--sans); outline: 0; }
 .notebook-title:focus { border-bottom-color: color-mix(in srgb, var(--accent) 60%, transparent); }
 .notebook-title::placeholder { color: var(--placeholder); }
 .notebook-page-tools { flex: none; display: flex; align-items: center; gap: 6px; }
@@ -97,11 +100,21 @@
 .notebook-delete { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; }
 .notebook-delete:hover { background: color-mix(in srgb, var(--error) 15%, transparent); color: var(--error); }
 .notebook-delete .icon { width: 14px; height: 14px; }
-.notebook-day { display: flex; align-items: center; gap: 9px; color: var(--text); font: 12.5px var(--sans); }
+.notebook-day { flex: none; display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 9px 0 5px; border-radius: 999px; background: color-mix(in srgb, var(--text) 6%, transparent); color: var(--muted); font: 12px var(--sans); white-space: nowrap; }
+.notebook-day > .icon { flex: none; width: 13px; height: 13px; }
+.notebook-day.is-on > .icon { color: var(--accent); }
+.notebook-day .switch { flex: none; }
+:root[data-look='journal'] .notebook-day { border-radius: var(--wobble); }
+:root[data-look='nebula'] .notebook-day { border-radius: 0; background: transparent; box-shadow: inset 0 0 0 1px var(--edge); }
+:root[data-pixel] .notebook-day { border-radius: 0; }
 .notebook-day small { color: var(--muted); font-size: 12px; }
 .notebook-day label { cursor: default; }
-.notebook .notebook-text { --paper-ink: var(--text); flex: 1 0 auto; min-height: 180px; color: var(--text); }
-.notebook .notebook-text .cm-content { min-height: 170px; }
+/* The text takes the room the page has (a click anywhere in it writes), but asks for little of its own: a fixed 180px
+   pushed attachments and footer down and made a short note scroll in a small window. */
+.notebook .notebook-text { --paper-ink: var(--text); flex: 1 0 auto; display: flex; flex-direction: column; min-height: 72px; color: var(--text); }
+.notebook .notebook-text > .cm-editor { flex: 1 0 auto; }
+.notebook .notebook-text .cm-scroller { flex: 1 0 auto; }
+.notebook .notebook-text .cm-content { min-height: 64px; align-self: stretch; }
 .notebook-attachments { flex: none; display: flex; flex-direction: column; gap: 8px; padding-top: 10px; border-top: 1px solid var(--divider); }
 .notebook-attachments-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .notebook-attachments h3 { display: flex; align-items: center; gap: 6px; margin: 0; color: var(--strong); font: 600 12.5px var(--sans); }
@@ -169,10 +182,12 @@
 :root[data-look='journal'] .notebook-head h2 .icon { color: var(--accent); }
 :root[data-look='journal'] .notebook-head-count { font: italic 13px var(--serif); }
 :root[data-look='journal'] .notebook-new { border-radius: var(--wobble); background: var(--accent); color: var(--on-accent); box-shadow: var(--key); font-family: var(--hand); font-weight: 700; }
-:root[data-look='journal'] .notebook-side { background: color-mix(in srgb, var(--book-paper, var(--surface)) 92%, var(--leather, #6b3a24)); border-right: 1px solid color-mix(in srgb, var(--strong) 14%, transparent);
-  box-shadow: inset -10px 0 14px -12px color-mix(in srgb, var(--ink, #2a1a0c) 33%, transparent); }
+:root[data-look='journal'] .notebook-side { background: color-mix(in srgb, var(--book-paper, var(--surface)) 92%, var(--leather, #6b3a24)); border-right: 1px solid color-mix(in srgb, var(--strong) 14%, transparent); }
 :root[data-look='journal'] .notebook-tree-head { font: italic 600 12px var(--display); letter-spacing: .02em; text-transform: none; color: color-mix(in srgb, var(--strong) 70%, transparent); }
-:root[data-look='journal'] .notebook-search { border-radius: 3px; background: color-mix(in srgb, var(--book-paper, var(--surface)) 70%, #fff); }
+/* The search: the same field as the app's search at the top left. */
+:root[data-look='journal'] .notebook-search { height: 28px; border-radius: var(--wobble-lg); background: var(--sticker-edge); box-shadow: inset 0 0 0 1.5px var(--ink-soft); color: var(--placeholder); }
+:root[data-look='journal'] .notebook-search:focus-within { box-shadow: inset 0 0 0 1.5px var(--ink-soft); }
+.notebook .notebook-search input:is(:focus, :focus-visible) { outline: none !important; box-shadow: none !important; }
 :root[data-look='journal'] .notebook-folder-name { font: 14px var(--serif) !important; border-radius: 3px; }
 /* Contents: dotted leaders run from the folder's name to its count. */
 :root[data-look='journal'] .notebook-folder-name > span:not(.notebook-branch, .notebook-twisty) { flex: 0 1 auto; }
@@ -180,13 +195,13 @@
   background: radial-gradient(circle, color-mix(in srgb, var(--strong) 35%, transparent) .8px, transparent 1.2px) 0 calc(100% - 4px) / 5px 4px repeat-x; padding-left: 4px; }
 :root[data-look='journal'] .notebook-folder.is-current .notebook-folder-name { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--strong); }
 :root[data-look='journal'] .notebook-folder.is-current .notebook-folder-name .icon { color: var(--accent); }
-:root[data-look='journal'] .notebook-note { border-radius: 2px; box-shadow: inset 3px 0 0 var(--paper), 0 1px 0 color-mix(in srgb, var(--strong) 8%, transparent); }
+:root[data-look='journal'] .notebook-note { border-radius: var(--wobble); box-shadow: none; }
+/* Journal: a little paper tab in the note's colour, stuck on slightly askew. */
+:root[data-look='journal'] .notebook-note::before { left: 2px; top: 9px; bottom: auto; width: 6px; height: 16px; border-radius: 2px 3px 2px 3px; rotate: -4deg; box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 25%, transparent); }
 :root[data-look='journal'] .notebook-note strong { font: 600 13.5px var(--display); }
 :root[data-look='journal'] .notebook-note small { font: italic 12px var(--serif); }
-:root[data-look='journal'] .notebook-page { --rule: 26px; padding: 16px 26px 14px 46px;
-  background: linear-gradient(90deg, transparent 33px, color-mix(in srgb, var(--accent) 45%, transparent) 33px 34px, transparent 34px),
-    repeating-linear-gradient(to bottom, transparent 0 calc(var(--rule) - 1px), color-mix(in srgb, #5a7fa8 22%, transparent) calc(var(--rule) - 1px) var(--rule)) 0 12px / 100% var(--rule),
-    var(--book-paper, var(--surface)); background-attachment: local; }
+/* Plain paper: ruled lines never quite matched headings, lists and code in the text. */
+:root[data-look='journal'] .notebook-page { --rule: 26px; padding: 16px 26px 14px 26px; background: var(--book-paper, var(--surface)); }
 :root[data-look='journal'] .notebook-title { font: 600 26px var(--display); letter-spacing: -.01em; }
 :root[data-look='journal'] .notebook-day, :root[data-look='journal'] .notebook-page-foot { font: italic 13px var(--serif); }
 :root[data-look='journal'] .notebook .notebook-text .cm-content { font: 15px/26px var(--write, var(--serif)); }
@@ -234,12 +249,14 @@
 :root[data-look='nebula'] .notebook-folder-tools { top: 0; background: #08080a; }
 :root[data-look='nebula'] .notebook-folder-tools button { border-radius: 0; background: transparent; box-shadow: none; }
 :root[data-look='nebula'] .notebook-rename { height: 22px; border-radius: 0; font: 12px var(--mono); }
-:root[data-look='nebula'] .notebook-note { --paper: #cfcfcf; padding: 5px 8px 6px 12px; border-radius: 0; box-shadow: inset 2px 0 0 var(--paper); }
+:root[data-look='nebula'] .notebook-note { --paper: #cfcfcf; padding: 5px 8px 6px 12px; border-radius: 0; box-shadow: none; }
+:root[data-look='nebula'] .notebook-note::before { left: 0; top: 0; bottom: 0; width: 2px; border-radius: 0; }
 :root[data-look='nebula'] .notebook-note.paper-blue { --paper: #d5b8ff; } :root[data-look='nebula'] .notebook-note.paper-green { --paper: #a6f2dc; } :root[data-look='nebula'] .notebook-note.paper-pink { --paper: #ffd0b0; }
 :root[data-look='nebula'] .notebook-note strong { font: 700 12px var(--mono); text-transform: lowercase; }
 :root[data-look='nebula'] .notebook-note strong::after { content: '.md'; color: var(--muted); font-weight: 400; }
 :root[data-look='nebula'] .notebook-note :is(small, .notebook-note-meta) { font: 10.5px var(--mono); }
-:root[data-look='nebula'] .notebook-note.is-current { background: var(--event-background); box-shadow: inset 2px 0 0 var(--accent); }
+:root[data-look='nebula'] .notebook-note.is-current { background: var(--event-background); }
+:root[data-look='nebula'] .notebook-note.is-current::before { background: var(--accent); }
 :root[data-look='nebula'] .notebook-page { padding: 18px 24px 14px 28px; background: var(--surface); }
 :root[data-look='nebula'] .notebook-title { font: italic 400 32px/1.1 var(--display); border-bottom: 1px dashed var(--edge); }
 :root[data-look='nebula'] .notebook-folder-pick, :root[data-look='nebula'] .notebook-delete { border-radius: 0; }
@@ -273,7 +290,7 @@
   .notebook-rename, .notebook-note, .notebook-folder-pick, .notebook-delete, .notebook-attach-actions button, .notebook-attachment, .notebook-turn, .notebook-dots button, .notebook-attachment-foot button) { border-radius: 0; }
 :root[data-pixel] .notebook-new { box-shadow: 3px 3px 0 #0009; transition: none; }
 :root[data-pixel] .notebook-attachment { box-shadow: 0 0 0 2px var(--edge), 4px 4px 0 #000a; transform: none !important; }
-:root[data-pixel] .notebook-note { box-shadow: inset 4px 0 0 var(--paper); }
+:root[data-pixel] .notebook-note::before { left: 0; top: 0; bottom: 0; width: 4px; height: auto; border-radius: 0; rotate: none; box-shadow: none; }
 :root[data-pixel] .notebook-dots button { width: 8px; height: 8px; transition: none; }
 :root[data-pixel] .notebook-dots button[aria-current] { transform: none; box-shadow: 0 0 0 2px var(--accent); }
 :root[data-pixel] .notebook-pager { backdrop-filter: none; }
@@ -318,19 +335,29 @@ button.notebook-folder-pick:hover, button.notebook-folder-pick[aria-expanded='tr
 :root[data-pixel] .folder-pick-option { font-size: 15px; }
 
 /* Several notes chosen (Ctrl / Shift + click): ringed, and a bar to move them all into a folder. */
-.notebook-note.is-chosen { background: color-mix(in srgb, var(--accent) 16%, transparent); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 60%, transparent); }
+/* Chosen notes (Ctrl/Shift+click): the note with its pages is marked as one block, in the look's own way. */
+.notebook-note-group.is-chosen { border-radius: 7px; background: color-mix(in srgb, var(--accent) 14%, transparent); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 55%, transparent); }
+.notebook-note-group.is-chosen > .notebook-subpage { border-left-color: color-mix(in srgb, var(--accent) 45%, transparent); color: var(--text); }
 .notebook-chosen { display: flex; align-items: center; gap: 6px; margin: 2px 0 6px; padding: 5px 6px 5px 9px; border-radius: 7px; background: color-mix(in srgb, var(--accent) 12%, var(--surface)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent); color: var(--text); font: 600 11.5px var(--sans); }
-.notebook-chosen > span { flex: 1; min-width: 0; white-space: nowrap; }
+.notebook-chosen > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .notebook-chosen button.notebook-folder-pick { height: 24px; }
 .notebook-chosen-clear { display: grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--muted); cursor: pointer; }
 .notebook-chosen-clear:hover { background: var(--hover); color: var(--text); }
 .notebook-chosen-clear .icon { width: 10px; height: 10px; }
-:root[data-look='journal'] .notebook-note.is-chosen { background: color-mix(in srgb, var(--priority) 30%, transparent); box-shadow: inset 3px 0 0 var(--paper), inset 0 0 0 1px color-mix(in srgb, var(--priority) 70%, transparent); }
-:root[data-look='journal'] .notebook-chosen { border-radius: 2px; background: color-mix(in srgb, var(--priority) 22%, var(--book-paper, var(--surface))); font: italic 600 12.5px var(--serif); }
-:root[data-look='nebula'] .notebook-note.is-chosen { background: color-mix(in srgb, var(--nb-violet, #7b2cbf) 30%, transparent); box-shadow: inset 2px 0 0 var(--paper), inset 0 0 0 1px var(--nb-violet-light, #b388ff); }
+:root[data-look='journal'] .notebook-note-group.is-chosen { border-radius: var(--wobble-lg); background: color-mix(in srgb, var(--violet) 22%, transparent); box-shadow: inset 0 0 0 1.5px var(--ink-soft); }
+:root[data-look='journal'] .notebook-chosen { border-radius: var(--wobble); background: color-mix(in srgb, var(--violet) 22%, var(--book-paper, var(--surface))); box-shadow: inset 0 0 0 1.5px var(--ink-soft); font: italic 600 12.5px var(--serif); }
+:root[data-look='nebula'] .notebook-note-group.is-chosen { border-radius: 0; background: color-mix(in srgb, var(--nb-violet, #7b2cbf) 24%, transparent); box-shadow: inset 0 0 0 1px var(--nb-violet-light, #b388ff); }
 :root[data-look='nebula'] .notebook-chosen { border-radius: 0; background: #0c0c0e; box-shadow: inset 0 0 0 1px var(--nb-violet-light, #b388ff); font: 700 11px var(--mono); }
-:root[data-pixel] :is(.notebook-chosen, .notebook-note.is-chosen, .notebook-chosen-clear) { border-radius: 0; }
+:root[data-pixel] :is(.notebook-chosen, .notebook-note-group.is-chosen, .notebook-chosen-clear) { border-radius: 0; }
+:root[data-pixel] .notebook-note-group.is-chosen { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 70%, transparent); }
 
 .notebook-day-link { padding: 0; border: 0; background: transparent; color: var(--muted); font: inherit; text-align: left; cursor: pointer; text-decoration: underline; text-decoration-color: color-mix(in srgb, currentColor 35%, transparent); text-underline-offset: 3px; }
 .notebook-day-link:hover { color: var(--accent); }
 .notebook-chosen-delete:hover { color: var(--error); }
+
+/* The pinboard assignment beside the title: a quiet tool like the mode switch, in every look. */
+.notebook .notebook-page-tools .board-assign { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 6px; background: transparent; background-image: none; box-shadow: none; color: var(--muted); cursor: pointer; }
+.notebook .notebook-page-tools .board-assign:is(:hover, [aria-expanded='true']) { background: color-mix(in srgb, var(--text) 10%, transparent); color: var(--text); }
+.notebook .notebook-page-tools .board-assign .icon { width: 14px; height: 14px; }
+:root[data-look='journal'] .notebook .notebook-page-tools .board-assign { border-radius: var(--wobble); }
+:root[data-look='nebula'] .notebook .notebook-page-tools .board-assign { border-radius: 0; }

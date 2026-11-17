@@ -11,6 +11,8 @@ const english: Record<string, string> = {
   "Loslassen: als eigenes Fenster": "Release: as a window of its own",
   "{0} zurück in die App": "{0} back into the app",
   "Zurück in die App": "Back into the app",
+  "{0} als eigenes Fenster": "{0} as a window of its own",
+  "Als eigenes Fenster öffnen": "Open as a window of its own",
   "Ziehen zum Verschieben (⇧: ins Raster) · Doppelklick: Ausgangsposition": "Drag to move (⇧: into the grid) · double click: starting position",
   "Ziehen zum Verschieben (⇧: ins Raster)": "Drag to move (⇧: into the grid)",
   "{0}: Ausgangsposition": "{0}: starting position",

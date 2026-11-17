@@ -1,15 +1,18 @@
 import { tagRank } from './tags.ts';
-import { t, dateFormat } from './i18n.ts';
+import { t, dateFormat, getLanguage } from './i18n.ts';
 import type { Entry } from './journal';
 import { monthGrid, shiftDate, shiftMonth, weekDates } from './dates.ts';
 
 // The calendar window's views, after Apple's and Samsung's calendars (year, month, week, day) and TaskNotes' work week.
 export type CalendarView = 'year' | 'month' | 'week' | 'workweek' | 'day';
-/** `short` is shown when the calendar is narrow (a slim sidebar). */
-export const calendarViews = (): { view: CalendarView; label: string; short: string; key: string }[] => ([
-  { view: 'year', label: t("Jahr"), short: t("Jahr"), key: 'J' }, { view: 'month', label: t("Monat"), short: t("Monat"), key: 'M' }, { view: 'week', label: t("Woche"), short: t("Woche"), key: 'W' },
-  { view: 'workweek', label: t("Arbeitswoche"), short: t("Mo–Fr"), key: 'A' }, { view: 'day', label: t("Tag"), short: t("Tag"), key: 'T' },
-]);
+/** `short` is shown when the calendar is narrow (a slim sidebar), `letter` in the narrowest bar (the desk windows' head). */
+export const calendarViews = (): { view: CalendarView; label: string; short: string; letter: string; key: string }[] => {
+  const en = getLanguage() === 'en';
+  return [
+    { view: 'year', label: t("Jahr"), short: t("Jahr"), letter: en ? 'Y' : 'J', key: 'J' }, { view: 'month', label: t("Monat"), short: t("Monat"), letter: 'M', key: 'M' }, { view: 'week', label: t("Woche"), short: t("Woche"), letter: 'W', key: 'W' },
+    { view: 'workweek', label: t("Arbeitswoche"), short: t("Mo–Fr"), letter: en ? 'M–F' : 'Mo–Fr', key: 'A' }, { view: 'day', label: t("Tag"), short: t("Tag"), letter: en ? 'D' : 'T', key: 'T' },
+  ];
+};
 
 const noon = (date: string) => { const [year, month, day] = date.split('-').map(Number); return new Date(year, month - 1, day, 12); };
 const daysInMonth = (month: string) => { const [year, value] = month.split('-').map(Number); return new Date(year, value, 0).getDate(); };

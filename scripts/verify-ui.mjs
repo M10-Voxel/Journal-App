@@ -2159,12 +2159,13 @@ async function checkNebulaTheme() {
   const panelBox = "(() => { const p=document.querySelector('.nebula-cal-panel').getBoundingClientRect(), d=document.querySelector('.nebula-desk').getBoundingClientRect(), q=document.querySelector('.nebula-poster').getBoundingClientRect(); return { top:p.top-d.top, bottom:innerHeight-p.bottom, height:p.height, poster:q.bottom-d.top }; })()";
   const before = await evaluate(panelBox);
   assert(before.top > before.poster && Math.abs(before.bottom - 18) <= 2, `The calendar fills the column below the poster: ${JSON.stringify(before)}`);
-  await evaluate("document.querySelector('.nebula-desk').scrollTop=420");
+  // Room to scroll the poster away, however compact the panels are.
+  await evaluate("document.querySelector('.nebula-grid').style.minHeight='2000px'; document.querySelector('.nebula-desk').scrollTop=420");
   await pause(200);
   const after = await evaluate(panelBox);
   assert(after.poster < 0 && Math.abs(after.top - 18) <= 2 && Math.abs(after.bottom - 18) <= 2 && after.height > before.height + 100, `The poster is gone, the calendar takes its room: ${JSON.stringify(after)}`);
   await pause(300); await screenshot('nebula-week.png');
-  await evaluate("document.querySelector('.nebula-desk').scrollTop=0");
+  await evaluate("document.querySelector('.nebula-grid').style.minHeight=''; document.querySelector('.nebula-desk').scrollTop=0");
   await evaluate("document.querySelector('.nebula-cal-views [data-cal-view=month]').click()");
   await until("Boolean(document.querySelector('.nebula-side .cal-compact-grid'))");
   await key('3', 'Digit3', 2);
@@ -2398,11 +2399,7 @@ async function checkNebulaTheme() {
   await release(besideEntries);
   await until("[...document.querySelectorAll('.nebula-grid > .nebula-panel')].map(p => p.dataset.panel).join()==='rating,entries,board,scales,activities,calendar' && document.querySelector('.nebula-panel.is-board').dataset.span==='6'");
   assert(await evaluate("(() => { const a=document.querySelector('.nebula-panel.is-entries').getBoundingClientRect(), b=document.querySelector('.nebula-panel.is-board').getBoundingClientRect(); return document.querySelector('.nebula-panel.is-entries').dataset.span==='6' && Math.abs(a.top-b.top)<2 && a.right<b.left; })()"), 'Two windows share a row.');
-  // Half and whole rows by button: back to the whole row, the board moves to the next row.
-  await evaluate("document.querySelector('.nebula-panel.is-entries .nebula-panel-half').click()");
-  await until("document.querySelector('.nebula-panel.is-entries').dataset.span==='12'");
-  await evaluate("document.querySelector('.nebula-panel.is-entries .nebula-panel-half').click()");
-  await until("document.querySelector('.nebula-panel.is-entries').dataset.span==='6'");
+  // (The half/whole-row button is gone; the width is dragged at the right edge.)
   await evaluate("document.querySelector('.nebula-panel.is-calendar').scrollIntoView({block:'end'})"); await pause(300);
   await screenshot('nebula-grid-docked.png');
   // Out of the grid: the calendar dragged out floats again where it was let go.
@@ -3940,6 +3937,170 @@ try {
     await evaluate("localStorage.removeItem('journal.widget-chrome');window.dispatchEvent(new StorageEvent('storage',{key:'journal.widget-chrome'}))");
     await until("!!document.querySelector('.desktop-widget-open')");
     assert.deepEqual(errors,[]);console.log('Widget actions passed: hidden on load, symbol toggle, Escape, outside click and no reserved space in all themes/popup styles, including Pixel.');
+  } else if (process.env.JOURNAL_UI_SCOPE === 'space-probe') {
+    // Measures every scrolling box on the desk: how far its content reaches past it and which element does that.
+    await command('Emulation.setFocusEmulationEnabled',{enabled:true});
+    await command('Emulation.setDeviceMetricsOverride',{width:1700,height:1000,deviceScaleFactor:1,mobile:false});
+    await evaluate("localStorage.setItem('journal.settings',JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'),theme:'nebula'}));localStorage.setItem('test.scales',JSON.stringify([{id:'s1',name:'Schlaf',min:0,max:12,color:'#8ab4f8',active:true},{id:'s2',name:'Stress',min:0,max:10,color:'#f28b82',active:true}]))");
+    await command('Page.reload');await until("Boolean(document.querySelector('.nebula-desk'))");
+    const measure = () => evaluate(`(()=>{const out=[];for(const box of document.querySelectorAll('.nebula-desk *, .desktop-widget *')){const cs=getComputedStyle(box);if(!/(auto|scroll)/.test(cs.overflowY+cs.overflowX))continue;
+      const dy=box.scrollHeight-box.clientHeight, dx=box.scrollWidth-box.clientWidth;if(dy<=0&&dx<=0)continue;const r=box.getBoundingClientRect();if(!r.width||!r.height)continue;
+      const name=e=>e.tagName.toLowerCase()+(e.className&&typeof e.className==='string'?'.'+e.className.trim().split(/\s+/).slice(0,3).join('.'):'');
+      const panel=box.closest('[data-panel],[data-window]');let worst=null;for(const child of box.querySelectorAll('*')){const c=child.getBoundingClientRect();if(!c.width&&!c.height)continue;const over=Math.max(c.bottom-r.bottom-0, c.right-r.right);if(over>0&&(!worst||over>worst.over))worst={over:Math.round(over),el:name(child)};}
+      out.push({panel:panel?.dataset.panel??panel?.dataset.window??'',box:name(box),dy,dx,h:Math.round(r.height),worst});}return out;})()`);
+    for (const mode of ['day','week']) {
+      await evaluate(`document.querySelector('.nebula-tab[data-period-mode=${mode}]')?.click()`);await pause(500);
+      for (const look of ['journal','classic','nebula']) {
+        await evaluate(`window.__uiTest.emit('journal:theme',{layout:'desk',look:'${look}',pixel:false,popupStyle:'a'})`);await until(`document.documentElement.dataset.look==='${look}'`);await pause(500);
+        console.log(mode, look, JSON.stringify(await measure(), null, 1));
+        // Every panel pinned to exactly the height its content takes: nothing may scroll then.
+        console.log('pinned', mode, look, JSON.stringify(await evaluate(`(()=>{const out=[];for(const body of document.querySelectorAll('.nebula-panel-body:not(.has-height)')){if(!body.clientHeight)continue;
+          const h=body.getBoundingClientRect().height;body.style.height=h+'px';body.classList.add('has-height');const dy=body.scrollHeight-body.clientHeight,dx=body.scrollWidth-body.clientWidth;
+          if(dy>0||dx>0){const r=body.getBoundingClientRect();let worst=[];for(const c of body.querySelectorAll('*')){const b=c.getBoundingClientRect();if(!b.width&&!b.height)continue;const o=Math.max(b.bottom-(r.bottom-parseFloat(getComputedStyle(body).paddingBottom)),b.right-r.right);if(o>0.5)worst.push([Math.round(o),c.tagName.toLowerCase()+'.'+String(c.className).split(' ').slice(0,2).join('.')]);}
+            worst.sort((a,b)=>b[0]-a[0]);out.push({panel:body.closest('[data-panel]')?.dataset.panel,dy,dx,worst:worst.slice(0,4)});}
+          body.style.height='';body.classList.remove('has-height');}return out;})()`)));await screenshot(`space-${mode}-${look}.png`);
+      }
+    }
+    // The calendar window's head: label, the view tabs in the middle, the tools – in a wide and a narrow window.
+    await evaluate("document.querySelector('.nebula-calendar-toggle')?.click()");await until("Boolean(document.querySelector('.nebula-calendar.is-open .nebula-window-tabs .cal-views'))");
+    for (const look of ['journal','classic','nebula']) {
+      await evaluate(`window.__uiTest.emit('journal:theme',{layout:'desk',look:'${look}',pixel:false,popupStyle:'a'})`);await until(`document.documentElement.dataset.look==='${look}'`);
+      for (const width of [1700, 1000, 640, 520]) {
+        await command('Emulation.setDeviceMetricsOverride',{width,height:800,deviceScaleFactor:1,mobile:false});await pause(400);
+        console.log('tabs', look, width, JSON.stringify(await evaluate(`(()=>{const h=document.querySelector('.nebula-calendar .nebula-window-head'),v=h.querySelector('.cal-views'),r=v.getBoundingClientRect(),hr=h.getBoundingClientRect();
+          return {head:Math.round(hr.width),tabs:Math.round(r.width),left:Math.round(r.left-hr.left),right:Math.round(hr.right-r.right),text:[...v.querySelectorAll('button')].map(b=>b.innerText.trim())};})()`)));
+        await screenshot(`tabs-${look}-${width}.png`);
+      }
+    }
+  } else if (process.env.JOURNAL_UI_SCOPE === 'notebook-space-probe') {
+    await command('Emulation.setFocusEmulationEnabled',{enabled:true});
+    await command('Emulation.setDeviceMetricsOverride',{width:1400,height:900,deviceScaleFactor:1,mobile:false});
+    await evaluate(`(() => {
+      const n=String.fromCharCode(10),f=String.fromCharCode(96).repeat(3),text='Geräte Key'+n+n+f+'code'+n+'i0TUzD+KIfg2DVApOXCSIahduVnX0TqzKJ9fmGpPYho='+n+f;
+      sessionStorage.setItem('boardCards',JSON.stringify([{id:'key',kind:'note',title:'Schlüssel',text,dates:[],order:1,created:window.__uiTest.date,notebook:true}]));
+      localStorage.setItem('journal.notebookNote','key');
+      localStorage.setItem('journal.settings',JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'),theme:'nebula'}));
+    })()`);
+    await command('Page.reload');await until("Boolean(document.querySelector('.nebula-desk'))");
+    await evaluate("document.querySelector('.nebula-notebook-toggle')?.click()");await until("Boolean(document.querySelector('.notebook .cm-content'))");await pause(800);
+    for (const look of ['journal','classic','nebula']) {
+      await evaluate(`window.__uiTest.emit('journal:theme',{layout:'desk',look:'${look}',pixel:false,popupStyle:'a'})`);await pause(600);
+      for (const height of [900, 420]) {
+        await command('Emulation.setDeviceMetricsOverride',{width:1400,height,deviceScaleFactor:1,mobile:false});await pause(400);
+        console.log('notebook', look, height, JSON.stringify(await evaluate(`(()=>{const out=[];for(const box of document.querySelectorAll('.nebula-notebook, .nebula-notebook *')){const cs=getComputedStyle(box);if(!/(auto|scroll)/.test(cs.overflowY))continue;
+          const dy=box.scrollHeight-box.clientHeight;if(dy<=0)continue;const r=box.getBoundingClientRect();if(!r.height)continue;const pb=parseFloat(cs.paddingBottom);
+          let end=0;const vis=c=>{for(let e=c;e&&e!==box;e=e.parentElement){const st=getComputedStyle(e);if(st.visibility==='hidden'||st.opacity==='0'||st.display==='none')return false;}return true;};
+          const worst=[];for(const c of box.querySelectorAll('*')){const b=c.getBoundingClientRect();if(!b.height)continue;if(vis(c))end=Math.max(end,b.bottom-r.top+box.scrollTop);const o=b.bottom-(r.bottom-pb);if(o>0.5)worst.push([Math.round(o),c.tagName.toLowerCase()+'.'+String(c.className).split(' ').slice(0,2).join('.'),Math.round(b.height)]);}
+          worst.sort((a,b)=>b[0]-a[0]);out.push({box:box.tagName.toLowerCase()+'.'+String(box.className).split(' ').slice(0,2).join('.'),dy,h:Math.round(r.height),extra:Math.round(box.scrollHeight-(end+pb)),worst:worst.slice(0,6)});}return out;})()`)));
+        console.log('children', JSON.stringify(await evaluate(`[...document.querySelector('.nebula-notebook .notebook-page').children].map(c=>[c.tagName.toLowerCase()+'.'+String(c.className).split(' ')[0],Math.round(c.getBoundingClientRect().height),getComputedStyle(c).minHeight,getComputedStyle(c).flex])`)));
+        await screenshot(`nspace-${look}-${height}.png`);
+      }
+    }
+  } else if (process.env.JOURNAL_UI_SCOPE === 'windows-probe') {
+    await command('Emulation.setFocusEmulationEnabled',{enabled:true});
+    await command('Emulation.setDeviceMetricsOverride',{width:1500,height:900,deviceScaleFactor:1,mobile:false});
+    await evaluate("localStorage.setItem('journal.settings',JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'),theme:'nebula'}))");
+    await command('Page.reload');await until("Boolean(document.querySelector('.nebula-desk'))");
+    await evaluate(`document.querySelector('.nebula-tab[data-period-mode=${process.env.PROBE_MODE ?? 'week'}]')?.click()`);await pause(500);
+    const boxes = () => evaluate(`(()=>{const r=s=>{const e=document.querySelector(s);if(!e)return null;const b=e.getBoundingClientRect();return [Math.round(b.left),Math.round(b.top),Math.round(b.right),Math.round(b.bottom)];};
+      return {rail:r('.nebula-side'),cal:r('.nebula-calendar.is-open'),notes:r('.nebula-notebook.is-open'),railLast:r('.nebula-side > :last-child'),grid:r('.nebula-terminals'),calPanel:r('.nebula-cal-panel'),stage:r('.nebula-stage')};})()`);
+    for (const look of (process.env.PROBE_LOOKS ?? 'nebula,journal,classic').split(',')) {
+      await evaluate(`window.__uiTest.emit('journal:theme',{layout:'desk',look:'${look}',pixel:false,popupStyle:'a'})`);await pause(500);
+      if (!await evaluate("document.querySelector('.nebula-calendar')?.classList.contains('is-open')")) await evaluate("document.querySelector('.nebula-calendar-toggle')?.click()");await pause(500);
+      console.log('cal', look, JSON.stringify(await boxes()));await screenshot(`win-${look}-cal.png`);
+      if (!await evaluate("document.querySelector('.nebula-notebook')?.classList.contains('is-open')")) await evaluate("document.querySelector('.nebula-notebook-toggle')?.click()");await pause(600);
+      console.log('both', look, JSON.stringify(await boxes()));await screenshot(`win-${look}-both.png`);
+      await evaluate("document.querySelector('.nebula-calendar-toggle')?.click()");await pause(500);
+      console.log('notes', look, JSON.stringify(await boxes()));await screenshot(`win-${look}-notes.png`);
+      await evaluate("document.querySelector('.nebula-notebook-toggle')?.click()");await pause(400);
+    }
+    // Opened windows dim the desk; a view tab above closes them; a period's poster names it once.
+    await evaluate("document.querySelector('.nebula-calendar-toggle').click();document.querySelector('.nebula-notebook-toggle').click()");await pause(500);
+    const dim = await evaluate("getComputedStyle(document.querySelector('.nebula-terminals')).opacity");
+    await evaluate("document.querySelector('.nebula-tab[data-period-mode=year]').click()");await pause(500);
+    const closed = await evaluate("!document.querySelector('.nebula-calendar.is-open, .nebula-notebook.is-open')");
+    const posterTexts = await evaluate("[...document.querySelectorAll('.nebula-poster :is(.nebula-poster-date, .nebula-poster-title)')].map(e=>e.innerText.trim())");
+    console.log('extra', JSON.stringify({dim, closed, posterTexts, undimmed: await evaluate("getComputedStyle(document.querySelector('.nebula-terminals')).opacity")}));
+    await screenshot('win-year.png');
+  } else if (process.env.JOURNAL_UI_SCOPE === 'notebook-turning') {
+    // Turning a note's pages: Bild↓/↑ with the focus anywhere in the notebook or on nothing (pointer over it), Strg+Bild↓/↑
+    // while writing, Shift + wheel over the page.
+    await command('Emulation.setFocusEmulationEnabled',{enabled:true});
+    await command('Emulation.setDeviceMetricsOverride',{width:1400,height:900,deviceScaleFactor:1,mobile:false});
+    await evaluate(`(() => {
+      const card=(id,title,extra={})=>({id,kind:'note',title,text:'Text '+title,dates:[],order:1,created:window.__uiTest.date,notebook:true,...extra});
+      sessionStorage.setItem('boardCards',JSON.stringify([card('root','Eins',{links:['two'],pageLinks:['two']}),card('two','Zwei',{links:['root','three'],pageLinks:['three']}),card('three','Drei',{links:['two']})]));
+      localStorage.setItem('journal.notebookNote','root');
+      localStorage.setItem('journal.settings',JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'),theme:'nebula'}));
+    })()`);
+    await command('Page.reload');await until("Boolean(document.querySelector('.nebula-desk'))");
+    await evaluate("document.querySelector('.nebula-notebook-toggle')?.click()");await until("Boolean(document.querySelector('.notebook-page'))");await pause(500);
+    const pageNow = "document.querySelector('.notebook-page')?.dataset.pageId";
+    const pageCount = await evaluate("document.querySelectorAll('.notebook-dots button').length");
+    console.log('pages', pageCount, await evaluate(pageNow));
+    const pkey = async (keyName, modifiers=0) => { for (const type of ['rawKeyDown','keyUp']) await command('Input.dispatchKeyEvent',{type,key:keyName,code:keyName,windowsVirtualKeyCode:keyName==='PageDown'?34:33,modifiers}); };
+    const center = await evaluate("(()=>{const r=document.querySelector('.notebook-page').getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/3};})()");
+    await command('Input.dispatchMouseEvent',{type:'mouseMoved',...center});
+    await evaluate("document.activeElement?.blur()");
+    await pkey('PageDown');await pause(200);const a=await evaluate(pageNow);
+    await pkey('PageDown');await pause(200);const b=await evaluate(pageNow);
+    await pkey('PageUp');await pause(200);const c=await evaluate(pageNow);
+    // In the editor: plain Bild↓ stays with the text, Strg+Bild↓ turns.
+    await evaluate("document.querySelector('.notebook-page .cm-content')?.focus()");await pause(100);
+    await pkey('PageDown');await pause(200);const d=await evaluate(pageNow);
+    await pkey('PageDown',2);await pause(200);const e=await evaluate(pageNow);
+    await pkey('PageUp',2);await pause(200);await pkey('PageUp',2);await pause(200);const f=await evaluate(pageNow);
+    // Shift + wheel over the page.
+    await command('Input.dispatchMouseEvent',{type:'mouseWheel',...center,deltaX:0,deltaY:120,modifiers:8});await pause(300);const g=await evaluate(pageNow);
+    await command('Input.dispatchMouseEvent',{type:'mouseWheel',...center,deltaX:0,deltaY:-120,modifiers:8});await pause(300);const h=await evaluate(pageNow);
+    console.log('turning', JSON.stringify({a,b,c,d,e,f,g,h}));
+    assert.deepEqual({a,b,c,d,e,f,g,h},{a:'two',b:'three',c:'two',d:'two',e:'three',f:'root',g:'two',h:'root'},'Pages turn by keys and Shift + wheel.');
+    console.log('Notebook turning passed.');
+  } else if (process.env.JOURNAL_UI_SCOPE === 'notebook-look-probe') {
+    await command('Emulation.setFocusEmulationEnabled',{enabled:true});
+    await command('Emulation.setDeviceMetricsOverride',{width:1500,height:900,deviceScaleFactor:1,mobile:false});
+    await evaluate(`(() => {
+      const card=(id,title,extra={})=>({id,kind:'note',title,text:'Text '+title,dates:[],order:1,created:window.__uiTest.date,notebook:true,...extra});
+      sessionStorage.setItem('boardCards',JSON.stringify([card('root','App Checkliste',{links:['two'],pageLinks:['two']}),card('two','Generell',{links:['root','three'],pageLinks:['three']}),card('three','Kalender',{links:['two']}),
+        card('b','Buchungssystem',{paper:'blue',dates:[window.__uiTest.date]}),card('c','Device Key',{paper:'pink'})]));
+      localStorage.setItem('journal.notebookNote','root');
+      localStorage.setItem('journal.settings',JSON.stringify({...JSON.parse(localStorage.getItem('journal.settings')||'{}'),theme:'nebula'}));
+    })()`);
+    await command('Page.reload');await until("Boolean(document.querySelector('.nebula-desk'))");
+    await evaluate("document.querySelector('.nebula-calendar-toggle').click();document.querySelector('.nebula-notebook-toggle').click()");await until("Boolean(document.querySelector('.notebook-page'))");await pause(500);
+    // Choose two notes (Ctrl+click), the one with pages among them; focus the search.
+    await evaluate("document.querySelector('.notebook-note[data-note-id=root]').dispatchEvent(new MouseEvent('click',{bubbles:true,ctrlKey:true}));document.querySelector('.notebook-note[data-note-id=c]').dispatchEvent(new MouseEvent('click',{bubbles:true,ctrlKey:true}))");
+    for (const look of (process.env.PROBE_LOOKS ?? 'journal,classic,nebula').split(',')) {
+      await evaluate(`window.__uiTest.emit('journal:theme',{layout:'desk',look:'${look}',pixel:false,popupStyle:'a'})`);await pause(600);
+      await evaluate("document.querySelector('.notebook-search input').focus()");await pause(200);
+      console.log('look', look, JSON.stringify(await evaluate("(()=>{const i=document.querySelector('.notebook-search input'),l=i.closest('.notebook-search');return {inputOutline:getComputedStyle(i).outlineStyle+' '+getComputedStyle(i).outlineWidth,labelOutline:getComputedStyle(l).outlineStyle,labelShadow:getComputedStyle(l).boxShadow,chosen:document.querySelectorAll('.is-chosen').length};})()")));
+      await screenshot(`nlook-${look}.png`);
+      await evaluate("document.querySelector('.nebula-calendar-toggle').click()");await pause(500);
+      await evaluate("document.querySelector('.notebook-note[data-note-id=root]').scrollIntoView({block:'end'})");await pause(200);
+      const clip = await evaluate("(()=>{const r=document.querySelector('.nebula-notebook').getBoundingClientRect();return {x:r.left-40,y:r.top-20,width:560,height:760,scale:1};})()");
+      const shot = await command('Page.captureScreenshot',{format:'png',clip:{...clip,width:1000}});await writeFile(join(artifacts,`nlook-${look}-zoom.png`),Buffer.from(shot.data,'base64'));
+      await evaluate("document.querySelector('.nebula-calendar-toggle').click()");await pause(500);
+    }
+  } else if (process.env.JOURNAL_UI_SCOPE === 'widget-space-probe') {
+    await command('Emulation.setFocusEmulationEnabled',{enabled:true});
+    await command('Emulation.setDeviceMetricsOverride',{width:460,height:520,deviceScaleFactor:1,mobile:false});
+    await evaluate("localStorage.setItem('test.scales',JSON.stringify([{id:'stress',name:'Stress',min:0,max:10,color:'#e46a6a',active:true},{id:'sleep',name:'Schlaf',min:0,max:20,color:'#6a8ae4',active:true}]))");
+    for (const height of [300, 200]) for (const kind of ['day-values','activities','entries','notebook','calendar','board']) {
+      await command('Emulation.setDeviceMetricsOverride',{width:420,height,deviceScaleFactor:1,mobile:false});
+      await command('Page.navigate',{url:`http://127.0.0.1:${server.address().port}/?window=widget-${kind}`});
+      await until("!!document.querySelector('.desktop-widget')");await pause(900);
+      for (const look of ['journal','classic','nebula']) {
+        await evaluate(`window.__uiTest.emit('journal:theme',{layout:'desk',look:'${look}',pixel:false,popupStyle:'a'})`);await pause(500);
+        const result=await evaluate(`(()=>{const out=[];for(const box of document.querySelectorAll('.desktop-widget, .desktop-widget *')){const cs=getComputedStyle(box);if(!/(auto|scroll)/.test(cs.overflowY+cs.overflowX))continue;
+          const dy=box.scrollHeight-box.clientHeight,dx=box.scrollWidth-box.clientWidth;if(dy<=0&&dx<=0)continue;const r=box.getBoundingClientRect();if(!r.width||!r.height)continue;const pb=parseFloat(cs.paddingBottom);
+          const worst=[];for(const c of box.querySelectorAll('*')){const b=c.getBoundingClientRect();if(!b.width&&!b.height)continue;const o=Math.max(b.bottom-(r.bottom-pb),b.right-r.right);if(o>0.5){const st=getComputedStyle(c);worst.push([Math.round(o),c.tagName.toLowerCase()+'.'+String(c.className).split(' ').slice(0,2).join('.'),st.visibility,st.opacity]);}}
+          // Where the visible content really ends (in the box's scroll coordinates) against what the box scrolls to.
+          let end=0;const vis=c=>{for(let e=c;e&&e!==box;e=e.parentElement){const st=getComputedStyle(e);if(st.visibility==='hidden'||st.opacity==='0'||st.display==='none')return false;}return true;};
+          for(const c of box.querySelectorAll('*')){const b=c.getBoundingClientRect();if(!b.height||!vis(c))continue;end=Math.max(end,b.bottom-r.top+box.scrollTop);}
+          worst.sort((a,b)=>b[0]-a[0]);out.push({extra:Math.round(box.scrollHeight-(end+pb)),box:box.tagName.toLowerCase()+'.'+String(box.className).split(' ').slice(0,2).join('.'),dy,dx,h:Math.round(r.height),worst:worst.slice(0,5)});}return out;})()`);
+        console.log('widget', height, kind, look, JSON.stringify(result));await screenshot(`wspace-${kind}-${look}.png`);
+      }
+    }
   } else if (process.env.JOURNAL_UI_SCOPE === 'nebula-tickets') {
     await command('Emulation.setFocusEmulationEnabled',{enabled:true});
     await command('Emulation.setDeviceMetricsOverride',{width:1800,height:1000,deviceScaleFactor:1,mobile:false});

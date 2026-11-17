@@ -39,9 +39,9 @@
 .nebula-grid.is-dragging .nebula-panel-head { cursor: grabbing; }
 .nebula-panel-head .nebula-prompt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nebula-panel-state { flex: none; color: var(--nb-violet); font: 700 10px var(--mono); letter-spacing: .06em; }
-.nebula-panel .nebula-window-tools :is(.nebula-panel-half, .nebula-panel-minimize, .nebula-panel-float) { width: 30px; height: 100%; min-height: 26px; padding: 0; border: 0; border-left: 1px solid var(--nb-ink);
+.nebula-panel .nebula-window-tools :is(.nebula-panel-minimize, .nebula-panel-float) { width: 30px; height: 100%; min-height: 26px; padding: 0; border: 0; border-left: 1px solid var(--nb-ink);
   background: transparent; color: var(--nb-ink); font: 700 13px/1 var(--mono); cursor: pointer; }
-.nebula-panel .nebula-window-tools :is(.nebula-panel-half, .nebula-panel-minimize, .nebula-panel-float):hover { background: var(--nb-ink); color: var(--nb-paper); }
+.nebula-panel .nebula-window-tools :is(.nebula-panel-minimize, .nebula-panel-float):hover { background: var(--nb-ink); color: var(--nb-paper); }
 .nebula-panel .nebula-window-tools .nebula-calendar-close { width: 34px; height: 100%; min-height: 26px; }
 .nebula-panel-minimize { font-size: 14px !important; }
 
@@ -94,8 +94,8 @@
 .nebula-layout-reset:hover { border-color: var(--nb-violet-light); color: #fff; }
 
 /* The floating window's own new button (into the grid). */
-.nebula-window-tools .nebula-window-grid { width: 30px; height: 100%; min-height: 26px; padding: 0; border: 0; border-left: 1px solid var(--nb-ink); background: transparent; color: var(--nb-ink); font: 700 14px var(--mono); cursor: pointer; }
-.nebula-window-tools .nebula-window-grid:hover { background: var(--nb-ink); color: var(--nb-paper); }
+.nebula-window-tools :is(.nebula-window-grid, .nebula-window-detach) { width: 30px; height: 100%; min-height: 26px; padding: 0; border: 0; border-left: 1px solid var(--nb-ink); background: transparent; color: var(--nb-ink); font: 700 14px var(--mono); cursor: pointer; }
+.nebula-window-tools :is(.nebula-window-grid, .nebula-window-detach):hover { background: var(--nb-ink); color: var(--nb-paper); }
 @media (prefers-reduced-motion: reduce) { .nebula-panel-resize::after { transition: none; } }
 
 /* The day's own windows floating over the desk (taken out of the grid): a window like the calendar's, in the middle until
@@ -150,3 +150,52 @@
 .nebula-layout-slot[aria-pressed='true'] { border-color: var(--nb-violet-light, var(--accent)); color: var(--strong, #fff); box-shadow: inset 0 -2px 0 var(--nb-violet-light, var(--accent)); }
 .nebula-layout-save.is-choosing { border-style: dashed; }
 .nebula-layouts:has(.is-choosing) .nebula-layout-slot { outline: 1px dashed var(--nb-violet-light, var(--accent)); outline-offset: 2px; }
+
+/* The calendar's head: label, the view tabs in the middle, the tools. The tabs are flat cells like the calendar's old bar of
+   views; they take part of the head's width (wide in a wide window, narrower as it shrinks, always with room to the sides),
+   and shorten to Jahr/Monat/Woche/Mo–Fr and then to letters. */
+:root .nebula-terminal-head.has-tabs { container: cal-head / inline-size; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; }
+:root .nebula-terminal-head.has-tabs > :first-child { justify-self: start; }
+:root .nebula-terminal-head.has-tabs > .nebula-window-tools { justify-self: end; margin-left: 0; }
+.nebula-window-tabs { display: flex; justify-content: center; align-self: center; min-width: 0; }
+:root .nebula-terminal-head.has-tabs .nebula-window-tabs .cal-views { display: flex; gap: 0; width: clamp(120px, min(52cqi, 100cqi - 340px), 640px); min-width: 0; height: 30px; padding: 0; overflow: hidden;
+  border-radius: 8px; background: var(--surface); background-image: none; box-shadow: inset 0 0 0 1px var(--divider); filter: none; rotate: none; transform: none; }
+:root .nebula-terminal-head.has-tabs .nebula-window-tabs .cal-views-indicator { display: none; }
+:root .nebula-terminal-head.has-tabs .nebula-window-tabs .cal-views button { flex: 1 1 0; min-width: 0; height: auto; margin: 0; padding: 0 4px; overflow: hidden; border: 0; border-right: 1px solid var(--divider);
+  border-radius: 0; background: transparent; background-image: none; box-shadow: none; filter: none; rotate: none; transform: none; color: var(--muted); white-space: nowrap; text-overflow: ellipsis;
+  transition: color var(--fast) ease, background-color var(--fast) ease; }
+:root .nebula-terminal-head.has-tabs .nebula-window-tabs .cal-views button:last-of-type { border-right: 0; }
+:root .nebula-terminal-head.has-tabs .nebula-window-tabs .cal-views button::before { content: none; }
+:root .nebula-terminal-head.has-tabs .nebula-window-tabs .cal-views button:hover:not([aria-selected='true']) { background: color-mix(in srgb, var(--strong) 3.137%, transparent); color: var(--text); }
+:root .nebula-terminal-head.has-tabs .nebula-window-tabs .cal-views button[aria-selected='true'] { background: var(--background); color: var(--text); font-weight: 500; }
+@container cal-head (max-width: 760px) {
+  .nebula-window-tabs .cal-view-long { display: none; }
+  .nebula-window-tabs .cal-view-short { display: inline; }
+}
+@container cal-head (max-width: 540px) {
+  .nebula-window-tabs .cal-view-short { display: none; }
+  .nebula-window-tabs .cal-view-letter { display: inline; }
+  :root .nebula-terminal-head.has-tabs .nebula-window-tabs .cal-views button { flex: 1 0 auto; min-width: max-content; padding: 0 8px; }
+  :root .nebula-terminal-head.has-tabs .nebula-window-tabs .cal-views { width: auto; min-width: clamp(120px, 100cqi - 340px, 200px); }
+}
+
+/* Room in the desk's panels: the period sections bring the page's margins (28px above, 48px below, a rule and 28px over
+   their first heading); in a panel its frame and label already set it off, so they start and end at the body's padding.
+   This also keeps a panel with a set height from scrolling while its content still fits. */
+:root[data-layout='desk'] :is(.nebula-terminal, .nebula-floating) .period-section { padding: 0; }
+:root[data-layout='desk'] :is(.nebula-terminal, .nebula-floating) .period-section > :first-child:is(.checklist-section-heading),
+:root[data-layout='desk'] :is(.nebula-terminal, .nebula-floating) .period-section > :first-child > .checklist-section-heading:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+/* The ratings panel: its label already names it, so its heading keeps only the button for the day values. */
+:root[data-layout='desk'] .is-ratings .period-ratings > .checklist-section-heading:first-child { justify-content: flex-end; margin: 0 0 8px; padding: 0; }
+:root[data-layout='desk'] .is-ratings .period-ratings > .checklist-section-heading:first-child > div { display: none; }
+/* A section heading that only repeats the panel's label (the day's rating) goes; one with a button (day values) stays. */
+:root[data-layout='desk'] :is(.nebula-terminal, .nebula-floating) .period-section > .section-heading:not(:has(button)) { display: none; }
+:root[data-layout='desk'] :is(.nebula-terminal, .nebula-floating) .period-section > .section-heading:has(button) { justify-content: flex-end; margin-bottom: 8px; padding-bottom: 0; border-bottom: 0; }
+:root[data-layout='desk'] :is(.nebula-terminal, .nebula-floating) .period-section > .section-heading:has(button) .section-title { display: none; }
+/* The day's rating panel: its label names it already. */
+:root[data-layout='desk'] .is-rating .period-rating > .rating-heading { display: none; }
+:root[data-layout='desk'] .is-rating .period-rating { padding-bottom: 4px; }
+/* Calendar or notes open in their places over the desk: what lies behind fades nearly into the background – quietly, but
+   its contents no longer show through the gaps. A window moved or resized (floating) leaves the desk as it is. */
+.nebula-terminals { transition: opacity 240ms ease; }
+.nebula-stage:has(:is(.nebula-calendar, .nebula-notebook).is-open:not(.is-floating)) .nebula-terminals { opacity: .1; }

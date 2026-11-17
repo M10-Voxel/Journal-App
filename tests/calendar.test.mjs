@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { durationOf, formatDuration, isoWeek, layoutTimed, orderForCalendar, shiftMonthKeepingDay, shiftView, shortTitle, snapRange, viewDates, viewRange, viewTitle } from '../src/calendar.ts';
+import { calendarViews, durationOf, formatDuration, isoWeek, layoutTimed, orderForCalendar, shiftMonthKeepingDay, shiftView, shortTitle, snapRange, viewDates, viewRange, viewTitle } from '../src/calendar.ts';
 import { formatSpan, keepDuration, planChange, tomorrowChange } from '../src/planning.ts';
 
 const entry = (id, kind, extra = {}) => ({ id, kind, text:id, done:false, cancelled:false, priority:false, time:null, reminder:false, plan:null, ...extra });
@@ -92,4 +92,9 @@ test('planning keeps a span; moving its start keeps the duration', () => {
   assert.deepEqual(planChange('2026-10-30', ['2026-10-30'], { time:null, end:'15:45', reminder:false }), { time:null, end:null, reminder:false }, 'No end without a start.');
   assert.equal(tomorrowChange(span, '2026-10-30', () => 'id').plan.end, '10:30');
   assert.equal(formatSpan('09:00', '10:30'), '09:00–10:30');
+});
+
+test('every view has a one-letter form for a narrow head', () => {
+  const letters = calendarViews().map(item => item.letter);
+  assert.deepEqual(letters, ['J', 'M', 'W', 'Mo–Fr', 'T']);
 });
