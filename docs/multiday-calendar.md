@@ -10,7 +10,7 @@ Voreingestellt ist **nur im Kalender**. Aufgabe und Ereignis sind die weiteren E
 
 ## Darstellung und Aktionen
 
-- Stundenansichten öffnen bei 04:00 Uhr; frühere Stunden bleiben durch Scrollen erreichbar. **Strg+Mausrad** verändert den Stundenabstand und hält die Zeit unter dem Zeiger fest. Der Kalenderzoom ist unabhängig von der allgemeinen UI-Größe und wird lokal gemerkt.
+- Stundenansichten öffnen bei 04:00 Uhr; frühere Stunden bleiben durch Scrollen erreichbar. **Strg+Mausrad** verändert den Stundenabstand und hält die Zeit unter dem Zeiger fest. Der Kalenderzoom ist unabhängig von der allgemeinen UI-Größe und wird lokal gemerkt. Die Ansicht „Tage“ (früher Tagesansicht) ist ein seitwärts scrollendes Band aus Tagen, davon 1–5 offen; Bedienung in [days-view.md](days-view.md). Dort behält das Band beim Verschieben seine Stunden, statt wieder bei 04:00 zu öffnen.
 - Eine Dauer über 24 Stunden erscheint oben als zusammenhängender Balken statt im Stundenraster. Die tatsächlichen Start-/Enduhrzeiten bleiben gespeichert. Termine über Mitternacht bis zu 24 Stunden können in den Stundenblöcken der beteiligten Tage erscheinen.
 - Monats- und Jahresansichten zeigen zusammenhängende Bereiche; kompakte Monatsansichten markieren die abgedeckten Tage. Fortsetzungen verweisen auf denselben Ursprungseintrag und erzeugen keine Datenkopien.
 - **Entf** löscht den Eintrag unter der Maus beziehungsweise im geöffneten Detailkontext, wenn gerade kein Textfeld bearbeitet wird. Bei Serien oder verknüpften Vorkommen wird nach dem Löschumfang gefragt.

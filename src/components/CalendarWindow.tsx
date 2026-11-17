@@ -29,6 +29,7 @@ import { calendarInitialDate, calendarPreferencesKey, loadCalendarPreferences } 
 import type { CalendarLocation } from '../calendarPreferences';
 import { filterTagDays, isShown, tagOf } from '../tags';
 import { requestCalendarCreate, requestCalendarMove } from '../calendarRequests';
+import { bandColumns, bandRange, centeredScroll, datesBetween, defaultOpenDays, foldedWidth, rangeOf, spanTo } from '../dayWindow';
 
 // The calendar: in the journal's sidebar, or in a window of its own (currently not offered). Year and month like
 // Apple's and Samsung's calendars, week, work week and day as a time grid with a band for entries without time
@@ -88,7 +89,19 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
   const [slide, setSlide] = useState<'next' | 'prev' | null>(null);
   const [editing, setEditing] = useState<Editing | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
-  const range = viewRange(view, date);
+  // The "Tage" view (also Nebula's day panel): weeks side by side, `openDays` from `date` open, the rest folded.
+  const landscape = view === 'day';
+  const openDays = landscape ? prefs.openDays : 1;
+  // The band: a long row of days that scrolls sideways (Shift + wheel). It holds the open days with `bandBuffer` days on
+  // both sides, grows when scrolled near an end and is never narrowed while the view stays.
+  const [storedBand, setStoredBand] = useState<{ from: string; to: string } | null>(null);
+  const bandSpan = landscape ? bandRange(storedBand, date, openDays) : null;
+  useEffect(() => { if (bandSpan && (bandSpan.from !== storedBand?.from || bandSpan.to !== storedBand?.to)) setStoredBand(bandSpan); }, [bandSpan?.from, bandSpan?.to]);
+  useEffect(() => { if (!landscape) setStoredBand(null); }, [landscape]);
+  const extendBand = (direction: 1 | -1) => setStoredBand(current => current && (direction < 0 ? { ...current, from: shiftDate(current.from, -28) } : { ...current, to: shiftDate(current.to, 28) }));
+  const bandList = useMemo(() => bandSpan ? datesBetween(bandSpan.from, bandSpan.to) : [], [bandSpan?.from, bandSpan?.to]);
+  const openSet = useMemo(() => new Set(landscape ? viewDates('day', date, openDays) : []), [landscape, date, openDays]);
+  const range = landscape ? { from: bandList[0], to: bandList[bandList.length - 1] } : viewRange(view, date);
   useLayoutEffect(()=>{
     const root=rootRef.current;if(!root || (view!=='month' && view!=='year'))return;
     const align=()=>root.querySelectorAll<HTMLElement>('.cal-month-day,.cal-month-kw,.cal-year-grid > *').forEach(cell=>{
@@ -100,7 +113,7 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
 
   // One day more before: an appointment from the evening before may reach into the first shown day.
   const { days, error } = useCalendarData(shiftDate(range.from, -366), range.to);
-  const title = viewTitle(view, date);
+  const title = viewTitle(view, date, openDays);
   const tags = useTags();
   const tagOrder = tags.map(tag => tag.id).join();
   const [hiddenTags, setHiddenTags] = useHiddenTags(tagScope);
@@ -115,7 +128,7 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
 
   useEffect(() => { try {
     // A calendar with a fixed view keeps the stored view (another calendar's) and stores only the kinds shown.
-    const stored = {view: fixedView ? loadCalendarPreferences(preferencesKey).view : prefs.view, kinds: prefs.kinds, ...rememberDate ? {date, followToday} : {}};
+    const stored = {view: fixedView ? loadCalendarPreferences(preferencesKey).view : prefs.view, kinds: prefs.kinds, openDays: prefs.openDays, ...rememberDate ? {date, followToday} : {}};
     localStorage.setItem(preferencesKey, JSON.stringify(stored));
   } catch { /* keep it for this session */ } }, [prefs, preferencesKey, rememberDate, date, followToday]);
   useEffect(() => {
@@ -132,15 +145,16 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
   useEffect(() => { if (autoFocus) rootRef.current?.focus(); }, []);
   // Whenever the journal shows another day, the calendar goes there; browsing the calendar leaves the journal alone.
   useEffect(() => { if (journalDate && !showDate) go(journalDate); }, [journalDate]);
-  useEffect(() => { if (showDate) go(showDate); }, [showDate]);
+  // A day picked elsewhere (Nebula's week strip) opens first, even when it is already open.
+  useEffect(() => { if (showDate) { setSlide(null); setDate(showDate); } }, [showDate]);
   useEffect(() => { onDateChange?.(date); }, [date]);
   useEffect(() => { onStateChange?.({date, view}); }, [date, view, onStateChange]);
   // Another page or view leaves the entry being edited behind.
-  const pageKey = view === 'year' ? date.slice(0, 4) : view === 'month' ? date.slice(0, 7) : viewDates(view, date)[0];
+  const pageKey = view === 'year' ? date.slice(0, 4) : view === 'month' ? date.slice(0, 7) : landscape ? `${date}/${openDays}` : viewDates(view, date)[0];
   useEffect(() => setEditing(null), [view, pageKey]);
   const refocus = () => rootRef.current?.focus({ preventScroll: true });
   // Timed entries in a time grid are edited there, as a range that can be moved and resized; all others in place.
-  const gridDates = view === 'week' || view === 'workweek' || view === 'day' ? viewDates(view, date) : [];
+  const gridDates = landscape ? bandList : view ==='week' || view === 'workweek' ? viewDates(view, date) : [];
   const inGrid = editing?.entry.time && !(editing.entry.end && durationOf({time:editing.entry.time,end:editing.entry.end})>1440) && gridDates.includes(editing.date) ? editing : null;
   const save = async (change: EntryEdit, scope?: ScopeOption) => { if (editing) { await onEdit!(editing.date, editing.entry.id, change, scope); setEditing(null); refocus(); } };
   const remove = async (others: { id: string; date: string }[]) => { if (editing) { await onRemove!(editing.date, editing.entry.id, others); setEditing(null); refocus(); } };
@@ -150,22 +164,53 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
 
   const setView = (next: CalendarView) => { if (!fixedView) setPrefs(current => ({ ...current, view: next })); };
   // Going somewhere directly shows it in place; stepping slides the next page in from that side.
-  const go = (value: string) => { setSlide(null); setDate(value); setFollowToday(rememberDate && value === today); };
-  useViewHistory({ date, view }, value => { go(value.date); setView(value.view); });
+  // In the "Tage" view a day already open stays where it is (the journal following a click on an open day's head).
+  const go = (value: string) => { setSlide(null); if (!(landscape && openSet.has(value))) setDate(value); setFollowToday(rememberDate && value === today); };
+  // "Heute" and H: the open days start with today again.
+  // "Heute" and H: today and the two days after are open again (the default), whatever was open before.
+  const goToday = () => { setSlide(null); setDate(today); setFollowToday(rememberDate); if (landscape) setPrefs(current => ({ ...current, openDays: defaultOpenDays })); };
+  // A mouse's back and forward buttons return to the days open before (view history).
+  useViewHistory({ date, view, openDays: prefs.openDays }, value => { setSlide(null); setDate(value.date); setFollowToday(false); setView(value.view); if (value.openDays) setPrefs(current => ({ ...current, openDays: value.openDays })); });
   const show = (next: CalendarView, value: string) => { go(value); setView(withoutDay && next === 'day' ? 'week' : next); };
   // A day clicked in any view opens its note in the journal; the calendar goes there too.
   const openDay = (value: string) => { go(value); onOpen(value); };
   // In the year and month view a click shows the day's week; Ctrl opens the day's note.
   const pickDay = (value: string, journal?: boolean) => { if (journal) openDay(value); else show('week', value); };
-  const step = (amount: 1 | -1) => { setFollowToday(false); setSlide(amount > 0 ? 'next' : 'prev'); setDate(shiftView(view, date, amount)); };
-  useWheelSwipe(step, { root:rootRef, ignore:'.cal-viewbar, .cal-toolbar, .cal-composer' });
+  // In the "Tage" view the arrows move the open days by a week.
+  const step = (amount: 1 | -1) => { setFollowToday(false); setSlide(landscape ? null : amount > 0 ? 'next' : 'prev'); setDate(landscape ? shiftDate(date, amount * 7) : shiftView(view, date, amount)); };
+  // The "Tage" view: the open days move by `by` days; the band scrolls along so they stay in the middle.
+  const moveOpen = (by: number) => { setFollowToday(false); setSlide(null); setDate(current => shiftDate(current, by)); };
+  const openRange = (next: { start: string; size: number }) => { setFollowToday(false); setSlide(null); setDate(next.start); setPrefs(current => ({ ...current, openDays: next.size })); };
+  // A day opened by a click is the only open one.
+  const openOnly = (value: string) => openRange({ start: value, size: 1 });
+  // In the "Tage" view Shift + wheel scrolls the band itself (TimeGrid); elsewhere it turns the page.
+  useWheelSwipe(amount => { if (!landscape) step(amount); }, { root:rootRef, ignore:'.cal-viewbar, .cal-toolbar, .cal-composer, .cal-time.is-band' });
+  // Alt + wheel moves the open days by one day, Ctrl + Alt + wheel by as many as are open.
+  const windowWheel = useRef({ total: 0, last: 0 });
+  useEffect(() => {
+    if (!landscape) return;
+    const wheel = (event: WheelEvent) => {
+      const root = rootRef.current;
+      if (!event.altKey || !root || !(event.target instanceof Node) || !root.contains(event.target) || (event.target instanceof Element && event.target.closest('.cal-composer, .popover'))) return;
+      event.preventDefault(); event.stopPropagation();
+      const state = windowWheel.current, now = performance.now();
+      if (now - state.last > 220) state.total = 0;
+      state.last = now;
+      state.total += (Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX) * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? 600 : 1);
+      if (Math.abs(state.total) < 50) return;
+      const direction = state.total > 0 ? 1 : -1; state.total = 0;
+      moveOpen(direction * (event.ctrlKey ? openDays : 1));
+    };
+    document.addEventListener('wheel', wheel, { passive: false, capture: true });
+    return () => document.removeEventListener('wheel', wheel, true);
+  }, [landscape, openDays]);
   function onKeyDown(event: KeyboardEvent) {
     if ((event.target as Element).closest('input, .cal-composer')) return;
     if (event.defaultPrevented || event.ctrlKey || event.altKey || event.metaKey) return;
     const byKey = views.find((item, index) => item.key === event.key.toUpperCase() || String(index + 1) === event.key);
     if (byKey) setView(byKey.view);
     else if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') step(event.key === 'ArrowLeft' ? -1 : 1);
-    else if (event.key === 'h' || event.key === 'H') go(today);
+    else if (event.key === 'h' || event.key === 'H') { if (landscape) goToday(); else go(today); }
     else return;
     event.preventDefault();
   }
@@ -216,7 +261,7 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
    const cell=(event.target as Element).closest<HTMLElement>('[data-range-date]');if(!cell)return;event.preventDefault();
    const start=cell.dataset.rangeDate!;let end=start,moved=false,x=event.clientX,y=event.clientY,lastFlip=0;
    const follow=(e:globalThis.PointerEvent)=>{x=e.clientX;y=e.clientY;moved ||= Math.hypot(x-event.clientX,y-event.clientY)>5;const target=document.elementFromPoint(x,y)?.closest<HTMLElement>('[data-range-date]')?.dataset.rangeDate;if(target)end=target;if(moved)setRangeDraw({start:start<end?start:end,end:start<end?end:start});};
-   const timer=setInterval(()=>{if(!moved || !rootRef.current)return;const r=rootRef.current.getBoundingClientRect();const direction=x>r.right-24 || y>Math.min(r.bottom,innerHeight)-24?1:x<r.left+24?-1:0;if(direction && Date.now()-lastFlip>900){lastFlip=Date.now();const next=shiftView(view,rangePage.current,direction as 1|-1);rangePage.current=next;setDate(next);const nextDays=viewDates(view,next);end=direction>0?nextDays[nextDays.length-1]:nextDays[0];setRangeDraw({start:start<end?start:end,end:start<end?end:start});}},150);
+   const timer=setInterval(()=>{if(!moved || !rootRef.current)return;const r=rootRef.current.getBoundingClientRect();const direction=x>r.right-24 || y>Math.min(r.bottom,innerHeight)-24?1:x<r.left+24?-1:0;if(direction && Date.now()-lastFlip>900){lastFlip=Date.now();const next=shiftView(view,rangePage.current,direction as 1|-1,openDays);rangePage.current=next;setDate(next);const nextDays=viewDates(view,next,openDays);end=direction>0?nextDays[nextDays.length-1]:nextDays[0];setRangeDraw({start:start<end?start:end,end:start<end?end:start});}},150);
    const finish=()=>{clearInterval(timer);window.removeEventListener('pointermove',follow);window.removeEventListener('pointerup',finish);window.removeEventListener('pointercancel',cancel);if(moved){suppressContext.current=true;window.setTimeout(()=>{suppressContext.current=false;},250);setMulti({start:start<end?start:end,end:start<end?end:start});}setRangeDraw(null);};
    const cancel=()=>{moved=false;finish();};window.addEventListener('pointermove',follow);window.addEventListener('pointerup',finish);window.addEventListener('pointercancel',cancel);
   };
@@ -247,7 +292,7 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
   },[date,onCreate]);
   const selectedIndex = views.findIndex(item => item.view === view);
   const nav = <div className="cal-nav"><NavCluster label={t("Kalendernavigation")} prev={{ label: t("Zurück"), tip: t("Zurück · ←") }} next={{ label: t("Weiter"), tip: t("Weiter · →") }} today={{ tip: t("Heute · H") }}
-    atToday={viewDates(view, date).includes(today)} onPrev={() => step(-1)} onToday={() => go(today)} onNext={() => step(1)} /></div>;
+    atToday={landscape ? date === today : viewDates(view, date).includes(today)} onPrev={() => step(-1)} onToday={() => landscape ? goToday() : go(today)} onNext={() => step(1)} /></div>;
   const heading = <h1 className="cal-title" title={`${title.main} ${title.sub}`} key={`${view}-${title.main}-${title.sub}`}><strong><span className="cal-title-long">{title.main}</span><span className="cal-title-short" aria-hidden="true">{shortTitle(title.main)}</span></strong>{title.sub && <> <span className="cal-title-sub">{title.sub}</span></>}</h1>;
   const actions = <div className="cal-actions">
     <TagFilter label={t("Tags im Kalender")} hidden={hiddenTags} onChange={setHiddenTags} />
@@ -267,7 +312,7 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
     </button>)}
   </div>;
   return <OpenInJournal.Provider value={onOpen}><EditInCalendar.Provider value={editContext}>
-    <div ref={rootRef} className={`cal${embedded ? ' is-embedded' : ''}${fixedView ? ' is-fixed' : ''}`} data-view={view} tabIndex={-1} aria-label={t("Kalender")} onKeyDown={event => {
+    <div ref={rootRef} className={`cal${embedded ? ' is-embedded' : ''}${fixedView ? ' is-fixed' : ''}${landscape ? ' is-band' : ''}`} data-view={view} tabIndex={-1} aria-label={t("Kalender")} onKeyDown={event => {
       if (calendarSelection().size && !(event.target as Element).closest('input, textarea, [contenteditable="true"], .cal-composer, .popover')) {
         if (event.key === 'Delete' || event.key === 'Backspace') { event.preventDefault(); event.stopPropagation(); void removeChosen(); return; }
         if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); clearCalendarSelection(); return; }
@@ -296,9 +341,9 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
           {view === 'year' && <YearView date={date} today={today} journalDate={journalDate} days={displayDays} entriesOn={displayEntriesOn} onDay={pickDay} onMonth={value => show('month', value)} />}
           {view === 'month' && <MonthView date={date} today={today} journalDate={journalDate} days={displayDays} entriesOn={displayEntriesOn} onDay={pickDay} onMore={value => show('day', value)} onWeek={value => show('week', value)} />}
           {(view === 'week' || view === 'workweek' || view === 'day') && <div className="cal-split">
-            <TimeGrid journalDays={days} dates={viewDates(view, date)} today={today} now={now} journalDate={journalDate} entriesOn={entriesOn} onDay={openDay} onCreate={onCreate} newTag={newTag}
+            <TimeGrid journalDays={days} dates={landscape ? bandList : viewDates(view, date)} band={landscape ? { open: openSet, start: date, size: openDays, onOpen: openOnly, onRange: openRange, onExtend: extendBand } : undefined} today={today} now={now} journalDate={journalDate} entriesOn={entriesOn} onDay={openDay} onCreate={onCreate} newTag={newTag}
               editing={inGrid} onEditEnd={byKey => { setEditing(null); if (byKey) refocus(); }} onSave={save} onRemove={remove} />
-            {view === 'day' && <DaySide date={date} today={today} journalDate={journalDate} days={displayDays} hiddenTags={hiddenTags} onPick={openDay} />}
+            {view === 'day' && !landscape && <DaySide date={date} today={today} journalDate={journalDate} days={displayDays} hiddenTags={hiddenTags} onPick={openDay} />}
           </div>}
         </div>
       </div>
@@ -425,8 +470,10 @@ type Gesture = { mode: 'new' | 'start' | 'end' | 'move'; column: HTMLElement; da
  * the edges the grid scrolls along) and the composer opens next to it; the marked range can still be moved and resized.
  * A click into the band on top makes an entry for the whole day, without a time.
  */
-function TimeGrid({ journalDays, dates, today, now, journalDate, entriesOn, onDay, onCreate, newTag, editing, onEditEnd, onSave, onRemove }: {
-  journalDays: Map<string, CalendarDay>; newTag?: string | null; dates: string[]; today: string; now: Date; journalDate: string | null; entriesOn: (date: string) => Entry[]; onDay: (date: string) => void;
+/** The "Tage" view's band: which days are open, and how a click or a drag over the heads opens others. */
+type Band = { open: ReadonlySet<string>; start: string; size: number; onOpen: (date: string) => void; onRange: (range: { start: string; size: number }) => void; onExtend: (direction: 1 | -1) => void };
+function TimeGrid({ journalDays, dates, band, today, now, journalDate, entriesOn, onDay, onCreate, newTag, editing, onEditEnd, onSave, onRemove }: {
+  journalDays: Map<string, CalendarDay>; band?: Band; newTag?: string | null; dates: string[]; today: string; now: Date; journalDate: string | null; entriesOn: (date: string) => Entry[]; onDay: (date: string) => void;
   onCreate?: (date: string, entry: NewEntry) => Promise<void>;
   editing: Editing | null; onEditEnd: (byKey: boolean) => void; onSave: (change: EntryEdit, scope?: ScopeOption) => Promise<void>; onRemove: (others: { id: string; date: string }[]) => Promise<void>;
 }) {
@@ -450,7 +497,7 @@ function TimeGrid({ journalDays, dates, today, now, journalDate, entriesOn, onDa
   const zoom=useRef((()=>{try{return Math.max(.5,Math.min(4,Number(localStorage.getItem('journal.calendarZoom'))||1));}catch{return 1;}})());
   useEffect(()=>{
     const wheel=(event:WheelEvent)=>{
-      const grid=scrollRef.current;if(!event.ctrlKey || !grid || !(event.target instanceof Node) || !grid.contains(event.target))return;
+      const grid=scrollRef.current;if(!event.ctrlKey || event.altKey || !grid || !(event.target instanceof Node) || !grid.contains(event.target))return;
       event.preventDefault();event.stopPropagation();
       const nextZoom=Math.max(.5,Math.min(4,zoom.current*Math.exp(-event.deltaY*.002)));
       const next=Math.max(24,Math.min(320,baseHourHeight.current*nextZoom));
@@ -467,8 +514,84 @@ function TimeGrid({ journalDays, dates, today, now, journalDate, entriesOn, onDa
       const cells=Math.max(1,Math.round(column.getBoundingClientRect().width/(hourHeight/4)));
       column.style.setProperty('--paper-columns',String(cells));
     });
-    align();const observer=new ResizeObserver(align);observer.observe(grid);return()=>observer.disconnect();
+    // Each column observed too: the band's columns change width (gliding) without the grid itself changing.
+    align();const observer=new ResizeObserver(align);observer.observe(grid);grid.querySelectorAll('.cal-time-column').forEach(column=>observer.observe(column));return()=>observer.disconnect();
   },[hourHeight,dates[0],dates.length]);
+  // The band's columns in px (open days share what the folded ones leave), so a change of the open days can glide.
+  const [bodyWidth, setBodyWidth] = useState(0);
+  useLayoutEffect(() => {
+    const grid = scrollRef.current; if (!grid || !band) return;
+    const measure = () => setBodyWidth(grid.clientWidth - (grid.querySelector<HTMLElement>('.cal-time-hours')?.offsetWidth ?? 56));
+    measure(); const observer = new ResizeObserver(measure); observer.observe(grid); return () => observer.disconnect();
+  }, [Boolean(band)]);
+  const bandTemplate = band && bodyWidth > 0 ? bandColumns(dates, band.open, bodyWidth, band.size).map(value => `${value.toFixed(2)}px`).join(' ') : null;
+  // The band scrolls sideways. Whenever the open days change, it glides so that they sit in the middle; when it grows on
+  // the left (scrolled near its start), the view stays where it was.
+  const bandView = useRef<{ start: string; size: number; first: string; width: number } | null>(null);
+  const extending = useRef(false);
+  useLayoutEffect(() => {
+    const grid = scrollRef.current;
+    if (!grid || !band || bodyWidth <= 0) { bandView.current = null; return; }
+    const last = bandView.current;
+    bandView.current = { start: band.start, size: band.size, first: dates[0], width: bodyWidth };
+    extending.current = false;
+    const target = centeredScroll(dates, band.start, band.size, bodyWidth);
+    if (!last || last.width !== bodyWidth) { grid.scrollLeft = target; return; }
+    if (last.first !== dates[0]) grid.scrollLeft += Math.max(0, dates.indexOf(last.first)) * foldedWidth;
+    if (last.start !== band.start || last.size !== band.size) grid.scrollTo({ left: target, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  });
+  const followBandScroll = () => {
+    const grid = scrollRef.current;
+    if (!grid || !band || extending.current) return;
+    if (grid.scrollLeft < bodyWidth) { extending.current = true; band.onExtend(-1); }
+    else if (grid.scrollLeft + grid.clientWidth > grid.scrollWidth - bodyWidth) { extending.current = true; band.onExtend(1); }
+  };
+  // Shift + wheel (or a sideways swipe) scrolls the band: days come in on one side and leave on the other, the open
+  // ones too. Alt and Ctrl are the open days' and the zoom's.
+  useEffect(() => {
+    if (!band) return;
+    const wheel = (event: WheelEvent) => {
+      const grid = scrollRef.current;
+      if (!grid || event.altKey || event.ctrlKey || !(event.target instanceof Node) || !grid.contains(event.target)) return;
+      const sideways = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.shiftKey ? event.deltaY : 0;
+      if (!sideways) return;
+      event.preventDefault(); event.stopPropagation();
+      // A mouse notch moves three folded days; a trackpad follows the fingers a little slower than 1:1.
+      const notch = event.deltaMode !== 0 || Math.abs(sideways) >= 50;
+      grid.scrollLeft += notch ? Math.sign(sideways) * 3 * foldedWidth : sideways * .6;
+    };
+    document.addEventListener('wheel', wheel, { passive: false, capture: true });
+    return () => document.removeEventListener('wheel', wheel, true);
+  }, [Boolean(band)]);
+  // Drawing over the day heads opens those days (at most five); `headRange` is the range shown meanwhile.
+  const [headRange, setHeadRange] = useState<{ start: string; size: number } | null>(null);
+  const headClick = useRef(false);
+  const beginHeadDrag = (event: ReactPointerEvent<HTMLElement>, date: string) => {
+    if (!band || event.button !== 0 || !event.isPrimary) return;
+    const pressX = event.clientX;
+    let moved = false, last: { start: string; size: number } | null = null;
+    const follow = (e: globalThis.PointerEvent) => {
+      if (!moved && Math.abs(e.clientX - pressX) < 6) return;
+      moved = true;
+      const target = document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>('[data-head-date]')?.dataset.headDate;
+      if (target) { last = rangeOf(date, target); setHeadRange(last); }
+    };
+    const end = () => {
+      window.removeEventListener('pointermove', follow); window.removeEventListener('pointerup', end); window.removeEventListener('pointercancel', cancel);
+      setHeadRange(null);
+      if (moved) { headClick.current = true; window.setTimeout(() => { headClick.current = false; }, 250); if (last) band.onRange(last); }
+    };
+    const cancel = () => { moved = false; end(); };
+    window.addEventListener('pointermove', follow); window.addEventListener('pointerup', end); window.addEventListener('pointercancel', cancel);
+  };
+  const pickHead = (event: React.MouseEvent, date: string) => {
+    if (headClick.current) { headClick.current = false; return; }
+    if (!band) { onDay(date); return; }
+    // Shift adds the days up to this one; a folded day becomes the only open one; an open one opens the journal.
+    if (event.shiftKey) band.onRange(spanTo(band.start, band.size, date));
+    else if (band.open.has(date)) onDay(date);
+    else band.onOpen(date);
+  };
   const scrollAnchor = useRef<number | null>(4);
   const pendingStart = useRef(true);
   const restoreStart = (scroller: HTMLElement, height: number) => {
@@ -527,7 +650,14 @@ function TimeGrid({ journalDays, dates, today, now, journalDate, entriesOn, onDa
       .map(entry => ({ id: `${entry.id}:rest`, time: '00:00', end: timeOfMinutes(minutesOf(entry.end) - 24 * 60), entry, from: before, night: 'rest' as const }));
     return { date, untimed: entries.filter(entry => !entry.time), timed: layoutTimed([...carried, ...own]) };
   });
-  const spans=[...journalDays].flatMap(([date,day])=>day.entries.filter(entry=>entry.time && entry.end && durationOf({time:entry.time,end:entry.end})>1440 && entriesOn(date).some(shown=>shown.id===entry.id)).map(entry=>({date,entry,end:shiftDate(date,Math.floor((minutesOf(entry.end!)-1)/1440))}))).filter(item=>item.date<=dates[dates.length-1] && item.end>=dates[0]);
+  const spanItems=[...journalDays].flatMap(([date,day])=>day.entries.filter(entry=>entry.time && entry.end && durationOf({time:entry.time,end:entry.end})>1440 && entriesOn(date).some(shown=>shown.id===entry.id)).map(entry=>({date,entry,end:shiftDate(date,Math.floor((minutesOf(entry.end!)-1)/1440))}))).filter(item=>item.date<=dates[dates.length-1] && item.end>=dates[0]);
+  // Multi-day entries share a row as long as they do not overlap; one that starts while another still runs goes below it.
+  const laneEnds: string[] = [];
+  const spans = [...spanItems].sort((a,b)=>a.date.localeCompare(b.date) || b.end.localeCompare(a.end) || a.entry.id.localeCompare(b.entry.id)).map(item=>{
+    let lane = laneEnds.findIndex(end => end < item.date); if (lane < 0) lane = laneEnds.length; laneEnds[lane] = item.end;
+    return { ...item, lane };
+  });
+  const spanLanes = laneEnds.length;
   // Always open the shown days at 04:00, independently of their appointments.
   useLayoutEffect(() => {
     pendingStart.current = true;
@@ -537,7 +667,8 @@ function TimeGrid({ journalDays, dates, today, now, journalDate, entriesOn, onDa
     setMarking(false);
     gesture.current = null;
     cancelAnimationFrame(frame.current);
-  }, [dates[0], dates.length]);
+    // The band keeps its hours while it moves; other views open each page at 04:00.
+  }, band ? ['band', 0] : [dates[0], dates.length]);
   useEffect(() => () => cancelAnimationFrame(frame.current), []);
   // Editing a timed entry shows it as a marked range over its block: moved, resized and saved like a new one.
   const editDraft = useRef(false);
@@ -645,19 +776,26 @@ function TimeGrid({ journalDays, dates, today, now, journalDate, entriesOn, onDa
     onLostPointerCapture: finish,
   } : {};
 
-  return <div className={`cal-time${onCreate ? ' can-create' : ''}${marking ? ' is-marking' : ''}`} ref={scrollRef} style={{ '--days': dates.length, '--hour': `${hourHeight}px` } as CSSProperties}>
+  // In the band: a folded day is narrow and quiet, an open one has hours with text; Mondays carry the week's number.
+  const monday = (date: string) => Boolean(band) && new Date(`${date}T12:00`).getDay() === 1;
+  const fold = (date: string) => (band && !band.open.has(date) ? ' is-folded' : band ? ' is-open' : '') + (monday(date) ? ' is-week-start' : '');
+  const headRangeEnd = headRange ? shiftDate(headRange.start, headRange.size - 1) : '';
+  return <div className={`cal-time${onCreate ? ' can-create' : ''}${marking ? ' is-marking' : ''}${band ? ' is-band' : ''}`} ref={scrollRef} onScroll={band ? followBandScroll : undefined} style={{ '--days': dates.length, '--hour': `${hourHeight}px`, ...bandTemplate ? { '--band': bandTemplate } : {} } as CSSProperties}>
     <div className="cal-time-top">
       <div className="cal-time-head">
-        <span className="cal-time-corner">{t("KW ")}{isoWeek(dates[0])}</span>
+        <span className="cal-time-corner">{t("KW ")}{isoWeek(band ? band.start : dates[0])}</span>
         {dates.map(date => {
-          const label = <><span className="cal-time-weekday">{formatWeekday(date)}</span><strong>{Number(date.slice(8))}</strong></>;
-          const classes = `cal-time-day${hasJournalContent(journalDays.get(date)) ? ' has-journal-content' : ''}${weekendClass(date)}${date === today ? ' is-today' : ''}${date === journalDate ? ' is-journal' : ''}`;
-          return <button key={date} type="button" className={classes} title={t("{0} im Journal öffnen", formatDate(date))} onClick={() => onDay(date)}>{label}</button>;
+          const folded = Boolean(band && !band.open.has(date));
+          const label = folded ? <strong>{Number(date.slice(8))}</strong> : <><span className="cal-time-weekday">{formatWeekday(date)}</span><strong>{Number(date.slice(8))}</strong></>;
+          const classes = `cal-time-day${fold(date)}${headRange && date >= headRange.start && date <= headRangeEnd ? ' is-range' : ''}${hasJournalContent(journalDays.get(date)) ? ' has-journal-content' : ''}${weekendClass(date)}${date === today ? ' is-today' : ''}${date === journalDate ? ' is-journal' : ''}`;
+          const title = !band ? t("{0} im Journal öffnen", formatDate(date)) : folded ? `${dayLabel(date, journalDays.get(date))}\n${t("Klick: Tag öffnen · Umschalt+Klick: bis hier öffnen")}` : `${t("{0} im Journal öffnen", formatDate(date))}\n${t("Über die Tage ziehen: diese Tage öffnen")}`;
+          return <button key={date} type="button" className={classes} data-head-date={date} data-week={monday(date) ? isoWeek(date) : undefined} title={title}
+            onPointerDown={event => beginHeadDrag(event, date)} onClick={event => pickHead(event, date)}>{label}</button>;
         })}
       </div>
       <div className={`cal-time-allday${columns.some(column => column.untimed.length) ? '' : ' is-empty'}`}>
-        <span className="cal-time-corner">{t("ohne Zeit")}</span>{spans.map((item,index)=><div key={item.entry.id} className="cal-multiday-bar" style={{gridColumn:`${Math.max(0,dates.indexOf(item.date))+2} / ${item.end>=dates[dates.length-1]?dates.length+2:dates.indexOf(item.end)+3}`,gridRow:index+2}}><CalendarItem entry={item.entry} date={item.date}/></div>)}
-        {columns.map((column,index) => <div key={column.date} data-range-date={column.date} style={{gridColumn:index+2}} className={`cal-time-allday-cell${weekendClass(column.date)}${allDay?.date === column.date ? ' is-composing' : ''}`}
+        <span className="cal-time-corner" style={band ? { gridRow: `1 / ${spanLanes + 2}` } : undefined}>{t("ohne Zeit")}</span>{spans.map(item=><div key={item.entry.id} className="cal-multiday-bar" style={{gridColumn:`${Math.max(0,dates.indexOf(item.date))+2} / ${item.end>=dates[dates.length-1]?dates.length+2:dates.indexOf(item.end)+3}`,gridRow:item.lane+2}}><CalendarItem entry={item.entry} date={item.date}/></div>)}
+        {columns.map((column,index) => <div key={column.date} data-range-date={column.date} style={{gridColumn:index+2}} className={`cal-time-allday-cell${fold(column.date)}${weekendClass(column.date)}${allDay?.date === column.date ? ' is-composing' : ''}`}
           title={onCreate ? t("Rechtsklick: Eintrag für den ganzen Tag") : undefined}
           onContextMenu={event => { if (!onCreate || (event.target as Element).closest('.cal-item')) return; event.preventDefault(); event.stopPropagation(); setDraft(null); if (editing) onEditEnd(false); setAllDay({ date: column.date, element: event.currentTarget }); }}>
           {column.untimed.map(entry => <CalendarItem key={entry.id} entry={entry} date={column.date} />)}
@@ -665,8 +803,11 @@ function TimeGrid({ journalDays, dates, today, now, journalDate, entriesOn, onDa
       </div>
     </div>
     <div className="cal-time-body">
-      <div className="cal-time-hours" aria-hidden="true">{Array.from({ length: 24 }, (_, hour) => <span key={hour} style={{ top: hour * hourHeight }}>{hour ? `${String(hour).padStart(2, '0')}:00` : ''}</span>)}</div>
-      {columns.map(column => <div key={column.date} data-date={column.date} className={`cal-time-column${weekendClass(column.date)}${column.date === today ? ' is-today' : ''}`} {...columnHandlers(column.date)}>
+      <div className="cal-time-hours" aria-hidden="true">{Array.from({ length: 24 }, (_, hour) => <span key={hour} style={{ top: hour * hourHeight }}>{hour ? `${String(hour).padStart(2, '0')}:00` : ''}</span>)}
+        {/* In the band the hours stay put while the days scroll, so the current time is labelled here. */}
+        {band && dates.includes(today) && <span className="cal-now-label" style={{ top: nowMinutes / 60 * hourHeight }}>{String(now.getHours()).padStart(2, '0')}:{String(now.getMinutes()).padStart(2, '0')}</span>}</div>
+      {columns.map(column => <div key={column.date} data-date={column.date} className={`cal-time-column${fold(column.date)}${weekendClass(column.date)}${column.date === today ? ' is-today' : ''}`} {...columnHandlers(column.date)}
+        {...band && !band.open.has(column.date) ? { title: dayLabel(column.date, journalDays.get(column.date)), onClick: (event: React.MouseEvent) => { if (!(event.target as Element).closest('.cal-selection')) band.onOpen(column.date); } } : {}}>
         {column.timed.map(({ item, start, duration, left, width }) => <CalendarItem key={item.id} entry={item.entry} date={item.from} variant="block" short={duration < 45} night={item.night}
           style={{ top: start / 60 * hourHeight + (item.night === 'rest' ? 0 : 1), height: Math.max(10, duration / 60 * hourHeight - (item.night ? 1 : 3)), left: `calc(${left}% + 2px)`, width: `calc(${width}% - 4px)` }} />)}
         {column.date === today && <div className="cal-now" style={{ top: nowMinutes / 60 * hourHeight }} aria-hidden="true" />}

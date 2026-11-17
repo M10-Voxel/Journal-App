@@ -2131,10 +2131,10 @@ async function checkNebulaTheme() {
   assert.equal(await evaluate("document.querySelector('.nebula-tab[aria-current=page]').dataset.periodMode"), 'week');
   // The calendar's day view: in the week, a strip of its days changes the day shown without leaving the overview.
   await evaluate("document.querySelector('.nebula-cal-views [data-cal-view=day]').click()");
-  // It is the calendar's own day view: 24 hours in one column, no view tabs, and the main calendar keeps its view.
+  // It is the calendar's "Tage" view: open days among folded ones, no view tabs, and the main calendar keeps its view.
   const panelCal = ".nebula-cal-panel .cal.is-fixed[data-view=day]";
-  await until(`document.querySelectorAll('.nebula-cal-strip button').length===7 && document.querySelectorAll('${panelCal} .cal-time-column').length===1`);
-  assert.equal(await evaluate(`document.querySelectorAll('${panelCal} .cal-time-hours span').length`), 24);
+  await until(`document.querySelectorAll('.nebula-cal-strip button').length===7 && document.querySelectorAll('${panelCal} .cal-time-column.is-open').length===3`);
+  assert.equal(await evaluate(`document.querySelectorAll('${panelCal} .cal-time-hours span:not(.cal-now-label)').length`), 24);
   assert.equal(await evaluate(`document.querySelectorAll('${panelCal} .cal-viewbar').length`), 0);
   assert.equal(await evaluate("document.querySelector('.nebula-calendar .cal')?.dataset.view ?? 'month'"), 'month', 'The main calendar (when open) keeps its view.');
   assert.equal(await evaluate("JSON.parse(localStorage.getItem('journal.calendar') ?? '{}').view ?? 'month'"), 'month');
@@ -2144,7 +2144,7 @@ async function checkNebulaTheme() {
   await until(`document.querySelector('.nebula-cal-strip [data-strip-date="${otherDay}"]').getAttribute('aria-pressed')==='true'`);
   assert.equal(await evaluate("document.querySelector('.nebula-tab[aria-current=page]').dataset.periodMode"), 'week');
   // Entries are made in it like in the calendar: dragging over the hours with the right button opens the composer.
-  const column = await evaluate(`(() => { const r=document.querySelector('${panelCal} .cal-time-column').getBoundingClientRect(), b=document.querySelector('${panelCal} .cal-body').getBoundingClientRect(); const allday=document.querySelector('${panelCal} .cal-time-allday').getBoundingClientRect(); const top=Math.max(r.top,b.top,allday.bottom)+30; return {x:r.left+r.width/2, y:top}; })()`);
+  const column = await evaluate(`(() => { const r=document.querySelector('${panelCal} .cal-time-column.is-open').getBoundingClientRect(), b=document.querySelector('${panelCal} .cal-body').getBoundingClientRect(); const allday=document.querySelector('${panelCal} .cal-time-allday').getBoundingClientRect(); const top=Math.max(r.top,b.top,allday.bottom)+30; return {x:r.left+r.width/2, y:top}; })()`);
   await command('Input.dispatchMouseEvent', { type:'mouseMoved', x:column.x, y:column.y });
   await command('Input.dispatchMouseEvent', { type:'mousePressed', x:column.x, y:column.y, button:'right', buttons:2, clickCount:1 });
   for (let step = 1; step <= 6; step++) await command('Input.dispatchMouseEvent', { type:'mouseMoved', x:column.x, y:column.y + step * 12, button:'right', buttons:2 });
@@ -2526,6 +2526,103 @@ async function checkNebulaTheme() {
   console.log('Nebula checks passed: third design card, no pixel look (switch disabled, choice kept), fixed palette over the stored one, fonts, rail/terminals/poster layout, writing and Alt+D in the terminal, day turning and [ HEUTE ], view tabs and Ctrl+1–5, the calendar window (Ctrl+K, Esc, ×), tickets opening their day, widths 1380–560, reduced motion, the calendar window and switching back.');
 }
 
+async function checkDaysView() {
+  // The "Tage" view in a slim sidebar-like window: a long band of days that scrolls sideways, three open days from today
+  // in the middle, the others folded to quiet strips.
+  for (const [look, pixel] of [['classic', false], ['journal', false], ['classic', true]]) {
+    await command('Emulation.setDeviceMetricsOverride', { width:520, height:900, deviceScaleFactor:1, mobile:false });
+    await evaluate(`localStorage.setItem('journal.settings', JSON.stringify((({theme, ...rest}) => ({...rest, layout:'classic', look:'${look}', pixel:${pixel}, popupStyle:'a', colorTheme:'${look === 'journal' ? 'lavender-night' : 'original'}'}))(JSON.parse(localStorage.getItem('journal.settings')||'{}')))); localStorage.setItem('journal.calendar', JSON.stringify({view:'day'}))`);
+    await command('Page.navigate', { url:`http://127.0.0.1:${server.address().port}/?window=calendar` });
+    await until("Boolean(document.querySelector('.cal.is-band .cal-time-column.is-open'))");
+    const [today, plus2] = await evaluate('[window.__uiTest.date, window.__uiTest.shift(2)]');
+    // A trip over four days: one bar over open and folded days alike.
+    await evaluate(`(() => { const day=window.__uiTest.day('${plus2}') ?? { date:'${plus2}', title:'', body:'', revision:1, entries:[] }; day.entries=day.entries.filter(entry=>entry.id!=='40000000-0000-4000-8000-000000000001'); day.entries.push({ id:'40000000-0000-4000-8000-000000000001', kind:'event', text:'Reise', done:false, cancelled:false, priority:false, time:'08:00', end:'80:00' }); return window.__uiTest.store(day); })()`);
+    await until("[...document.querySelectorAll('.cal-multiday-bar .cal-item-text')].some(item => item.textContent === 'Reise')");
+    // Multi-day entries share a row while they do not overlap; one that starts while another runs goes a row below.
+    for (const [id, text, offset, end] of [['3', 'Kurs', -12, '50:00'], ['4', 'Messe', -6, '50:00'], ['5', 'Camp', -5, '40:00']]) {
+      await evaluate(`(() => { const date=window.__uiTest.shift(${offset}), day=window.__uiTest.day(date) ?? { date, title:'', body:'', revision:1, entries:[] }; day.entries=day.entries.filter(entry=>entry.id!=='40000000-0000-4000-8000-00000000000${id}'); day.entries.push({ id:'40000000-0000-4000-8000-00000000000${id}', kind:'event', text:'${text}', done:false, cancelled:false, priority:false, time:'08:00', end:'${end}' }); return window.__uiTest.store(day); })()`);
+    }
+    await until("['Kurs', 'Messe', 'Camp', 'Reise'].every(text => [...document.querySelectorAll('.cal-multiday-bar .cal-item-text')].some(item => item.textContent === text))");
+    const rowOf = text => evaluate(`getComputedStyle([...document.querySelectorAll('.cal-multiday-bar')].find(bar => bar.textContent.includes(${JSON.stringify(text)}))).gridRowStart`);
+    assert.deepEqual(await Promise.all(['Kurs', 'Messe', 'Reise', 'Camp'].map(rowOf)), ['2', '2', '2', '3'], 'Trips one after another share a row; the overlapping one goes below.');
+    assert(await evaluate("(() => { const bars=[...document.querySelectorAll('.cal-multiday-bar')].map(bar => bar.getBoundingClientRect()); return Math.max(...bars.map(r => r.bottom)) - Math.min(...bars.map(r => r.top)) <= 36; })()"), 'Two rows of trips stay slim (17 px each).');
+    // A folded day never looks empty: its appointments are thin coloured ticks at their hours.
+    await evaluate("(() => { const date=window.__uiTest.shift(8), day=window.__uiTest.day(date) ?? { date, title:'', body:'', revision:1, entries:[] }; day.entries=day.entries.filter(entry=>entry.id!=='40000000-0000-4000-8000-000000000002'); day.entries.push({ id:'40000000-0000-4000-8000-000000000002', kind:'event', text:'Training', done:false, cancelled:false, priority:false, time:'09:00', end:'11:30' }); return window.__uiTest.store(day); })()");
+    await until("(() => { const strip=document.querySelector('.cal-time-column.is-folded[data-date=\"' + window.__uiTest.shift(8) + '\"] .cal-item'); if (!strip) return false; const r=strip.getBoundingClientRect(), c=getComputedStyle(strip).backgroundColor; return r.height > 20 && r.width >= 2 && c !== 'rgba(0, 0, 0, 0)'; })()");
+    const open = "[...document.querySelectorAll('.cal-time-column.is-open')].map(column => column.dataset.date)";
+    // Where the open days sit in the visible day area (0 = left edge, 1 = right edge), and what is visible at all.
+    const view = () => evaluate(`(() => { const grid=document.querySelector('.cal-time'), hours=grid.querySelector('.cal-time-hours').getBoundingClientRect(), left=hours.right, right=grid.getBoundingClientRect().left+grid.clientWidth;
+      const opened=[...grid.querySelectorAll('.cal-time-column.is-open')].map(column => column.getBoundingClientRect());
+      const middle=opened.length ? (opened[0].left + opened.at(-1).right) / 2 : 0;
+      const shown=[...grid.querySelectorAll('.cal-time-column')].filter(column => { const r=column.getBoundingClientRect(); return r.right > left + 1 && r.left < right - 1; }).length;
+      return { open:${open}, middle:(middle - left) / (right - left), shown, scroll:grid.scrollLeft, openVisible:opened.some(r => r.right > left + 1 && r.left < right - 1) }; })()`);
+    await pause(600);
+    let shown = await view();
+    assert.equal(shown.open[0], today, 'Today and the two days after are open.'); assert.equal(shown.open.length, 3);
+    assert(Math.abs(shown.middle - .5) < .03, `The open days sit in the middle (${shown.middle}).`);
+    assert(shown.shown >= 21, `More than a week is visible beside them (${shown.shown} days).`);
+    assert(await evaluate("(() => { const folded=document.querySelector('.cal-time-column.is-folded').getBoundingClientRect().width, open=document.querySelector('.cal-time-column.is-open').getBoundingClientRect().width; return folded < 12 && open > 44; })()"), 'Folded days are narrow, open ones wide.');
+    assert(await evaluate("document.documentElement.scrollWidth <= innerWidth"), 'Nothing overflows the window sideways.');
+    await screenshot(`days-${look}${pixel ? '-pixel' : ''}.png`);
+    if (look !== 'classic' || pixel) continue;
+    const at = await evaluate("(() => { const r=document.querySelector('.cal-time-body').getBoundingClientRect(), grid=document.querySelector('.cal-time').getBoundingClientRect(); return { x:grid.left+grid.width/2, y:Math.min(innerHeight-40, r.top+200) }; })()");
+    const wheelBy = (modifiers, deltaY = 100) => command('Input.dispatchMouseEvent', { type:'mouseWheel', ...at, deltaX:0, deltaY, modifiers });
+    // Alt + wheel: one day on, the band gliding along so they stay in the middle; Ctrl + Alt + wheel: as many as are open.
+    for (const [modifiers, days] of [[1, 1], [3, 4]]) {
+      await pause(260); await wheelBy(modifiers);
+      await until(`${open}[0] === window.__uiTest.shift(${days})`);
+      await pause(600);
+      shown = await view();
+      assert(Math.abs(shown.middle - .5) < .03, `Still in the middle after moving (${shown.middle}).`);
+    }
+    // The plain wheel scrolls the hours only.
+    const top = await evaluate("document.querySelector('.cal-time').scrollTop");
+    await pause(260); await wheelBy(0); await until(`document.querySelector('.cal-time').scrollTop !== ${top}`);
+    assert.equal((await view()).open[0], await evaluate('window.__uiTest.shift(4)'));
+    // Shift + wheel scrolls the time axis: days come in on one side and leave on the other, the open ones too; what is
+    // open does not change. Far enough on, the band grows by itself.
+    const before = (await view()).scroll;
+    for (let step = 0; step < 40; step++) await wheelBy(8, 120);
+    await pause(200);
+    shown = await view();
+    assert(shown.scroll > before + 600, `Shift + wheel scrolls sideways (${before} → ${shown.scroll}).`);
+    assert.equal(shown.open[0], await evaluate('window.__uiTest.shift(4)'), 'Scrolling leaves the open days alone.');
+    assert.equal(shown.openVisible, false, 'Scrolled far enough, the open days leave the view.');
+    await screenshot('days-scrolled.png');
+    // A click on a folded day opens only that day (and brings it to the middle); the mouse's back button returns to the
+    // days open before (the view history joins changes less than 250 ms apart).
+    await pause(400);
+    const target = await evaluate(`(() => { const grid=document.querySelector('.cal-time'), mid=grid.getBoundingClientRect().left+grid.clientWidth/2; return [...grid.querySelectorAll('.cal-time-day.is-folded')].find(head => head.getBoundingClientRect().left > mid).dataset.headDate; })()`);
+    const opened = (await view()).open;
+    await evaluate(`document.querySelector('.cal-time-day[data-head-date="${target}"]').click()`);
+    await until(`JSON.stringify(${open}) === ${JSON.stringify(JSON.stringify([target]))}`);
+    await pause(600);
+    assert(Math.abs((await view()).middle - .5) < .03, 'The clicked day is brought to the middle.');
+    await screenshot('days-one-open.png');
+    await command('Input.dispatchMouseEvent', { type:'mousePressed', ...at, button:'back', buttons:8, clickCount:1 });
+    await command('Input.dispatchMouseEvent', { type:'mouseReleased', ...at, button:'back', buttons:0, clickCount:1 });
+    await until(`JSON.stringify(${open}) === ${JSON.stringify(JSON.stringify(opened))}`);
+    // "Heute" opens today and the two days after again.
+    await evaluate("document.querySelector('.cal-nav .nav-today').click()");
+    await until(`${open}[0] === window.__uiTest.date && ${open}.length === 3`);
+    await pause(600); // the band glides and the columns change their widths
+    // Drawing over the heads opens those days (here five); the arrows move them by a week.
+    const head = date => evaluate(`(() => { const r=document.querySelector('.cal-time-day[data-head-date="' + ${date} + '"]').getBoundingClientRect(); return { x:r.left+r.width/2, y:r.top+r.height/2 }; })()`);
+    const from = await head('window.__uiTest.date'), to = await head('window.__uiTest.shift(4)');
+    await command('Input.dispatchMouseEvent', { type:'mouseMoved', ...from });
+    await command('Input.dispatchMouseEvent', { type:'mousePressed', ...from, button:'left', buttons:1, clickCount:1 });
+    await command('Input.dispatchMouseEvent', { type:'mouseMoved', ...to, button:'left', buttons:1 });
+    await command('Input.dispatchMouseEvent', { type:'mouseReleased', ...to, button:'left', buttons:0, clickCount:1 });
+    await until(`${open}.length === 5`);
+    await pause(600);
+    await screenshot('days-five-open.png');
+    await evaluate("document.querySelector('.cal').focus()");
+    await key('ArrowRight', 'ArrowRight');
+    await until(`${open}[0] === window.__uiTest.shift(7)`);
+  }
+  await evaluate("localStorage.removeItem('journal.calendar')");
+  console.log('Days view passed: a sideways scrolling band with three open days from today in the middle, Alt/Ctrl+Alt + wheel (staying in the middle), Shift + wheel scrolling the time axis, a click opening one day, back button, today, drawing over heads, arrows by a week; classic, journal and pixel.');
+}
 async function checkCalendarStart() {
   const origin = `http://127.0.0.1:${server.address().port}`;
   const atHour = hour => `(() => { const grid=document.querySelector('.cal-time'); return grid && Math.abs(grid.scrollTop/parseFloat(getComputedStyle(grid).getPropertyValue('--hour'))-${hour}) < .05; })()`;
@@ -2688,11 +2785,11 @@ async function checkCalendars() {
   await until(`${heading} === ${longDate(sideToday)}`);
   await evaluate(`${side()}.focus()`);
   await key('t', 'KeyT');
-  await until(`${side()}.dataset.view === 'day' && Boolean(${side('.cal-time-column')})`);
+  await until(`${side()}.dataset.view === 'day' && Boolean(${side('.cal-time-column.is-open')})`);
   await pause(350);
   const gridHour = () => evaluate("parseFloat(getComputedStyle(document.querySelector('.sidebar .cal-time')).getPropertyValue('--hour'))");
   assert(Math.abs(await evaluate("document.querySelector('.sidebar .cal-time').scrollTop / parseFloat(getComputedStyle(document.querySelector('.sidebar .cal-time')).getPropertyValue('--hour'))") - 4) < .05, 'The time grid always opens at 04:00.');
-  const at = minutes => evaluate(`(() => { const grid=document.querySelector('.sidebar .cal-time'), r=grid.querySelector('.cal-time-column').getBoundingClientRect(), hour=parseFloat(getComputedStyle(grid).getPropertyValue('--hour')); return { x:r.left+r.width/2, y:r.top+${minutes}/60*hour }; })()`);
+  const at = minutes => evaluate(`(() => { const grid=document.querySelector('.sidebar .cal-time'), r=grid.querySelector('.cal-time-column.is-open').getBoundingClientRect(), hour=parseFloat(getComputedStyle(grid).getPropertyValue('--hour')); return { x:r.left+r.width/2, y:r.top+${minutes}/60*hour }; })()`);
   const markRange = async (from, ...through) => {
     const start = await at(from);
     await command('Input.dispatchMouseEvent', { type:'mouseMoved', x:start.x, y:start.y });
@@ -2765,12 +2862,12 @@ async function checkCalendars() {
   await key('Escape');
   await until(`!document.querySelector('.cal-composer') && !document.querySelector('.sidebar .cal-selection')`);
   // A click into the band on top makes an entry for the whole day, without a time.
-  const allDay = await evaluate("(() => { const r=document.querySelector('.sidebar .cal-time-allday-cell').getBoundingClientRect(); return { x:r.right-8, y:r.top+r.height/2 }; })()");
+  const allDay = await evaluate("(() => { const r=document.querySelector('.sidebar .cal-time-allday-cell.is-open').getBoundingClientRect(); return { x:r.right-8, y:r.top+r.height/2 }; })()");
   await command('Input.dispatchMouseEvent', { type:'mouseMoved', ...allDay });
   await command('Input.dispatchMouseEvent', { type:'mousePressed', ...allDay, button:'right', buttons:2, clickCount:1 });
   await command('Input.dispatchMouseEvent', { type:'mouseReleased', ...allDay, button:'right', buttons:0, clickCount:1 });
   await until("document.querySelector('.cal-composer.is-placed') && document.querySelector('.cal-composer-untimed')?.textContent==='ohne Uhrzeit' && document.activeElement === document.querySelector('.cal-composer-text')");
-  assert(await evaluate("document.querySelector('.sidebar .cal-time-allday-cell').classList.contains('is-composing') && !document.querySelector('.sidebar .cal-selection')"));
+  assert(await evaluate("document.querySelector('.sidebar .cal-time-allday-cell.is-open').classList.contains('is-composing') && !document.querySelector('.sidebar .cal-selection')"));
   await command('Input.insertText', { text:'Ganzer Tag' });
   await pause(100); await screenshot('calendar-allday.png');
   await key('Enter', 'Enter');
@@ -2790,9 +2887,9 @@ async function checkCalendars() {
   // On another day the entry goes straight into the store; the journal stays on its day.
   const journalDay = await evaluate(heading);
   await evaluate(`${side()}.focus()`);
-  await key('ArrowRight', 'ArrowRight');
+  await wheel('.sidebar .cal-time-body', 0, 100, 1); // Alt + wheel: the open days move on by one
   const nextDay = await evaluate('window.__uiTest.shift(1)');
-  await until(`${side('.cal-day-side h2')}?.textContent === ${longDate(nextDay)} || ${side('.cal-time-day')}?.title.startsWith(${longDate(nextDay)})`);
+  await until(`${side('.cal-time-day.is-open')}?.title.startsWith(${longDate(nextDay)})`);
   await evaluate(`${side('.cal-time')}.scrollTop = 0`);
   await evaluate("new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
   point = await markRange(60 + 5, 60 + 35);
@@ -2842,7 +2939,7 @@ async function checkCalendars() {
   await evaluate(`${side()}.focus()`);
   await key('h', 'KeyH');
   await key('t', 'KeyT');
-  await until(`${side()}.dataset.view === 'day' && ${side('.cal-time-day')}?.title.startsWith(${longDate(sideToday)})`);
+  await until(`${side()}.dataset.view === 'day' && ${side('.cal-time-day.is-open')}?.title.startsWith(${longDate(sideToday)})`);
   const rightClick = async expression => {
     const target = await evaluate(`(() => { const element=${expression}; element.scrollIntoView({ block:'nearest' }); const r=element.getBoundingClientRect(); return { x:r.left+Math.min(r.width/2, 30), y:r.top+Math.min(r.height/2, 8) }; })()`);
     await command('Input.dispatchMouseEvent', { type:'mouseMoved', x:target.x, y:target.y });
@@ -2876,7 +2973,7 @@ async function checkCalendars() {
     await pause(300);
     await screenshot('calendar-overnight.png');
     await evaluate(`${side()}.focus()`); await key('h', 'KeyH'); await key('t', 'KeyT');
-    await until(`${side()}.dataset.view === 'day' && ${side('.cal-time-day')}?.title.startsWith(${longDate(sideToday)})`);
+    await until(`${side()}.dataset.view === 'day' && ${side('.cal-time-day.is-open')}?.title.startsWith(${longDate(sideToday)})`);
   }
   await rightClick(sideBlock('Zahnarzt-Test'));
   await until("document.querySelector('.cal-composer.is-editing.is-placed') && document.activeElement === document.querySelector('.cal-composer-text')");
@@ -3137,18 +3234,20 @@ async function checkCalendars() {
   assert.deepEqual(await evaluate(lastCall), ['show_day', { date:tomorrow, entry:null }]);
   assert.equal(await evaluate("document.querySelector('.cal').dataset.view"), 'year');
   await key('t', 'KeyT');
-  await until("document.querySelector('.cal').dataset.view === 'day' && document.querySelectorAll('.cal-time-column').length === 1");
-  const blocks = await evaluate("[...document.querySelectorAll('.cal-item.is-block')].map(block => { const r=block.getBoundingClientRect(); return { left:Math.round(r.left), width:Math.round(r.width) }; })");
+  // The "Tage" view: the picked day opens with the two after it, the other days of its weeks folded beside them.
+  await until("document.querySelector('.cal').dataset.view === 'day' && document.querySelectorAll('.cal-time-column.is-open').length === 3");
+  const dayColumn = `document.querySelector('.cal-time-column[data-date="${tomorrow}"]')`;
+  assert.equal(await evaluate(`${dayColumn}.classList.contains('is-open')`), true, 'The picked day is open.');
+  const blocks = await evaluate(`[...${dayColumn}.querySelectorAll('.cal-item.is-block')].map(block => { const r=block.getBoundingClientRect(); return { left:Math.round(r.left), width:Math.round(r.width) }; })`);
   assert.equal(blocks.length, 2); assert(blocks[0].left < blocks[1].left && blocks[0].left + blocks[0].width > blocks[1].left && Math.abs(blocks[0].width - blocks[1].width) < 2, 'Overlapping cards are wide and staggered, not squeezed into equal slices.');
-  assert.deepEqual(await texts('.cal-time-allday .cal-item'), ['Bericht abgeben']);
+  assert.deepEqual(await texts(`.cal-time-allday-cell[data-range-date="${tomorrow}"] .cal-item`), ['Bericht abgeben']);
   await evaluate("document.querySelector('.cal-filter-note').click()");
-  await until("[...document.querySelectorAll('.cal-time-allday .cal-item-text')].some(item => item.textContent === 'Gute Laune')");
-  assert.equal(await evaluate("document.querySelector('.cal-day-notes').textContent.includes('Gute Laune')"), true);
+  await until(`[...document.querySelectorAll('.cal-time-allday-cell[data-range-date="${tomorrow}"] .cal-item-text')].some(item => item.textContent === 'Gute Laune')`);
   await pause(350);
   await screenshot('calendar-day.png');
   await evaluate(`(() => { const day=window.__uiTest.day('${tomorrow}'); day.entries.push({ id:'30000000-0000-4000-8000-000000000001', kind:'task', text:'Code review', done:false, cancelled:false, priority:true, time:'09:45', end:'11:00' }); return window.__uiTest.store(day); })()`);
-  await until("document.querySelectorAll('.cal-item.is-block').length === 3");
-  assert.equal(await evaluate("(() => { const column=document.querySelector('.cal-time-column').getBoundingClientRect(), cards=[...document.querySelectorAll('.cal-item.is-block')].map(card => card.getBoundingClientRect()); return cards.every(card => card.width >= column.width * .5 - 5 && card.left >= column.left && card.right <= column.right) && cards[0].right > cards[1].left && cards[1].right > cards[2].left; })()"), true, 'Three cards overlap by half while remaining inside their day.');
+  await until(`${dayColumn}.querySelectorAll('.cal-item.is-block').length === 3`);
+  assert.equal(await evaluate(`(() => { const column=${dayColumn}.getBoundingClientRect(), cards=[...${dayColumn}.querySelectorAll('.cal-item.is-block')].map(card => card.getBoundingClientRect()); return cards.every(card => card.width >= column.width * .5 - 5 && card.left >= column.left && card.right <= column.right) && cards[0].right > cards[1].left && cards[1].right > cards[2].left; })()`), true, 'Three cards overlap by half while remaining inside their day.');
   await screenshot('calendar-overlapping.png');
   // Actual viewport resizing must resize the timeline, keep the date row compact and avoid dead space below it.
   for (const height of [460, 780, 1500, 2160]) {
@@ -3158,10 +3257,12 @@ async function checkCalendars() {
     if (height === 1500) await screenshot('calendar-tall.png');
   }
   await command('Emulation.setDeviceMetricsOverride', { width:1120, height:760, deviceScaleFactor:1, mobile:false });
-  await evaluate("document.querySelector('.cal-open').click()");
+  // An open day's head opens it in the journal; the arrows move the open days by a week.
+  await evaluate(`document.querySelector('.cal-time-day[data-head-date="${tomorrow}"]').click()`);
   assert.deepEqual(await evaluate(lastCall), ['show_day', { date:tomorrow, entry:null }]);
+  await evaluate("document.querySelector('.cal').focus()");
   await key('ArrowRight', 'ArrowRight');
-  await until(`document.querySelector('.cal-day-side h2').textContent === ${longDate(later)}`);
+  await until("document.querySelector('.cal-time-column.is-open')?.dataset.date === window.__uiTest.shift(8)");
   await evaluate('location.reload()');
   await until("document.querySelector('.cal')?.dataset.view === 'day'");
   assert.equal(await evaluate("document.querySelector('.cal-filter-note').getAttribute('aria-pressed')"), 'true', 'View and filters are remembered.');
@@ -3244,10 +3345,10 @@ try {
     assert(await evaluate("(()=>{const h=document.querySelector('.desktop-widget-head');return h.scrollWidth<=h.clientWidth+1;})()"),'The narrow header fits');
     await screenshot('calendar-widget-narrow.png');
     await command('Emulation.setDeviceMetricsOverride',{width:980,height:720,deviceScaleFactor:1,mobile:false});await pause(150);
-    for(const [index,view,count] of [[0,'year',12],[1,'month',42],[2,'week',7],[3,'workweek',5],[4,'day',1]]){
+    for(const [index,view,count] of [[0,'year',12],[1,'month',42],[2,'week',7],[3,'workweek',5],[4,'day',3]]){
       await evaluate(`document.querySelectorAll('.cal-views [role=tab]')[${index}].click()`);
       await until(`document.querySelector('.cal').dataset.view==='${view}'`);
-      const selector=view==='year'?'.cal-year-month':view==='month'?'.cal-month-day':'.cal-time-column';
+      const selector=view==='year'?'.cal-year-month':view==='month'?'.cal-month-day':view==='day'?'.cal-time-column.is-open':'.cal-time-column';
       await until(`document.querySelectorAll('${selector}').length===${count}`);
       assert(await evaluate("(()=>{const c=document.querySelector('.cal').getBoundingClientRect(),w=document.querySelector('.desktop-widget').getBoundingClientRect();return c.bottom<=w.bottom+1 && c.width<=w.width;})()"),'Calendar fits the visible widget');
       await pause(300);await screenshot(`calendar-widget-${view}.png`);
@@ -3322,6 +3423,8 @@ try {
       await screenshot(`calendar-widget-${theme}-${popupStyle}${pixel?'-pixel':''}.png`);
     }
     assert.deepEqual(errors,[]);console.log('Calendar widget passed: views in the header (letters when narrow), all five views, create/edit/delete, ICS import by drop, restored date/view/filters, independent instances and all themes.');
+  } else if (process.env.JOURNAL_UI_SCOPE === 'days-view') {
+    await checkDaysView();
   } else if (process.env.JOURNAL_UI_SCOPE === 'board-widget') {
     // The pinboard as a desktop widget: the header holds the day's navigation, "+" and "open"; the rest is the cork.
     await command('Emulation.setFocusEmulationEnabled',{enabled:true});

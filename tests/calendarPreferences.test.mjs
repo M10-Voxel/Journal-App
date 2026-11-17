@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { calendarInitialDate, calendarWidgetPreferencesKey, copyWidgetPreferences, loadCalendarPreferences, parseCalendarPreferences } from '../src/calendarPreferences.ts';
 
 test('calendar preferences retain all five views and valid filters', () => {
-  for(const view of ['year','month','week','workweek','day']) assert.deepEqual(parseCalendarPreferences(JSON.stringify({view,kinds:{event:false,task:true,note:true},date:'2026-11-11',followToday:false})),{view,kinds:{event:false,task:true,note:true},date:'2026-11-11',followToday:false});
+  for(const view of ['year','month','week','workweek','day']) assert.deepEqual(parseCalendarPreferences(JSON.stringify({view,kinds:{event:false,task:true,note:true},date:'2026-11-11',followToday:false})),{view,kinds:{event:false,task:true,note:true},date:'2026-11-11',followToday:false,openDays:3});
 });
 test('malformed preferences and invalid dates recover without invalid calendar ranges', () => {
   for(const raw of ['null','false','[]','{bad',JSON.stringify({view:'unknown',kinds:{event:'no'},date:'2025-02-29'})]){

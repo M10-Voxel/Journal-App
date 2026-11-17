@@ -39,6 +39,16 @@ Ziel: weitere Aufbauten, Optiken und Popup-Varianten sollen sich leicht ergänze
 - [ ] **Journal-Optik neu: Sticker auf Lavendelpapier** – umgesetzt: Mali/Nunito, Paletten Lavendel und Lavendel Nacht, Sticker-Bausteine (`journal-look.css`), Popups a–d (Karteikarte, Sticker, Sticker-Bogen, Papierschnipsel), Buch, Desk ohne Fenster (`journal-desk.css`), Widgets, Bereich `journal-sticker`. Offen: Auswahl, welche Popup-Varianten bleiben, und Feinschliff nach Durchsicht der Screenshots (`docs/journal-style.md`).
 
 - [x] **iCal-Import und -Export nach Rust** – Plan in `docs/plan-ical-repeat-rust.md` (nur ICS, Wiederholungsrechnung bleibt in TS; `ical.js` aus dem Bündel; Vergleichstests vor dem Umschalten).
+- [x] **Kalenderansicht „Tage“ statt Tagesansicht** (erledigt: Band aus ganzen Wochen, 1–5 offene Tage (Standard heute + 2), übrige Tage gefaltet mit farbigen Belegungsstrichen, Alt/Strg+Alt + Mausrad verschieben die offenen Tage, Umschalt + Mausrad scrollt die Zeitachse, Pfeile eine Woche, auch im Desk-Kalender; scrollendes Band mit offenen Tagen in der Mitte, Klick öffnet nur diesen Tag, Ziehen über die Köpfe öffnet Tage, Maus-Zurück und „Heute“; siehe `docs/days-view.md`).
+
+## Schnellfenster (Raycast-artig)
+Ein Fenster für schnelles Eintragen und Nachsehen. In der App öffnet es `Strg+K`, überall sonst `Strg+Alt+Leertaste`. Es wird nur per Tastatur bedient und hat **in keinem UI-Element Buttons**. Vorschläge kommen als Lückentext, mit `Tab` springt man von Lücke zu Lücke. Es lädt sofort. Vollständiger Plan: `docs/plan-quick-bar.md`.
+- [ ] **Stufe 1: Zeile in der App (`Strg+K`)** – Engine (`src/quick/grammar.ts`, `fields.ts`, `engine.ts`) und `QuickBar.tsx`. Eintragen mit Lückentext und Tab-Sprüngen, Aufzählungen (`Mo` → Tab → `Di` …), Suche (`search.ts`), Befehle (`>`), alle drei Optiken. Tests in `tests/quickEngine.test.mjs`.
+- [ ] **Stufe 2: eingebettete Bedienelemente** – Mini-Kalender mit Bereich und der Wahl durchgehend `▬` / wiederholt `┆`, Uhr (`ClockTyping`), Skala (`scaleCells`).
+- [ ] **Stufe 3: Kalender mit neuer Oberfläche** – fasst die nächste Zeit zusammen, ist eine eigene, neue Oberfläche, nur per Tastatur. Zuerst den Entwurf zeigen.
+- [ ] **Stufe 4: Bewertung und Aktivitäten** – Skalen mit den Pfeiltasten (`withPeriodValues`), Aktivitäten starten/stoppen/nachtragen (`activityTimer.ts`).
+- [ ] **Stufe 5: Pinnwand per Tastatur** – in der App und im Schnellfenster. Räumliche Navigation in `src/boardNavigation.ts`, neue Kürzel in `ShortcutHelp.tsx` und `docs/bulletin-board.md`. Später mehr Funktionen, z. B. Karten verbinden.
+- [ ] **Stufe 6: global** – `tauri-plugin-global-shortcut`, Fenster `quick` wird beim Start versteckt vorbereitet, Eintrag im Tray-Menü, Einstellungen (Kürzel, an/aus).
 
 ## Offene Fragen
 - ~~**Pinnwand für Zeiträume** (Woche…Jahr)~~ – entschieden: jede Ansicht kann eine Pinnwand haben (Funktionen).

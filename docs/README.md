@@ -33,6 +33,7 @@ Die Dokumentation beschreibt den aktuellen Windows-Zweig `Windows`. Android ist 
 - [Entwicklung und Prüfungen](development.md): Voraussetzungen, Befehle, Architektur und Release-Ablauf.
 - [Ressourcenverwaltung](performance.md): Kalender-Caches, Hintergrundfenster und lokales Mailmodell.
 - [Plan: iCal-Import und -Export nach Rust](plan-ical-repeat-rust.md): geplanter Umbau, noch nicht umgesetzt.
+- [Plan: Schnellfenster](plan-quick-bar.md): Eingabe per Tastatur wie bei Raycast, in der App und überall; noch nicht umgesetzt.
 - [Eigenständige ML-Probe](../tools/mail-ml-probe/README.md): zusätzliches Entwicklerwerkzeug für synthetische Mailtexte.
 - [Release-Archiv 0.1.1](releases/0.1.1.md): historische Versionshinweise, kein aktuelles Handbuch.
 

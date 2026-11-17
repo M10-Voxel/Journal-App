@@ -10,7 +10,7 @@ export const calendarViews = (): { view: CalendarView; label: string; short: str
   const en = getLanguage() === 'en';
   return [
     { view: 'year', label: t("Jahr"), short: t("Jahr"), letter: en ? 'Y' : 'J', key: 'J' }, { view: 'month', label: t("Monat"), short: t("Monat"), letter: 'M', key: 'M' }, { view: 'week', label: t("Woche"), short: t("Woche"), letter: 'W', key: 'W' },
-    { view: 'workweek', label: t("Arbeitswoche"), short: t("Mo–Fr"), letter: en ? 'M–F' : 'Mo–Fr', key: 'A' }, { view: 'day', label: t("Tag"), short: t("Tag"), letter: en ? 'D' : 'T', key: 'T' },
+    { view: 'workweek', label: t("Arbeitswoche"), short: t("Mo–Fr"), letter: en ? 'M–F' : 'Mo–Fr', key: 'A' }, { view: 'day', label: t("Tage"), short: t("Tage"), letter: en ? 'D' : 'T', key: 'T' },
   ];
 };
 
@@ -23,8 +23,8 @@ export function shiftMonthKeepingDay(date: string, amount: number): string {
 }
 
 /** The dates a view shows as columns (week views and the day) or, for month and year, every date it needs data for. */
-export function viewDates(view: CalendarView, date: string): string[] {
-  if (view === 'day') return [date];
+export function viewDates(view: CalendarView, date: string, days = 1): string[] {
+  if (view === 'day') return Array.from({ length: days }, (_, index) => shiftDate(date, index));
   if (view === 'week') return weekDates(date);
   if (view === 'workweek') return weekDates(date).slice(0, 5);
   if (view === 'month') return monthGrid(date.slice(0, 7));
@@ -37,11 +37,11 @@ export function viewRange(view: CalendarView, date: string): { from: string; to:
   const dates = viewDates(view === 'day' ? 'month' : view, date);
   return { from: dates[0], to: dates[dates.length - 1] };
 }
-/** One step back or forth: a year, a month, a week or a day. */
-export function shiftView(view: CalendarView, date: string, step: number): string {
+/** One step back or forth: a year, a month, a week or (in the "Tage" view) the open days. */
+export function shiftView(view: CalendarView, date: string, step: number, days = 1): string {
   if (view === 'year') return shiftMonthKeepingDay(date, step * 12);
   if (view === 'month') return shiftMonthKeepingDay(date, step);
-  return shiftDate(date, step * (view === 'day' ? 1 : 7));
+  return shiftDate(date, step * (view === 'day' ? days : 7));
 }
 
 /** ISO 8601 week number (weeks start on Monday; week 1 holds the year's first Thursday). */
@@ -57,8 +57,13 @@ const weekdayLong = () => dateFormat({ weekday: 'long' });
 export const formatMonthName = (date: string) => monthName().format(noon(date));
 export const formatWeekdayLong = (date: string) => weekdayLong().format(noon(date));
 /** One-line calendar heading: what is shown, and – in the week views the week, in the day view the day – in grey after it. */
-export function viewTitle(view: CalendarView, date: string): { main: string; sub: string } {
+export function viewTitle(view: CalendarView, date: string, days = 1): { main: string; sub: string } {
   const year = date.slice(0, 4);
+  if (view === 'day' && days > 1) {
+    const last = shiftDate(date, days - 1);
+    const sub = date.slice(0, 7) === last.slice(0, 7) ? `${Number(date.slice(8))}.–${Number(last.slice(8))}.` : `${Number(date.slice(8))}.${Number(date.slice(5, 7))}.–${Number(last.slice(8))}.${Number(last.slice(5, 7))}.`;
+    return { main: `${formatMonthName(date)} ${year}`, sub };
+  }
   if (view === 'year') return { main: year, sub: '' };
   if (view === 'month') return { main: `${formatMonthName(date)} ${year}`, sub: '' };
   if (view === 'day') return { main: `${formatMonthName(date)} ${year}`, sub: `${formatWeekdayLong(date)}, ${Number(date.slice(8))}.` };

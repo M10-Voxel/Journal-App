@@ -419,6 +419,8 @@ const english: Record<string, string> = {
   "Datum": "Date",
   "Tag": "Day",
   "Tage": "Days",
+  "Klick: Tag öffnen · Umschalt+Klick: bis hier öffnen": "Click: open day · Shift+click: open up to here",
+  "Über die Tage ziehen: diese Tage öffnen": "Drag across days: open these days",
   "Tagen": "days",
   "Tg": "Day",
   "Woche": "Week",

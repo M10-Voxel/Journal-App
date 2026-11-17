@@ -166,7 +166,7 @@ function NebulaCalendarPanel({ mode, date, today, onPick, dayCalendar, calendarO
     <header className="nebula-terminal-head">
       <HeadLabel sticker={sticker} prompt={<><b>~$</b> ./cal.sh</>} label={t('Kalender')} />
       <div className="nebula-cal-views" role="tablist" aria-label={t('Kalenderansicht')}>
-        {(['month', 'day'] as const).map(value => <button key={value} type="button" role="tab" aria-selected={view === value} data-cal-view={value} onClick={() => choose(value)}>{value === 'month' ? t('Monat') : t('Tag')}</button>)}
+        {(['month', 'day'] as const).map(value => <button key={value} type="button" role="tab" aria-selected={view === value} data-cal-view={value} onClick={() => choose(value)}>{value === 'month' ? t('Monat') : t('Tage')}</button>)}
       </div>
       <button type="button" className={`nebula-calendar-toggle${calendarOpen ? ' is-open' : ''}`} aria-expanded={calendarOpen} aria-keyshortcuts="Control+K"
         aria-label={calendarOpen ? t('Kalender schließen') : t('Kalender öffnen')} title={calendarOpen ? t('Kalender schließen · Strg K') : t('Kalender öffnen · Strg K')} onClick={onCalendarToggle}><Icon name="calendar" /></button>

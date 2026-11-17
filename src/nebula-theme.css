@@ -324,6 +324,14 @@
 .nebula-cal-day .cal-toolbar { flex-wrap: wrap; padding: 6px 8px; }
 .nebula-cal-day .cal-toolbar .cal-title { order: -1; flex: 1 0 100%; min-height: 24px; overflow: hidden; font-size: 17px; }
 .nebula-cal-day .cal-toolbar .cal-title-sub { display: inline; overflow: hidden; text-overflow: ellipsis; }
+/* The panel is narrow: the column with the week number and "ohne Zeit" is left out, the days get all the room. The elements
+   stay (a zero-width grid column), so the days keep their grid places. The hours are no column either: faint labels over the
+   left edge of the days, which the pointer passes through. */
+:root[data-layout='desk'] .nebula-cal-day .cal-time { --time-corner: 0px; }
+:root[data-layout='desk'] .nebula-cal-day .cal-time .cal-time-corner { width: 0; padding: 0; overflow: hidden; visibility: hidden; }
+:root[data-layout='desk'] .nebula-cal-day .cal-time .cal-time-hours { width: 0; overflow: visible; pointer-events: none; background: none; }
+:root[data-layout='desk'] .nebula-cal-day .cal-time .cal-time-hours span { right: auto; left: 2px; padding: 0 2px; border-radius: 3px; font-size: 8.5px; line-height: 11px; opacity: .6; background: color-mix(in srgb, var(--background) 72%, transparent); }
+:root[data-layout='desk'] .nebula-cal-day .cal-time .cal-time-hours .cal-now-label { opacity: 1; }
 .nebula-cal-panel .nebula-terminal-head { padding-right: 0; }
 .nebula-cal-views { display: flex; align-self: stretch; }
 .nebula-cal-views button { padding: 0 10px; border: 0; border-left: 1px solid var(--nb-ink); background: transparent; color: var(--nb-ink); font: 700 10px var(--mono); text-transform: uppercase; letter-spacing: .06em; cursor: pointer; }

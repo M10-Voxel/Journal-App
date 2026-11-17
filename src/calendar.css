@@ -243,6 +243,7 @@ button.cal-time-day:hover { background: color-mix(in srgb, var(--strong) 3.137%,
   .cal-year { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: none; grid-auto-rows: minmax(190px, 1fr); padding: 12px 16px 16px; gap: 14px 20px; }
 }
 @container cal (max-width: 600px) {
+  .cal-time { --time-corner: 42px; }
   .cal-day-side { display: none; }
   .cal-view-long { display: none; }
   .cal-view-short { display: inline; }
@@ -547,3 +548,47 @@ button.cal-time-day:hover { background: color-mix(in srgb, var(--strong) 3.137%,
    its tooltip opens to the right instead of centred below it. */
 .cal-composer-kinds > [data-tip]:first-child::after { left: 0; transform: translate(0, -3px) scale(.95); transform-origin: left top; }
 .cal-composer-kinds > [data-tip]:first-child:is(:hover, :focus-visible)::after { transform: translate(0, 0); }
+
+/* ── "Tage": a long band of days that scrolls sideways; the open days are wide with hours and text, the others folded to
+   quiet narrow strips that still show when they are busy (docs/days-view.md). ─────────────────────────────────────── */
+.cal-time.is-band { overflow-x: hidden; }
+.cal-time.is-band .cal-time-top, .cal-time.is-band :is(.cal-time-head, .cal-time-allday, .cal-time-body) { width: max-content; min-width: 100%; }
+.cal-time.is-band .cal-time-top { z-index: 6; }
+.cal-time.is-band :is(.cal-time-head, .cal-time-allday, .cal-time-body) { grid-template-columns: var(--time-corner, 56px) var(--band, repeat(var(--days), minmax(0, 1fr))); transition: grid-template-columns 200ms ease-out; }
+/* The hours and the corners stay at the left while the days scroll under them. */
+.cal-time.is-band :is(.cal-time-corner, .cal-time-hours) { position: sticky; left: 0; z-index: 5; background: var(--background); }
+.cal-time.is-band .cal-time-head .cal-time-corner { align-self: stretch; display: flex; align-items: center; justify-content: flex-end; }
+.cal-time.is-band .cal-now-row { left: var(--time-corner, 56px); }
+.cal-time.is-band .cal-now-row span { display: none; }
+.cal-time.is-band .cal-time-hours .cal-now-label { right: 4px; z-index: 1; padding: 1px 4px; border-radius: 4px; background: var(--now); color: var(--on-now); font: 600 10px var(--mono); }
+.cal-time.is-band .cal-time-day { position: relative; min-width: 0; padding: 0; overflow: hidden; }
+.cal-time.is-band .cal-time-day.is-range { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+/* Week starts: a faint line and the week's number. */
+.cal-time.is-band .cal-time-day.is-week-start { overflow: visible; }
+.cal-time.is-band .cal-time-day.is-week-start::before { content: attr(data-week); position: absolute; top: 2px; left: 3px; z-index: 1; font: 7.5px/1 var(--mono); color: var(--placeholder); opacity: .7; pointer-events: none; }
+.cal-time.is-band :is(.cal-time-day, .cal-time-column, .cal-time-allday-cell).is-week-start { box-shadow: inset 1px 0 color-mix(in srgb, var(--strong) 14%, transparent); }
+
+/* Folded days: no grid, no borders, quiet dates; only the marks of what happens there. */
+.cal-time.is-band :is(.cal-time-column, .cal-time-allday-cell).is-folded { border-left-color: transparent; background: none; cursor: pointer; }
+.cal-time.is-band .cal-time-day.is-folded { cursor: pointer; }
+.cal-time.is-band .cal-time-day.is-folded strong { min-width: 0; height: auto; padding: 0; margin-top: 10px; background: none; writing-mode: vertical-lr; text-orientation: upright; font-size: 7.5px; line-height: 8px; letter-spacing: -1.5px; font-weight: 400; color: var(--placeholder); opacity: .55; }
+.cal-time.is-band .cal-time-day.is-folded.is-today strong { color: var(--now); opacity: 1; font-weight: 700; }
+.cal-time.is-band .cal-time-day.is-folded.is-today::after { content: ''; position: absolute; bottom: 3px; left: calc(50% - 1.5px); width: 3px; height: 3px; border-radius: 50%; background: var(--now); }
+.cal-time.is-band .cal-time-day.is-folded:hover, .cal-time.is-band .cal-time-column.is-folded:hover { background-color: color-mix(in srgb, var(--accent) 6%, transparent); }
+.cal-time.is-band .cal-time-day.is-folded:hover strong { opacity: 1; }
+/* Their entries: thin ticks in the middle of the strip, at their hour and in their tag's colour, half strength. */
+.cal-time.is-band .cal-time-column.is-folded .cal-item.is-block { left: calc(50% - 1.5px) !important; width: 3px !important; min-height: 3px; padding: 0 !important; border-radius: 2px; box-shadow: none; opacity: .5; pointer-events: none;
+  background: var(--tag, var(--event)) !important; }
+.cal-time.is-band .cal-time-allday-cell.is-folded { align-items: center; padding: 4px 0; gap: 2px; }
+.cal-time.is-band .cal-time-allday-cell.is-folded .cal-item { width: 3px; height: 3px; min-height: 3px; padding: 0 !important; border-radius: 50%; box-shadow: none; opacity: .5; pointer-events: none; background: var(--tag, var(--event)) !important; }
+.cal-time.is-band :is(.cal-time-column, .cal-time-allday-cell).is-folded .cal-item.is-task:not(.has-tag) { background: var(--muted) !important; }
+.cal-time.is-band :is(.cal-time-column, .cal-time-allday-cell).is-folded .cal-item.is-event:not(.has-tag) { background: var(--event) !important; }
+.cal-time.is-band :is(.cal-time-column, .cal-time-allday-cell).is-folded .cal-item > *, .cal-time.is-band .cal-time-column.is-folded .cal-item::before { display: none; }
+/* Journal content on a folded day: a faint line under its date instead of the outline. */
+.cal-time.is-band .cal-time-day.is-folded.has-journal-content { outline: none; }
+.cal-time.is-band .cal-time-day.is-folded.has-journal-content:not(.is-today)::after { content: ''; position: absolute; bottom: 4px; left: 2px; right: 2px; height: 1px; background: color-mix(in srgb, var(--strong) 22%, transparent); }
+/* The band without time stays slim: entries of one day stack, multi-day entries share a row where they do not overlap. */
+.cal-time.is-band .cal-time-allday .cal-time-allday-cell, .cal-time.is-band.can-create .cal-time-allday .cal-time-allday-cell { min-height: 22px; max-height: 76px; padding: 2px 3px; }
+.cal-time.is-band .cal-time-allday.is-empty .cal-time-allday-cell, .cal-time.is-band.can-create .cal-time-allday.is-empty .cal-time-allday-cell { min-height: 16px; padding-block: 0; }
+.cal-time.is-band .cal-multiday-bar { padding: 1px 3px; }
+.cal-time.is-band .cal-multiday-bar .cal-item { height: 15px; font-size: 10.5px; }
