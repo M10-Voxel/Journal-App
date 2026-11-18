@@ -11,7 +11,7 @@ impl Store {
         // WAL needs fewer syncs per save than the rollback journal and keeps reads independent of writes.
         conn.pragma_update_and_check(None, "journal_mode", "WAL", |r| r.get::<_, String>(0))?;
         let version: i64 = conn.pragma_query_value(None, "user_version", |r| r.get(0))?;
-        if version > 14 { return Err("Die Datenbank wurde mit einer neueren Version erstellt".into()); }
+        if version > crate::vault::SCHEMA_VERSION { return Err("Die Datenbank wurde mit einer neueren Version erstellt".into()); }
         if version == 0 {
             let tx = conn.transaction()?;
             tx.execute_batch("CREATE TABLE days (date TEXT PRIMARY KEY, title TEXT NOT NULL, body TEXT NOT NULL, revision INTEGER NOT NULL CHECK(revision > 0));
@@ -137,7 +137,16 @@ impl Store {
             tx.execute_batch("PRAGMA user_version = 14;")?;
             tx.commit()?;
         }
-        // Additive index only: schema version, persisted rows and older app compatibility stay unchanged.
+        // Preserve where a range was drawn. Existing entries keep their traditional multiday display.
+        if version < 15 {
+            let tx = conn.transaction()?;
+            if !tx.prepare("SELECT 1 FROM pragma_table_info('entries') WHERE name='time_grid'")?.exists([])? {
+                tx.execute_batch("ALTER TABLE entries ADD COLUMN time_grid INTEGER NOT NULL DEFAULT 0 CHECK(time_grid IN (0,1));")?;
+            }
+            tx.execute_batch("PRAGMA user_version = 15;")?;
+            tx.commit()?;
+        }
+        // Additive index only.
         conn.execute_batch("CREATE INDEX IF NOT EXISTS entries_activity_time ON entries(tag,day_date,time,end_time) WHERE plan IS NULL AND time IS NOT NULL AND end_time IS NOT NULL AND cancelled=0;")?;
         // The few entries with a plan (traces), for the lookups of what points at a day or an entry (storage/read.rs).
         conn.execute_batch("CREATE INDEX IF NOT EXISTS entries_plans ON entries(id,day_date,plan) WHERE plan IS NOT NULL;")?;

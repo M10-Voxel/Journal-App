@@ -1,5 +1,5 @@
 import { createPortal } from 'react-dom';
-import { calendarDaysWithSpans, calendarSpanLanes, calendarSpanSegment } from '../calendarSpans';
+import { calendarDaysWithSpans, calendarSpanLanes, calendarSpanSegment, calendarHourSlice } from '../calendarSpans';
 import { useViewHistory } from '../viewHistory';
 import { readCalendarEntry } from '../calendarClipboard';
 import { withStartAsync, occurrencesAsync, seriesHorizon } from '../repeat';
@@ -10,7 +10,7 @@ import type { CSSProperties, KeyboardEvent, PointerEvent as ReactPointerEvent } 
 import { CalendarDay, Entry, EntryKind, formatDate, formatWeekday, localDate } from '../journal';
 import { monthGrid, shiftDate } from '../dates';
 import { plainText } from '../markdown';
-import { shortTitle, CalendarView, calendarViews, durationOf, formatDuration, formatMonthName, isoWeek, layoutTimed, minutesOf, orderForCalendar, shiftView, snapMinutes, snapRange, viewDates, viewRange, viewTitle } from '../calendar';
+import { shortTitle, CalendarView, calendarViews, durationOf, formatDuration, formatMonthName, isoWeek, layoutTimed, maxSpanMinutes, minutesOf, orderForCalendar, shiftView, snapMinutes, snapRange, viewDates, viewRange, viewTitle } from '../calendar';
 import { formatEnd, timeOfMinutes } from '../planning';
 import type { ScopeOption } from '../planning';
 import { CalendarComposer } from './CalendarComposer';
@@ -155,7 +155,7 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
   const refocus = () => rootRef.current?.focus({ preventScroll: true });
   // Timed entries in a time grid are edited there, as a range that can be moved and resized; all others in place.
   const gridDates = landscape ? bandList : view ==='week' || view === 'workweek' ? viewDates(view, date) : [];
-  const inGrid = editing?.entry.time && !(editing.entry.end && durationOf({time:editing.entry.time,end:editing.entry.end})>1440) && gridDates.includes(editing.date) ? editing : null;
+  const inGrid = editing?.entry.time && (editing.entry.timeGrid || !(editing.entry.end && durationOf({time:editing.entry.time,end:editing.entry.end})>1440)) && gridDates.includes(editing.date) ? editing : null;
   const save = async (change: EntryEdit, scope?: ScopeOption) => { if (editing) { await onEdit!(editing.date, editing.entry.id, change, scope); setEditing(null); refocus(); } };
   const remove = async (others: { id: string; date: string }[]) => { if (editing) { await onRemove!(editing.date, editing.entry.id, others); setEditing(null); refocus(); } };
   const editingId = editing?.entry.id ?? null;
@@ -276,7 +276,7 @@ export const Calendar = memo(function Calendar({ journalDate, onOpen, onCreate, 
       const rule=whole && entry.repeat?.rule ? await withStartAsync(entry.repeat.rule,target) : null;
       const horizon=seriesHorizon(localDate(),target);
       const repeat=rule ? {series:crypto.randomUUID(),rule,horizon,dates:(await occurrencesAsync(rule,target,horizon)).filter(value=>value>target)} : undefined;
-      await onCreate(target,{kind:entry.kind,text:entry.text,description:entry.description ?? '',tag:entry.tag ?? null,time:entry.time ?? null,end:entry.end ?? null,priority:entry.priority,reminder:Boolean(entry.reminder),showInJournal:entry.showInJournal!==false,repeat});
+      await onCreate(target,{kind:entry.kind,text:entry.text,description:entry.description ?? '',tag:entry.tag ?? null,time:entry.time ?? null,end:entry.end ?? null,timeGrid:Boolean(entry.timeGrid),priority:entry.priority,reminder:Boolean(entry.reminder),showInJournal:entry.showInJournal!==false,repeat});
       setPasting(null);setNotice(t('Eintrag eingefügt'));
     }catch(reason){setNotice(String(reason));}
   };
@@ -641,16 +641,24 @@ function TimeGrid({ journalDays, dates, band, today, now, journalDate, entriesOn
   const [marking, setMarking] = useState(false);
   const gesture = useRef<Gesture | null>(null);
   const frame = useRef(0);
-  // Appointments past midnight: the block ends at 24:00 on its day and goes on from 00:00 on the next.
+  // Ranges drawn in the hour grid continue on every covered day, keeping one stored entry and its edit origin.
+  const gridItems = [...journalDays].flatMap(([date, day]) => day.entries.filter(entry => entry.timeGrid && entry.time && entry.end && entriesOn(date).some(shown => shown.id === entry.id)).map(entry => ({ date, entry })));
   const columns = dates.map(date => {
-    const entries = entriesOn(date).filter(entry=>!entry.time || !entry.end || durationOf({time:entry.time,end:entry.end})<=1440), before = shiftDate(date, -1);
+    const entries = entriesOn(date).filter(entry=>!entry.timeGrid && (!entry.time || !entry.end || durationOf({time:entry.time,end:entry.end})<=1440)), before = shiftDate(date, -1);
     const own = entries.filter((entry): entry is Entry & { time: string } => Boolean(entry.time))
       .map(entry => ({ id: entry.id, time: entry.time, end: entry.end && entry.end > '24:00' ? '24:00' : entry.end, entry, from: date, night: entry.end && entry.end > '24:00' ? 'start' as const : undefined }));
-    const carried = entriesOn(before).filter((entry): entry is Entry & { time: string; end: string } => Boolean(entry.time && entry.end && minutesOf(entry.end)-minutesOf(entry.time)<=1440 && minutesOf(entry.end)>1440))
+    const carried = entriesOn(before).filter((entry): entry is Entry & { time: string; end: string } => Boolean(!entry.timeGrid && entry.time && entry.end && minutesOf(entry.end)-minutesOf(entry.time)<=1440 && minutesOf(entry.end)>1440))
       .map(entry => ({ id: `${entry.id}:rest`, time: '00:00', end: timeOfMinutes(minutesOf(entry.end) - 24 * 60), entry, from: before, night: 'rest' as const }));
-    return { date, untimed: entries.filter(entry => !entry.time), timed: layoutTimed([...carried, ...own]) };
+    const grid = gridItems.flatMap(({ date: from, entry }) => {
+      const piece = calendarHourSlice(from, minutesOf(entry.time!), minutesOf(entry.end!), date);
+      return piece ? [{ id: `${entry.id}:${date}`, time: timeOfMinutes(piece.start), end: timeOfMinutes(piece.end), entry, from, night: date === from ? (piece.last ? undefined : 'start' as const) : 'rest' as const }] : [];
+    });
+    // A point created in the grid has no end and still belongs to its own day.
+    const points = entriesOn(date).filter((entry): entry is Entry & { time: string } => Boolean(entry.timeGrid && entry.time && !entry.end))
+      .map(entry => ({ id: entry.id, time: entry.time, end: entry.end, entry, from: date, night: undefined }));
+    return { date, untimed: entries.filter(entry => !entry.time), timed: layoutTimed([...carried, ...own, ...grid, ...points]), draftSlice: draft ? calendarHourSlice(draft.date, draft.start, draft.end, date) : null };
   });
-  const spanItems=[...journalDays].flatMap(([date,day])=>day.entries.filter(entry=>entry.time && entry.end && durationOf({time:entry.time,end:entry.end})>1440 && entriesOn(date).some(shown=>shown.id===entry.id)).map(entry=>({date,entry,end:shiftDate(date,Math.floor((minutesOf(entry.end!)-1)/1440))}))).filter(item=>item.date<=dates[dates.length-1] && item.end>=dates[0]);
+  const spanItems=[...journalDays].flatMap(([date,day])=>day.entries.filter(entry=>!entry.timeGrid && entry.time && entry.end && durationOf({time:entry.time,end:entry.end})>1440 && entriesOn(date).some(shown=>shown.id===entry.id)).map(entry=>({date,entry,end:shiftDate(date,Math.floor((minutesOf(entry.end!)-1)/1440))}))).filter(item=>item.date<=dates[dates.length-1] && item.end>=dates[0]);
   // Multi-day entries share a row as long as they do not overlap; one that starts while another still runs goes below it.
   const laneEnds: string[] = [];
   const spans = [...spanItems].sort((a,b)=>a.date.localeCompare(b.date) || b.end.localeCompare(a.end) || a.entry.id.localeCompare(b.entry.id)).map(item=>{
@@ -697,14 +705,14 @@ function TimeGrid({ journalDays, dates, band, today, now, journalDate, entriesOn
     const column = columnAt(x);
     return (dates.indexOf(column.dataset.date!) - dates.indexOf(date)) * 24 * 60 + minutesAt(column, y);
   };
-  /** A range in minutes from `date`'s day, kept within the shown days, at most a day long, moved onto the day it starts on. */
+  /** A continuous range in minutes from `date`'s day, moved onto its start day; the duration follows storage's limit. */
   function placed(date: string, start: number, end: number): Draft {
     const first = -dates.indexOf(date) * 24 * 60, last = (dates.length - dates.indexOf(date)) * 24 * 60;
     if (start < first) { end += first - start; start = first; }
     if (end > last + 24 * 60) { start -= end - last - 24 * 60; end = last + 24 * 60; }
     start = Math.min(start, last - snapMinutes);
     const days = Math.floor(start / (24 * 60));
-    return { date: shiftDate(date, days), start: start - days * 24 * 60, end: Math.min(end, start + 24 * 60) - days * 24 * 60 };
+    return { date: shiftDate(date, days), start: start - days * 24 * 60, end: Math.min(end, start + maxSpanMinutes) - days * 24 * 60 };
   }
   function follow(x: number, y: number) {
     const current = gesture.current;
@@ -719,10 +727,10 @@ function TimeGrid({ journalDays, dates, band, today, now, journalDate, entriesOn
       // In whole quarters from the anchor's to the pointer's, either way, also into the next or previous day.
       const [from, to] = [Math.floor(current.anchor / snapMinutes) * snapMinutes, Math.floor(at / snapMinutes) * snapMinutes];
       const [start, end] = [Math.min(from, to), Math.max(from, to) + snapMinutes];
-      setDraft(end - start > 24 * 60 ? placed(origin.date, to < from ? end - 24 * 60 : start, to < from ? end : start + 24 * 60) : placed(origin.date, start, end));
+      setDraft(placed(origin.date, start, end));
     }
-    else if (current.mode === 'start') setDraft(placed(origin.date, Math.min(origin.end - snapMinutes, Math.max(origin.end - 24 * 60, snap(at))), origin.end));
-    else if (current.mode === 'end') setDraft(placed(origin.date, origin.start, Math.max(origin.start + snapMinutes, Math.min(origin.start + 24 * 60, snap(at)))));
+    else if (current.mode === 'start') setDraft(placed(origin.date, Math.min(origin.end - snapMinutes, Math.max(origin.end - maxSpanMinutes, snap(at))), origin.end));
+    else if (current.mode === 'end') setDraft(placed(origin.date, origin.start, Math.max(origin.start + snapMinutes, Math.min(origin.start + maxSpanMinutes, snap(at)))));
     else {
       const delta = snap(at - current.anchor);
       setDraft(placed(origin.date, origin.start + delta, origin.end + delta));
@@ -808,7 +816,7 @@ function TimeGrid({ journalDays, dates, band, today, now, journalDate, entriesOn
         {band && dates.includes(today) && <span className="cal-now-label" style={{ top: nowMinutes / 60 * hourHeight }}>{String(now.getHours()).padStart(2, '0')}:{String(now.getMinutes()).padStart(2, '0')}</span>}</div>
       {columns.map(column => <div key={column.date} data-date={column.date} className={`cal-time-column${fold(column.date)}${weekendClass(column.date)}${column.date === today ? ' is-today' : ''}`} {...columnHandlers(column.date)}
         {...band && !band.open.has(column.date) ? { title: dayLabel(column.date, journalDays.get(column.date)), onClick: (event: React.MouseEvent) => { if (!(event.target as Element).closest('.cal-selection')) band.onOpen(column.date); } } : {}}>
-        {column.timed.map(({ item, start, duration, left, width }) => <CalendarItem key={item.id} entry={item.entry} date={item.from} variant="block" short={duration < 45} night={item.night}
+        {column.timed.map(({ item, start, duration, left, width }) => <CalendarItem key={item.id} entry={item.entry} date={item.from} shownOn={column.date} shownTime={{ time: item.time, end: item.end }} variant="block" short={duration < 45} night={item.night}
           style={{ top: start / 60 * hourHeight + (item.night === 'rest' ? 0 : 1), height: Math.max(10, duration / 60 * hourHeight - (item.night ? 1 : 3)), left: `calc(${left}% + 2px)`, width: `calc(${width}% - 4px)` }} />)}
         {column.date === today && <div className="cal-now" style={{ top: nowMinutes / 60 * hourHeight }} aria-hidden="true" />}
         {draft?.date === column.date && <div ref={selectionRef} className={`cal-selection${marking ? ' is-marking' : ''}${draft.end - draft.start < 45 ? ' is-short' : ''}${draft.end > 24 * 60 ? ' is-night-start' : ''}${editTone ? ' is-edit' : ''}`}
@@ -819,10 +827,10 @@ function TimeGrid({ journalDays, dates, band, today, now, journalDate, entriesOn
           {draft.end <= 24 * 60 && <i className="cal-selection-edge is-end" title={t("Ende ziehen")} onPointerDown={event => begin(event, 'end', column.date)} />}
         </div>}
         {/* Past midnight the range goes on in the next day's column, where its end can be dragged. */}
-        {draft && draft.end > 24 * 60 && shiftDate(draft.date, 1) === column.date && <div className={`cal-selection is-night-rest${marking ? ' is-marking' : ''}${editTone ? ' is-edit' : ''}`}
-          style={{ top: 0, height: (draft.end - 24 * 60) / 60 * hourHeight , ...editTone ? { '--tone': editTone } : {} } as CSSProperties} onPointerDown={event => begin(event, 'move', column.date)}>
+        {draft && column.draftSlice && column.date !== draft.date && <div className={`cal-selection is-night-rest${marking ? ' is-marking' : ''}${editTone ? ' is-edit' : ''}`}
+          style={{ top: column.draftSlice.start / 60 * hourHeight, height: (column.draftSlice.end - column.draftSlice.start) / 60 * hourHeight , ...editTone ? { '--tone': editTone } : {} } as CSSProperties} onPointerDown={event => begin(event, 'move', column.date)}>
           <span className="cal-selection-time">{t("bis ")}{formatEnd(timeOfMinutes(draft.end))}</span>
-          <i className="cal-selection-edge is-end" title={t("Ende ziehen")} onPointerDown={event => begin(event, 'end', column.date)} />
+          {column.draftSlice.last && <i className="cal-selection-edge is-end" title={t("Ende ziehen")} onPointerDown={event => begin(event, 'end', column.date)} />}
         </div>}
       </div>)}
       {dates.includes(today) && <div className="cal-now-row" style={{ top: nowMinutes / 60 * hourHeight }} aria-hidden="true"><span>{String(now.getHours()).padStart(2, '0')}:{String(now.getMinutes()).padStart(2, '0')}</span></div>}

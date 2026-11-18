@@ -4,6 +4,13 @@ import { shiftDate } from './dates.ts';
 export type SpanEntry = Entry & { spanOrigin?: string };
 export type CalendarSpan = { entry: SpanEntry; start: string; end: string; lane: number };
 
+/** The exact part of a continuous hour-grid range on one day. Midnight ends are exclusive. */
+export function calendarHourSlice(origin: string, start: number, end: number, day: string) {
+ const offset = (Date.parse(day) - Date.parse(origin)) / 86400000 * 1440;
+ const from = Math.max(0, start - offset), to = Math.min(1440, end - offset);
+ return Number.isFinite(offset) && to > from ? { start: from, end: to, last: offset + to === end } : null;
+}
+
 /** One stable lane per interval, shared by every day and week of the visible range. */
 export function calendarSpanLanes(dates: readonly string[], entriesOn: (date: string) => Entry[]): CalendarSpan[] {
  if (!dates.length) return [];

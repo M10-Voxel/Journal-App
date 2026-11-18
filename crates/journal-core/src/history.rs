@@ -69,6 +69,8 @@ pub fn step(store:&mut Store,redo:bool)->rusqlite::Result<bool>{
     let recorded=[b,a].into_iter().flatten().filter_map(|r|serde_json::from_str::<Value>(r).ok()?.get("revision")?.as_i64()).max().unwrap_or(0);
     object.insert("revision".into(),Value::from(current.unwrap_or(0).max(recorded)+1));
    }
+   // Rows recorded before schema 15 keep their original, non-grid multiday presentation on replay.
+   if table=="entries" { object.entry("time_grid").or_insert(Value::from(0)); }
    let columns=object.keys().cloned().collect::<Vec<_>>();
    let values=columns.iter().map(|k|match &object[k]{Value::String(s)=>rusqlite::types::Value::Text(s.clone()),Value::Number(n)=>rusqlite::types::Value::Integer(n.as_i64().unwrap()),_=>rusqlite::types::Value::Null}).collect::<Vec<_>>();
    tx.execute(&format!("INSERT INTO {table} ({}) VALUES ({}) ON CONFLICT({pk}) DO UPDATE SET {}",columns.join(","),vec!["?";columns.len()].join(","),columns.iter().filter(|c|c.as_str()!=pk).map(|c|format!("{c}=excluded.{c}")).collect::<Vec<_>>().join(",")),rusqlite::params_from_iter(values))?;

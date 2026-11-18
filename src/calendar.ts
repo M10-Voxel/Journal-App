@@ -87,6 +87,8 @@ export const minutesOf = (time: string) => Number(time.split(':')[0]) * 60 + Num
 export const slotMinutes = 60;
 /** Ranges marked in the time grid snap to quarter hours. */
 export const snapMinutes = 15;
+/** Storage accepts continuous ranges up to one year, including hour-grid gestures. */
+export const maxSpanMinutes = 366 * 1440;
 /** How long an entry lasts in the time grid: up to its end, or `slotMinutes` (at most until midnight). */
 export const durationOf = (item: { time: string; end?: string | null }) =>
   item.end ? minutesOf(item.end) - minutesOf(item.time) : Math.min(slotMinutes, 24 * 60 - minutesOf(item.time));

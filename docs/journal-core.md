@@ -14,6 +14,8 @@
 
 Vault wählen, anlegen und umziehen bleibt in der App (`src-tauri/src/vault.rs`). Andere Programme folgen nur dem Zeiger. Ist der eingestellte Vault nicht erreichbar, melden sie einen Fehler und nehmen nie stillschweigend einen anderen.
 
+Schema 15 ergänzt die Herkunft einer Zeitspanne: `Entry.time_grid`/`timeGrid` ist bei im Stundenraster gezogenen Bereichen wahr; traditionelle mehrtägige Einträge bleiben falsch. Der Standardwert der Migration erhält die vorhandene Darstellung. Die 66 Kern-Tests prüfen unter anderem Speicherung, Kalenderexport, Verschieben, geplante Kopien, Serienfortsetzung, Historie einschließlich alter Zeilen und das Übernehmen älterer Sync-Snapshots. J-TerminaL und Haupt-App benötigen denselben aktualisierten Kern.
+
 ## Mehrere Programme auf einer Datenbank
 
 Die Datenbank läuft im WAL-Modus mit `busy_timeout`. Die App und J-TerminaL können sie also gleichzeitig offen haben.

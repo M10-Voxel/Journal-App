@@ -18,7 +18,7 @@ pub fn same_sync_value(a:&Value,b:&Value)->bool {
 }
 const TABLES: &[(&str,&str)] = &[("tags","id"),("series","id"),("days","date"),("entries","id")];
 /// Entry columns newer than the snapshot format, with the value an older snapshot's entries get.
-fn later_column(col: &str) -> Option<Value> { match col { "reminder_before" => Some(json!(0)), "icon" => Some(Value::Null), _ => None } }
+fn later_column(col: &str) -> Option<Value> { match col { "reminder_before" | "time_grid" => Some(json!(0)), "icon" => Some(Value::Null), _ => None } }
 impl Store {
     pub fn sync_snapshot(&self) -> Result<Value> {
         let mut tables=serde_json::Map::new();

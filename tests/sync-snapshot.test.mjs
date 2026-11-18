@@ -2,6 +2,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {upgradeSnapshot,databaseSnapshot,syncPreferences} from '../src/sync/snapshot.ts';
 import {mergeThreeWay} from '../src/sync/merge.ts';
+test('legacy snapshots default to side lanes while hour-grid origins survive sync merging',()=>{
+ const old={schema:12,tables:{entries:{range:{id:'range',time:'14:00',end_time:'64:00'}}},settings:{}};
+ const base=upgradeSnapshot(old),local=structuredClone(base);
+ assert.equal(base.tables.entries.range.time_grid,0);
+ local.tables.entries.range.time_grid=1;
+ const merged=mergeThreeWay(base,local,upgradeSnapshot(old));
+ assert.deepEqual(merged.conflicts,[]);
+ assert.equal(databaseSnapshot(merged.value).tables.entries.range.time_grid,1);
+});
 test('legacy cloud preserves newly added activities, cards and images',()=>{
  const old={schema:11,tables:{}};
  const local=upgradeSnapshot({...old,settings:{'period-data':{days:{a:{rating:8}}},'board:card:a':{asset:'image'}},images:{image:'avif'},preferences:{theme:'pixel'}});

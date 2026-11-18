@@ -26,6 +26,8 @@ export interface Entry {
   time?: string | null;
   /** Optional end `HH:MM` on the same day, after `time` (entries marked as a range in the calendar). */
   end?: string | null;
+  /** A range drawn in the hour grid remains there across days; missing/false keeps the traditional multiday band. */
+  timeGrid?: boolean;
   /** The user wants to be reminded (see reminders.rs). */
   reminder?: boolean;
   /** Minutes before the entry's time (or 9:00 without one) the reminder comes; 0 or missing: at the time. */
@@ -145,7 +147,7 @@ export const journal = {
 export interface LinkedEntry { id: string; date: string; kind: EntryKind; done: boolean; cancelled: boolean; trace: boolean; series?: string | null }
 export interface LinkedEdit {
   kind: EntryKind; text: string; description: string; tag: string | null; priority: boolean; reminder: boolean; showInJournal: boolean;
-  times?: { time: string | null; end: string | null }; reminderBefore?: number; icon?: string | null;
+  times?: { time: string | null; end: string | null }; reminderBefore?: number; icon?: string | null; timeGrid?: boolean;
 }
 export type LinkedAction = 'remove' | 'done' | 'cancelled' | 'open';
 

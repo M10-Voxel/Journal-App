@@ -478,7 +478,7 @@ export function App() {
   const createFromCalendar = useStableCallback(async (target: string, made: NewEntry) => {
     await flushHistoryWindows();
     return serializeEditorMutation(async () => {
-      const entry: Entry = { id: crypto.randomUUID(), kind: made.kind, text: made.text, description: made.description, tag: made.tag ?? null, done: false, cancelled: false, priority: made.priority, time: made.time, end: made.end, reminder: made.reminder, reminderBefore: made.reminderBefore ?? 0, icon: made.icon ?? null, showInJournal: made.showInJournal, plan: null, repeat: made.repeat ?? null };
+      const entry: Entry = { id: crypto.randomUUID(), kind: made.kind, text: made.text, description: made.description, tag: made.tag ?? null, done: false, cancelled: false, priority: made.priority, time: made.time, end: made.end, timeGrid: Boolean(made.timeGrid), reminder: made.reminder, reminderBefore: made.reminderBefore ?? 0, icon: made.icon ?? null, showInJournal: made.showInJournal, plan: null, repeat: made.repeat ?? null };
       if (target === date && ready) {
         captureLayout();
         update(current => ({ ...current, entries: orderEntries([...current.entries, entry]) }));
@@ -569,10 +569,10 @@ export function App() {
       }
       if (!scope?.others.length || !change.kind) return;
       const edit: LinkedEdit = { kind: change.kind, text: change.text ?? '', description: change.description ?? '', tag: change.tag ?? null, priority: Boolean(change.priority),
-        reminder: Boolean(change.reminder), showInJournal: change.showInJournal !== false, reminderBefore: change.reminderBefore ?? 0, icon: change.icon ?? null, ...'time' in change ? { times: { time: change.time ?? null, end: change.end ?? null } } : {} };
+        reminder: Boolean(change.reminder), showInJournal: change.showInJournal !== false, reminderBefore: change.reminderBefore ?? 0, icon: change.icon ?? null, timeGrid: change.timeGrid, ...'time' in change ? { times: { time: change.time ?? null, end: change.end ?? null } } : {} };
       const here = scope.others.filter(other => other.date === date && ready);
       const same: EntryEdit = { kind: edit.kind, text: edit.text, description: edit.description, tag: edit.tag, priority: edit.priority, reminder: edit.reminder, showInJournal: edit.showInJournal, reminderBefore: edit.reminderBefore, icon: edit.icon,
-        ...edit.times ? { time: edit.times.time, end: edit.times.end } : {}, ...edit.kind === 'task' ? {} : { done: false, cancelled: false } };
+        ...edit.times ? { time: edit.times.time, end: edit.times.end } : {}, ...edit.timeGrid === undefined ? {} : { timeGrid: edit.timeGrid }, ...edit.kind === 'task' ? {} : { done: false, cancelled: false } };
       for (const other of here) changeEntry(other.id, same);
       if (here.length) { for (const other of here) keepAlone.current.add(other.id); pendingSave.current = true; }
       const elsewhere = scope.others.filter(other => !here.includes(other)).map(other => other.id);

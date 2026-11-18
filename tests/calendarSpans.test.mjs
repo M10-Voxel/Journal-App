@@ -1,7 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { calendarDaysWithSpans, calendarSpanLanes, calendarSpanSegment } from '../src/calendarSpans.ts';
+import { calendarDaysWithSpans, calendarSpanLanes, calendarSpanSegment, calendarHourSlice } from '../src/calendarSpans.ts';
 const entry={id:'span',kind:'event',text:'Delivery',done:false,cancelled:false,priority:false,time:'00:00',end:'48:00',showInJournal:false};
+test('a continuous Wednesday 14:00 to Friday 16:00 range covers all three hour columns', () => {
+ const origin='2026-11-18', start=14*60, end=2*1440+16*60;
+ assert.deepEqual(calendarHourSlice(origin,start,end,'2026-11-18'),{start:840,end:1440,last:false});
+ assert.deepEqual(calendarHourSlice(origin,start,end,'2026-11-19'),{start:0,end:1440,last:false});
+ assert.deepEqual(calendarHourSlice(origin,start,end,'2026-11-20'),{start:0,end:960,last:true});
+ assert.equal(calendarHourSlice(origin,start,end,'2026-11-21'),null);
+ assert.equal(calendarHourSlice(origin,start,end,'2026-11-17'),null);
+});
+test('hour slices preserve an exclusive midnight end through month and year boundaries', () => {
+ assert.deepEqual(calendarHourSlice('2026-12-31',840,2880,'2027-01-01'),{start:0,end:1440,last:true});
+ assert.equal(calendarHourSlice('2026-12-31',840,2880,'2027-01-02'),null);
+});
 test('continuations appear across month and year boundaries, preserving their edit origin',()=>{
  const days=new Map([['2026-12-31',{date:'2026-12-31',title:'',entries:[entry]}]]);
  const shown=calendarDaysWithSpans(days,'2027-01-01','2027-01-31');

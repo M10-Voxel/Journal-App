@@ -141,9 +141,9 @@ function measureTime(item: HTMLElement) {
 
 /** One entry: its journal symbol and the text. Events are filled bars, tasks and notes lines (like Samsung's calendar). */
 /** `night`: a block past midnight – `start` on its own day (cut at 24:00), `rest` its continuation on the next. */
-export function CalendarItem({ entry, date, variant = 'line', short = false, style, night }: { entry: Entry; date: string; variant?: 'line' | 'block'; short?: boolean; style?: CSSProperties; night?: 'start' | 'rest' }) {
+export function CalendarItem({ entry, date, variant = 'line', short = false, style, night, shownOn, shownTime }: { entry: Entry; date: string; variant?: 'line' | 'block'; short?: boolean; style?: CSSProperties; night?: 'start' | 'rest'; shownOn?: string; shownTime?: { time: string; end?: string | null } }) {
   useLanguage();
-  const shownDate = night === 'rest' ? shiftDate(date, 1) : date;
+  const shownDate = shownOn ?? (night === 'rest' ? shiftDate(date, 1) : date);
   date=(entry as SpanEntry).spanOrigin ?? date;
   const open = useContext(OpenInJournal);
   const { edit, editingId, remove, move, change } = useContext(EditInCalendar);
@@ -216,12 +216,12 @@ export function CalendarItem({ entry, date, variant = 'line', short = false, sty
       {tag && <span className="cal-details-tag">{tag.icon ? <EntryIcon name={tag.icon} className="tag-icon" /> : <span className="tag-dot" />}{tag.name}</span>}
     </div>
   </div> : null;
-  const spanning=Boolean(entry.end && Number(entry.end.split(':')[0])>=24);
+  const spanning=Boolean(!(entry.timeGrid && variant === 'block') && entry.end && Number(entry.end.split(':')[0])>=24);
   const state = entry.done ? ' is-done' : entry.cancelled ? ' is-cancelled' : '';
   return <button type="button" className={`cal-item is-${entry.kind} is-${variant}${short ? ' is-short' : ''}${spanning ? ' is-multiday' : ''}${state}${entry.priority ? ' is-priority' : ''}${tag ? ' has-tag' : ''}${entry.icon ? ' has-icon' : ''}${editingId === entry.id ? ' is-editing' : ''}${chosen ? ' is-selected' : ''}${night ? ` is-night-${night}` : ''}`}
     ref={noteRef} style={tag ? { ...style, '--tag': tag.color } as CSSProperties : style} data-tag={tag?.name}
-    data-calendar-entry={entry.id} data-calendar-time={night === 'rest' ? '00:00' : entry.time ?? undefined}
-    data-calendar-end={night === 'start' ? '24:00' : night === 'rest' && entry.end ? timeOfMinutes(minutesOf(entry.end) - 1440) : entry.end ?? undefined}
+    data-calendar-entry={entry.id} data-calendar-time={shownTime?.time ?? (night === 'rest' ? '00:00' : entry.time ?? undefined)}
+    data-calendar-end={shownTime ? shownTime.end ?? undefined : night === 'start' ? '24:00' : night === 'rest' && entry.end ? timeOfMinutes(minutesOf(entry.end) - 1440) : entry.end ?? undefined}
     title={t("{0}{1} · Im Journal zeigen{2}", entryTitle(entry, tag?.name), !mail && entry.description ? `\n${entry.description}` : '', edit ? t(" · Rechtsklick: bearbeiten") : '')} aria-label={entryTitle(entry, tag?.name)}
     onContextMenu={event => { if (!edit) return; event.preventDefault(); event.stopPropagation(); edit(entry, date, event.currentTarget); }}
     onKeyDown={event => { if (edit && (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10'))) { event.preventDefault(); edit(entry, date, event.currentTarget); } }}

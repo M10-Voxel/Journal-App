@@ -4798,6 +4798,8 @@ try {
     await side(3,notePoint);await until("!document.querySelector('.nebula-notebook-toggle').classList.contains('is-open')");
     await pause(100);await side(4);await until("document.querySelector('.nebula-notebook-toggle').classList.contains('is-open')");
     assert.deepEqual(errors,[]);console.log('Interaction fixes passed: editable poster, untagged shortcut, board zoom and stable positions, view and Nebula layout history.');
+  } else if (process.env.JOURNAL_UI_SCOPE === 'calendar-hour-grid-spans') {
+    await (await import('./ui-calendar-hour-spans.mjs')).verifyHourSpans({ evaluate, until, screenshot, command, key, errors });
   } else if (process.env.JOURNAL_UI_SCOPE === 'calendar-connected-spans') {
     const month=await evaluate('window.__uiTest.date.slice(0,7)');
     await evaluate(`(() => {const month='${month}';const entry=(id,end)=>({id,kind:'event',text:id,time:'00:00',end,done:false,cancelled:false,priority:false});return Promise.all([

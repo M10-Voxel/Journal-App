@@ -11,7 +11,7 @@ import { createPortal } from 'react-dom';
 import { journal } from '../journal';
 import type { Entry, EntryKind, Repeat } from '../journal';
 import { formatMonth, formatShortDate, localDate, shiftMonth } from '../dates';
-import { minutesOf, formatDuration, slotMinutes, snapMinutes } from '../calendar';
+import { minutesOf, formatDuration, slotMinutes, snapMinutes, maxSpanMinutes } from '../calendar';
 import { formatEnd, canBeNote, editScopes, formatSpan, linkedScopes, repeatChangeAsync, timeOfMinutes } from '../planning';
 import { defaultRule, describe, withStart } from '../repeat';
 import type { RepeatRule } from '../repeat';
@@ -34,9 +34,9 @@ import { getWidgetSurface, inDesktopWidget, popupViewport, subscribeWidgetSurfac
 /** A range marked in the time grid, in minutes of its day. */
 export interface Draft { date: string; start: number; end: number }
 /** What the composer creates: an event or a task (a time block) over the marked range. */
-export interface NewEntry { kind: EntryKind; text: string; description: string; tag: string | null; time: string | null; end: string | null; priority: boolean; reminder: boolean; reminderBefore?: number; icon?: string | null; showInJournal: boolean; repeat?: Repeat }
+export interface NewEntry { kind: EntryKind; text: string; description: string; tag: string | null; time: string | null; end: string | null; priority: boolean; reminder: boolean; reminderBefore?: number; icon?: string | null; timeGrid?: boolean; showInJournal: boolean; repeat?: Repeat }
 /** What editing an entry in the calendar changes. */
-export type EntryEdit = Partial<Pick<Entry, 'kind' | 'text' | 'description' | 'tag' | 'priority' | 'reminder' | 'reminderBefore' | 'icon' | 'time' | 'end' | 'done' | 'cancelled' | 'showInJournal' | 'repeat'>>;
+export type EntryEdit = Partial<Pick<Entry, 'kind' | 'text' | 'description' | 'tag' | 'priority' | 'reminder' | 'reminderBefore' | 'icon' | 'time' | 'end' | 'timeGrid' | 'done' | 'cancelled' | 'showInJournal' | 'repeat'>>;
 
 const widths = { create: 400, edit: 436 };
 type ComposerKind = EntryKind | 'calendar';
@@ -67,7 +67,7 @@ export function CalendarComposer({ date, draft, entry, span, onSpanChange, tag: 
   // A range marked in the calendar becomes a calendar entry unless chosen otherwise (it is the first choice, too).
   const [kind, setKind] = useState<EntryKind>(entry?.kind ?? 'event');
   const [text, setText] = useState(entry?.text ?? '');
-  const longSpan=Boolean(span) || Boolean(entry?.time && entry.end && minutesOf(entry.end)-minutesOf(entry.time)>1440);
+  const longSpan=Boolean(span) || Boolean(entry?.time && entry.end && !entry.timeGrid && minutesOf(entry.end)-minutesOf(entry.time)>1440);
   const [longEndDate,setLongEndDate]=useState(span ? span.end : entry?.end ? shiftDate(date,Math.floor(minutesOf(entry.end)/1440)) : date);
   const [longStartTime,setLongStartTime]=useState(entry?.time ?? '00:00');
   const [longEndTime,setLongEndTime]=useState(entry?.end ? timeOfMinutes(minutesOf(entry.end)%1440) : '23:59');
@@ -163,8 +163,8 @@ export function CalendarComposer({ date, draft, entry, span, onSpanChange, tag: 
     if (!current || !onChange) return;
     const value = 'to' in change ? change.to : (edge === 'start' ? current.start : current.end) + change.by;
     changeDraft(edge === 'start'
-      ? { ...current, start: Math.min(current.end - snapMinutes, Math.max(0, current.end - 24 * 60, value)) }
-      : { ...current, end: Math.max(current.start + snapMinutes, Math.min(current.start + 24 * 60, 48 * 60 - snapMinutes, value)) });
+      ? { ...current, start: Math.min(1440 - snapMinutes, current.end - snapMinutes, Math.max(0, current.end - maxSpanMinutes, value)) }
+      : { ...current, end: Math.max(current.start + snapMinutes, Math.min(current.start + maxSpanMinutes, value)) });
   };
   const chooseKind = (next: ComposerKind) => {
     if (!kinds.includes(next)) return;
@@ -184,13 +184,13 @@ export function CalendarComposer({ date, draft, entry, span, onSpanChange, tag: 
       if (longSpan && (longEnd <= minutesOf(longStartTime) || longEnd - minutesOf(longStartTime) > 366 * 1440)) { setError(t('Bitte den Zeitraum prüfen.')); setBusy(false); return; }
       if (!entry) {
         const times = longSpan ? { time: longStartTime, end: timeOfMinutes(longEnd) } : { time: draft ? timeOfMinutes(draft.start) : null, end: draft ? timeOfMinutes(draft.end) : null };
-        const made = { kind: kind === 'note' ? 'event' as const : kind, text: text.trim(), description: description.trim(), tag: tagId, ...times, priority, reminder, reminderBefore: reminder ? reminderBefore : 0, icon, showInJournal };
+        const made = { kind: kind === 'note' ? 'event' as const : kind, text: text.trim(), description: description.trim(), tag: tagId, ...times, timeGrid: Boolean(draft), priority, reminder, reminderBefore: reminder ? reminderBefore : 0, icon, showInJournal };
         await onCreate?.({ ...made, repeat: await repeatOf({ id: '', done: false, cancelled: false, plan: null, ...made }) });
       } else {
         // An entry without an end keeps having none, unless its length changed.
         const times = longSpan ? {time:longStartTime,end:timeOfMinutes((Date.parse(longEndDate)-Date.parse(date))/86400000*1440+minutesOf(longEndTime))} : draft ? { time: timeOfMinutes(draft.start), end: entry.end || length !== slotMinutes ? timeOfMinutes(draft.end) : null } : {};
         const repeat = await repeatOf(entry);
-        const change: EntryEdit = { kind, text: text.trim(), description: description.trim(), tag: tagId, priority, showInJournal, reminder: kind === 'note' ? false : reminder, reminderBefore: kind !== 'note' && reminder ? reminderBefore : 0, icon, ...times, ...kind === 'task' ? {} : { done: false, cancelled: false }, ...repeat ? { repeat } : {} };
+        const change: EntryEdit = { kind, text: text.trim(), description: description.trim(), tag: tagId, priority, showInJournal, reminder: kind === 'note' ? false : reminder, reminderBefore: kind !== 'note' && reminder ? reminderBefore : 0, icon, timeGrid: kind !== 'note' && Boolean(entry.timeGrid), ...times, ...kind === 'task' ? {} : { done: false, cancelled: false }, ...repeat ? { repeat } : {} };
         // A changed rule makes a new series anyway; otherwise the group decides whether there is anything to ask.
         const options = repeat ? [] : editScopes(await journal.linked(entry.id).catch(() => []), entry.id, date);
         if (options.length > 1) { setApplying({ change, options }); setBusy(false); return; }

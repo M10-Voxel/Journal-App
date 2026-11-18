@@ -8,10 +8,13 @@ mod schema;
 mod read;
 #[cfg(test)]
 mod performance_tests;
+#[cfg(test)]
+mod time_grid_tests;
 
 pub type ActivityMinutes = std::collections::BTreeMap<String, std::collections::BTreeMap<String, i64>>;
 
 fn default_true() -> bool { true }
+fn is_false(value: &bool) -> bool { !*value }
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
@@ -25,6 +28,8 @@ pub struct Entry {
     #[serde(default)] pub time: Option<String>,
     /// Optional end `HH:MM` on the same day, after `time` (entries made by marking a range in the calendar).
     #[serde(default)] pub end: Option<String>,
+    /// A range drawn in the hour grid stays in that grid across days; false keeps the traditional multiday lane.
+    #[serde(default, rename = "timeGrid", skip_serializing_if = "is_false")] pub time_grid: bool,
     /// Whether the user wants a reminder (see `due_reminders`).
     #[serde(default)] pub reminder: bool,
     /// How many minutes before the entry's time (or `REMINDER_DEFAULT`) the reminder comes; 0 at the time itself.
@@ -83,6 +88,7 @@ pub struct LinkedEdit {
     pub kind: String, pub text: String, #[serde(default)] pub description: String, #[serde(default)] pub tag: Option<String>, pub priority: bool, pub reminder: bool,
     #[serde(default = "default_true", rename = "showInJournal")] pub show_in_journal: bool, #[serde(default)] pub times: Option<LinkedTimes>,
     #[serde(default, rename = "reminderBefore")] pub reminder_before: i64, #[serde(default)] pub icon: Option<String>,
+    #[serde(default, rename = "timeGrid")] pub time_grid: Option<bool>,
 }
 #[derive(Clone, Debug, Deserialize)]
 pub struct LinkedTimes { pub time: Option<String>, #[serde(default)] pub end: Option<String> }
@@ -175,10 +181,10 @@ impl Store {
             } else { e.id.clone() };
             tx.execute("INSERT INTO days(date,title,body,revision) VALUES(?1,'','',1) ON CONFLICT(date) DO NOTHING", [&item.date])?;
             let position: i64 = tx.query_row("SELECT COALESCE(MAX(position)+1,0) FROM entries WHERE day_date=?1", [&item.date], |r| r.get(0))?;
-            tx.execute("INSERT INTO entries(id,day_date,kind,text,done,position,cancelled,priority,time,reminder,plan,end_time,show_in_journal,calendar_uid,description,series,tag,reminder_before,icon)
-                VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,NULL,?11,?12,?13,?14,?16,(SELECT id FROM tags WHERE id=?15),?17,?18)
-                ON CONFLICT(id) DO UPDATE SET reminder_before=excluded.reminder_before,icon=COALESCE(excluded.icon,entries.icon),day_date=excluded.day_date,kind=excluded.kind,text=excluded.text,description=excluded.description,done=excluded.done,cancelled=excluded.cancelled,priority=excluded.priority,time=excluded.time,reminder=excluded.reminder,end_time=excluded.end_time,show_in_journal=excluded.show_in_journal,calendar_uid=excluded.calendar_uid,series=excluded.series,tag=COALESCE(excluded.tag,entries.tag),position=CASE WHEN entries.day_date=excluded.day_date THEN entries.position ELSE excluded.position END",
-                params![id,item.date,e.kind,e.text,e.done,position,e.cancelled,e.priority,e.time,e.reminder,e.end,e.show_in_journal,e.calendar_uid,e.description,e.tag,series,e.reminder_before.clamp(0, MAX_REMINDER_BEFORE),e.icon.as_deref().filter(|icon| valid_icon(icon))])?;
+            tx.execute("INSERT INTO entries(id,day_date,kind,text,done,position,cancelled,priority,time,reminder,plan,end_time,show_in_journal,calendar_uid,description,series,tag,reminder_before,icon,time_grid)
+                VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,NULL,?11,?12,?13,?14,?16,(SELECT id FROM tags WHERE id=?15),?17,?18,?19)
+                ON CONFLICT(id) DO UPDATE SET reminder_before=excluded.reminder_before,icon=COALESCE(excluded.icon,entries.icon),time_grid=CASE WHEN excluded.time IS NULL THEN 0 ELSE MAX(excluded.time_grid,entries.time_grid) END,day_date=excluded.day_date,kind=excluded.kind,text=excluded.text,description=excluded.description,done=excluded.done,cancelled=excluded.cancelled,priority=excluded.priority,time=excluded.time,reminder=excluded.reminder,end_time=excluded.end_time,show_in_journal=excluded.show_in_journal,calendar_uid=excluded.calendar_uid,series=excluded.series,tag=COALESCE(excluded.tag,entries.tag),position=CASE WHEN entries.day_date=excluded.day_date THEN entries.position ELSE excluded.position END",
+                params![id,item.date,e.kind,e.text,e.done,position,e.cancelled,e.priority,e.time,e.reminder,e.end,e.show_in_journal,e.calendar_uid,e.description,e.tag,series,e.reminder_before.clamp(0, MAX_REMINDER_BEFORE),e.icon.as_deref().filter(|icon| valid_icon(icon)),e.time_grid && e.time.is_some()])?;
             // Keep a local tag when the source supplies none; otherwise use the imported category.
             let mut updated = e; updated.tag = tx.query_row("SELECT tag FROM entries WHERE id=?1", [&id], |r| r.get(0))?; updated.id = id;
             sync_linked(&tx, &updated, &mut touched)?;
@@ -198,7 +204,7 @@ impl Store {
         crate::history::begin(&tx)?;
         tx.execute("INSERT INTO days(date,title,body,revision) VALUES(?1,'','',1) ON CONFLICT(date) DO NOTHING", [to])?;
         let position: i64 = tx.query_row("SELECT COALESCE(MAX(position)+1,0) FROM entries WHERE day_date=?1", [to], |r| r.get(0))?;
-        tx.execute("UPDATE entries SET day_date=?2,time=?3,end_time=?4,position=CASE WHEN day_date=?2 THEN position ELSE ?5 END WHERE id=?1", params![id,to,time,end,position])?;
+        tx.execute("UPDATE entries SET day_date=?2,time=?3,end_time=?4,time_grid=CASE WHEN ?3 IS NULL THEN 0 ELSE time_grid END,position=CASE WHEN day_date=?2 THEN position ELSE ?5 END WHERE id=?1", params![id,to,time,end,position])?;
         let mut touched = BTreeSet::from([from.to_string(), to.to_string()]);
         let plans = tx.prepare("SELECT id,day_date,plan FROM entries WHERE plan IS NOT NULL")?.query_map([], |r| Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?)))?.collect::<rusqlite::Result<Vec<_>>>()?;
         for (plan_id, date, raw) in plans {
@@ -330,26 +336,26 @@ impl Store {
             for entry in &day.entries { clear.execute(params![entry.id, entry.calendar_uid])?; }
         }
         {
-            let mut insert = tx.prepare_cached("INSERT INTO entries(id,day_date,kind,text,done,position,cancelled,priority,time,reminder,plan,end_time,show_in_journal,calendar_uid,series,description,tag,reminder_before,icon) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19)
-                ON CONFLICT(id) DO UPDATE SET kind=excluded.kind,text=excluded.text,done=excluded.done,position=excluded.position,cancelled=excluded.cancelled,priority=excluded.priority,time=excluded.time,reminder=excluded.reminder,plan=excluded.plan,end_time=excluded.end_time,show_in_journal=excluded.show_in_journal,calendar_uid=excluded.calendar_uid,series=excluded.series,description=excluded.description,tag=excluded.tag,reminder_before=excluded.reminder_before,icon=excluded.icon
-                WHERE (entries.kind,entries.text,entries.done,entries.position,entries.cancelled,entries.priority,entries.time,entries.reminder,entries.plan,entries.end_time,entries.show_in_journal,entries.calendar_uid,entries.series,entries.description,entries.tag,entries.reminder_before,entries.icon)
-                  IS NOT (excluded.kind,excluded.text,excluded.done,excluded.position,excluded.cancelled,excluded.priority,excluded.time,excluded.reminder,excluded.plan,excluded.end_time,excluded.show_in_journal,excluded.calendar_uid,excluded.series,excluded.description,excluded.tag,excluded.reminder_before,excluded.icon)")?;
+            let mut insert = tx.prepare_cached("INSERT INTO entries(id,day_date,kind,text,done,position,cancelled,priority,time,reminder,plan,end_time,show_in_journal,calendar_uid,series,description,tag,reminder_before,icon,time_grid) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20)
+                ON CONFLICT(id) DO UPDATE SET kind=excluded.kind,text=excluded.text,done=excluded.done,position=excluded.position,cancelled=excluded.cancelled,priority=excluded.priority,time=excluded.time,reminder=excluded.reminder,plan=excluded.plan,end_time=excluded.end_time,show_in_journal=excluded.show_in_journal,calendar_uid=excluded.calendar_uid,series=excluded.series,description=excluded.description,tag=excluded.tag,reminder_before=excluded.reminder_before,icon=excluded.icon,time_grid=excluded.time_grid
+                WHERE (entries.kind,entries.text,entries.done,entries.position,entries.cancelled,entries.priority,entries.time,entries.reminder,entries.plan,entries.end_time,entries.show_in_journal,entries.calendar_uid,entries.series,entries.description,entries.tag,entries.reminder_before,entries.icon,entries.time_grid)
+                  IS NOT (excluded.kind,excluded.text,excluded.done,excluded.position,excluded.cancelled,excluded.priority,excluded.time,excluded.reminder,excluded.plan,excluded.end_time,excluded.show_in_journal,excluded.calendar_uid,excluded.series,excluded.description,excluded.tag,excluded.reminder_before,excluded.icon,excluded.time_grid)")?;
             for (position, entry) in day.entries.iter().enumerate() {
                 let plan = entry.plan.as_ref().map(serde_json::to_string).transpose()?;
-                insert.execute(params![entry.id,day.date,entry.kind,entry.text,entry.done,position as i64,entry.cancelled,entry.priority,entry.time,entry.reminder,plan,entry.end,entry.show_in_journal,entry.calendar_uid,series[position],entry.description,entry.tag,entry.reminder_before,entry.icon])?;
+                insert.execute(params![entry.id,day.date,entry.kind,entry.text,entry.done,position as i64,entry.cancelled,entry.priority,entry.time,entry.reminder,plan,entry.end,entry.show_in_journal,entry.calendar_uid,series[position],entry.description,entry.tag,entry.reminder_before,entry.icon,entry.time_grid && entry.time.is_some()])?;
             }
         }
         // A series started here gets its further occurrences, as open copies with this entry's time and reminder.
         for (index, dates) in &started {
             let entry = &day.entries[*index];
-            let copy = Template { kind: &entry.kind, text: &entry.text, description: &entry.description, tag: entry.tag.as_deref(), priority: entry.priority, time: entry.time.as_deref(), end: entry.end.as_deref(), reminder: entry.reminder, show_in_journal: entry.show_in_journal, reminder_before: entry.reminder_before, icon: entry.icon.as_deref() };
+            let copy = Template { kind: &entry.kind, text: &entry.text, description: &entry.description, tag: entry.tag.as_deref(), priority: entry.priority, time: entry.time.as_deref(), end: entry.end.as_deref(), reminder: entry.reminder, show_in_journal: entry.show_in_journal, reminder_before: entry.reminder_before, icon: entry.icon.as_deref(), time_grid: entry.time_grid };
             for date in dates { add_copy(&tx, date, &Uuid::new_v4().to_string(), &copy, series[*index].as_deref())?; touched.insert(date.clone()); }
         }
         // A newly planned trace moves its entry: an open copy with the planned time and reminder is appended to every target day.
         // A repeating plan starts its series there; an entry that repeated already continues differently from then on.
         for (index, entry) in day.entries.iter().enumerate() {
             let Some(plan) = &entry.plan else { continue };
-            let copy = Template { kind: &entry.kind, text: &entry.text, description: &entry.description, tag: entry.tag.as_deref(), priority: entry.priority, time: plan.time.as_deref(), end: plan.end.as_deref(), reminder: plan.reminder, show_in_journal: entry.show_in_journal, reminder_before: entry.reminder_before, icon: entry.icon.as_deref() };
+            let copy = Template { kind: &entry.kind, text: &entry.text, description: &entry.description, tag: entry.tag.as_deref(), priority: entry.priority, time: plan.time.as_deref(), end: plan.end.as_deref(), reminder: plan.reminder, show_in_journal: entry.show_in_journal, reminder_before: entry.reminder_before, icon: entry.icon.as_deref(), time_grid: entry.time_grid };
             for target in plan.targets.iter().filter(|target| !created.contains(&target.id)) {
                 let mut dates = Vec::new();
                 let repeating = match &plan.repeat {
@@ -408,13 +414,13 @@ impl Store {
         crate::history::begin(&tx)?;
         let mut touched = BTreeSet::new();
         {
-            let mut update = tx.prepare_cached("UPDATE entries SET kind=?2, text=?3, description=?4, tag=(SELECT id FROM tags WHERE id=?5), priority=?6, reminder=?7, show_in_journal=?8, reminder_before=?12, icon=?13,
+            let mut update = tx.prepare_cached("UPDATE entries SET kind=?2, text=?3, description=?4, tag=(SELECT id FROM tags WHERE id=?5), priority=?6, reminder=?7, show_in_journal=?8, reminder_before=?12, icon=?13, time_grid=CASE WHEN ?2='note' OR (?9 AND ?10 IS NULL) THEN 0 ELSE COALESCE(?14,time_grid) END,
                 done=CASE WHEN ?2='task' THEN done ELSE 0 END, cancelled=CASE WHEN ?2='task' THEN cancelled ELSE 0 END,
                 time=CASE WHEN ?9 THEN ?10 ELSE time END, end_time=CASE WHEN ?9 THEN ?11 ELSE end_time END WHERE id=?1 AND plan IS NULL RETURNING day_date")?;
             for id in ids {
                 let reminder = edit.reminder && edit.kind != "note";
                 let date: Option<String> = update.query_row(params![id, edit.kind, edit.text, edit.description, edit.tag, edit.priority, reminder, edit.show_in_journal,
-                    times.is_some(), times.and_then(|times| times.time.clone()), times.and_then(|times| times.end.clone()), edit.reminder_before, edit.icon], |r| r.get(0)).optional()?;
+                    times.is_some(), times.and_then(|times| times.time.clone()), times.and_then(|times| times.end.clone()), edit.reminder_before, edit.icon, edit.time_grid], |r| r.get(0)).optional()?;
                 touched.extend(date);
             }
             for date in &touched { tx.execute("UPDATE days SET revision=revision+1 WHERE date=?1", [date])?; }
@@ -518,10 +524,10 @@ impl Store {
             }
             let horizon: Option<String> = tx.prepare_cached("SELECT horizon FROM series WHERE id=?1")?.query_row([&extension.series], |r| r.get(0)).optional()?;
             if horizon.as_deref() != Some(extension.from.as_str()) { continue; }
-            let latest: Option<((String, String, bool, Option<String>, Option<String>, bool, bool, String, Option<String>), (i64, Option<String>))> = tx.prepare_cached("SELECT kind, text, priority, time, end_time, reminder, show_in_journal, description, tag, reminder_before, icon FROM entries WHERE series=?1 ORDER BY plan IS NOT NULL, day_date DESC LIMIT 1")?
-                .query_row([&extension.series], |r| Ok(((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?, r.get(8)?), (r.get(9)?, r.get(10)?)))).optional()?;
-            let Some(((kind, text, priority, time, end, reminder, show_in_journal, description, tag), (reminder_before, icon))) = latest else { continue };
-            let copy = Template { kind: &kind, text: &text, description: &description, tag: tag.as_deref(), priority, time: time.as_deref(), end: end.as_deref(), reminder, show_in_journal, reminder_before, icon: icon.as_deref() };
+            let latest: Option<((String, String, bool, Option<String>, Option<String>, bool, bool, String, Option<String>), (i64, Option<String>, bool))> = tx.prepare_cached("SELECT kind, text, priority, time, end_time, reminder, show_in_journal, description, tag, reminder_before, icon, time_grid FROM entries WHERE series=?1 ORDER BY plan IS NOT NULL, day_date DESC LIMIT 1")?
+                .query_row([&extension.series], |r| Ok(((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?, r.get(8)?), (r.get(9)?, r.get(10)?, r.get(11)?)))).optional()?;
+            let Some(((kind, text, priority, time, end, reminder, show_in_journal, description, tag), (reminder_before, icon, time_grid))) = latest else { continue };
+            let copy = Template { kind: &kind, text: &text, description: &description, tag: tag.as_deref(), priority, time: time.as_deref(), end: end.as_deref(), reminder, show_in_journal, reminder_before, icon: icon.as_deref(), time_grid };
             for date in &extension.dates { add_copy(&tx, date, &Uuid::new_v4().to_string(), &copy, Some(&extension.series))?; touched.insert(date.clone()); }
             tx.execute("UPDATE series SET horizon=?2 WHERE id=?1", [&extension.series, &extension.to])?;
         }
@@ -610,14 +616,14 @@ fn end_series(tx: &Connection, series: &str, date: &str, successor: Option<(&str
     Ok(())
 }
 /// What a copy (planned or repeated) takes from its original.
-struct Template<'a> { kind: &'a str, text: &'a str, description: &'a str, tag: Option<&'a str>, priority: bool, time: Option<&'a str>, end: Option<&'a str>, reminder: bool, show_in_journal: bool, reminder_before: i64, icon: Option<&'a str> }
+struct Template<'a> { kind: &'a str, text: &'a str, description: &'a str, tag: Option<&'a str>, priority: bool, time: Option<&'a str>, end: Option<&'a str>, reminder: bool, show_in_journal: bool, reminder_before: i64, icon: Option<&'a str>, time_grid: bool }
 /// Appends an open copy to `date` (creating the day if needed, otherwise marking it changed).
 fn add_copy(tx: &Connection, date: &str, id: &str, copy: &Template, series: Option<&str>) -> Result<()> {
     if tx.prepare_cached("SELECT 1 FROM entries WHERE id=?1")?.query_row([id], |_| Ok(())).optional()?.is_some() { return Err("Der geplante Eintrag existiert bereits".into()); }
     tx.prepare_cached("INSERT INTO days(date,title,body,revision) VALUES(?1,'','',1) ON CONFLICT(date) DO UPDATE SET revision=revision+1")?.execute([date])?;
     let position: i64 = tx.prepare_cached("SELECT COALESCE(MAX(position)+1,0) FROM entries WHERE day_date=?1")?.query_row([date], |r| r.get(0))?;
-    tx.prepare_cached("INSERT INTO entries(id,day_date,kind,text,done,position,cancelled,priority,time,reminder,plan,end_time,show_in_journal,calendar_uid,series,description,tag,reminder_before,icon) VALUES(?1,?2,?3,?4,0,?5,0,?6,?7,?8,NULL,?9,?10,NULL,?11,?12,?13,?14,?15)")?
-        .execute(params![id, date, copy.kind, copy.text, position, copy.priority, copy.time, copy.reminder, copy.end, copy.show_in_journal, series, copy.description, copy.tag, copy.reminder_before, copy.icon])?;
+    tx.prepare_cached("INSERT INTO entries(id,day_date,kind,text,done,position,cancelled,priority,time,reminder,plan,end_time,show_in_journal,calendar_uid,series,description,tag,reminder_before,icon,time_grid) VALUES(?1,?2,?3,?4,0,?5,0,?6,?7,?8,NULL,?9,?10,NULL,?11,?12,?13,?14,?15,?16)")?
+        .execute(params![id, date, copy.kind, copy.text, position, copy.priority, copy.time, copy.reminder, copy.end, copy.show_in_journal, series, copy.description, copy.tag, copy.reminder_before, copy.icon, copy.time_grid && copy.time.is_some()])?;
     Ok(())
 }
 /// A series without occurrences is gone.
@@ -644,7 +650,7 @@ fn validate_date(date: &str) -> Result<()> {
 mod tests {
     use super::*;
     fn store() -> Store { Store::from_connection(Connection::open_in_memory().unwrap()).unwrap() }
-    fn entry(kind: &str) -> Entry { Entry { id:Uuid::new_v4().to_string(), kind:kind.into(), text:"Beispiel".into(), done:false, cancelled:false, priority:false, time:None, end:None, reminder:false, plan:None, origin:None, show_in_journal:true, calendar_uid:None, description:String::new(), tag:None, repeat:None, reminder_before:0, icon:None } }
+    fn entry(kind: &str) -> Entry { Entry { id:Uuid::new_v4().to_string(), kind:kind.into(), text:"Beispiel".into(), done:false, cancelled:false, priority:false, time:None, end:None, reminder:false, plan:None, origin:None, show_in_journal:true, calendar_uid:None, description:String::new(), tag:None, repeat:None, reminder_before:0, icon:None, time_grid:false } }
     fn plan(via: &str, dates: &[&str], time: Option<&str>, reminder: bool) -> Plan {
         Plan { via: via.into(), targets: dates.iter().map(|date| PlanTarget { date: (*date).into(), id: Uuid::new_v4().to_string() }).collect(), time: time.map(Into::into), end: None, reminder, repeat: None }
     }
@@ -1040,7 +1046,7 @@ mod tests {
         assert_eq!(db.load("2026-11-05").unwrap().entries[0].text, "Beispiel");
         // "Every Thursday" (or all): the chosen ones get kind, text, details and times; the trace stays as it is.
         let edit = LinkedEdit { kind: "event".into(), text: "Donnerstags".into(), description: "Raum 2".into(), tag: Some("unbekannt".into()), priority: true, reminder: true, show_in_journal: true,
-            times: Some(LinkedTimes { time: Some("09:15".into()), end: Some("10:30".into()) }), reminder_before: 0, icon: None };
+            times: Some(LinkedTimes { time: Some("09:15".into()), end: Some("10:30".into()) }), reminder_before: 0, icon: None, time_grid: None };
         let changed = db.edit_linked(&[targets[1].clone(), targets[2].clone(), trace.clone()], &edit).unwrap();
         assert_eq!(changed, vec!["2026-11-05".to_string(), "2026-11-12".to_string()]);
         let moved = &db.load("2026-11-12").unwrap().entries[0];
@@ -1269,7 +1275,7 @@ mod tests {
         day.entries[0].plan = Some(plan("tomorrow", &["2026-10-29"], None, false));
         db.save(day).unwrap();
         assert_eq!(db.load("2026-10-29").unwrap().entries[0].text, "Bestehend");
-        assert_eq!(db.conn.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0)).unwrap(), 14);
+        assert_eq!(db.conn.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0)).unwrap(), crate::vault::SCHEMA_VERSION);
     }
     #[test] fn save_reload_and_isolate_days() {
         let mut db = store(); let mut day = db.load("2024-02-29").unwrap(); day.title="Ein Tag".into(); day.entries=vec![entry("task"),entry("event"),entry("note")];

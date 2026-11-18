@@ -11,7 +11,7 @@ pub const LOCAL: &str = "journal.local.json";
 /// The app's identifier (`tauri.conf.json`); its data folder holds `vault.json`.
 pub const IDENTIFIER: &str = "de.journal.local";
 /// The newest database version this code knows (see `storage/schema.rs`).
-pub const SCHEMA_VERSION: i64 = 14;
+pub const SCHEMA_VERSION: i64 = 15;
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

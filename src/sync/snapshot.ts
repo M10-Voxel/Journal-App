@@ -58,7 +58,7 @@ export function upgradeSnapshot(value:Json):Record<string,Json>{
       if (!records || typeof records !== 'object' || Array.isArray(records)) continue;
       tables[table] = Object.fromEntries(Object.entries(records).map(([id,record]) => [id,
         record && typeof record === 'object' && !Array.isArray(record)
-          ? {...(table === 'entries' ? {reminder_before:0} : {}),icon:null,...record} : record]));
+          ? {...(table === 'entries' ? {reminder_before:0,time_grid:0} : {}),icon:null,...record} : record]));
     }
     return {...snapshot,tables,...(value.preferences ? {preferences:syncPreferences(value.preferences)} : {})};
   }
