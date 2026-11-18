@@ -315,6 +315,13 @@ fn toggle(bar: &Bar) {
 }
 
 fn connect(bar: &Bar) {
+    bar.on_calendar_resized(|height| with_app(|app| {
+        if height > 0.0 && app.state.metrics.height != height {
+            app.state.metrics.height = height;
+            let calendar = app.state.calendar_view();
+            app.draw_calendar(calendar);
+        }
+    }));
     bar.on_cal_mouse(|button, kind, x, y, shift| with_app(|app| {
         // Moving without a button only matters while marking.
         if kind == 1 && !app.state.marking() { return; }
@@ -598,6 +605,26 @@ mod tests {
         send_key_combo(&bar, [K::Return]);
         send_key_combo(&bar, [K::Return]);
         assert_eq!(bar.get_active(), F::Description.index() as i32, "Enter on more opens it.");
+        // Reopen the weekly editor with More expanded, as in the reported blank area.
+        for _ in 0..3 { send_key_combo(&bar, [K::UpArrow]); }
+        assert_eq!(bar.get_active(), F::Repeat.index() as i32);
+        send_key_combo(&bar, [K::Return]);
+        let theme = bar.global::<Theme>();
+        let expanded = bar.get_content_height();
+        assert!(expanded > theme.get_calendar_height());
+        let resize_and_check_calendar = |height| {
+            let size = slint::LogicalSize::new(theme.get_width(), height);
+            bar.window().dispatch_event(slint::platform::WindowEvent::Resized { size });
+            i_slint_backend_testing::mock_elapsed_time(Duration::from_millis(1));
+            let bands = bar.get_cal_bands();
+            let last = bands.row_data(bands.row_count() - 1).unwrap();
+            assert!(last.y < height && last.y + last.h >= height, "The last day must cover the viewport bottom at {height}.");
+        };
+        resize_and_check_calendar(expanded);
+        send_key_combo(&bar, [K::Escape]);
+        resize_and_check_calendar(bar.get_content_height());
+        for _ in 0..3 { send_key_combo(&bar, [K::DownArrow]); }
+        assert_eq!(bar.get_active(), F::Description.index() as i32);
         send_key_combo(&bar, [K::Tab]);
         send_key_combo(&bar, [K::Tab]);
         send_key_combo(&bar, [K::Return]);
@@ -737,6 +764,13 @@ mod tests {
         let pixels = visual.window().take_snapshot().unwrap();
         let width = pixels.width() as usize;
         let pixel = |x: usize, y: usize| pixels.as_slice()[y * width + x];
+        // The shared window frame must also clip the calendar header and the last day.
+        let bottom = pixels.height() as usize - 1;
+        for y in [0, 2, bottom - 2, bottom] {
+            for x in 0..theme.get_radius() as usize {
+                assert_eq!(pixel(x, y).a, pixel(width - 1 - x, y).a, "Corner coverage at ({x}, {y})");
+            }
+        }
         let count = |x: usize, y: usize, w: usize, h: usize, predicate: fn(slint::Rgba8Pixel) -> bool| {
             (y..y + h).flat_map(|y| (x..x + w).map(move |x| pixel(x, y))).filter(|p| predicate(*p)).count()
         };

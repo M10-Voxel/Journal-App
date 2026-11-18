@@ -112,6 +112,8 @@ Offene Aufgaben. Erledigtes mit `[x]` markieren. Vollständiger Plan: `docs/plan
   - Kleiner Eckenradius für die schmalen Balken zentral im Theme. Layout- und Renderprüfungen für beide Positionen, gemischte Zeitspannen und wiederverwendete Reihen.
   - 109 Tests grün; gerenderte Beschriftungen samt Symbolen oben/unten und die weniger gerundeten Enden geprüft. Nur Test-Datenbanken und künstliche UI-Daten.
   - Release erfolgreich als `j-terminal/target/release/j-terminal-updated.exe` gebaut, da die bisherige EXE noch läuft.
+- [x] **Kalender bis zum unteren Fensterrand fortsetzen.** Der UI-Test öffnet und schließt den Wiederholungseditor bei ausgeklapptem „Mehr“ und prüft, dass die letzte sichtbare Tageszeile jeweils den unteren Rand erreicht.
+- [x] **Rechte Kalenderecken abrunden.** Der Fensterrahmen schneidet Kalenderkopf und Tageszeilen mit derselben Rundung wie links zu.
 - [ ] **Stufe 5: Bewertung und Aktivitäten in der Tagesansicht**
   - Tagesbewertung und eigene Skalen als platzsparende runde Dials mit Bezeichnung und Wert; Maus, Pfeiltasten und Zahleneingabe. Vorhandene Skalenregeln beachten und auf den angezeigten Tag speichern.
   - Aktivitäten starten/stoppen, abhaken und Zeiten nachtragen; laufende Timer auch beim Betrachten eines anderen Tages sichtbar halten. Vorhandene Aktivitätslogik übernehmen und zusammen mit dem Tageswechsel prüfen.

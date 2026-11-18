@@ -69,6 +69,9 @@ export component Bar inherits Window {
     in property <bool> cal-focus;
     callback cal-mouse(int, int, length, length, bool);
     callback cal-wheel(length, length, bool, bool);
+    callback calendar-resized(length);
+    private property <length> calendar-viewport-height: calendar.height;
+    changed calendar-viewport-height => { root.calendar-resized(self.calendar-viewport-height); }
     // The search bar
     in property <bool> entry-open;
     in property <string> search-placeholder;
@@ -113,7 +116,7 @@ export component Bar inherits Window {
         border-color: Theme.border;
         border-width: Theme.border-width;
         border-radius: Theme.radius;
-    }
+        clip: true;
     HorizontalLayout {
     layout := VerticalLayout {
         width: Theme.form-width;
@@ -488,7 +491,7 @@ export component Bar inherits Window {
         }
     }
     Rectangle { width: Theme.border-width; background: Theme.divider; }
-    Calendar {
+    calendar := Calendar {
         width: Theme.calendar-width;
         bands: root.cal-bands;
         blocks: root.cal-blocks;
@@ -510,6 +513,7 @@ export component Bar inherits Window {
         focused: root.cal-focus;
         mouse(button, kind, x, y, shift) => { root.cal-mouse(button, kind, x, y, shift); }
         wheel(x, delta, ctrl, shift) => { root.cal-wheel(x, delta, ctrl, shift); }
+    }
     }
     }
 }

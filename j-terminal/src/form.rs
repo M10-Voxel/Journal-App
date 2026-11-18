@@ -1234,7 +1234,7 @@ impl Form {
 
     /// The calendar for what the form holds now: the days around it are read, and it moves to the cursor or the draft
     /// when that left what is shown (but never while the mouse marks something).
-    fn calendar_view(&mut self) -> Layout {
+    pub fn calendar_view(&mut self) -> CalendarView {
         if let (Some(journal), Some(snapshot)) = (&self.journal, &mut self.snapshot) {
             let _ = snapshot.ensure(&journal.store, repeat::shift(self.cal_top, -crate::snapshot::LOOKBACK), repeat::shift(self.cal_top, crate::snapshot::AHEAD));
         }
@@ -1255,7 +1255,7 @@ impl Form {
         let layout = calendar::layout(&self.cal_input(&items, &open, &none), &m);
         self.shown_layout = layout.clone();
         self.shown_metrics = m;
-        layout
+        CalendarView { layout, focus: matches!(self.options, Some(Options::Calendar(_))), metrics: m }
     }
 
     // ----- Reading the form -----
@@ -1357,7 +1357,7 @@ impl Form {
     // ----- What is drawn -----
 
     pub fn view(&mut self) -> View {
-        let calendar = CalendarView { layout: self.calendar_view(), focus: matches!(self.options, Some(Options::Calendar(_))), metrics: self.shown_metrics };
+        let calendar = self.calendar_view();
         let ft = self.ft();
         let field = self.field();
         let problem = self.live_problem();
