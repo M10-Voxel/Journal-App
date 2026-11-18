@@ -16,6 +16,8 @@ Vor einer Wiederherstellung werden ausstehende Journaländerungen sowie Pinnwand
 
 Es entstehen keine vollständigen Datenbank-/Bildkopien. Bilddateien bleiben über ihre vorhandene Referenz erhalten; `period-data` ist ein gemeinsamer JSON-Datensatz und wird als Einheit protokolliert. Wiederherstellung beachtet Fremdschlüssel und erhöht Tagesrevisionen gegen veraltete Schreibzugriffe.
 
+Die Historie liegt in der Datenbank und gehört allen Programmen, die sie über `journal-core` öffnen. Was J-TerminaL schreibt, lässt sich in der App mit Strg+Z zurücknehmen, und umgekehrt. Ein Rückgängig in einem anderen Programm meldet die App wie ein eigenes (`history:restored`, siehe [Datenkern](journal-core.md)).
+
 Neue Inhaltsschreibwege müssen `history::begin` in ihrer Transaktion aufrufen. Neue Tabellen oder Settings-Präfixe müssen in `history::install` und gegebenenfalls in die Wiederherstellungsreihenfolge aufgenommen werden. Inkompatible Schemamigrationen benötigen eine Anpassung oder Leerung der Historie.
 
-Implementierung: `src-tauri/src/history.rs`, `src/components/UndoShortcuts.tsx`, `src/viewHistory.ts`. Browserbereich `undo`; siehe [Entwicklung](development.md).
+Implementierung: `crates/journal-core/src/history.rs` (Historie), `src-tauri/src/history.rs` (Befehl), `src/components/UndoShortcuts.tsx`, `src/viewHistory.ts`. Browserbereich `undo`; siehe [Entwicklung](development.md).

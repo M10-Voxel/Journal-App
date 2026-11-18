@@ -20,7 +20,8 @@ npm.cmd run tauri dev
 | Befehl | Ergebnis |
 | --- | --- |
 | `npm.cmd test` | Frontend-/Logiktests und Tests der Release-Automatik |
-| `cargo test --locked --manifest-path src-tauri/Cargo.toml` | Native Tests mit temporären Beispieldatenbanken |
+| `cargo test --locked --manifest-path crates/journal-core/Cargo.toml` | Tests des Datenkerns (Speicher, Migrationen, Historie, Sync-Snapshot, Vault-Zeiger, Änderungen von außen) mit temporären Beispieldatenbanken |
+| `cargo test --locked --manifest-path src-tauri/Cargo.toml` | Native Tests der App (Pinnwand, Drive, Kalender, Mail …) |
 | `npm.cmd run build` | TypeScript-Prüfung und Frontend in `dist/` |
 | `npm.cmd run check:ui` | Browserprüfung des gebauten Frontends mit Edge und synthetischen Tauri-IPC-Daten |
 | `npm.cmd run tauri build -- --no-bundle` | Release-EXE ohne Installer |
@@ -52,7 +53,7 @@ Browser-Mocks prüfen weder echte Anbieteranmeldungen noch eine native Installat
 | Notizblock | `src/components/Notebook.tsx`, `src/notebook.ts` |
 | Mail-Erkennung | `src/mail.ts`, `src/mailRecognize.ts` (bei Bedarf geladen), `src/mailMl.ts`, `src/mailContext.ts`, `src-tauri/src/mail/` |
 | Drive und Zusammenführung | `src/components/DriveSettings.tsx`, `src/sync/`, `src-tauri/src/drive.rs` |
-| Datenbank, Vault, Historie | `src-tauri/src/storage.rs` (Modelle/Schreiben), `src-tauri/src/storage/schema.rs` (Öffnen/Migrationen), `src-tauri/src/storage/read.rs` (Lesen/Aktivitätssummen), `vault.rs`, `history.rs` |
+| Datenbank, Vault, Historie | Datenkern `crates/journal-core` ([Datenkern](journal-core.md)): `storage.rs` (Modelle/Schreiben), `storage/schema.rs` (Öffnen/Migrationen), `storage/read.rs` (Lesen/Aktivitätssummen), `history.rs`, `sync.rs` (Drive-Snapshot), `vault.rs` (Vault-Zeiger), `watch.rs` (Änderungen von außen). In der App: `src-tauri/src/vault.rs` (Vault wählen/umziehen), `history.rs` (Befehl), `external.rs` |
 | Darstellung | `src/settings.ts`, `src/colors.ts`, `src/i18n.ts`, Theme-CSS |
 
 Jedes Fenster lädt nur seinen eigenen Code: `src/main.tsx` entscheidet anhand des Fensterlabels und lädt das Journal (`App.tsx`), Widgets, Kalender-, Mini-, Erinnerungs- und herausgelöste Fenster jeweils als eigenen Chunk. Die Stylesheets der Komponenten bleiben in `main.tsx` in fester Reihenfolge importiert, damit die Kaskade (Optiken zuletzt) in jedem Fenster gleich ist; neue Komponenten-CSS gehört dort vor `styles.css` eingetragen. Code, den alle Fenster brauchen (`UndoShortcuts`, `ThemeSync` …), soll keine schweren Module statisch importieren; die Pinnwand meldet ihr Leeren der Warteschlange über `registerBoardFlush` (`src/editorFlush.ts`).

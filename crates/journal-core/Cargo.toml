@@ -1,0 +1,13 @@
+[package]
+name = "journal-core"
+version = "0.1.0"
+edition = "2021"
+description = "The journal's data: SQLite storage, schema and migrations, undo history, sync snapshots and the vault pointer. Shared by the Journal app and J-TerminaL."
+license = "MIT"
+
+[dependencies]
+rusqlite = { version = "0.37", features = ["bundled", "backup"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
+uuid = { version = "1", features = ["v4"] }

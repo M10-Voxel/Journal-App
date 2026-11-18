@@ -28,6 +28,6 @@ Exportiert werden Aufgaben und Ereignisse einschließlich reiner Kalendereinträ
 
 ICS wird in `src-tauri/src/calendar.rs` verarbeitet (Parser `ical`, Serien `rrule`, IANA-Zeitzonen `chrono-tz`, eingebettete `VTIMEZONE`-Definitionen). `src/ical.ts` ist die asynchrone Tauri-Schnittstelle. Auch Vorschau, Fortsetzung und Verschieben gespeicherter ICS-Regeln verwenden Rust; normale Journal-Regeln bleiben in TypeScript.
 
-Implementierung: `src/ical.ts`, `src-tauri/src/calendar.rs`, `src/components/CalendarTransfer.tsx`, Importbefehle in `src-tauri/src/storage.rs`. Logiktests: `tests/ical.test.mjs`; Browserbereich `calendar`.
+Implementierung: `src/ical.ts`, `src-tauri/src/calendar.rs`, `src/components/CalendarTransfer.tsx`, Importbefehle in `crates/journal-core/src/storage.rs`. Logiktests: `tests/ical.test.mjs`; Browserbereich `calendar`.
 
 `npm test` baut zuerst den isolierten Rust-Testprozess `calendar-probe` (Windows C++ Build Tools erforderlich). Gemeinsame JSON-Fixtures liegen unter `tests/fixtures/ical-*.json`; `cargo test` prüft sie ebenfalls.

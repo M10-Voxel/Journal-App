@@ -2,19 +2,12 @@
 //! Changes take effect on restart, after every window and background writer has stopped.
 use std::{collections::BTreeMap, fs, path::{Path, PathBuf}, sync::Mutex};
 use rusqlite::{Connection, OpenFlags};
-use serde::{Deserialize, Serialize};
+use journal_core::vault::{error, read_config, validate, Config, Pending, DB, LOCAL};
+use serde::Serialize;
 use tauri::Manager;
 
 type Result<T> = std::result::Result<T, String>;
 type Preferences = BTreeMap<String, String>;
-const DB: &str = "journal.sqlite3";
-const LOCAL: &str = "journal.local.json";
-
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct Pending { path: PathBuf, mode: String }
-#[derive(Default, Serialize, Deserialize)]
-struct Config { active: Option<PathBuf>, pending: Option<Pending> }
 pub struct Vault { pub path: PathBuf, global: PathBuf, error: Option<String>, operation: Mutex<()> }
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -22,14 +15,6 @@ pub struct Status { path: String, legacy: bool, preferences: Option<Preferences>
 #[derive(Serialize)]
 pub struct Choice { path: String }
 
-fn error(e: impl std::fmt::Display) -> String { format!("Vault: {e}") }
-fn read_config(global: &Path) -> Result<Config> {
-    match fs::read(global.join("vault.json")) {
-        Ok(bytes) => serde_json::from_slice(&bytes).map_err(error),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Config::default()),
-        Err(e) => Err(error(e)),
-    }
-}
 // rename-over-existing is atomic on Windows and Unix. A failed write keeps the old pointer.
 fn write_json(path: &Path, value: &impl Serialize) -> Result<()> {
     let temp = path.with_extension(format!("{}.tmp", uuid::Uuid::new_v4()));
@@ -41,15 +26,6 @@ fn write_json(path: &Path, value: &impl Serialize) -> Result<()> {
 }
 fn empty(path: &Path) -> Result<()> {
     if fs::read_dir(path).map_err(error)?.next().is_some() { return Err(error("Für einen neuen Vault bitte einen leeren Ordner auswählen.")); }
-    Ok(())
-}
-fn validate(path: &Path) -> Result<()> {
-    let db = Connection::open_with_flags(path.join(DB), OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(error)?;
-    let version: i64 = db.pragma_query_value(None, "user_version", |r| r.get(0)).map_err(error)?;
-    if !(1..=14).contains(&version) { return Err(error("Kein unterstützter Journal-Vault. Eventuell benötigt er eine neuere App-Version.")); }
-    for table in ["days", "entries"] { db.prepare(&format!("SELECT * FROM {table} LIMIT 0")).map_err(error)?; }
-    let check: String = db.query_row("PRAGMA quick_check", [], |r| r.get(0)).map_err(error)?;
-    if check != "ok" { return Err(error("Die Datenbankprüfung ist fehlgeschlagen.")); }
     Ok(())
 }
 fn backup(source: &Path, target: &Path) -> Result<()> {

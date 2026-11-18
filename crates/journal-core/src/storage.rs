@@ -120,7 +120,8 @@ pub const REMINDER_DEFAULT: &str = "09:00";
 pub const MAX_REMINDER_BEFORE: i64 = 30 * 24 * 60;
 /// An entry's icon: a Lucide name (lower-case words joined by hyphens).
 pub fn valid_icon(icon: &str) -> bool { !icon.is_empty() && icon.len() <= 64 && icon.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-') }
-pub struct Store { pub(crate) conn: Connection }
+/// `conn` is open to the app's own modules (board, Drive) that write their settings rows directly.
+pub struct Store { pub conn: Connection }
 
 impl Store {
     pub fn interface_language(&self) -> Result<String> { Ok(self.conn.query_row("SELECT value FROM settings WHERE key='ui-language'", [], |row|row.get(0)).optional()?.unwrap_or_else(||"de".into())) }

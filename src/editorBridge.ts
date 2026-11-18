@@ -32,6 +32,12 @@ export async function serializeEditorMutation<T>(work: () => Promise<T>): Promis
   return sessions.run(async () => { await sessions.flush(); const result = await work(); await sessions.reload(); return result; });
 }
 
+/** In the editor's queue like a mutation, but without saving first: for taking in what was saved elsewhere. */
+export async function serializeEditorRead<T>(work: () => Promise<T>): Promise<T> {
+  if (!host) return work();
+  return host.run(work);
+}
+
 /** Only installed in the resident main window; widgets never call save_day. */
 export async function installEditorHost(editor: CurrentDayEditor) {
   let sequence = 0;

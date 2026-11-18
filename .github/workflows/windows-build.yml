@@ -50,6 +50,7 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             src-tauri/target
+            crates/journal-core/target
           key: windows-rust-${{ runner.arch }}-${{ hashFiles('src-tauri/Cargo.lock') }}
           restore-keys: windows-rust-${{ runner.arch }}-
       - run: npm ci
@@ -59,6 +60,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/ci-release.mjs prepare
       - run: npm test
+      - name: Data core tests
+        run: cargo test --locked --manifest-path crates/journal-core/Cargo.toml
       - name: Backend tests
         run: cargo test --locked --manifest-path src-tauri/Cargo.toml
       - name: Build test downloads

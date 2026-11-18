@@ -8,7 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { DayEditor } from './components/DayEditor';
 import type { DesktopWidgetState } from './desktopWidgets';
-import { flushEditorSessions, hasEditorDrafts, installEditorHost, loadEditorDay, publishEditorDay, reloadEditorSessions, serializeEditorMutation } from './editorBridge';
+import { flushEditorSessions, hasEditorDrafts, installEditorHost, loadEditorDay, publishEditorDay, reloadEditorSessions, serializeEditorMutation, serializeEditorRead } from './editorBridge';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { invoke } from '@tauri-apps/api/core';
 import { emit, listen } from '@tauri-apps/api/event';
@@ -257,6 +257,23 @@ export function App() {
     });
     return () => { void stop.then(fn => fn()); };
   }, []);
+  // Written by another program on the same database (J-TerminaL, see external.rs) on the day shown: what it saved joins
+  // the editor like an import does (entries edited here keep those edits), and the revision moves on, so unsaved
+  // typing is saved on top of it. Nothing is saved first: that would be refused as stale.
+  const takeInExternal = useStableCallback(async (target: string) => {
+    const before = journal.cached(target);
+    journal.invalidateDates([target]);
+    const refreshed = await journal.load(target);
+    setDay(current => current?.date === target ? mergeCalendarImport(current, before, refreshed) : current);
+  });
+  useEffect(() => {
+    const stop = listen<string[]>('journal:external', event => {
+      const target = dateRef.current;
+      if (!event.payload.includes(target)) return;
+      void serializeEditorRead(() => takeInExternal(target)).catch(reason => setError(String(reason)));
+    });
+    return () => { void stop.then(fn => fn()); };
+  }, []);
   useEffect(() => {
     const stops = [
       listen('journal:hello', () => { void emit('journal:date', dateRef.current); void emit('journal:board-context', boardContextRef.current); }),
@@ -377,7 +394,14 @@ export function App() {
       setSavedCount(count => count + 1);
       return unchanged;
     }
-    catch (reason) { setError(t("Speichern fehlgeschlagen: {0}", String(reason))); pendingNavigation.current = null; return false; }
+    catch (reason) {
+      // Another program saved this day a moment ago (before external.rs noticed): take that in; saving by itself then
+      // tries again with the new revision.
+      if (String(reason).includes('Dieser Tag wurde inzwischen geändert')) {
+        try { await takeInExternal(snapshot.date); pendingNavigation.current = null; return false; } catch { /* reported below */ }
+      }
+      setError(t("Speichern fehlgeschlagen: {0}", String(reason))); pendingNavigation.current = null; return false;
+    }
     finally { busyRef.current = false; setBusy(false); }
   });
   const currentDayRef = useRef<Day | null>(null);

@@ -395,6 +395,8 @@ const bootstrap = `
       return [...changed].sort();
     }
     if (command === 'save_day') {
+      // Like storage.rs, where a check asks for it: a day saved elsewhere meanwhile refuses the stale state.
+      if (window.__uiTest.strictRevision && (days.get(payload.day.date)?.revision ?? 0) !== payload.day.revision) throw new Error('Dieser Tag wurde inzwischen geändert. Bitte neu laden.');
       const value = structuredClone(payload.day); value.revision += 1;
       // Edits kept with their entry ("only this one") are not passed on (keepAlone in storage.rs).
       const alone = new Set(value.keepAlone ?? []); delete value.keepAlone;
@@ -5462,6 +5464,34 @@ try {
     await until("document.querySelector('.entry .entry-text').value==='Restored content'");
     assert(await evaluate("window.__sameRow===document.querySelector('.entry')"));
     console.log('Undo UI passed: local text undo, empty entry removal, redo and in-place refresh.');
+  } else if (process.env.JOURNAL_UI_SCOPE === 'external-writes') {
+    // Another program (J-TerminaL) writes the day shown: its entry joins the editor, unsaved typing here stays and is
+    // saved on top of it. A save racing the other write is refused as stale (like storage.rs), the write taken in, and
+    // saving by itself goes through on the next try, without an error.
+    await evaluate("window.__uiTest.strictRevision=true; window.__journalAutosaveDelay=200; true");
+    const typeAtEnd = async text => {
+      await evaluate("(() => { const field=document.querySelector('.entry .entry-text'); field.focus(); field.setSelectionRange(field.value.length, field.value.length); return true; })()");
+      await command('Input.insertText', { text });
+    };
+    const external = (id, text) => `(() => { const d=window.__uiTest.day(); d.revision+=1; d.entries.push({ id:'${id}', kind:'task', text:'${text}', done:false, cancelled:false, priority:false }); window.__uiTest.store(d); return true; })()`;
+    const stored = "window.__uiTest.day().entries.map(entry => entry.text)";
+    await evaluate("window.__journalAutosaveDelay=3600000; true");
+    await typeAtEnd(' – hier getippt');
+    await evaluate(external('40000000-0000-4000-8000-000000000001', 'Von J-TerminaL'));
+    await evaluate("window.__uiTest.emit('journal:external',[window.__uiTest.date])");
+    await until("[...document.querySelectorAll('.entry .entry-text')].some(field => field.value==='Von J-TerminaL')");
+    assert(await evaluate("[...document.querySelectorAll('.entry .entry-text')].some(field => field.value.endsWith(' – hier getippt'))"), 'Typing in progress survives an external write.');
+    await evaluate("window.__journalAutosaveDelay=200; true");
+    await typeAtEnd('!');
+    await until(`${stored}.some(text => text.endsWith(' – hier getippt!')) && ${stored}.includes('Von J-TerminaL')`);
+    // The other program writes before this window's poll noticed it; the save just after is stale.
+    await typeAtEnd(' und weiter');
+    await evaluate(external('40000000-0000-4000-8000-000000000002', 'Noch eins'));
+    await until(`${stored}.some(text => text.endsWith(' und weiter')) && ${stored}.includes('Noch eins')`);
+    await until("[...document.querySelectorAll('.entry .entry-text')].some(field => field.value==='Noch eins')");
+    assert.equal(await evaluate("document.body.innerText.includes('Speichern fehlgeschlagen')"), false, 'A refused stale save shows no error.');
+    assert.deepEqual(errors, []);
+    console.log('External writes passed: entries written elsewhere join the day shown, unsaved typing stays, a stale save recovers by itself.');
   } else if (process.env.JOURNAL_UI_SCOPE === 'period-boards') {
     await command('Emulation.setFocusEmulationEnabled',{enabled:true});
     await command('Emulation.setDeviceMetricsOverride',{width:1800,height:1100,deviceScaleFactor:1,mobile:false});

@@ -60,7 +60,7 @@ Einträge, Bilder, offene Ansichten, Modellgröße und WebView2-Version bestimme
 
 ## Reproduzierbare Regressionen
 
-Die nativen Tests unter `src-tauri/src/storage/performance_tests.rs` verwenden ausschließlich Testdaten:
+Die nativen Tests unter `crates/journal-core/src/storage/performance_tests.rs` verwenden ausschließlich Testdaten:
 
 | Fall | Bisheriger Weg | Optimierter Weg |
 | --- | --- | --- |

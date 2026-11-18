@@ -5,7 +5,8 @@ mod drive;
 mod session;
 mod board;
 mod history;
-mod storage;
+mod external;
+use journal_core::storage;
 mod mail;
 mod ui_language;
 mod vault;
@@ -345,6 +346,7 @@ Ist die Datenbank von einer neueren Version angelegt, bitte Journal aktualisiere
             app.manage(Mutex::new(store));
             app.manage(mail::MailState::open(&dir.join("mail.sqlite3")).map_err(std::io::Error::other)?);
             reminders::start(app.handle().clone());
+            external::start(app.handle().clone());
             mail::start(app.handle().clone());
             // Closing the window keeps Journal running in the background (see main.tsx); the icon in the notification area
             // opens it again (click) or ends it (menu).

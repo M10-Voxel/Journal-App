@@ -25,7 +25,7 @@ Pushes auf `Windows` veröffentlichen nach erfolgreichen Prüfungen automatisch 
 
 ## Entwicklung
 
-Technik: **Tauri 2 / Rust**, **React / TypeScript** und **SQLite**.
+Technik: **Tauri 2 / Rust**, **React / TypeScript** und **SQLite** (Datenkern in `crates/journal-core`).
 
 Benötigt werden Windows, Node.js 24, Rust mit MSVC-Toolchain, Microsoft C++ Build Tools mit Windows SDK und WebView2. Siehe [Tauri-Voraussetzungen](https://v2.tauri.app/start/prerequisites/).
 
@@ -54,3 +54,4 @@ EXE und Installer entstehen unter `src-tauri/target/release/` bzw. `src-tauri/ta
 - [Kalenderimport](docs/ics-import.md) und [mehrtägige Einträge](docs/multiday-calendar.md)
 - [Journal-Stil](docs/journal-style.md), [Nebula-Stil](docs/nebula-style.md) und [Popup-Stile](docs/popup-styles.md)
 - [Ressourcenverwaltung und Backend-Optimierungen](docs/performance.md)
+- [Datenkern `journal-core`](docs/journal-core.md), gemeinsam mit dem Schnellprogramm J-TerminaL (Branch `J-TerminaL`)
