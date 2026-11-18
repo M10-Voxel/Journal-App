@@ -1,0 +1,183 @@
+// The one design of J-TerminaL: the Journal app's standard design (look `classic`, palette `original`; `src/colors.ts`,
+// `src/styles.css`, the calendar's composer in `src/calendar.css`, branch `Windows`). Every colour, spacing and font lives
+// here; components only read `Theme`. Further designs are new values, not new parts.
+//
+// The fonts are the app's own (IBM Plex Sans for the interface, Lilex for what is written; SIL OFL, assets/fonts).
+import "../assets/fonts/IBMPlexSans-400.ttf";
+import "../assets/fonts/IBMPlexSans-500.ttf";
+import "../assets/fonts/IBMPlexSans-600.ttf";
+import "../assets/fonts/Lilex-400.ttf";
+import "../assets/fonts/Lilex-500.ttf";
+
+export global Theme {
+    // ── The palette `original` ──
+    // The window is a popup like the app's composer: the surface, its edge, the black ground inside fields and the calendar.
+    out property <color> background: #292929;      // surface
+    out property <color> ground: #000000;          // background
+    out property <color> inset: #1f1f1f;
+    out property <color> hover: #393939;
+    out property <color> selected: #494949;
+    out property <color> border: #ffffff21;        // line
+    out property <color> edge: #ffffff12;
+    out property <color> divider: #2e2e2e;
+    out property <color> text: #bcbcbc;
+    out property <color> strong: #e0e0e0;
+    out property <color> muted: #999999;
+    out property <color> placeholder: #7a7a7a;
+    out property <color> accent: #569eff;
+    out property <color> priority: #e6a85c;
+    out property <color> success: #76d982;
+    out property <color> error: #ff5555;
+    out property <color> selection: #569eff33;
+    out property <color> event: #569eff;
+    out property <color> event-background: #1d2b40;
+    out property <color> event-text: #d6e6ff;
+    out property <color> task-background: #2d2d2d;
+    out property <color> now: #ff5f57;
+    out property <color> saturday: #7fb2ff;
+    out property <color> sunday: #e57b7b;
+    // What the parts are made of.
+    out property <color> recognised: #1f1f1f;      // a choice not chosen: inset
+    out property <color> row-selection: #393939;   // the active line: hover
+    out property <color> row-selection-strong: #494949;
+    out property <color> chip-selected: #1d2b40;   // a chosen choice: the event's ground, its text bright
+    out property <color> chip-selected-text: #d6e6ff;
+    out property <color> field-background: #000000;
+    out property <color> field-focus: #569eff80;   // the composer's field focus: the accent at half
+    out property <color> panel-background: #1f1f1f;
+    out property <color> panel-border: #ffffff12;
+
+    // ── Type ──
+    out property <string> ui-font: "IBM Plex Sans";
+    out property <string> write-font: "Lilex";
+    out property <int> weight-normal: 400;
+    out property <int> weight-medium: 500;
+    out property <int> weight-semibold: 600;
+    out property <length> line-size: 18px;
+    out property <length> small-size: 12px;
+    out property <length> row-size: 13px;
+    out property <length> label-size: 13px;
+    out property <length> form-size: 15px;
+    out property <length> write-size: 13px;
+    out property <length> type-size: 14px;
+    out property <length> clock-size: 40px;
+
+    // ── The window ──
+    // The form at the left, the calendar at the right.
+    out property <length> width: 1501px;
+    out property <length> form-width: 600px;
+    out property <length> calendar-width: 900px;
+    out property <length> calendar-height: 600px;
+    out property <length> radius: 16px;            // the composer's corners
+    out property <length> border-width: 1px;
+    out property <length> padding: 18px;
+    out property <length> gap: 8px;
+    out property <length> calendar-gap: 3px;
+    out property <length> block-radius: 6px;
+    out property <length> line-height: 52px;
+    out property <length> search-icon-size: 16px;
+    out property <length> search-height: 34px;
+    out property <length> row-height: 34px;
+
+    // ── The form: a line per piece ──
+    out property <length> form-row-height: 38px;
+    out property <length> label-width: 130px;
+    out property <length> option-inset: 10px;
+    out property <length> marker-width: 3px;
+    // A field the keyboard is in: a pill on the black ground, as the composer's text field.
+    out property <length> field-radius: 15px;
+    out property <length> field-inset: 9px;
+    out property <length> field-vpad: 5px;
+    // A line that is no text keeps the input at this width: a narrower one loses the keyboard focus.
+    out property <length> idle-input-width: 40px;
+    // "When": the date, the start and the end side by side.
+    out property <length> when-date-width: 220px;
+    out property <length> when-time-width: 96px;
+    out property <length> when-dash-width: 22px;
+    out property <length> label-icon-size: 16px;
+    out property <length> more-radius: 8px;
+    out property <length> more-inset: 10px;
+    out property <color> more-background: #1f1f1f;
+
+    // ── The open options of a field: a quiet card under the form ──
+    out property <length> panel-radius: 10px;
+    out property <length> panel-padding: 12px;
+    out property <length> panel-spacing: 10px;
+    out property <length> choice-spacing: 2px;
+    out property <length> focus-ring: 1.5px;
+    out property <length> choice-height: 28px;
+    out property <length> sentence-spacing: 8px;
+    out property <length> sentence-label-width: 92px;
+    out property <length> sentence-height: 28px;
+    out property <length> sentence-inset: 9px;
+    out property <length> toggle-width: 38px;
+    out property <length> clock-inset: 14px;
+    out property <length> clock-box-height: 62px;
+    out property <length> tag-dot: 10px;
+    out property <length> icon-size: 20px;
+    out property <length> icon-cell: 38px;
+    out property <int> icon-columns: 14;
+    out property <int> reminder-columns: 4;
+
+    // ── The calendar: days one under another, the 24 hours left to right, long entries in lanes at the side ──
+    out property <color> cal-background: #000000;
+    out property <length> cal-pad: 6px;
+    out property <length> cal-head-height: 22px;
+    out property <int> cal-lanes: 3;
+    out property <length> cal-lane-width: 20px;
+    out property <length> cal-lane-core: 3px;
+    out property <length> cal-lane-text-size: 11px;
+    out property <length> cal-lane-text-top: 4px;
+    out property <length> cal-label-width: 150px;
+    out property <length> cal-date-width: 50px;
+    out property <length> cal-week-width: 40px;
+    out property <length> cal-date-height: 20px;
+    out property <length> cal-chip-height: 18px;
+    // Closed all-day entries retain their hit area when a Lucide icon replaces the dot.
+    out property <length> cal-dot: 12px;
+    out property <length> cal-icon-size: 12px;
+    out property <length> cal-title-size: 11px;
+    out property <length> cal-time-size: 10px;
+    out property <length> cal-date-size: 12px;
+    out property <length> cal-week-size: 10px;
+    out property <length> cal-month-size: 13px;
+    out property <length> cal-text-inset: 6px;
+    out property <length> cal-text-tail: 2px;
+    out property <length> cal-title-top: 2px;
+    out property <length> cal-title-height: 15px;
+    out property <length> cal-time-top: 16px;
+    out property <length> cal-tick-inset: 2px;
+    out property <length> cal-label-top: 3px;
+    out property <length> cal-day-height: 30px;
+    out property <length> cal-thin-height: 5px;
+    out property <length> cal-row-height: 36px;
+    out property <length> cal-month-height: 24px;
+    out property <length> cal-month-line-width: 2px;
+    out property <length> cal-month-label-inset: 12px;
+    out property <length> cal-stroke-radius: 4px;  // the calendar's blocks
+    out property <length> cal-block-edge: 3px;
+    out property <length> cal-point-width: 140px;
+    out property <length> cal-point-line-width: 4px;
+    out property <length> cal-point-bar-height: 16px;
+    out property <length> cal-point-bar-radius: 3px;
+    out property <length> cal-fresh-border: 1.5px;
+    out property <length> cal-now-width: 2px;
+    out property <length> cal-week-line-width: 2px;
+    out property <float> cal-fill: 0.28;
+    out property <float> cal-lane-fill: 0.40;
+    out property <float> cal-done-opacity: 0.45;
+    out property <float> cal-open-opacity: 0.5;
+    out property <color> cal-month-tint: #ffffff05;
+    out property <color> cal-month-head: #292929;
+    out property <color> cal-month-line: #999999;
+    out property <color> cal-weekend: #ffffff04;
+    out property <color> cal-today: #569eff14;
+    out property <color> cal-selected: #569eff33;
+    out property <color> cal-day-line: #1c1c1c;
+    out property <color> cal-week-line: #569eff73;
+    out property <color> cal-hour-line: #ffffff09;
+    out property <color> cal-hour-line-strong: #ffffff14;
+    out property <color> cal-stroke: #7a7a7a;
+    out property <color> cal-now: #ff5f57;
+    out property <color> cal-caret: #569eff26;
+}

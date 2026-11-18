@@ -1,0 +1,515 @@
+import { Theme } from "theme.slint";
+export { Theme }
+import { Calendar, CalBand, CalBlock, CalChip, CalLane, CalTick } from "calendar.slint";
+export { CalBand, CalBlock, CalChip, CalLane, CalTick }
+// A command offered under the search bar.
+export struct CommandRow { name: string, detail: string }
+// One field of the form: its line (as shown), its place in the line ("when" has three), the line's label and icon on
+// its first field, what it holds (or the pale default), and a colour dot (tag) or an icon.
+export struct FormRow { field: int, line: int, cell: int, multi: bool, label: string, has-label-icon: bool, label-icon: image, value: string, hint: string, filled: bool, error: bool, has-color: bool, color: color, has-icon: bool, icon: image }
+// A choice of the open options (a tag, an icon, a reminder); `index` is what a click chooses.
+export struct ChoiceRow { index: int, label: string, has-color: bool, color: color, has-icon: bool, icon: image, selected: bool }
+// A choice of the repetition. kind: 0 one of several, 1 switched on/off, 2 a number, 3 a date; `after` follows it.
+export struct SentencePart { text: string, kind: int, selected: bool, focused: bool, slot: int, value: int, after: string }
+export struct SentenceLine { label: string, has-icon: bool, icon: image, parts: [SentencePart] }
+
+export component Bar inherits Window {
+    // The form
+    in property <[FormRow]> rows;
+    in property <int> line-count;
+    in property <int> active;
+    in property <int> active-line;
+    in property <int> active-cell;
+    in property <bool> active-multi;
+    in property <bool> more-open;
+    // The input shows the active field's text; otherwise the keys go to the field's switch or its open options.
+    in property <bool> editable;
+    in property <bool> native-arrows;
+    in property <bool> options;
+    in property <[string]> type-names;
+    in property <[image]> type-icons;
+    in property <int> type-selected;
+    in property <string> placeholder;
+    in-out property <string> text <=> input.text;
+    callback edited(string);
+    // Every key the form has a use for: the key's number and the modifiers (1 Shift, 2 Strg, 4 Alt).
+    callback form-key(int, int);
+    // The open options: 0 none, 1 tags, 2 icons, 3 reminders, 4 the repetition, 5 the clock, 6 the calendar.
+    in property <int> panel-kind;
+    in property <[ChoiceRow]> choices;
+    in property <[SentenceLine]> sentence;
+    in property <string> panel-label;
+    in property <string> panel-note;
+    in property <string> panel-hint;
+    in property <string> clock-hours;
+    in property <string> clock-minutes;
+    in property <bool> clock-on-minutes;
+    in property <image> panel-icon;
+    callback choice-clicked(int);
+    callback sentence-clicked(int, int);
+    // The calendar beside the form
+    in property <string> hint-calendar;
+    in property <[CalBand]> cal-bands;
+    in property <[CalBlock]> cal-blocks;
+    in property <[CalChip]> cal-chips;
+    in property <[CalLane]> cal-lanes;
+    in property <[CalTick]> cal-ticks;
+    in property <length> cal-time-x;
+    in property <string> cal-title;
+    in property <image> cal-icon;
+    in property <bool> cal-has-now;
+    in property <length> cal-now-x;
+    in property <length> cal-now-y;
+    in property <length> cal-now-h;
+    in property <bool> cal-has-caret;
+    in property <length> cal-caret-x;
+    in property <length> cal-caret-y;
+    in property <length> cal-caret-w;
+    in property <length> cal-caret-h;
+    in property <bool> cal-focus;
+    callback cal-mouse(int, int, length, length, bool);
+    callback cal-wheel(length, length, bool, bool);
+    // The search bar
+    in property <bool> entry-open;
+    in property <string> search-placeholder;
+    in property <image> search-icon;
+    in property <image> command-icon;
+    in property <[CommandRow]> commands;
+    in property <int> command-selected;
+    in-out property <string> search-text <=> search.text;
+    callback search-edited(string);
+    in property <string> notice;
+    in property <bool> notice-is-error;
+    in property <string> hint-rows;
+    in property <string> hint-pick;
+    in property <string> hint-save;
+    in property <string> hint-undo;
+    private property <bool> hints;
+    private property <length> value-x: Theme.padding + Theme.label-width;
+    public function focus-input() { input.focus(); }
+    public function focus-line() { root.hints = false; if root.entry-open { input.focus(); input.select-all(); } else { search.focus(); } }
+    public function focus-entry() { input.focus(); input.select-all(); }
+    public function focus-search() { search.focus(); }
+    public function select-text() { input.select-all(); }
+    // Where a field of a line lies: "when" has the date, the start and the end side by side.
+    pure function cell-x(cell: int) -> length {
+        return root.value-x + (cell == 0 ? 0px : cell == 1 ? Theme.when-date-width : Theme.when-date-width + Theme.when-time-width + Theme.when-dash-width);
+    }
+    pure function cell-width(cell: int, multi: bool) -> length {
+        return !multi ? Theme.form-width - root.value-x - Theme.padding : cell == 0 ? Theme.when-date-width - Theme.gap : Theme.when-time-width;
+    }
+    pure function mods(shift: bool, control: bool, alt: bool) -> int { return (shift ? 1 : 0) + (control ? 2 : 0) + (alt ? 4 : 0); }
+
+    out property <length> content-height: max(layout.preferred-height, Theme.calendar-height);
+    title: "J-TerminaL";
+    no-frame: true;
+    always-on-top: true;
+    background: transparent;
+    width: Theme.width;
+    height: max(layout.preferred-height, Theme.calendar-height);
+    default-font-family: Theme.ui-font;
+    Rectangle {
+        background: Theme.background;
+        border-color: Theme.border;
+        border-width: Theme.border-width;
+        border-radius: Theme.radius;
+    }
+    HorizontalLayout {
+    layout := VerticalLayout {
+        width: Theme.form-width;
+        spacing: 0px;
+        // ----- The search bar: always on top -----
+        Rectangle {
+            height: Theme.line-height;
+            Rectangle {
+                x: Theme.padding; y: (parent.height - Theme.search-height) / 2;
+                width: parent.width - Theme.padding * 2; height: Theme.search-height;
+                background: Theme.field-background; border-radius: Theme.field-radius;
+                border-width: Theme.border-width; border-color: search.has-focus ? Theme.field-focus : Theme.edge;
+                Image {
+                    x: Theme.field-inset; y: (parent.height - self.height) / 2;
+                    width: Theme.search-icon-size; height: Theme.search-icon-size;
+                    source: root.search-icon; colorize: search.has-focus ? Theme.accent : Theme.placeholder;
+                }
+            }
+            if search.text == "": Text {
+                x: Theme.padding + Theme.field-inset + Theme.search-icon-size + Theme.gap; width: parent.width - self.x - Theme.padding - Theme.field-inset; height: parent.height; vertical-alignment: center;
+                text: root.search-placeholder; color: Theme.placeholder; font-size: Theme.form-size;
+            }
+            search := TextInput {
+                x: Theme.padding + Theme.field-inset + Theme.search-icon-size + Theme.gap; width: parent.width - self.x - Theme.padding - Theme.field-inset; height: parent.height;
+                vertical-alignment: center; single-line: true;
+                color: Theme.strong; selection-background-color: Theme.selection; selection-foreground-color: Theme.strong; font-size: Theme.form-size;
+                edited => { root.search-edited(self.text); }
+                key-pressed(event) => {
+                    root.hints = event.modifiers.control;
+                    // Modifier keys alone do nothing (their codes are control characters too).
+                    if event.text == Key.Control || event.text == Key.Shift || event.text == Key.Alt || event.text == Key.Meta { return reject; }
+                    if event.text == Key.F6 { root.form-key(15, 0); return accept; }
+                    if event.text == Key.Tab { root.form-key(0, 0); return accept; }
+                    if event.text == Key.UpArrow { root.form-key(1, 0); return accept; }
+                    if event.text == Key.DownArrow { root.form-key(2, 0); return accept; }
+                    if event.text == Key.Return { root.form-key(3, root.mods(event.modifiers.shift, event.modifiers.control, false)); return accept; }
+                    if event.text == Key.Escape { root.form-key(4, 0); return accept; }
+                    if event.modifiers.control {
+                        if event.text == "z" || event.text == "Z" { root.form-key(50, 0); return accept; }
+                        if event.text == "y" || event.text == "Y" { root.form-key(51, 0); return accept; }
+                        if event.text == "q" || event.text == "Q" { root.form-key(52, 0); return accept; }
+                    }
+                    reject
+                }
+                key-released(event) => { root.hints = event.modifiers.control; reject }
+            }
+        }
+        for command[index] in root.commands: Rectangle {
+            height: Theme.row-height;
+            background: index == root.command-selected ? Theme.row-selection : transparent;
+            HorizontalLayout {
+                padding-left: Theme.padding; padding-right: Theme.padding; spacing: Theme.gap;
+                Image { source: root.command-icon; width: Theme.label-icon-size; height: Theme.label-icon-size; colorize: Theme.accent; y: (parent.height - self.height) / 2; }
+                Text { text: command.name; color: Theme.accent; font-size: Theme.row-size; vertical-alignment: center; }
+                Text { text: command.detail; color: Theme.muted; font-size: Theme.small-size; vertical-alignment: center; horizontal-stretch: 1; }
+            }
+        }
+        if root.hints && !root.entry-open: HorizontalLayout {
+            padding-left: Theme.padding; padding-right: Theme.padding;
+            Text { text: root.hint-calendar + "\n" + root.hint-undo; color: Theme.placeholder; font-size: Theme.small-size; wrap: word-wrap; }
+        }
+        Rectangle { height: Theme.border-width; background: Theme.divider; }
+        // ----- The entry form, under the search bar while open -----
+        Rectangle {
+            height: root.entry-open ? root.line-count * Theme.form-row-height + Theme.gap : 0px;
+            clip: true;
+            // The type: four switches with their icons, Alt+1–4 from anywhere.
+            HorizontalLayout {
+                x: Theme.padding; y: 0px; height: Theme.form-row-height;
+                spacing: Theme.calendar-gap;
+                alignment: start;
+                for name[n] in root.type-names: Rectangle {
+                    width: type-row.preferred-width;
+                    height: Theme.choice-height;
+                    y: (Theme.form-row-height - Theme.choice-height) / 2;
+                    background: n == root.type-selected ? Theme.chip-selected : transparent;
+                    border-radius: Theme.field-radius;
+                    border-width: n == root.type-selected ? Theme.border-width : 0px;
+                    border-color: root.active == 0 ? Theme.accent : Theme.field-focus;
+                    type-row := HorizontalLayout {
+                        padding-left: Theme.option-inset; padding-right: Theme.option-inset; spacing: Theme.calendar-gap * 2; alignment: center;
+                        Image {
+                            width: Theme.label-icon-size; height: Theme.label-icon-size; y: (parent.height - self.height) / 2;
+                            source: root.type-icons[n]; colorize: n == root.type-selected ? Theme.accent : Theme.muted;
+                        }
+                        Text {
+                            text: name; font-size: Theme.type-size;
+                            color: n == root.type-selected ? Theme.chip-selected-text : Theme.muted;
+                            vertical-alignment: center;
+                        }
+                    }
+                    TouchArea { clicked => { root.form-key(21 + n, 4); input.focus(); } }
+                }
+            }
+            for row in root.rows: Rectangle {
+                y: row.line * Theme.form-row-height;
+                height: Theme.form-row-height;
+                if row.field == 7: Rectangle {
+                    x: Theme.padding; y: Theme.field-vpad;
+                    width: Theme.form-width - Theme.padding * 2; height: parent.height - Theme.field-vpad * 2;
+                    background: root.active == row.field ? Theme.row-selection : root.more-open ? Theme.more-background : transparent;
+                    border-radius: Theme.more-radius;
+                    border-width: root.active == row.field ? Theme.border-width : 0px; border-color: Theme.field-focus;
+                    HorizontalLayout {
+                        padding-left: Theme.more-inset; padding-right: Theme.more-inset; spacing: Theme.gap;
+                        Image { width: Theme.label-icon-size; height: Theme.label-icon-size; source: row.label-icon; colorize: root.active == row.field ? Theme.accent : Theme.muted; y: (parent.height - self.height) / 2; }
+                        Text { text: row.label; color: root.active == row.field ? Theme.strong : Theme.text; font-size: Theme.row-size; font-weight: Theme.weight-medium; vertical-alignment: center; }
+                        Rectangle { height: Theme.border-width; background: Theme.divider; horizontal-stretch: 1; y: (parent.height - self.height) / 2; }
+                        Text { text: row.value; color: Theme.muted; font-size: Theme.small-size; vertical-alignment: center; overflow: elide; }
+                    }
+                }
+                if row.label != "" && row.field != 7: HorizontalLayout {
+                    x: Theme.padding; width: Theme.label-width; height: parent.height;
+                    spacing: Theme.gap; alignment: start;
+                    if row.has-label-icon: Image {
+                        width: Theme.label-icon-size; height: Theme.label-icon-size; y: (parent.height - self.height) / 2;
+                        source: row.label-icon; colorize: row.line == root.active-line ? Theme.accent : Theme.placeholder;
+                    }
+                    Text {
+                        text: row.label; color: row.line == root.active-line ? Theme.accent : Theme.muted;
+                        font-size: Theme.label-size; vertical-alignment: center;
+                    }
+                }
+                if row.cell == 2: Text {
+                    x: root.cell-x(2) - Theme.when-dash-width; width: Theme.when-dash-width; height: parent.height;
+                    text: "–"; color: Theme.muted; font-size: Theme.form-size; horizontal-alignment: center; vertical-alignment: center;
+                }
+                // The composer's black fields, with its quiet blue focus contour.
+                if row.field != 7: Rectangle {
+                    x: root.cell-x(row.cell); y: Theme.field-vpad;
+                    width: root.cell-width(row.cell, row.multi); height: parent.height - Theme.field-vpad * 2;
+                    background: Theme.field-background; border-radius: Theme.field-radius;
+                    border-width: Theme.border-width;
+                    border-color: row.error ? Theme.error : row.field == root.active ? Theme.field-focus : Theme.edge;
+                }
+                if row.field != 7 && !(row.field == root.active && root.editable): HorizontalLayout {
+                    x: root.cell-x(row.cell) + Theme.field-inset; width: root.cell-width(row.cell, row.multi) - Theme.field-inset * 2; height: parent.height;
+                    spacing: Theme.gap;
+                    alignment: start;
+                    if row.has-color && row.filled: Rectangle {
+                        width: Theme.tag-dot; height: Theme.tag-dot; y: (parent.height - self.height) / 2;
+                        border-radius: self.width / 2; background: row.color;
+                    }
+                    if row.has-icon && row.filled: Image {
+                        width: Theme.icon-size; height: Theme.icon-size; y: (parent.height - self.height) / 2;
+                        source: row.icon; colorize: Theme.text;
+                    }
+                    Text {
+                        text: row.filled ? row.value : row.hint;
+                        color: row.error ? Theme.error : row.filled ? Theme.text : Theme.placeholder;
+                        font-family: row.field == 1 || row.field == 8 || row.multi ? Theme.write-font : Theme.ui-font;
+                        font-size: Theme.write-size; vertical-alignment: center; overflow: elide;
+                    }
+                }
+            }
+            // The one input, laid over the active field when that field has text.
+            input-area := Rectangle {
+                x: root.cell-x(root.active-cell) + Theme.field-inset;
+                y: root.active-line * Theme.form-row-height;
+                width: root.editable ? root.cell-width(root.active-cell, root.active-multi) - Theme.field-inset * 2 : Theme.idle-input-width;
+                height: Theme.form-row-height;
+                opacity: root.editable ? 1 : 0;
+                clip: true;
+                if input.text == "" && root.editable: Text {
+                    width: parent.width; height: parent.height; vertical-alignment: center;
+                    text: root.placeholder; color: Theme.placeholder;
+                    font-family: root.active == 1 || root.active == 8 || root.active-multi ? Theme.write-font : Theme.ui-font;
+                    font-size: Theme.write-size;
+                }
+                input := TextInput {
+                    height: parent.height;
+                    width: max(parent.width, self.preferred-width);
+                    vertical-alignment: center;
+                    color: Theme.strong;
+                    selection-background-color: Theme.selection;
+                    selection-foreground-color: Theme.strong;
+                    font-family: root.active == 1 || root.active == 8 || root.active-multi ? Theme.write-font : Theme.ui-font;
+                    font-size: Theme.write-size;
+                    single-line: true;
+                    edited => { root.edited(self.text); }
+                    cursor-position-changed(pos) => {
+                        if pos.x + self.x < 0px { self.x = -pos.x; }
+                        if pos.x + self.x > input-area.width - Theme.gap { self.x = input-area.width - Theme.gap - pos.x; }
+                    }
+                    key-pressed(event) => {
+                        root.hints = event.modifiers.control;
+                        if event.text == Key.Control || event.text == Key.Shift || event.text == Key.Alt || event.text == Key.Meta { return reject; }
+                        if event.text == Key.F6 { root.form-key(15, 0); return accept; }
+                        if event.text == Key.Tab || event.text == Key.Backtab { root.form-key(0, root.mods(event.modifiers.shift || event.text == Key.Backtab, event.modifiers.control, event.modifiers.alt)); return accept; }
+                        if event.text == Key.UpArrow { root.form-key(1, root.mods(event.modifiers.shift, event.modifiers.control, event.modifiers.alt)); return accept; }
+                        if event.text == Key.DownArrow { root.form-key(2, root.mods(event.modifiers.shift, event.modifiers.control, event.modifiers.alt)); return accept; }
+                        if event.text == Key.Return { root.form-key(3, root.mods(event.modifiers.shift, event.modifiers.control, event.modifiers.alt)); return accept; }
+                        if event.text == Key.Escape { root.form-key(4, 0); return accept; }
+                        // The arrows belong to the field's switch or its options (with their modifiers).
+                        if !root.native-arrows && event.text == Key.LeftArrow { root.form-key(5, root.mods(event.modifiers.shift, event.modifiers.control, false)); return accept; }
+                        if !root.native-arrows && event.text == Key.RightArrow { root.form-key(6, root.mods(event.modifiers.shift, event.modifiers.control, false)); return accept; }
+                        if !root.editable {
+                            if event.text == Key.Insert { root.form-key(11, 0); return accept; }
+                            if event.text == Key.Delete || event.text == Key.Backspace { root.form-key(12, 0); return accept; }
+                            if event.text == Key.PageUp { root.form-key(7, root.mods(event.modifiers.shift, false, false)); return accept; }
+                            if event.text == Key.PageDown { root.form-key(8, root.mods(event.modifiers.shift, false, false)); return accept; }
+                            if event.text == Key.Home || (root.cal-focus && (event.text == "h" || event.text == "H")) { root.form-key(9, 0); return accept; }
+                            if event.text == " " { root.form-key(10, 0); return accept; }
+                            if !event.modifiers.alt && event.text >= "0" && event.text <= "9" { root.form-key(20 + event.text.to-float(), 0); return accept; }
+                        }
+                        if event.modifiers.control {
+                            if event.text == "z" || event.text == "Z" { root.form-key(50, 0); return accept; }
+                            if event.text == "y" || event.text == "Y" { root.form-key(51, 0); return accept; }
+                            if event.text == "q" || event.text == "Q" { root.form-key(52, 0); return accept; }
+                            return reject;
+                        }
+                        if event.modifiers.alt {
+                            if event.text >= "1" && event.text <= "4" { root.form-key(20 + event.text.to-float(), 4); }
+                            return accept;
+                        }
+                        if !root.editable { return accept; }
+                        reject
+                    }
+                    key-released(event) => { root.hints = event.modifiers.control; reject }
+                }
+            }
+        }
+        // ----- The open options of the active field -----
+        if root.entry-open && root.panel-kind > 0: HorizontalLayout {
+            padding-left: Theme.padding; padding-right: Theme.padding; padding-bottom: Theme.gap;
+            Rectangle {
+            height: panel.preferred-height;
+            clip: true;
+            background: Theme.panel-background;
+            border-radius: Theme.panel-radius;
+            border-width: Theme.border-width;
+            border-color: Theme.panel-border;
+            panel := VerticalLayout {
+            padding: Theme.panel-padding;
+            spacing: Theme.panel-spacing;
+            // A heading: what the options are about.
+            if root.panel-label != "": HorizontalLayout {
+                spacing: Theme.gap; alignment: start;
+                Image { width: Theme.label-icon-size; height: Theme.label-icon-size; source: root.panel-icon; colorize: Theme.accent; y: (parent.height - self.height) / 2; }
+                Text { text: root.panel-label; color: Theme.strong; font-size: Theme.row-size; font-weight: Theme.weight-semibold; vertical-alignment: center; }
+            }
+            // Tags: a list with their colours.
+            if root.panel-kind == 1: VerticalLayout {
+                spacing: Theme.choice-spacing;
+                for choice in root.choices: Rectangle {
+                    height: Theme.choice-height;
+                    background: choice.selected ? Theme.chip-selected : transparent;
+                    border-radius: Theme.block-radius;
+                    HorizontalLayout {
+                        padding-left: Theme.gap; spacing: Theme.gap; alignment: start;
+                        Rectangle {
+                            width: Theme.tag-dot; height: Theme.tag-dot; y: (parent.height - self.height) / 2;
+                            border-radius: self.width / 2; background: choice.has-color ? choice.color : transparent;
+                            border-width: choice.has-color ? 0px : Theme.border-width; border-color: Theme.placeholder;
+                        }
+                        if choice.has-icon: Image { source: choice.icon; width: Theme.label-icon-size; height: Theme.label-icon-size; colorize: choice.has-color ? choice.color : Theme.muted; y: (parent.height - self.height) / 2; }
+                        Text { text: choice.label; color: choice.selected ? Theme.chip-selected-text : Theme.muted; font-size: Theme.row-size; vertical-alignment: center; }
+                    }
+                    TouchArea { clicked => { root.choice-clicked(choice.index); input.focus(); } }
+                }
+            }
+            // Icons: a grid, the chosen one's name under it.
+            if root.panel-kind == 2: Rectangle {
+                height: Math.ceil(root.choices.length / Theme.icon-columns) * Theme.icon-cell;
+                for choice[i] in root.choices: Rectangle {
+                    x: Math.mod(i, Theme.icon-columns) * Theme.icon-cell;
+                    y: Math.floor(i / Theme.icon-columns) * Theme.icon-cell;
+                    width: Theme.icon-cell - Theme.calendar-gap; height: Theme.icon-cell - Theme.calendar-gap;
+                    background: choice.selected ? Theme.chip-selected : transparent;
+                    border-radius: Theme.block-radius;
+                    border-width: choice.selected ? Theme.border-width : 0px; border-color: Theme.accent;
+                    Image {
+                        width: Theme.icon-size; height: Theme.icon-size;
+                        x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2;
+                        source: choice.icon; colorize: choice.selected ? Theme.accent : Theme.muted;
+                    }
+                    TouchArea { clicked => { root.choice-clicked(choice.index); input.focus(); } }
+                }
+            }
+            // Reminders: ready-made lengths in a grid; anything else is typed.
+            if root.panel-kind == 3: Rectangle {
+                height: Math.ceil(root.choices.length / Theme.reminder-columns) * Theme.choice-height;
+                for choice[i] in root.choices: Rectangle {
+                    x: Math.mod(i, Theme.reminder-columns) * (parent.width / Theme.reminder-columns);
+                    y: Math.floor(i / Theme.reminder-columns) * Theme.choice-height;
+                    width: parent.width / Theme.reminder-columns - Theme.calendar-gap; height: Theme.choice-height - Theme.calendar-gap;
+                    background: choice.selected ? Theme.chip-selected : Theme.recognised;
+                    border-radius: Theme.block-radius;
+                    border-width: choice.selected ? Theme.border-width : 0px; border-color: Theme.accent;
+                    Text { text: choice.label; color: choice.selected ? Theme.chip-selected-text : Theme.muted; font-size: Theme.row-size; horizontal-alignment: center; vertical-alignment: center; }
+                    TouchArea { clicked => { root.choice-clicked(choice.index); input.focus(); } }
+                }
+            }
+            // The repetition: labelled lines; one choice of several looks like a segmented switch, days and months
+            // like round switches, numbers and dates like fields.
+            if root.panel-kind == 4: VerticalLayout {
+                spacing: Theme.sentence-spacing;
+                for line in root.sentence: HorizontalLayout {
+                    spacing: 0px;
+                    HorizontalLayout {
+                        width: Theme.sentence-label-width; spacing: Theme.gap; alignment: start;
+                        if line.has-icon: Image {
+                            width: Theme.label-icon-size; height: Theme.label-icon-size; y: (parent.height - self.height) / 2;
+                            source: line.icon; colorize: Theme.placeholder;
+                        }
+                        Text { text: line.label; color: Theme.muted; font-size: Theme.label-size; vertical-alignment: center; }
+                    }
+                    HorizontalLayout {
+                        spacing: Theme.calendar-gap;
+                        alignment: start;
+                        for part in line.parts: HorizontalLayout {
+                            spacing: Theme.calendar-gap;
+                            Rectangle {
+                                width: part.kind == 1 ? Theme.toggle-width : part-text.preferred-width + Theme.sentence-inset * 2;
+                                height: Theme.sentence-height;
+                                background: part.kind >= 2 ? Theme.field-background : part.selected ? Theme.chip-selected : Theme.recognised;
+                                border-radius: part.kind == 1 ? Theme.sentence-height / 2 : Theme.block-radius;
+                                border-width: part.focused ? Theme.focus-ring : (part.kind == 2 || part.kind == 3) ? Theme.border-width : 0px;
+                                border-color: part.focused ? Theme.accent : Theme.panel-border;
+                                part-text := Text {
+                                    text: part.text; font-size: Theme.row-size;
+                                    font-weight: part.selected && part.kind != 2 ? Theme.weight-semibold : Theme.weight-normal;
+                                    color: part.selected && part.kind < 2 ? Theme.chip-selected-text : part.focused || part.kind >= 2 ? Theme.text : Theme.muted;
+                                    horizontal-alignment: center; vertical-alignment: center;
+                                }
+                                TouchArea { clicked => { root.sentence-clicked(part.slot, part.value); input.focus(); } }
+                            }
+                            if part.after != "": Text { text: part.after; color: Theme.muted; font-size: Theme.row-size; vertical-alignment: center; }
+                        }
+                    }
+                }
+            }
+            // The clock: big hours and minutes, the part with the arrows lit.
+            if root.panel-kind == 5: HorizontalLayout {
+                alignment: center; spacing: Theme.gap;
+                Rectangle {
+                    width: hours-text.preferred-width + Theme.clock-inset * 2; height: Theme.clock-box-height;
+                    background: !root.clock-on-minutes ? Theme.selection : Theme.field-background;
+                    border-radius: Theme.block-radius;
+                    border-width: !root.clock-on-minutes ? Theme.focus-ring : 0px; border-color: Theme.accent;
+                    hours-text := Text { text: root.clock-hours; font-family: Theme.write-font; font-size: Theme.clock-size; color: Theme.text; horizontal-alignment: center; vertical-alignment: center; }
+                }
+                Text { text: ":"; font-family: Theme.write-font; font-size: Theme.clock-size; color: Theme.muted; vertical-alignment: center; }
+                Rectangle {
+                    width: minutes-text.preferred-width + Theme.clock-inset * 2; height: Theme.clock-box-height;
+                    background: root.clock-on-minutes ? Theme.selection : Theme.field-background;
+                    border-radius: Theme.block-radius;
+                    border-width: root.clock-on-minutes ? Theme.focus-ring : 0px; border-color: Theme.accent;
+                    minutes-text := Text { text: root.clock-minutes; font-family: Theme.write-font; font-size: Theme.clock-size; color: Theme.text; horizontal-alignment: center; vertical-alignment: center; }
+                }
+            }
+            if root.panel-note != "": Text { text: root.panel-note; color: Theme.muted; font-size: Theme.small-size; }
+            if root.hints: Text { text: root.panel-hint; color: Theme.placeholder; font-size: Theme.small-size; wrap: word-wrap; }
+            }
+            }
+        }
+        if root.entry-open && root.hints: HorizontalLayout {
+            padding: Theme.padding; padding-top: Theme.gap; padding-bottom: Theme.gap;
+            Text {
+                text: root.hint-rows + "\n" + root.hint-pick + "\n" + root.hint-calendar + "\n" + root.hint-save + "\n" + root.hint-undo;
+                color: Theme.placeholder; font-size: Theme.small-size; wrap: word-wrap;
+            }
+        }
+        if root.notice != "": VerticalLayout {
+            Rectangle { height: Theme.border-width; background: Theme.divider; }
+            HorizontalLayout {
+                padding: Theme.padding;
+                padding-top: Theme.gap;
+                padding-bottom: Theme.gap;
+                Text { text: root.notice; color: root.notice-is-error ? Theme.error : Theme.muted; font-size: Theme.small-size; wrap: word-wrap; }
+            }
+        }
+    }
+    Rectangle { width: Theme.border-width; background: Theme.divider; }
+    Calendar {
+        width: Theme.calendar-width;
+        bands: root.cal-bands;
+        blocks: root.cal-blocks;
+        chips: root.cal-chips;
+        lanes: root.cal-lanes;
+        ticks: root.cal-ticks;
+        time-x: root.cal-time-x;
+        title: root.cal-title;
+        icon: root.cal-icon;
+        has-now: root.cal-has-now;
+        now-x: root.cal-now-x;
+        now-y: root.cal-now-y;
+        now-h: root.cal-now-h;
+        has-caret: root.cal-has-caret;
+        caret-x: root.cal-caret-x;
+        caret-y: root.cal-caret-y;
+        caret-w: root.cal-caret-w;
+        caret-h: root.cal-caret-h;
+        focused: root.cal-focus;
+        mouse(button, kind, x, y, shift) => { root.cal-mouse(button, kind, x, y, shift); }
+        wheel(x, delta, ctrl, shift) => { root.cal-wheel(x, delta, ctrl, shift); }
+    }
+    }
+}

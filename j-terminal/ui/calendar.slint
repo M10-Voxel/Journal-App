@@ -1,0 +1,188 @@
+import { Theme } from "theme.slint";
+
+// Where things go is computed in `src/calendar.rs`; this only draws it.
+// kind: 0 day, 1 month heading.
+export struct CalBand { y: length, h: length, kind: int, label: string, week: string, week-start: bool, tint: bool, weekend: bool, sunday: bool, today: bool, selected: bool, cursor: bool, open: bool }
+// A piece of time in a day. text: 0 none, 1 title, 2 title and time; cut: it goes on left of what is shown.
+export struct CalBlock { x: length, y: length, w: length, h: length, title: string, time: string, color: color, fresh: bool, done: bool, cut: bool, point: bool, caption-at-top: bool, marker: length, text: int, has-icon: bool, icon: image }
+// An entry without a time beside the date: a line with its title, or a dot while the day is closed.
+export struct CalChip { x: length, y: length, w: length, h: length, title: string, color: color, fresh: bool, done: bool, dot: bool, has-icon: bool, icon: image }
+// An entry over several days in its lane at the side; its title is an image, turned to read downwards.
+export struct CalLane { x: length, y: length, w: length, h: length, color: color, fresh: bool, done: bool, title: image, title-w: length, title-h: length, has-icon: bool, icon: image }
+// A mark of the hours.
+export struct CalTick { x: length, label: string, strong: bool }
+
+export component Calendar inherits Rectangle {
+    in property <[CalBand]> bands;
+    in property <[CalBlock]> blocks;
+    in property <[CalChip]> chips;
+    in property <[CalLane]> lanes;
+    in property <[CalTick]> ticks;
+    in property <string> title;
+    in property <image> icon;
+    in property <bool> has-now;
+    in property <length> now-x;
+    in property <length> now-y;
+    in property <length> now-h;
+    in property <bool> focused;
+    // The keyboard's place (a day's side, or a stretch of its hours).
+    in property <bool> has-caret;
+    in property <length> caret-x;
+    in property <length> caret-y;
+    in property <length> caret-w;
+    in property <length> caret-h;
+    // Where the side ends and the hours begin (from the layout in Rust).
+    in property <length> time-x;
+    // button: 0 left, 1 right; kind: 0 pressed, 1 moved, 2 released; the position inside the calendar.
+    callback mouse(int, int, length, length, bool);
+    // The wheel: x, how far, Strg, Shift.
+    callback wheel(length, length, bool, bool);
+    clip: true;
+    background: Theme.cal-background;
+    property <length> label-x: Theme.cal-pad + Theme.cal-lanes * Theme.cal-lane-width;
+
+    for band in root.bands: Rectangle {
+        y: band.y;
+        height: band.h;
+        width: root.width;
+        background: band.kind == 1 ? Theme.cal-month-head : band.selected ? Theme.cal-selected : band.today ? Theme.cal-today : band.weekend ? Theme.cal-weekend : band.tint ? Theme.cal-month-tint : transparent;
+        // Between days a faint line; where a week begins (Sunday to Monday) a line of its own colour.
+        Rectangle { y: 0px; height: band.week-start ? Theme.cal-week-line-width : Theme.border-width; background: band.week-start ? Theme.cal-week-line : Theme.cal-day-line; }
+        if band.kind == 0: Text {
+            x: root.label-x; y: Theme.cal-label-top; width: Theme.cal-date-width; height: Theme.cal-date-height - Theme.cal-label-top;
+            text: band.label; font-size: Theme.cal-date-size; font-weight: band.today ? Theme.weight-semibold : Theme.weight-normal;
+            color: band.today ? Theme.accent : band.sunday ? Theme.sunday : band.weekend ? Theme.saturday : Theme.text; overflow: elide;
+        }
+        if band.week != "": Text {
+            x: root.label-x + Theme.cal-date-width; y: Theme.cal-label-top; width: Theme.cal-week-width; height: Theme.cal-date-height - Theme.cal-label-top;
+            text: band.week; font-size: Theme.cal-week-size; color: Theme.placeholder; vertical-alignment: center;
+        }
+        if band.open: Rectangle { x: root.label-x - Theme.calendar-gap; width: Theme.border-width * 2; height: parent.height; background: Theme.accent; opacity: Theme.cal-open-opacity; }
+        if band.cursor: Rectangle {
+            x: Theme.cal-pad / 2; width: root.width - Theme.cal-pad; height: parent.height;
+            border-width: Theme.border-width; border-color: Theme.accent; border-radius: Theme.block-radius;
+        }
+    }
+    // The hours: a line at each mark over all days, stronger every six hours.
+    for tick in root.ticks: Rectangle {
+        x: tick.x; y: Theme.cal-head-height; width: Theme.border-width; height: root.height - Theme.cal-head-height;
+        background: tick.strong ? Theme.cal-hour-line-strong : Theme.cal-hour-line;
+    }
+    // Where the side ends.
+    Rectangle { x: root.time-x - Theme.border-width; y: Theme.cal-head-height; width: Theme.border-width; height: root.height - Theme.cal-head-height; background: Theme.cal-day-line; }
+    for block in root.blocks: Rectangle {
+        property <bool> show-icon: block.has-icon && block.w >= Theme.cal-text-inset + Theme.cal-icon-size + Theme.cal-text-tail && block.h >= Theme.cal-icon-size;
+        property <length> caption-height: block.point ? min(Theme.cal-point-bar-height, block.h) : block.h;
+        property <length> caption-top: block.point && !block.caption-at-top ? block.h - self.caption-height : 0px;
+        property <length> point-inset: block.point && block.marker < block.w / 2 ? Theme.cal-point-line-width : 0px;
+        x: block.x; y: block.y; width: block.w; height: block.h;
+        background: block.point ? transparent : block.color.with-alpha(Theme.cal-fill);
+        border-radius: Theme.cal-stroke-radius;
+        border-width: block.fresh && !block.point ? Theme.cal-fresh-border : 0px;
+        border-color: Theme.text;
+        opacity: block.done ? Theme.cal-done-opacity : 1;
+        if block.point: Rectangle {
+            x: 0px; y: parent.caption-top; width: parent.width; height: parent.caption-height;
+            background: block.color.with-alpha(Theme.cal-fill); border-radius: min(Theme.cal-point-bar-radius, self.height / 2);
+            border-width: block.fresh ? Theme.cal-fresh-border : 0px; border-color: Theme.text;
+        }
+        if !block.cut && !block.point: Rectangle { x: 0px; width: min(Theme.cal-block-edge, parent.width); background: block.color; border-radius: Theme.cal-stroke-radius; }
+        if self.show-icon: Image {
+            x: Theme.cal-text-inset + parent.point-inset; y: block.text == 2 ? Theme.cal-title-top : parent.caption-top + (parent.caption-height - self.height) / 2;
+            width: Theme.cal-icon-size; height: Theme.cal-icon-size; source: block.icon; colorize: block.color;
+        }
+        if block.text > 0: Text {
+            x: Theme.cal-text-inset + parent.point-inset + (parent.show-icon ? Theme.cal-icon-size + Theme.calendar-gap : 0px); y: block.text == 2 ? Theme.cal-title-top : parent.caption-top; width: max(0px, parent.width - self.x - Theme.cal-text-tail); height: block.text == 2 ? Theme.cal-title-height : parent.caption-height;
+            text: block.title; font-size: Theme.cal-title-size; font-weight: Theme.weight-medium; color: Theme.strong; overflow: elide; vertical-alignment: center;
+        }
+        if block.text == 2: Text {
+            x: Theme.cal-text-inset; y: Theme.cal-time-top; width: parent.width - self.x - Theme.cal-text-tail; height: Theme.cal-date-size;
+            text: block.time; font-family: Theme.write-font; font-size: Theme.cal-time-size; color: Theme.muted; overflow: elide;
+        }
+        if block.point: Rectangle {
+            x: clamp(block.marker - Theme.cal-point-line-width / 2, 0px, max(0px, parent.width - Theme.cal-point-line-width));
+            y: 0px; width: min(Theme.cal-point-line-width, parent.width); height: parent.height;
+            background: block.color; border-radius: self.width / 2;
+        }
+    }
+    for chip in root.chips: Rectangle {
+        x: chip.x; y: chip.y; width: chip.w; height: chip.h;
+        background: chip.dot ? (chip.has-icon ? transparent : chip.color) : chip.color.with-alpha(Theme.cal-fill);
+        border-radius: chip.dot ? chip.w / 2 : Theme.cal-stroke-radius;
+        border-width: chip.fresh ? Theme.cal-fresh-border : 0px;
+        border-color: Theme.text;
+        opacity: chip.done ? Theme.cal-done-opacity : 1;
+        if !chip.dot: Rectangle { x: 0px; width: Theme.cal-block-edge; background: chip.color; border-radius: Theme.cal-stroke-radius; }
+        if chip.has-icon: Image {
+            x: chip.dot ? 0px : Theme.cal-text-inset; y: (parent.height - self.height) / 2;
+            width: Theme.cal-icon-size; height: Theme.cal-icon-size; source: chip.icon; colorize: chip.color;
+        }
+        if !chip.dot: Text {
+            x: Theme.cal-text-inset + (chip.has-icon ? Theme.cal-icon-size + Theme.calendar-gap : 0px); width: parent.width - self.x - Theme.cal-text-tail; height: parent.height;
+            text: chip.title; font-size: Theme.cal-title-size; color: Theme.text; overflow: elide; vertical-alignment: center;
+        }
+    }
+    for lane in root.lanes: Rectangle {
+        x: lane.x; y: lane.y; width: lane.w; height: lane.h;
+        background: lane.color.with-alpha(Theme.cal-lane-fill);
+        border-radius: Theme.cal-stroke-radius;
+        border-width: lane.fresh ? Theme.cal-fresh-border : 0px;
+        border-color: Theme.text;
+        opacity: lane.done ? Theme.cal-done-opacity : 1;
+        clip: true;
+        Rectangle { x: 0px; width: Theme.cal-lane-core; background: lane.color; }
+        if lane.has-icon: Image {
+            x: Theme.cal-lane-core + (parent.width - Theme.cal-lane-core - self.width) / 2; y: Theme.cal-lane-text-top;
+            width: Theme.cal-icon-size; height: Theme.cal-icon-size; source: lane.icon; colorize: Theme.strong;
+        }
+        Image {
+            x: Theme.cal-lane-core + (parent.width - Theme.cal-lane-core - lane.title-w) / 2; y: Theme.cal-lane-text-top + (lane.has-icon ? Theme.cal-icon-size + Theme.calendar-gap : 0px);
+            width: lane.title-w; height: lane.title-h;
+            source: lane.title; colorize: Theme.text; image-fit: fill;
+        }
+    }
+    if root.has-caret: Rectangle {
+        x: root.caret-x; y: root.caret-y; width: root.caret-w; height: root.caret-h;
+        background: Theme.cal-caret;
+        border-width: Theme.focus-ring; border-color: Theme.accent; border-radius: Theme.block-radius;
+    }
+    if root.has-now: Rectangle { x: root.now-x; y: root.now-y; width: Theme.cal-now-width; height: root.now-h; background: Theme.cal-now; }
+    // Month boundaries stay visible over the hour grid and long entries' lanes.
+    for band in root.bands: Rectangle {
+        visible: band.kind == 1;
+        y: band.y; width: root.width; height: band.h;
+        background: Theme.cal-month-head;
+        Rectangle { x: 0px; y: 0px; width: parent.width; height: Theme.cal-month-line-width; background: Theme.cal-month-line; }
+        Text {
+            x: Theme.cal-month-label-inset; width: parent.width - self.x * 2; height: parent.height;
+            text: band.label; color: Theme.strong; font-size: Theme.cal-month-size; font-weight: Theme.weight-semibold; vertical-alignment: center;
+        }
+        Rectangle { x: 0px; y: parent.height - Theme.border-width; width: parent.width; height: Theme.border-width; background: Theme.divider; }
+    }
+    // The header stays: the month and the hours shown.
+    Rectangle {
+        y: 0px; height: Theme.cal-head-height; width: root.width;
+        background: Theme.background;
+        Image { x: Theme.cal-pad; y: (parent.height - self.height) / 2; width: Theme.cal-icon-size; height: Theme.cal-icon-size; source: root.icon; colorize: Theme.muted; }
+        Text { x: Theme.cal-pad + Theme.cal-icon-size + Theme.gap; width: root.time-x - self.x; height: parent.height; text: root.title; color: Theme.strong; font-size: Theme.cal-date-size; font-weight: Theme.weight-semibold; vertical-alignment: center; overflow: elide; }
+        for tick in root.ticks: Text {
+            x: tick.x + Theme.cal-tick-inset; height: parent.height;
+            text: tick.label; font-family: Theme.write-font; color: Theme.placeholder; font-size: Theme.cal-time-size; vertical-alignment: center;
+        }
+        Rectangle { y: parent.height - Theme.border-width; height: Theme.border-width; background: Theme.divider; }
+    }
+    TouchArea {
+        pointer-event(event) => {
+            if event.button == PointerEventButton.left || event.button == PointerEventButton.right {
+                if event.kind == PointerEventKind.down { root.mouse(event.button == PointerEventButton.right ? 1 : 0, 0, self.mouse-x, self.mouse-y, event.modifiers.shift); }
+                if event.kind == PointerEventKind.up { root.mouse(event.button == PointerEventButton.right ? 1 : 0, 2, self.mouse-x, self.mouse-y, event.modifiers.shift); }
+            }
+            if event.kind == PointerEventKind.move { root.mouse(1, 1, self.mouse-x, self.mouse-y, event.modifiers.shift); }
+        }
+        scroll-event(event) => {
+            root.wheel(self.mouse-x, event.delta-y != 0px ? event.delta-y : event.delta-x, event.modifiers.control, event.modifiers.shift);
+            accept
+        }
+    }
+    if root.focused: Rectangle { border-width: Theme.border-width; border-color: Theme.accent; }
+}

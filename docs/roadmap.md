@@ -7,17 +7,114 @@ Offene Aufgaben. Erledigtes mit `[x]` markieren. Vollständiger Plan: `docs/plan
   - Die Haupt-App erkennt Schreibvorgänge von außen (`src-tauri/src/external.rs`, jede Sekunde `PRAGMA data_version`). Sie übernimmt sie in den offenen Tag und speichert nach einem abgelehnten veralteten Stand von selbst erneut.
   - Drive-Sync geprüft: Er vergleicht ganze Snapshots, Änderungen bei geschlossener App kommen also beim nächsten Abgleich mit.
   - Die Historie ist gemeinsam: Strg+Z in der App nimmt auch J-TerminaL-Einträge zurück.
-- [ ] **Stufe 1: Grundgerüst**
-  - `j-terminal/` mit Hintergrundprozess, `global-hotkey` (`Strg+Alt+Leertaste`), nur einer Instanz und Autostart.
-  - Slint-Fenster mit Eingabezeile im einen Design (`ui/theme.slint`).
-  - Vault und Datenbank über `journal-core` öffnen, RAM messen.
-- [ ] **Stufe 2: Eingabezeile**
+- [x] **Stufe 1: Grundgerüst** – erledigt am 18.11.2026, noch nicht committet.
+  - `j-terminal/` mit Hintergrundprozess, `global-hotkey` (`Strg+Alt+Leertaste`, schaltet ein/aus), nur einer Instanz (lokaler Socket `j-terminal.sock`, ein zweiter Start holt das Fenster nach vorne) und Autostart (`HKCU\…\Run`, `--background`, nur im Release-Build).
+  - Slint-Fenster (nur Software-Renderer) mit Eingabezeile im einen Design (`ui/theme.slint`): ohne Rahmen, immer im Vordergrund, nicht in der Taskleiste, oben mittig auf dem Bildschirm mit der Maus. `Esc` und Fokusverlust verstecken es.
+  - Vault und Datenbank über `journal-core` öffnen (`src/journal.rs`): legt nie ein Journal an, fällt nie auf ein anderes zurück, lässt eine neuere Datenbank unberührt („Bitte J-TerminaL aktualisieren“). Probleme stehen blass unter der Zeile.
+  - RAM gemessen (Release, privater Arbeitssatz): 2,5 MB im Leerlauf, ca. 5 MB nach dem ersten Öffnen. Kürzel bis sichtbar: ca. 18 ms.
+- [x] **Stufe 2: Eingabezeile** – umgesetzt am 18.11.2026, noch nicht committet.
   - Engine in Rust: Lückentext und Tab, Aufzählungen (`Mo` → Tab → `Di`), ▬/┆.
   - Anlegen über `journal-core`, Heute-Übersicht, Suche, Befehle (`>`).
-  - `repeat.ts` und `repeatText.ts` der App nach Rust übertragen. Viele Unit-Tests.
-- [ ] **Stufe 3: eingebettete Bedienelemente** – Mini-Kalender mit Bereich und der Wahl durchgehend `▬` / wiederholt `┆`, Uhr, Skala.
-- [ ] **Stufe 4: Kalender mit neuer Oberfläche** – fasst die nächste Zeit zusammen, nur per Tastatur. Zuerst den Entwurf zeigen.
-- [ ] **Stufe 5: Bewertung und Aktivitäten** – Skalen mit den Pfeiltasten, Aktivitäten starten/stoppen/nachtragen.
+  - `repeat.ts` und `repeatText.ts` der App nach Rust übertragen. Unit-Tests für Regeln, Erkennung, Vorschläge und Speicherung.
+  - `app.rs`, `save.rs` und `snapshot.rs` sind in `main.rs` eingebunden. Slint zeigt Vorschläge, erkannte Werte und Felder, eine Tagesvorschau rechts und Tastenhinweise nur beim Halten von Strg.
+  - Enter übernimmt Vorschläge; Shift+Enter erstellt mit kurzem Hinweis und bleibt offen. Tab übernimmt den Rückgängig-Vorschlag. Suche wird nach 180 ms ergänzt; `> Tag`, `> Rückgängig`, `> Wiederherstellen`, `> Beenden` funktionieren auch auf Englisch.
+  - 76 Tests grün, einschließlich Slint-Tastaturtest mit Umlaut, Tab-Feldern, Tageswahl, Shift+Enter, Undo und Esc. Alle Schreibtests nutzen eigene temporäre Datenbanken.
+  - Noch manuell zu prüfen: natives Fenster mit globalem Kürzel und Fokusverlust, Zusammenarbeit mit der Haupt-App und aktuelle RAM-/Latenzmessung. Laufende Aktivitäten und fehlende Bewertung in „Heute“ folgen mit Stufe 5.
+- [x] **Stufe 3: eingebettete Bedienelemente** – umgesetzt am 18.11.2026, noch nicht committet.
+  - Die zweite Vorschlagszeile öffnet den passenden Mini-Kalender bzw. die Uhr; nach einer Startzeit folgt zusätzlich „Dauer auf der Skala wählen“. Tab oder Enter auf dem markierten Vorschlag öffnet das Element im selben Fenster.
+  - Kalender: 6 Wochen, Montag zuerst, Monat/Jahr und heutiger Tag markiert. Pfeile bewegen, Shift+Pfeile fügen einen Bereich hinzu, Einfg schaltet einen Tag um und Entf schneidet Tage/Bereiche aus; PgUp/PgDn wechseln den Monat, H springt zu heute. Leertaste wechselt zwischen durchgehendem Band `▬` und Wiederholungspunkten `┆`.
+  - Uhr: Stunden/Minuten mit Links/Rechts oder Tab wählen, Hoch/Runter ändern den Wert; Zifferneingabe wie `ClockTyping` der Haupt-App.
+  - Dauer-Skala ab der Startzeit: Pfeile ändern um 5 Minuten, PgUp/PgDn um 1 Stunde; Zahlen setzen Minuten direkt (1–1440). Übernommen wird die Endzeit, auch nach Mitternacht. Bewertungsskalen bleiben Stufe 5.
+  - Enter schreibt die Auswahl zurück, ohne zu speichern. Esc schließt nur das Element und erhält die Eingabe. Tastenhinweise nur beim Halten von Strg, Texte deutsch/englisch, Gestaltung im Theme.
+  - 85 Tests grün: reine Bedienelement-Logik, Einbindung in Vorlagen, bestehende Zeiträume, Speichern und Slint-Tastaturtest durch alle drei Elemente. Native Darstellung/Fokus und die bisherigen manuellen Integrationsprüfungen bleiben offen.
+- [x] **Überarbeitung der Eingabe nach Praxistest** – 18.11.2026, noch nicht committet.
+  - Mehr kontextbezogene Vorschläge ohne bisherige Sechsergrenze, mit begrenzter Fensterhöhe und scrollender Auswahl. Startvorlagen und „Als Aufgabe/Termin/Notiz“ machen den Typ ausdrücklich wählbar; `calendar`/`kalender` ist ein Alias für Termin.
+  - `from`/`von` bietet Datums- und Uhrzeitspannen. Wiederholungs-Enddaten ersetzen ihren eigenen Platz, statt als neues `on`-Datum angehängt zu werden. Anführungszeichen schützen Titel; unvollständige bekannte Metadaten verhindern das Speichern mit Hinweis.
+  - Datum, Zeit, Typ, Tag und Wiederholung werden als auswählbare Blöcke dargestellt: Cursor oder Strg+Enter zum Bearbeiten, Alt+Pfeile zum Auswählen, Strg+Entf zum Entfernen.
+  - Kalender behält mehrere Bereiche und einzelne Tage. Einfg schaltet einen Tag um, Entf schneidet einen Tag oder Shift-Bereich aus. Zusammenhängende Teile werden normalisiert und mehrtägige Events bei Lücken als getrennte Einträge gespeichert; Rückgängig erfasst alle Teile.
+  - Wiederholungseditor nach Vergleich mit `Journal-App/src/components/RepeatPanel.tsx`: Tag/Woche/Monat/Jahr, Abstand, Wochentage, Monatsmuster, Monate, Pausen, Ende nie/Anzahl/Datum und nächste Termine. E öffnet das Enddatum im Kalender, Esc kehrt zum Entwurf zurück. Keine Buttons.
+  - 96 Tests einschließlich des Nutzersatzes „Hallo each Monday Tuesday Thursday until 04.12.2026“, Enddatum-Reparatur, geteilter Events mit Undo und echter Slint-Tastaturereignisse durch Blöcke und Wiederholungseditor. Bedienung: `docs/input.md`.
+- [x] **Inline-Felder und neue Tastenfolge** – 18.11.2026, noch nicht committet.
+  - Blöcke liegen direkt hinter dem Text der Schreibzeile; die separate Blockzeile entfällt. Alt+Pfeile springt zwischen Feldern, Strg+Pfeile verwendet die native Wortnavigation.
+  - `spin.rs`: vertikale Wertauswahl unter der Zeile. Hoch/Runter verändert Typ, Datum oder Uhrzeit. Tab/Shift+Tab wechselt durch Tag/Monat/Jahr beider Bereichsenden bzw. Stunde/Minute beider Zeiten und anschließend zum nächsten Block. Enter bestätigt, Esc stellt den ursprünglichen Text samt Vorlagenfeldern wieder her.
+  - Enter übernimmt den voreingestellten oder gewählten Vorschlag. Nur Shift+Enter erstellt einen Eintrag; das Popup bleibt dabei offen, auch aus einem Editor heraus.
+  - Der Kalender für die zweite Datumslücke behält das erste Datum als festen Start und übernimmt eine Spanne statt eines einzelnen Tags.
+  - 104 Tests grün einschließlich englischer `from … to __`-Vorlage, Monats-/Jahreswechsel, Schaltjahr, Typwechsel, Feldfolge, Abbrechen, offener Oberfläche nach Speichern und nativer Strg-Wortnavigation im Slint-Tastaturtest. Native visuelle Prüfung bleibt offen.
+- [x] **Geführte Vorlagen und Live-Vorschau** – 18.11.2026, noch nicht committet.
+  - Erste Vorschläge: heute ohne Uhrzeit, mit Datum und Uhrzeit, wiederkehrend. Ein schon geschriebener Titel bleibt erhalten. Vorgegebene Wörter/Werte und Lücken erscheinen blass, Tab navigiert die Felder; erforderliche Datums-/Zeitfelder öffnen direkt Kalender/Uhr.
+  - Wiederholungsvorlage mit direkter Auswahl für Rhythmus und Wochentage; ein Enddatum ist optional und wird beim Überspringen nicht gesetzt. Die freie Textsyntax und der ausführliche Editor bleiben verfügbar.
+  - Eigene Vorschaukarte mit Titel, Typ, Datum, Zeit, Wiederholung, nächsten fünf Terminen und fehlenden Feldern. Vorschau auch ohne Vault und bei noch nicht bestätigter Picker-Auswahl; keine Schreibvorgänge vor Shift+Enter.
+  - `draft_preview.rs` projiziert Entwürfe auf Tage. Der Mini-Kalender markiert diese bereits; dieselbe Projektion kann die kommende Kalenderübersicht verwenden. Ein unmöglich frühes Serienende wird nicht mehr still verlängert.
+  - 110 Tests grün einschließlich kompletter Slint-Tastaturabläufe, optionalem Ende, grauen Vorlagenanteilen, Live-Kalender-/Uhrvorschau und unveränderter Test-Datenbank während der Vorschau. Native visuelle Prüfung bleibt offen.
+- [x] **Vorschläge und Wiederholung vereinheitlicht** – 18.11.2026, noch nicht committet; ersetzt die bisherigen zwei Wiederholungsoberflächen.
+  - Hoch/Runter navigiert während der normalen Eingabe ausschließlich Vorschläge. Feldänderungen beginnen bewusst mit Alt+Pfeilen, Strg+Enter oder Klick. `Mo → runter → Enter` öffnet die wöchentliche Wiederholung mit Montag, ohne den Text vorher zu verändern.
+  - Ein gemeinsamer visueller Wiederholungseditor für Vorlage, Vorschlag und Inline-Block, aufgebaut auf dem `RepeatPanel.tsx` der Journal-App. Rhythmus, Abstand, Wochentage, gültige Monatsmuster, Monatsfilter, Pausen, Nie/Anzahl/Datum und Beginn; keine getrennte Endlücke.
+  - Text und visuelle Auswahl im selben Editor. Wortvorschläge aus der Journal-Portierung, Fehleranzeige, Vorschau und korrektes Abbrechen. Datums-/Zeitvorschläge bleiben auch hinter Wiederholungen erreichbar; andere Angaben werden beim Bearbeiten erhalten.
+  - Absoluter Serienbeginn bleibt beim Zurückschreiben erhalten. Editor, Vorschau und gespeicherte Termine stimmen auch bei zweiwöchentlichen Mustern überein. Abgewählte Wochentage bleiben nicht als Auftakttermin zurück.
+  - 116 Tests grün, einschließlich nativer Slint-Tastatureingaben durch den neuen Editor. Gerenderte Wochen-, Monats-, Text- und Vorschlagsansichten mit Software-Renderer geprüft. Prüfung des globalen Kürzels, nativer Fensterintegration und RAM/Latenz bleibt separat offen.
+- [x] **Umbau: Formular statt Eingabezeile** – 18.11.2026, noch nicht committet; ersetzt alle Eingabemechanismen oben (Vorlagen/Lücken, Vorschlagsliste, Blöcke im Text, Feldeditor, Befehle `>`, Suche in der Zeile).
+  - Warum: Die Zeile hatte zu viele Modi (Text, Blöcke, Vorlagen, Vorschläge, Popups), eine Information ließ sich auf mehreren Wegen ändern, Enter bedeutete je nach Zustand etwas anderes, und ein einfacher Eintrag brauchte viele Schritte.
+  - Neu: `form.rs` und `ui/bar.slint`. Elf feste Zeilen, jede Information des Eintrags hat genau eine: Typ, Titel, Datum, Zeit, Wiederholung, Tag, Beschreibung, Wichtig, Erinnerung (mit „n Minuten vorher“), Symbol, „Im Journal“. Alle Felder werden über `journal-core` gespeichert (`save::Extras`).
+  - **Enter erstellt nie.** Enter bestätigt die Zeile; Shift+Enter erstellt und lässt das Fenster offen; Strg+Enter erstellt und schließt.
+  - Schnelles Schreiben im Titel bleibt (`Zahnarzt Do 14 \Gesundheit`): beim Verlassen der Zeile wandern erkannte Wörter in ihre Zeilen. Der Parser (`engine/parse.rs`, `resolve.rs`) ist unverändert.
+  - Kalender, Uhr, Dauer und Wiederholungseditor bleiben und öffnen sich per Alt+↓ oder Enter auf einer leeren Zeile. Alt+1/2/3 setzt den Typ aus jeder Zeile.
+  - Entfernt: `app.rs`, `spin.rs`, `draft_preview.rs`, `engine/suggest.rs`, `engine/fields.rs`, `engine/blocks.rs` und die ungenutzten Texte.
+  - 80 Tests grün, davon 17 Modelltests (`form_tests.rs`) und ein Slint-Tastaturtest durch das echte Fenster. Bedienung: `docs/input.md`. Native Darstellung, Fokus und Zusammenspiel mit der Haupt-App bleiben manuell zu prüfen.
+- [ ] **Formular: bestehende Einträge** – Suche (Strg+F oder ähnlich) lädt einen Eintrag in dieselben Zeilen, Speichern aktualisiert ihn; Tag ansehen. Dazu fehlend: „Planen auf andere Tage“, Tagestitel/Journaltext.
+- [x] **Stufe 4: Kalender** – 18.11.2026, noch nicht committet. Dauerhaft rechts neben dem Formular (Fenster 1501 px: Formular 600, Kalender 900), endlos scrollbar, zeigt den entstehenden Eintrag live und ersetzt das Datum-Popup.
+  - Zeitgewebe nach Nutzervorlage: jeder Tag ein Band über 24 h, Zeitstücke in Tag-Farbe mit Titel/Uhrzeit, Überschneidungen in eigenen Reihen, Tage per Linksklick auf-/zuklappen (Shift: Bereich). Mehrtägiges als Spur links mit Titel. Wochenlinie farbig zwischen So und Mo, Monate mit Kopfzeile und Wechseltönung, Kopfzeile mit Monat und Stunden.
+  - Anlegen wie in der App per Rechtsklick: links ganztägig, links ziehen mehrtägig, in den 24 h ziehen Tag und Zeit (Viertelstunden, über Mitternacht und Tage). Standardtyp „Termin, nur im Kalender“ wie in der App.
+  - `calendar.rs` (Layout, Treffer, Scrollen; 11 Tests), `snapshot.rs` (wachsender Bereich, in Stücken ≤ 360 Tage), `ui/calendar.slint`. Bedienung: `docs/input.md`.
+  - Überarbeitung (18.11.2026): Einträge ohne Uhrzeit in der breiteren Seitenspalte (zugeklappt Punkte in Tag-Farbe, aufgeklappt Zeilen), mehrtägige Einträge mit gedrehtem Titel (eigene Glyphen-Rasterung in `turned.rs`, da der Software-Renderer keinen Text dreht) und ohne Zeitstück am letzten Tag. Zoom: Strg+Rad Tage, Strg+Shift+Rad Stunden, Shift+Rad Stunden verschieben; `+`/`−` entfallen. Linksklick auf einen Eintrag klappt seinen Tag auf. Beim Ziehen wird gegen das Layout vom Drücken geprüft, damit nichts unter dem Zeiger verrutscht.
+  - Offen: **Linksklick auf einen Eintrag öffnet seine Details** (vorgemerkt); Einträge im Kalender verschieben/ändern; Rechtsklick auf einen Eintrag (in der App: bearbeiten). Kategorie-/Eintragssymbole sind mit der Standarddesign-Anpassung unten umgesetzt.
+- [x] **Suchleiste statt Formular als Start** – 18.11.2026, noch nicht committet. Links oben eine Leiste mit Befehlen ab `/`; einziger Befehl bisher `/Entry` (öffnet das Formular). Markieren im Kalender öffnet das Formular von selbst; Esc schließt es wieder.
+- [x] **Bedienung über Optionen, Kalender-Tastatur, Uhr, Optik** – 18.11.2026, noch nicht committet.
+  - Tab geht immer ins nächste Feld; Enter öffnet die Optionen eines Felds (alle Pfeile), Enter übernimmt und geht weiter, Esc bricht ab und bleibt.
+  - Datum: ein Bereich ist immer mehrtägig, Kommas trennen einzelne Einträge (`▬`/`┆` entfallen).
+  - Kalender per Tastatur: Seitenspalte (ganze Tage, Shift-Bereich = mehrtägig) und 24-h-Spalte (Stunden, Strg Viertelstunden, Shift-Zeitraum auch über Tage), Tab wechselt, Enter übernimmt Tag/Zeitpunkt/Bereich, Esc erst Bereich weg, dann zurück. `picker.rs` entfällt.
+  - Uhr: große Stunden:Minuten, ↑/↓ ±1, Strg ±4 Std./±15 Min., Ziffern, Entf leert.
+  - Optik: Lucide-Symbole an allen Zeilen und Typen, Optionen als Karte; Wiederholung in beschrifteten Zeilen (Rhythmus, Einheit, Alle, Am, Ab, Bis, Pause, Nur in) mit Segmenten, runden Tages-/Monatsschaltern und Zahl-/Datumsfeldern.
+- [ ] **Links: Tagesansicht** unter der Suchleiste (Standard, solange kein Formular offen ist; Plan Abschnitt 0c).
+  - Heute kompakt zusammenfassen: Termine, offene Aufgaben, Notizen, Bewertungen und Aktivitäten.
+  - Die Ansicht folgt dem im Kalender gewählten Tag; z. B. Mittelklick für die Tageswahl, zusätzlich per Tastatur. Datum sichtbar und Rückkehr zu heute möglich. Nach dem Schließen des Formulars wieder zur Tagesansicht zurückkehren.
+  - Runde Bewertungs-Dials und Aktivitäten aus Stufe 5 in diese Ansicht integrieren. Tageswechsel darf Bewertungen nicht dem falschen Tag zuordnen.
+- [ ] **Eigenständiger Notizblock** als separat aufrufbarer Bereich, nicht in der Tagesansicht.
+  - Tagestitel/Journaltext ansehen und bearbeiten, mit denselben Daten wie in der Haupt-App und eindeutiger Zuordnung zum jeweiligen Tag.
+- [ ] **Suchleiste: Journal durchsuchen und Quick-Actions**, ausgehend von der vorhandenen `/Entry`-Aktion.
+  - Treffer mit `@Typ`-/`\Tag`-Filtern finden, anzeigen und zum Bearbeiten in dasselbe Formular laden.
+  - Tageswahl/Heute, Rückgängig/Wiederherstellen, Notizblock, Bewertung, Aktivitäten und später Pinnwand als kompakte Aktionen; Treffer und Aktionen auch mit der Maus benutzbar.
+- [ ] **Einträge: kompakte Hover-Vorschau** – vollständiger Name und ggf. Beschreibung in Kalender, Tagesansicht und Suchtreffern, auch bei schmalen Einträgen, Symbolanzeigen und mehrtägigen Spuren. Fenstergrenzen beachten, keine Änderung durch Hover; dieselben Informationen beim Tastaturfokus erreichbar machen.
+- [ ] **Felder und Aktionsflächen vollständig mit der Maus bedienen** – Felder fokussieren/bearbeiten, Typ/„Mehr“/Optionen und Suchtreffer anklicken, kompakte Aktionen auslösen. Alle Funktionen zusätzlich per Tastatur; keine zusätzlichen Buttonleisten. Beide Eingabewege prüfen.
+- [x] **Neu-Designs nach der Kritik vom 18.11.2026** – noch nicht committet.
+  - Kompaktes Formular: vier Typen wie in der App (Kalender, Ereignis, Aufgabe, Notiz; Alt+1–4), Zeile „Wann“ mit Datum │ Start – Ende (leeres Ende = Zeitpunkt, ↑/↓ ±15 Min., `+45`/`+1,5h` als Länge), „Mehr“ für Beschreibung, Wichtig, Erinnerung, Symbol. Die Vorschau entfällt; der Kalender öffnet den Tag des Entwurfs selbst, Fehler stehen rot am Feld.
+  - Tag: Liste aller Tags mit Farben unter der Zeile (Tippen filtert, ←/→ und Klick wählen); im Formular mit Farbpunkt.
+  - Symbol: Raster aus dem Lucide-Satz der App (`assets/lucide-icons.txt`, ISC-Lizenz in `assets/LICENSE-lucide.txt`, gerendert mit `zeno` in `icons.rs`), Suche nach Namen.
+  - Erinnerung: Vorlagen plus eigene getippte Werte (`45`, `2 h`, `3 Tage`, ≤ 30 Tage).
+  - Wiederholung: neuer Editor als Satz mit Lücken und fertigen Rhythmen (`repeat_sentence.rs`), jede Änderung sofort im Kalender. Das alte Panel (`repeat_editor.rs`, `repeat-panel.slint`), Uhr und Dauer-Skala sind entfernt.
+- [x] **Standarddesign der Journal-App übernehmen** – 18.11.2026, noch nicht committet; Fortsetzung ab Claudes `ui/theme.slint`.
+  - Palette `original` und Look `classic`: graue Panels, schwarze Felder und Kalenderfläche, abgerundete Eingaben mit blauer Fokuskontur, passende Typauswahl und Auswahlkarten. Alle Gestaltungswerte in `ui/theme.slint`; IBM Plex Sans und Lilex aus den bereits vorhandenen Font-Dateien.
+  - Vorhandene Lucide-Rasterung auch für Suche, Befehle, Tags und Kalender: eigenes Eintragssymbol vor Tag-Symbol, Farbpunkt als Rückfall; mehrtägige Spuren ebenfalls mit Symbol und IBM-Plex-Titel. Keine neuen Rust-Abhängigkeiten; Software-Renderer bleibt bestehen.
+  - Hinweise auch in Auswahlkarten nur beim Halten von Strg. Tests für Symbolvererbung, gespeicherte Symbole, Kalenderdarstellung und unveränderte Trefferflächen; Slint-Tastaturablauf mit gerenderten Ansichten gegen eine Test-Datenbank.
+  - 102 Tests grün, Release-Build erfolgreich. Nativ mit Test-Datenbank gemessen: privater Arbeitssatz rund 3 MiB im Hintergrund und 12 MiB nach dem Öffnen (gesamter Arbeitssatz rund 18/32 MiB). Ansichten und Messung in `j-terminal/target/ui-check/`.
+- [x] **Darstellungsfehler nach Standarddesign-Anpassung** – 18.11.2026, noch nicht committet.
+  - Unvollständige Icons behoben: 219 Lucide-Pfade für den vorhandenen `zeno`-Parser normalisiert; keine neuen Rust-Abhängigkeiten, keine zusätzliche Arbeit zur Laufzeit. Wiederholbarer Vorbereitungsschritt in `scripts/normalize_icon_arcs.py`.
+  - Aktiver und markierter Eingabetext explizit hell; Symbole auch in schmalen Kalenderereignissen ohne Titel, sofern sie in Breite und Höhe passen. Deutlichere Monatstrenner über Raster und mehrtägigen Spuren.
+  - 104 Tests grün, einschließlich vollständigem Einlesen aller 2046 Icon-Pfade, Gitarrenkörper und Pixelprüfungen für Textauswahl, passende/unpassende Icon-Größen sowie Monatstrenner. Darstellung gegen Test-Datenbank und künstliche UI-Daten geprüft. Release-Build erfolgreich; aktualisierte EXE separat erstellt, da die bisherige Instanz noch läuft.
+- [x] **Geglättete Icons, „Mehr“ und Stundenraster-Spannen** – 18.11.2026, noch nicht committet.
+  - Icons mit achtfacher physischer Auflösung rasterisieren und flächengewichtet auf die Bildschirmauflösung verkleinern; nur die kleinen fertigen Masken zwischenspeichern. Nach einem Windows-Skalierungswechsel werden die Masken neu gewählt. Keine zusätzlichen Rust-Abhängigkeiten. Slint-Ansichten bei 100, 125, 150 und 200 Prozent geprüft.
+  - „Mehr“ als eine Abschnittszeile mit Aufklapppfeil, Trennlinie und Zusammenfassung; keine doppelte Beschriftung, keine Buttons.
+  - Im 24-h-Raster gezogene Spannen erscheinen auf jedem betroffenen Tag (z. B. Mi 14–24, Do 0–24, Fr 0–16). Links oder über Felder angelegte mehrtägige Ereignisse behalten ihre Spur. Ein Ende um Mitternacht bleibt exklusiv. Zeitpunkte ohne Endzeit haben eine genaue dicke Markierung mit schmalem Titel-/Symbolbalken und bekommen keine angenommene Stunde mehr.
+  - Auf ausdrücklichen Nutzerwunsch auch im Branch `Windows`: `journal-core` speichert `timeGrid`/`time_grid` in Schema 15, Altbestand bleibt unverändert. Merkmal bleibt bei Historie, Kopien, Serien und Sync erhalten; nach Verschieben ohne Uhrzeit wird es gelöscht. Die Haupt-App zeichnet und bearbeitet Rasterspannen ebenfalls über alle Tage; ihre frühere 24-h-Gestengrenze ist entfernt. Beide Programme müssen mit dem aktualisierten Kern benutzt werden.
+  - 108 J-TerminaL-Tests, 66 Kern-Tests, 56 Backend-Tests der Haupt-App und 402 Frontend-Tests grün; zusätzliche Browserprüfung für drei Tagesstücke, traditionelle Spannen, Bearbeiten einer Fortsetzung und tatsächliches Ziehen/Speichern einer neuen Rasterspanne. Ausschließlich Test-Datenbanken und künstliche Browserdaten.
+  - Beide Release-EXEs gebaut. J-TerminaL mit Test-Datenbank nativ gemessen: privater Arbeitssatz 2,98 MiB im Hintergrund und 12,17 MiB geöffnet; gesamter Arbeitssatz 25,14/38,41 MiB. Messung in `j-terminal/target/ui-check/final-memory.json`.
+- [x] **Zeitpunkt-Beschriftungen bei Überschneidungen** – 18.11.2026, noch nicht committet.
+  - Beschriftung samt Symbol bei einer überlappenden Terminreihe darunter oben an der Zeitmarke anordnen; einzeln und in der untersten Reihe weiterhin unten. Reihen bleiben getrennt, Zeitmarken bleiben exakt.
+  - Kleiner Eckenradius für die schmalen Balken zentral im Theme. Layout- und Renderprüfungen für beide Positionen, gemischte Zeitspannen und wiederverwendete Reihen.
+  - 109 Tests grün; gerenderte Beschriftungen samt Symbolen oben/unten und die weniger gerundeten Enden geprüft. Nur Test-Datenbanken und künstliche UI-Daten.
+  - Release erfolgreich als `j-terminal/target/release/j-terminal-updated.exe` gebaut, da die bisherige EXE noch läuft.
+- [ ] **Stufe 5: Bewertung und Aktivitäten in der Tagesansicht**
+  - Tagesbewertung und eigene Skalen als platzsparende runde Dials mit Bezeichnung und Wert; Maus, Pfeiltasten und Zahleneingabe. Vorhandene Skalenregeln beachten und auf den angezeigten Tag speichern.
+  - Aktivitäten starten/stoppen, abhaken und Zeiten nachtragen; laufende Timer auch beim Betrachten eines anderen Tages sichtbar halten. Vorhandene Aktivitätslogik übernehmen und zusammen mit dem Tageswechsel prüfen.
 - [ ] **Stufe 6: Pinnwand per Tastatur** – in J-TerminaL. Die Kürzel für die Pinnwand der Haupt-App kommen im Branch `Windows` dazu. Später kommen mehr Funktionen, z. B. Karten verbinden.
 - [ ] **Stufe 7: Anbindung und Release**
   - `Strg+Leertaste` in der Haupt-App (im Branch `Windows`).

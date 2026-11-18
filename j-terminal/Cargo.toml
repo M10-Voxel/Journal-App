@@ -1,0 +1,42 @@
+[package]
+name = "j-terminal"
+version = "0.1.0"
+edition = "2021"
+description = "Schnelles Eintragen und Nachsehen im Journal, nur per Tastatur."
+license = "MIT"
+
+[dependencies]
+# The journal's data, from the branch `Windows` (see CLAUDE.md). Releases pin it by git commit instead.
+journal-core = { path = "../../Journal-App/crates/journal-core" }
+# The same version as journal-core's (bundled there), for a read-only look before opening.
+rusqlite = "0.37"
+chrono = { version = "0.4", default-features = false, features = ["std", "clock", "serde"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4"] }
+# Software renderer only: no GPU context, the least memory while waiting in the background.
+slint = { version = "1.19", default-features = false, features = ["std", "compat-1-2", "backend-winit", "renderer-software", "unstable-winit-030"] }
+global-hotkey = "0.10"
+# One instance: the socket is both the lock and the way a second start (and later the Journal app) says "show".
+interprocess = "2.4"
+# Lane titles in the calendar are turned; the software renderer cannot turn text, so they are drawn as images.
+ab_glyph = "0.2"
+# Entry icons (Lucide paths) are drawn into masks with it; already part of the font stack.
+zeno = "0.3"
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.56"
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }
+
+[build-dependencies]
+slint-build = "1.19"
+
+[dev-dependencies]
+i-slint-backend-testing = { version = "=1.19.0", features = ["renderer-software"] }
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"

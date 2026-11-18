@@ -1,0 +1,1459 @@
+//! The entry form without the window (docs/input.md): a compact form under the search bar, with the calendar beside it
+//! as the preview. Every piece of an entry has one place where it is changed, and Enter never saves.
+//!
+//! * Lines: the type (four, as in the app), the title, "when" (date │ start – end), the repetition, the tag, and behind
+//!   "more" the description, important, reminder and icon.
+//! * `↑`/`↓` move between lines, `Tab` always to the next field (in "when" from the date to the start and the end).
+//! * `Enter` opens a field's options (the calendar for the date, the clock for a time, the lists for tag, icon and
+//!   reminder, the repetition's lines); inside, all arrows move. `Enter` takes it and goes on, `Esc` cancels and stays.
+//!   Everything shows in the calendar at once.
+//! * `Shift+Enter` creates the entry and keeps the window, `Strg+Enter` creates it and closes.
+use std::collections::BTreeSet;
+use chrono::{Local, NaiveDate, Timelike};
+use crate::calendar::{self, Item, Layout, Metrics};
+use crate::engine::{
+    parse::{self, format_time, Draft, Kind, Mode, TagName},
+    resolve::{resolve, Outcome, Problem},
+};
+use crate::icons;
+use crate::journal::Journal;
+use crate::repeat::{self, Rule};
+use crate::repeat_sentence::{self, Act, Editor, Line};
+use crate::save::{self, Extras, Saved};
+use crate::snapshot::Snapshot;
+use crate::texts::{form_texts, texts, FormTexts, Language, Texts};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Key { Tab, Up, Down, Left, Right, Enter, Escape, Space, PageUp, PageDown, Home, Insert, Delete, Digit(u8), Undo, Redo, Quit,
+    /// F6: the keyboard goes to the calendar and back.
+    Focus,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Mods { pub shift: bool, pub ctrl: bool, pub alt: bool }
+
+/// The four types of the app: an appointment only in the calendar, an event (also in the journal), a task, a note.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Type { Calendar, Event, Task, Note }
+const TYPES: [Type; 4] = [Type::Calendar, Type::Event, Type::Task, Type::Note];
+impl Type {
+    fn kind(self) -> Kind { match self { Type::Calendar | Type::Event => Kind::Event, Type::Task => Kind::Task, Type::Note => Kind::Note } }
+    fn journal(self) -> bool { self != Type::Calendar }
+    fn index(self) -> usize { TYPES.iter().position(|t| *t == self).unwrap_or(0) }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Field { Kind, Title, Day, Start, End, Repeat, Tag, More, Description, Priority, Reminder, Icon }
+pub const FIELDS: [Field; 12] = [Field::Kind, Field::Title, Field::Day, Field::Start, Field::End, Field::Repeat, Field::Tag, Field::More, Field::Description, Field::Priority, Field::Reminder, Field::Icon];
+const TITLE: usize = 1;
+
+impl Field {
+    pub fn index(self) -> usize { FIELDS.iter().position(|f| *f == self).unwrap() }
+    /// The line it is on (the date, start and end share "when").
+    fn line(self) -> usize {
+        match self { Field::Kind => 0, Field::Title => 1, Field::Day | Field::Start | Field::End => 2, Field::Repeat => 3, Field::Tag => 4, Field::More => 5, Field::Description => 6, Field::Priority => 7, Field::Reminder => 8, Field::Icon => 9 }
+    }
+    fn cell(self) -> usize { match self { Field::Start => 1, Field::End => 2, _ => 0 } }
+    /// The field has text the input edits.
+    fn text(self) -> bool { !matches!(self, Field::Kind | Field::More | Field::Priority) }
+    /// `←`/`→` move the cursor in the text (otherwise they choose).
+    fn native_arrows(self) -> bool { matches!(self, Field::Title | Field::Day | Field::Start | Field::End | Field::Repeat | Field::Description) }
+    /// Behind "more".
+    fn extra(self) -> bool { matches!(self, Field::Description | Field::Priority | Field::Reminder | Field::Icon) }
+}
+
+/// Reminders ready to choose: minutes before the entry's time (0 at the time itself).
+const REMINDERS: [Option<i64>; 11] = [None, Some(0), Some(5), Some(10), Some(15), Some(30), Some(60), Some(120), Some(1440), Some(2880), Some(10080)];
+/// The icons shown before anything is typed.
+const COMMON_ICONS: [&str; 48] = ["calendar", "clock", "bell", "star", "heart", "house", "briefcase", "book-open", "graduation-cap", "stethoscope", "dumbbell", "utensils",
+    "shopping-cart", "car", "plane", "train-front", "bike", "music", "phone", "mail", "users", "user", "gift", "cake", "coffee", "party-popper", "pill", "hospital",
+    "building-2", "map-pin", "flag", "sun", "moon", "cloud", "umbrella", "tree-pine", "dog", "cat", "baby", "wrench", "laptop", "code", "pen", "camera", "film",
+    "gamepad-2", "trophy", "wallet"];
+const ICON_ROOM: usize = 56;
+/// Icons per line of the grid (as in `ui/theme.slint`).
+const ICON_COLUMNS: i32 = 14;
+
+#[derive(Clone, Debug, PartialEq)]
+struct Values {
+    typ: Type,
+    title: String,
+    /// Empty: today.
+    days: BTreeSet<NaiveDate>,
+    mode: Mode,
+    /// Minutes since midnight; no end is a point in time.
+    start: Option<u32>,
+    end: Option<u32>,
+    /// Kept with a draft made by marking the hour grid, independently of later text edits.
+    time_grid: bool,
+    rule: Option<Rule>,
+    tag: Option<String>,
+    description: String,
+    priority: bool,
+    reminder: Option<i64>,
+    icon: Option<String>,
+}
+
+impl Default for Values {
+    fn default() -> Self {
+        Values { typ: Type::Task, title: String::new(), days: BTreeSet::new(), mode: Mode::Continuous, start: None, end: None, time_grid: false, rule: None, tag: None,
+            description: String::new(), priority: false, reminder: None, icon: None }
+    }
+}
+
+/// One field as drawn: its line (counting only the lines shown), its place in the line, and what it shows.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct RowView {
+    pub field: usize,
+    pub line: usize,
+    pub cell: usize,
+    /// The line has several fields ("when").
+    pub multi: bool,
+    /// The line's label, on its first field only.
+    pub label: String,
+    /// The line's icon, beside its label.
+    pub label_icon: &'static str,
+    pub value: String,
+    pub hint: String,
+    pub filled: bool,
+    pub error: bool,
+    pub color: Option<calendar::Rgb>,
+    pub icon: String,
+}
+
+/// A choice under the active line.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Choice { pub label: String, pub color: Option<calendar::Rgb>, pub icon: String, pub selected: bool }
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub enum Panel {
+    #[default]
+    None,
+    Tags(Vec<Choice>),
+    Icons(Vec<Choice>),
+    Reminders(Vec<Choice>),
+    Repeat(Vec<Line>),
+    /// The clock: hours and minutes, which of them has the arrows, and a word on what it is.
+    Clock { label: String, hours: String, minutes: String, on_minutes: bool },
+    /// The calendar has the keyboard: what is chosen and how.
+    Calendar { label: String, hours: bool },
+}
+
+/// The calendar beside the form as the window draws it.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct CalendarView { pub layout: Layout, pub focus: bool, pub metrics: Metrics }
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct View {
+    pub rows: Vec<RowView>,
+    pub active: usize,
+    pub active_line: usize,
+    pub active_cell: usize,
+    pub active_multi: bool,
+    /// The input shows the active field's text.
+    pub editable: bool,
+    /// `←`/`→` move the cursor instead of choosing.
+    pub native_arrows: bool,
+    pub type_names: [String; 4],
+    pub type_icons: [&'static str; 4],
+    /// A field's options are open (Enter took it there).
+    pub options: bool,
+    pub type_selected: usize,
+    pub panel: Panel,
+    /// A line under the choices (the chosen icon's name, a hint).
+    pub panel_note: String,
+    pub panel_hint: String,
+    pub summary: String,
+    pub calendar: CalendarView,
+    /// The entry form is open (otherwise only the search bar is).
+    pub entry_open: bool,
+    pub commands: Vec<Command>,
+    pub command_selected: usize,
+    pub search_placeholder: String,
+    pub status: Option<(String, bool)>,
+    pub placeholder: String,
+}
+
+/// What the window has to do after a key.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Effect {
+    /// The input gets this text, all selected.
+    pub text: Option<String>,
+    pub hide: bool,
+    /// Created: show it briefly, then hide.
+    pub hide_soon: bool,
+    pub quit: bool,
+    /// The search bar gets this text.
+    pub search: Option<String>,
+    /// Where the keyboard goes.
+    pub focus: Option<Pane>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Pane { Search, Entry }
+
+/// A command offered under the search bar.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Command { pub name: String, pub detail: String }
+
+pub struct Form {
+    journal: Option<Journal>,
+    snapshot: Option<Snapshot>,
+    pub language: Language,
+    today: NaiveDate,
+    now: u32,
+    v: Values,
+    /// The values when the active field was entered (`Esc` brings them back).
+    backup: Values,
+    active: usize,
+    buffer: String,
+    row_error: Option<String>,
+    /// What is typed into the tag or icon field: it filters the choices.
+    query: String,
+    /// The highlighted choice under the active line.
+    pick: usize,
+    /// The repetition's sentence and where its keyboard is.
+    editor: Editor,
+    /// "More" is open.
+    more_open: bool,
+    /// Creating was tried: a missing title is named from now on.
+    tried: bool,
+    last_saved: Option<Saved>,
+    status: Option<(String, bool)>,
+    flash: Option<String>,
+    /// Sizes of the calendar, from the theme.
+    pub metrics: Metrics,
+    /// The open options of the active field, and the values from before they opened (`Esc` brings them back).
+    options: Option<Options>,
+    options_backup: Values,
+    /// The day at the top of the calendar and how far it is scrolled out of view.
+    cal_top: NaiveDate,
+    cal_offset: f32,
+    /// The day the calendar was last brought to (it only moves again when that changes).
+    cal_target: Option<NaiveDate>,
+    /// Days opened with a click, and the last one clicked (Shift+click opens everything up to it).
+    cal_open: BTreeSet<NaiveDate>,
+    cal_clicked: Option<NaiveDate>,
+    /// A right-button drag marking a new entry, and the calendar as it was when the button went down: the draft may
+    /// change the days' heights while dragging, the pointer is matched against what was under it.
+    mark: Option<MarkDrag>,
+    mark_layout: Option<(Layout, Metrics)>,
+    /// What the calendar shows now (the mouse is matched against it).
+    shown_layout: Layout,
+    shown_metrics: Metrics,
+    /// The moment given to `at` stays (tests); otherwise each showing reads the clock.
+    fixed_clock: bool,
+    /// The type was chosen on purpose (then the calendar leaves it alone).
+    kind_chosen: bool,
+    /// What is shown at the left: the search bar alone, or the entry form under it.
+    entry_open: bool,
+    search: String,
+    command_selected: usize,
+    /// How much taller the days are (Strg+wheel), how much wider the hours (Strg+Shift+wheel), and the minute at the
+    /// left edge of the hours (Shift+wheel).
+    zoom_days: f32,
+    zoom_hours: f32,
+    pan: f32,
+}
+
+/// The options of a field, open after Enter.
+#[derive(Clone, Debug, PartialEq)]
+enum Options {
+    /// The date in the calendar, with the keyboard.
+    Calendar(CalCursor),
+    /// A time on the clock (the start or the end).
+    Clock(Clock),
+    /// The tag, icon or reminder lists.
+    Choices,
+    /// The repetition's lines.
+    Repeat,
+}
+
+/// The keyboard in the calendar: on the side of the days (whole days) or in the 24 hours (a moment); with Shift a range
+/// from where Shift was first held.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct CalCursor { hours: bool, day: NaiveDate, minute: u32, anchor: Option<(NaiveDate, u32)> }
+
+/// The clock: the hours or the minutes have the arrows; digits typed so far.
+#[derive(Clone, Debug, PartialEq)]
+struct Clock { end: bool, minutes: bool, typed: String }
+
+/// A new entry marked with the right mouse button, as in the app.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum MarkDrag {
+    /// On the side of the days: whole days, from one to the other.
+    Days(NaiveDate, NaiveDate),
+    /// In the 24 hours: from one moment to another, also over midnight and several days.
+    Time((NaiveDate, u32), (NaiveDate, u32)),
+}
+
+fn now() -> (NaiveDate, u32) {
+    let now = Local::now();
+    (now.date_naive(), now.hour() * 60 + now.minute())
+}
+
+fn ranges(days: &BTreeSet<NaiveDate>) -> Vec<(NaiveDate, NaiveDate)> {
+    let mut out: Vec<(NaiveDate, NaiveDate)> = Vec::new();
+    for day in days {
+        match out.last_mut().filter(|last| repeat::shift(last.1, 1) == *day) { Some(last) => last.1 = *day, None => out.push((*day, *day)) }
+    }
+    out
+}
+
+/// A clock time: "14", "14:30", "1430", "930", "2pm"; with `midnight` also "24"/"24:00" (the end of the day).
+fn parse_clock(text: &str, midnight: bool) -> Option<u32> {
+    let text = text.trim().to_lowercase();
+    if midnight && (text == "24" || text == "24:00") { return Some(1440); }
+    if (3..=4).contains(&text.len()) && text.bytes().all(|b| b.is_ascii_digit()) {
+        let (hours, minutes) = text.split_at(text.len() - 2);
+        let (hours, minutes) = (hours.parse::<u32>().ok()?, minutes.parse::<u32>().ok()?);
+        return (hours <= 23 && minutes <= 59).then_some(hours * 60 + minutes);
+    }
+    parse::parse_time(&text)
+}
+
+/// A length: "45", "45 min", "1,5h", "1h30", "2 Std.", "1 Tag", "2 days", "1 Woche" → minutes.
+fn parse_length(text: &str) -> Option<i64> {
+    let text = text.trim().to_lowercase().replace(',', ".");
+    let (mut total, mut number, mut seen) = (0.0f64, String::new(), false);
+    let mut rest = text.as_str();
+    while !rest.is_empty() {
+        let c = rest.chars().next()?;
+        if c.is_ascii_digit() || c == '.' { number.push(c); rest = &rest[1..]; continue; }
+        if c.is_whitespace() { rest = &rest[1..]; continue; }
+        let word: String = rest.chars().take_while(|c| c.is_alphabetic() || *c == '.').collect();
+        rest = &rest[word.len()..];
+        let word = word.trim_end_matches('.');
+        let unit = match word {
+            "m" | "min" | "mins" | "minute" | "minuten" | "minutes" => 1.0,
+            "h" | "std" | "stunde" | "stunden" | "hour" | "hours" => 60.0,
+            "d" | "t" | "tag" | "tage" | "day" | "days" => 1440.0,
+            "w" | "woche" | "wochen" | "week" | "weeks" => 10080.0,
+            _ => return None,
+        };
+        total += number.parse::<f64>().ok()? * unit;
+        number.clear();
+        seen = true;
+    }
+    if !number.is_empty() {
+        // A number after a unit is the next smaller one ("1h30"); alone it is minutes.
+        total += number.parse::<f64>().ok()?;
+        seen = true;
+    }
+    seen.then_some(total.round() as i64)
+}
+
+/// A length in words: "45 Min.", "1 Std. 30 Min.", "2 Tage".
+fn length_text(minutes: i64, ft: &FormTexts) -> String {
+    if minutes > 0 && minutes % 1440 == 0 { let days = minutes / 1440; return format!("{days} {}", if days == 1 { ft.day } else { ft.days }); }
+    let (hours, rest) = (minutes / 60, minutes % 60);
+    match (hours, rest) { (0, m) => format!("{m} {}", ft.minutes), (h, 0) => format!("{h} {}", ft.hours), (h, m) => format!("{h} {} {m} {}", ft.hours, ft.minutes) }
+}
+
+/// The days, kind and mode a draft says (from a typed day or a quick title).
+fn days_of(draft: &Draft, kind: Kind) -> Option<(BTreeSet<NaiveDate>, Mode)> {
+    let mut set: BTreeSet<NaiveDate> = draft.dates.iter().copied().collect();
+    let spans = if draft.spans.is_empty() { draft.span.into_iter().collect::<Vec<_>>() } else { draft.spans.clone() };
+    for (first, last) in spans {
+        for n in 0..=repeat::days_between(first, last).clamp(0, 3660) { set.insert(repeat::shift(first, n)); }
+    }
+    if set.is_empty() { return None; }
+    // A range of days is one entry over all of them (repeating is the repetition's business); single days separated
+    // by commas are entries of their own.
+    let _ = kind;
+    Some((set, Mode::Continuous))
+}
+
+impl Form {
+    pub fn new(journal: Option<Journal>, language: Language) -> Self {
+        let (today, minutes) = now();
+        Self { fixed_clock: false, ..Self::at(journal, language, today, minutes) }
+    }
+
+    /// At a given moment (tests).
+    pub fn at(journal: Option<Journal>, language: Language, today: NaiveDate, minutes: u32) -> Self {
+        let snapshot = journal.as_ref().and_then(|journal| Snapshot::load(&journal.store, today).ok());
+        let v = Values::default();
+        Form { journal, snapshot, language, today, now: minutes, backup: v.clone(), v, active: TITLE, buffer: String::new(), row_error: None, query: String::new(),
+            pick: 0, editor: Editor::default(), more_open: false, tried: false, last_saved: None, status: None, flash: None,
+            metrics: Metrics::default(), options: None, options_backup: Values::default(), cal_top: repeat::shift(today, -1), cal_offset: 0.0, cal_target: None,
+            cal_open: BTreeSet::from([today]), cal_clicked: None, mark: None, mark_layout: None, shown_layout: Layout::default(), shown_metrics: Metrics::default(),
+            fixed_clock: true, kind_chosen: false, entry_open: false, search: String::new(), command_selected: 0, zoom_days: 1.0, zoom_hours: 1.0, pan: 0.0 }
+    }
+
+    fn t(&self) -> &'static Texts { texts(self.language) }
+    fn ft(&self) -> &'static FormTexts { form_texts(self.language) }
+    pub fn field(&self) -> Field { FIELDS[self.active] }
+    #[cfg(test)]
+    pub fn title(&self) -> &str { &self.v.title }
+
+    fn tags(&self) -> Vec<TagName> {
+        self.snapshot.as_ref().map(|snapshot| snapshot.tags.iter().map(|tag| TagName { id: tag.id.clone(), name: tag.name.clone() }).collect()).unwrap_or_default()
+    }
+    fn tag_name(&self, id: &str) -> Option<String> { self.tags().into_iter().find(|tag| tag.id == id).map(|tag| tag.name) }
+
+    /// The window was shown: the moment and the warm data are brought up to date.
+    pub fn shown(&mut self) -> Effect {
+        let (today, minutes) = if self.fixed_clock { (self.today, self.now) } else { now() };
+        self.set_clock(today, minutes);
+        self.options = None;
+        self.cal_close();
+        self.cal_top = repeat::shift(today, -1); self.cal_offset = 0.0; self.cal_target = None;
+        if !self.dirty() { self.entry_open = false; }
+        let effect = self.enter_row(TITLE);
+        Effect { focus: Some(if self.entry_open { Pane::Entry } else { Pane::Search }), ..effect }
+    }
+    pub fn set_clock(&mut self, today: NaiveDate, minutes: u32) {
+        self.today = today;
+        self.now = minutes;
+        if let (Some(journal), Some(snapshot)) = (&self.journal, &mut self.snapshot) { let _ = snapshot.refresh(&journal.store, today); }
+        self.flash = None;
+    }
+
+    // ----- The search bar and its commands -----
+
+    /// The search bar's text changed.
+    pub fn search_edited(&mut self, text: &str) {
+        self.search = text.to_string();
+        self.command_selected = 0;
+        self.status = None;
+        self.flash = None;
+    }
+
+    fn commands(&self) -> Vec<Command> {
+        let query = self.search.trim();
+        if !query.starts_with('/') { return Vec::new(); }
+        let query = parse::fold(&query[1..]);
+        let all = [("/Entry", ["entry", "eintrag"], self.ft().cmd_entry)];
+        all.iter().filter(|(_, names, _)| names.iter().any(|name| name.starts_with(&query) || query.starts_with(name)))
+            .map(|(name, _, detail)| Command { name: name.to_string(), detail: detail.to_string() }).collect()
+    }
+
+    fn search_key(&mut self, key: Key) -> Effect {
+        let commands = self.commands();
+        match key {
+            Key::Undo => self.undo_last(false),
+            Key::Redo => self.undo_last(true),
+            Key::Quit => Effect { quit: true, ..Effect::default() },
+            Key::Focus => { self.open_entry(); let effect = self.open_options(Field::Day); Effect { focus: Some(Pane::Entry), ..effect } }
+            Key::Up | Key::Down if !commands.is_empty() => {
+                let n = commands.len();
+                self.command_selected = (self.command_selected + if key == Key::Down { 1 } else { n - 1 }) % n;
+                Effect::default()
+            }
+            Key::Tab if !commands.is_empty() => Effect { search: Some(commands[self.command_selected.min(commands.len() - 1)].name.clone()), ..Effect::default() },
+            Key::Enter => {
+                let Some(command) = commands.get(self.command_selected.min(commands.len().saturating_sub(1))) else {
+                    if self.search.trim().starts_with('/') { self.status = Some((format!("{} {}", self.ft().cmd_unknown, self.search.trim()), true)); }
+                    return Effect::default();
+                };
+                match command.name.as_str() {
+                    "/Entry" => self.open_entry(),
+                    _ => Effect::default(),
+                }
+            }
+            Key::Escape if !self.search.is_empty() => { self.search_edited(""); Effect { search: Some(String::new()), ..Effect::default() } }
+            Key::Escape => Effect { hide: true, ..Effect::default() },
+            _ => Effect::default(),
+        }
+    }
+
+    /// `/Entry`: the entry form opens under the search bar, with the cursor in the title.
+    fn open_entry(&mut self) -> Effect {
+        self.entry_open = true;
+        self.search.clear();
+        self.status = None;
+        let effect = self.enter_row(TITLE);
+        Effect { search: Some(String::new()), focus: Some(Pane::Entry), ..effect }
+    }
+
+    /// The form closes and what was in it is dropped; the search bar has the keyboard again.
+    fn close_entry(&mut self) -> Effect {
+        self.entry_open = false;
+        self.v = Values::default();
+        self.kind_chosen = false;
+        self.more_open = false;
+        self.tried = false;
+        self.options = None;
+        self.cal_close();
+        let effect = self.enter_row(TITLE);
+        Effect { focus: Some(Pane::Search), ..effect }
+    }
+
+    // ----- Text of the fields -----
+
+    fn days_text(&self) -> String {
+        let parts = ranges(&self.v.days);
+        if parts.is_empty() { return String::new(); }
+        let text = parts.iter().map(|(first, last)| if first == last { first.format("%d.%m.%Y").to_string() } else { format!("{}–{}", first.format("%d.%m.%Y"), last.format("%d.%m.%Y")) }).collect::<Vec<_>>().join(", ");
+        text
+    }
+
+    fn reminder_text(&self) -> String {
+        match self.v.reminder { None => String::new(), Some(0) => self.ft().reminder_at_time.into(), Some(minutes) => length_text(minutes, self.ft()) }
+    }
+
+    /// What the input holds while the field is active.
+    fn text_of(&self, field: Field) -> String {
+        match field {
+            Field::Title => self.v.title.clone(),
+            Field::Day => self.days_text(),
+            Field::Start => self.v.start.map(format_time).unwrap_or_default(),
+            Field::End => self.v.start.and(self.v.end).map(format_time).unwrap_or_default(),
+            Field::Repeat => self.v.rule.as_ref().map(|rule| repeat_sentence::expression(rule, self.language)).unwrap_or_default(),
+            Field::Tag => self.v.tag.as_deref().and_then(|id| self.tag_name(id)).unwrap_or_default(),
+            Field::Description => self.v.description.clone(),
+            Field::Reminder => self.reminder_text(),
+            Field::Icon => self.v.icon.clone().unwrap_or_default(),
+            Field::Kind | Field::More | Field::Priority => String::new(),
+        }
+    }
+
+    /// What the field shows while it is not active.
+    fn shown_value(&self, field: Field) -> String {
+        let ft = self.ft();
+        match field {
+            Field::Kind => ft.types[self.v.typ.index()].to_string(),
+            Field::Day => match self.v.days.len() {
+                0 => String::new(),
+                1 => {
+                    let day = *self.v.days.iter().next().unwrap();
+                    let relative = match repeat::days_between(self.today, day) { 0 => Some(self.t().today), 1 => Some(self.t().tomorrow), 2 => Some(self.t().after_tomorrow), _ => None };
+                    let label = format!("{} {}", repeat::weekday_short(self.language)[repeat::weekday_of(day) as usize], day.format("%d.%m.%Y"));
+                    relative.map_or(label.clone(), |relative| format!("{label} · {relative}"))
+                }
+                _ => self.days_text(),
+            },
+            Field::End => match (self.v.start, self.v.end) {
+                (Some(start), Some(end)) => {
+                    // An end on a later day says how many days later.
+                    let span = ranges(&self.v.days).first().map_or(0, |(first, last)| repeat::days_between(*first, *last));
+                    let later = if span > 0 { span } else { i64::from(end <= start) };
+                    match later { 0 => format_time(end), n => format!("{} (+{n} {})", format_time(end), if n == 1 { ft.day } else { ft.days }) }
+                }
+                _ => self.text_of(Field::End),
+            },
+            Field::Repeat => self.v.rule.as_ref().map(|rule| repeat::describe(rule, self.language)).unwrap_or_default(),
+            Field::More => (if self.more_visible() { ft.less } else { ft.more }).to_string(),
+            Field::Priority => if self.v.priority { ft.priority_on.to_string() } else { String::new() },
+            Field::Reminder => match self.v.reminder { None => String::new(), Some(0) => ft.reminder_at_time.into(), Some(_) => format!("{} {}", self.reminder_text(), ft.reminder_before) },
+            other => self.text_of(other),
+        }
+    }
+
+    fn line_icon(field: Field) -> &'static str {
+        match field.line() { 1 => "type", 2 => "clock", 3 => "repeat", 4 => "tag", 5 => "ellipsis", 6 => "text-align-start", 7 => "star", 8 => "bell", 9 => "shapes", _ => "" }
+    }
+
+    fn hint_of(&self, field: Field) -> &'static str {
+        let ft = self.ft();
+        match field {
+            Field::Title => ft.empty_title, Field::Day => ft.empty_day, Field::Start => ft.empty_start, Field::End => ft.empty_end, Field::Repeat => ft.empty_repeat,
+            Field::Tag => ft.empty_tag, Field::Description => ft.empty_description, Field::Reminder => ft.empty_reminder, Field::Icon => ft.empty_icon,
+            Field::Priority => ft.priority_off, _ => "",
+        }
+    }
+
+    fn more_visible(&self) -> bool {
+        self.more_open || !self.v.description.is_empty() || self.v.priority || self.v.reminder.is_some() || self.v.icon.is_some()
+    }
+    fn visible(&self, field: Field) -> bool {
+        if field == Field::End && self.v.start.is_none() { return false; }
+        !field.extra() || self.more_visible()
+    }
+
+    // ----- Moving between fields -----
+
+    fn enter_row(&mut self, index: usize) -> Effect {
+        self.active = index;
+        self.backup = self.v.clone();
+        self.row_error = None;
+        self.query.clear();
+        self.flash = None;
+        let field = FIELDS[index];
+        self.pick = match field {
+            Field::Tag => self.tag_options().iter().position(|(id, _, _)| *id == self.v.tag).unwrap_or(0),
+            Field::Icon => self.icon_results().iter().position(|name| Some(name.to_string()) == self.v.icon).unwrap_or(0),
+            Field::Reminder => REMINDERS.iter().position(|r| *r == self.v.reminder).unwrap_or(usize::MAX),
+            _ => 0,
+        };
+        self.buffer = self.text_of(field);
+        Effect { text: Some(if field.text() { self.buffer.clone() } else { String::new() }), ..Effect::default() }
+    }
+
+    /// Finishes the active field: a problem in it keeps it open; a quick title hands its day, time and tag to theirs.
+    fn commit(&mut self) -> Result<(), String> {
+        if let Some(error) = &self.row_error { return Err(error.clone()); }
+        if self.field() == Field::Title { self.extract_title(); }
+        Ok(())
+    }
+
+    fn extract_title(&mut self) {
+        let draft = parse::parse(&self.v.title, self.today, &self.tags());
+        let found = draft.kind.is_some() || !draft.dates.is_empty() || draft.span.is_some() || draft.time.is_some() || draft.tag.is_some() || draft.repeat.is_some();
+        if !draft.unclear.is_empty() || draft.tag_word.is_some() { return; }
+        if !found {
+            // Quotes only protect the words; they are not part of the title.
+            if self.v.title.trim_start().starts_with('"') && !draft.text.is_empty() { self.v.title = draft.text; self.buffer = self.v.title.clone(); }
+            return;
+        }
+        let calendar_word = self.v.title.split_whitespace().any(|word| matches!(parse::fold(word).as_str(), "kalender" | "calendar" | "@calendar" | "@kalender"));
+        match draft.kind {
+            Some(Kind::Task) => { self.v.typ = Type::Task; self.kind_chosen = true; }
+            Some(Kind::Note) => { self.v.typ = Type::Note; self.kind_chosen = true; }
+            Some(Kind::Event) => { self.v.typ = if calendar_word { Type::Calendar } else { Type::Event }; self.kind_chosen = true; }
+            // A time without a word for the type makes an appointment, as the app makes it in its calendar.
+            None if draft.time.is_some() && !self.kind_chosen => self.v.typ = Type::Calendar,
+            None => {}
+        }
+        if let Some((days, mode)) = days_of(&draft, self.v.typ.kind()) { self.v.days = days; self.v.mode = mode; }
+        if draft.time.is_some() { self.v.start = draft.time; self.v.end = draft.end; }
+        if draft.tag.is_some() { self.v.tag = draft.tag.clone(); }
+        if draft.repeat.is_some() { self.v.rule = draft.repeat.clone(); }
+        self.v.title = draft.text.clone();
+        self.buffer = self.v.title.clone();
+    }
+
+    /// To the next field shown (or back).
+    fn move_field(&mut self, delta: i32) -> Effect {
+        if let Err(error) = self.commit() { self.status = Some((error, true)); return Effect::default(); }
+        self.status = None;
+        let mut index = self.active as i32;
+        loop {
+            index += delta;
+            if index < 0 || index >= FIELDS.len() as i32 { return self.stay(); }
+            if self.visible(FIELDS[index as usize]) { return self.enter_row(index as usize); }
+        }
+    }
+
+    /// To the line above or below, at its first field.
+    fn move_line(&mut self, delta: i32) -> Effect {
+        if let Err(error) = self.commit() { self.status = Some((error, true)); return Effect::default(); }
+        self.status = None;
+        let line = self.field().line() as i32;
+        let target = FIELDS.iter().filter(|f| self.visible(**f) && (f.line() as i32 - line).signum() == delta.signum())
+            .min_by_key(|f| ((f.line() as i32 - line).abs(), f.cell()));
+        match target { Some(field) => self.enter_row(field.index()), None => self.stay() }
+    }
+
+    /// Nothing to move to; the title may just have given its words to other fields.
+    fn stay(&mut self) -> Effect {
+        Effect { text: self.field().text().then(|| self.text_of(self.field())), ..Effect::default() }
+    }
+
+    // ----- Typing -----
+
+    /// The input's text changed (typed, deleted, pasted).
+    pub fn edited(&mut self, text: &str) {
+        self.buffer = text.to_string();
+        self.status = None;
+        self.flash = None;
+        self.row_error = self.apply_text(self.field(), text).err();
+    }
+
+    fn apply_text(&mut self, field: Field, text: &str) -> Result<(), String> {
+        let ft = self.ft();
+        let trimmed = text.trim();
+        match field {
+            Field::Title => self.v.title = text.to_string(),
+            Field::Description => self.v.description = text.to_string(),
+            Field::Day => {
+                if trimmed.is_empty() { self.v.days.clear(); return Ok(()); }
+                let draft = parse::parse(text, self.today, &[]);
+                if !draft.text.trim().is_empty() || !draft.unclear.is_empty() || draft.time.is_some() || draft.repeat.is_some() { return Err(ft.bad_day.into()); }
+                let (days, mode) = days_of(&draft, self.v.typ.kind()).ok_or_else(|| ft.bad_day.to_string())?;
+                self.v.days = days; self.v.mode = mode;
+            }
+            Field::Start => {
+                if trimmed.is_empty() { self.v.start = None; self.v.end = None; return Ok(()); }
+                let range = trimmed.to_lowercase().replace(" bis ", "-").replace(" to ", "-").replace('–', "-").replace('—', "-");
+                match range.split_once('-') {
+                    Some((a, b)) => {
+                        let start = parse_clock(a, false).ok_or_else(|| ft.bad_time.to_string())?;
+                        let end = parse_clock(b, true).ok_or_else(|| ft.bad_time.to_string())?;
+                        self.v.start = Some(start); self.v.end = Some(end);
+                    }
+                    None => self.v.start = Some(parse_clock(trimmed, false).ok_or_else(|| ft.bad_time.to_string())?),
+                }
+            }
+            Field::End => {
+                if trimmed.is_empty() { self.v.end = None; return Ok(()); }
+                let start = self.v.start.ok_or_else(|| ft.bad_end.to_string())?;
+                let end = match trimmed.strip_prefix('+') {
+                    Some(length) => { let length = parse_length(length).filter(|m| *m > 0 && *m <= 1440).ok_or_else(|| ft.bad_end.to_string())?; ((start as i64 + length) % 1440) as u32 }
+                    None => parse_clock(trimmed, true).ok_or_else(|| ft.bad_end.to_string())?,
+                };
+                self.v.end = Some(end);
+            }
+            Field::Repeat => {
+                if trimmed.is_empty() { self.v.rule = None; return Ok(()); }
+                let draft = parse::parse(text, self.today, &[]);
+                if !draft.text.trim().is_empty() || !draft.unclear.is_empty() { return Err(ft.bad_repeat.into()); }
+                self.v.rule = Some(draft.repeat.ok_or_else(|| ft.bad_repeat.to_string())?);
+            }
+            Field::Tag => {
+                self.query = text.to_string();
+                if trimmed.is_empty() { self.v.tag = None; self.pick = 0; return Ok(()); }
+                let options = self.tag_options();
+                self.pick = 1;
+                self.v.tag = Some(options.get(1).and_then(|(id, _, _)| id.clone()).ok_or_else(|| ft.bad_tag.to_string())?);
+            }
+            Field::Icon => {
+                self.query = text.to_string();
+                self.pick = 0;
+                if trimmed.is_empty() { self.v.icon = None; return Ok(()); }
+                self.v.icon = Some(self.icon_results().first().ok_or_else(|| ft.bad_icon.to_string())?.to_string());
+            }
+            Field::Reminder => {
+                let folded = parse::fold(trimmed);
+                self.v.reminder = if trimmed.is_empty() || folded == parse::fold(ft.reminder_presets[0]) { None }
+                    else if folded == parse::fold(ft.reminder_at_time) || trimmed == "0" { Some(0) }
+                    else { Some(parse_length(trimmed).filter(|m| *m >= 0 && *m <= storage_max_reminder()).ok_or_else(|| ft.bad_reminder.to_string())?) };
+                self.pick = REMINDERS.iter().position(|r| *r == self.v.reminder).unwrap_or(usize::MAX);
+            }
+            Field::Kind | Field::More | Field::Priority => {}
+        }
+        Ok(())
+    }
+
+    /// The tag choices: none first, then the tags whose name has the query in it (starting with it first).
+    fn tag_options(&self) -> Vec<(Option<String>, String, Option<calendar::Rgb>)> {
+        let query = parse::fold(self.query.trim());
+        let mut options = vec![(None, self.ft().no_tag.to_string(), None)];
+        let Some(snapshot) = &self.snapshot else { return options };
+        let mut found: Vec<(bool, &journal_core::storage::Tag)> = snapshot.tags.iter().filter_map(|tag| {
+            let name = parse::fold(&tag.name);
+            name.contains(&query).then_some((!name.starts_with(&query), tag))
+        }).collect();
+        found.sort_by_key(|(later, _)| *later);
+        options.extend(found.into_iter().map(|(_, tag)| (Some(tag.id.clone()), tag.name.clone(), calendar::parse_color(&tag.color))));
+        options
+    }
+
+    fn icon_results(&self) -> Vec<&'static str> {
+        if self.query.trim().is_empty() {
+            let mut common: Vec<&'static str> = COMMON_ICONS.iter().copied().filter(|name| icons::exists(name)).collect();
+            // The chosen icon is offered too, even when it is not a common one.
+            if let Some(icon) = self.v.icon.as_deref() { if let Some((name, _)) = icons::all().iter().find(|(name, _)| *name == icon) { if !common.contains(name) { common.insert(0, name); } } }
+            return common;
+        }
+        icons::search(&self.query, ICON_ROOM)
+    }
+
+    // ----- Keys -----
+
+    pub fn key(&mut self, key: Key, mods: Mods) -> Effect {
+        if !self.entry_open && self.options.is_none() { return self.search_key(key); }
+        self.status = None;
+        match key {
+            Key::Undo => return self.undo_last(false),
+            Key::Redo => return self.undo_last(true),
+            Key::Quit => return Effect { quit: true, ..Effect::default() },
+            Key::Digit(digit @ 1..=4) if mods.alt => return self.set_type(TYPES[digit as usize - 1]),
+            Key::Enter if mods.ctrl || mods.shift => {
+                self.options = None;
+                return self.save(mods.shift);
+            }
+            _ => {}
+        }
+        if self.options.is_some() { return self.options_key(key, mods); }
+        match key {
+            Key::Focus => self.open_options(Field::Day),
+            Key::Escape => {
+                if self.v != self.backup {
+                    self.v = self.backup.clone();
+                    self.row_error = None;
+                    self.query.clear();
+                    self.buffer = self.text_of(self.field());
+                    return Effect { text: Some(if self.field().text() { self.buffer.clone() } else { String::new() }), ..Effect::default() };
+                }
+                self.close_entry()
+            }
+            Key::Down if mods.alt => self.open_options(self.field()),
+            Key::Up => self.move_line(-1),
+            Key::Down => self.move_line(1),
+            Key::Tab => self.move_field(if mods.shift { -1 } else { 1 }),
+            Key::Enter => match self.field() {
+                Field::More => { self.more_open = !self.more_visible(); if self.more_open { self.move_field(1) } else { Effect::default() } }
+                Field::Day | Field::Start | Field::End | Field::Repeat | Field::Tag | Field::Icon | Field::Reminder => self.open_options(self.field()),
+                _ => self.move_field(1),
+            },
+            _ => self.value_key(key),
+        }
+    }
+
+    fn set_type(&mut self, typ: Type) -> Effect {
+        self.v.typ = typ;
+        self.kind_chosen = true;
+        if self.field() == Field::Kind { self.backup.typ = typ; }
+        Effect::default()
+    }
+
+    /// `←`/`→`/`Space`/`Delete`/digits on the fields that are a switch.
+    fn value_key(&mut self, key: Key) -> Effect {
+        let step: i32 = match key { Key::Left => -1, Key::Right => 1, Key::Space if !self.field().text() => 1, _ => 0 };
+        match self.field() {
+            Field::Kind => {
+                if let Key::Digit(digit @ 1..=4) = key { return self.set_type(TYPES[digit as usize - 1]); }
+                if step != 0 { return self.set_type(TYPES[(self.v.typ.index() as i32 + step).rem_euclid(4) as usize]); }
+            }
+            Field::Priority => if step != 0 || key == Key::Delete { self.v.priority = key != Key::Delete && !self.v.priority; },
+            Field::More => if step != 0 { self.more_open = step > 0; },
+            _ => {}
+        }
+        Effect::default()
+    }
+
+    // ----- Options: Enter in, Enter on, Esc back -----
+
+    /// Enter on a field: its options open; the values are kept for `Esc`.
+    fn open_options(&mut self, field: Field) -> Effect {
+        if let Err(error) = self.commit() { self.status = Some((error, true)); return Effect::default(); }
+        self.entry_open = true;
+        if self.field() != field { self.enter_row(field.index()); }
+        self.options_backup = self.v.clone();
+        let next_hour = ((self.now / 60 + 1) % 24) * 60;
+        self.options = Some(match field {
+            Field::Day => {
+                let day = self.v.days.iter().next().copied().unwrap_or(self.today);
+                Options::Calendar(CalCursor { hours: self.v.start.is_some(), day, minute: self.v.start.unwrap_or(next_hour), anchor: None })
+            }
+            Field::Start | Field::End => {
+                if self.v.start.is_none() { self.v.start = Some(next_hour); }
+                if field == Field::End && self.v.end.is_none() { self.v.end = Some((self.v.start.unwrap() + 60).min(1440)); }
+                Options::Clock(Clock { end: field == Field::End, minutes: false, typed: String::new() })
+            }
+            Field::Repeat => { self.editor.enter(self.v.rule.as_ref()); Options::Repeat }
+            Field::Tag | Field::Icon | Field::Reminder => Options::Choices,
+            _ => return self.move_field(1),
+        });
+        self.query.clear();
+        self.sync_options();
+        self.refresh_text()
+    }
+
+    /// The input shows the field's value again.
+    fn refresh_text(&mut self) -> Effect {
+        self.row_error = None;
+        self.buffer = self.text_of(self.field());
+        Effect { text: Some(if self.field().text() { self.buffer.clone() } else { String::new() }), ..Effect::default() }
+    }
+
+    /// Enter: the options are taken; on to the next field (or back with Shift+Tab).
+    fn take_options(&mut self, delta: i32) -> Effect {
+        self.options = None;
+        self.refresh_text();
+        self.move_field(delta)
+    }
+
+    /// Esc: the values from before the options came back; the field stays.
+    fn cancel_options(&mut self) -> Effect {
+        self.options = None;
+        self.v = self.options_backup.clone();
+        self.query.clear();
+        self.refresh_text()
+    }
+
+    fn options_key(&mut self, key: Key, mods: Mods) -> Effect {
+        match self.options.clone() {
+            Some(Options::Calendar(cursor)) => self.calendar_key(cursor, key, mods),
+            Some(Options::Clock(clock)) => self.clock_key(clock, key, mods),
+            Some(Options::Repeat) => {
+                let base = self.v.days.iter().next().copied().unwrap_or(self.today);
+                let act = match (key, mods.shift) {
+                    (Key::Enter, _) => return self.take_options(1),
+                    (Key::Tab, shift) => return self.take_options(if shift { -1 } else { 1 }),
+                    (Key::Escape, _) => return self.cancel_options(),
+                    (Key::Left, false) => Act::Left, (Key::Right, false) => Act::Right, (Key::Up, false) => Act::Up, (Key::Down, false) => Act::Down,
+                    (Key::Left, true) => Act::ShiftLeft, (Key::Right, true) => Act::ShiftRight, (Key::Up, true) => Act::ShiftUp, (Key::Down, true) => Act::ShiftDown,
+                    (Key::Space, _) => Act::Toggle, (Key::Delete, _) => Act::Delete, (Key::Digit(digit), _) => Act::Digit(digit),
+                    _ => return Effect::default(),
+                };
+                self.editor.act(&mut self.v.rule, base, act);
+                if self.v.typ == Type::Note && self.v.rule.is_some() && !self.kind_chosen { self.v.typ = Type::Task; }
+                self.buffer = self.text_of(Field::Repeat);
+                Effect::default()
+            }
+            Some(Options::Choices) => {
+                let columns: i32 = match self.field() { Field::Icon => ICON_COLUMNS, Field::Reminder => 4, _ => 1 };
+                let step = match key { Key::Left => -1, Key::Right => 1, Key::Up => -columns, Key::Down => columns, _ => 0 };
+                match key {
+                    Key::Enter => self.take_options(1),
+                    Key::Tab => self.take_options(if mods.shift { -1 } else { 1 }),
+                    Key::Escape => self.cancel_options(),
+                    Key::Delete => self.choose(None),
+                    _ if step != 0 => {
+                        let count = self.choice_count() as i32;
+                        if count == 0 { return Effect::default(); }
+                        let at = if self.pick == usize::MAX { if step > 0 { -1 } else { count } } else { self.pick as i32 };
+                        self.choose(Some((at + step).clamp(0, count - 1) as usize))
+                    }
+                    _ => Effect::default(),
+                }
+            }
+            None => Effect::default(),
+        }
+    }
+
+    // ----- The clock -----
+
+    fn clock_key(&mut self, mut clock: Clock, key: Key, mods: Mods) -> Effect {
+        let field_value = |form: &Form| if clock.end { form.v.end } else { form.v.start };
+        let Some(value) = field_value(self) else { return self.cancel_options() };
+        let (hours, minutes) = ((value / 60) as i32, (value % 60) as i32);
+        let next = match key {
+            Key::Enter => return self.take_options(1),
+            Key::Tab => return self.take_options(if mods.shift { -1 } else { 1 }),
+            Key::Escape => return self.cancel_options(),
+            Key::Delete => {
+                // No end: a point in time; no start: the whole day.
+                if clock.end { self.v.end = None; } else { self.v.start = None; self.v.end = None; }
+                self.options = None;
+                return self.refresh_text();
+            }
+            Key::Left | Key::Right => { clock.minutes = key == Key::Right; clock.typed.clear(); value }
+            Key::Up | Key::Down => {
+                let sign = if key == Key::Up { 1 } else { -1 };
+                clock.typed.clear();
+                if clock.minutes {
+                    let step = if mods.ctrl { 15 } else { 1 };
+                    let m = if mods.ctrl { (minutes / 15 * 15 + if sign < 0 && minutes % 15 != 0 { 15 } else { 0 }) + sign * step } else { minutes + sign * step };
+                    (hours * 60 + m.rem_euclid(60)) as u32
+                } else {
+                    let step = if mods.ctrl { 4 } else { 1 };
+                    ((hours + sign * step).rem_euclid(24) * 60 + minutes) as u32
+                }
+            }
+            Key::Digit(digit) => {
+                if clock.typed.len() >= 4 { clock.typed.clear(); }
+                clock.typed.push((b'0' + digit) as char);
+                let typed = &clock.typed;
+                let parsed = if typed.len() <= 2 { typed.parse::<u32>().ok().filter(|h| *h <= 23).map(|h| h * 60 + if clock.minutes { 0 } else { minutes as u32 }) } else { parse_clock(typed, clock.end) };
+                if typed.len() == 2 { clock.minutes = true; }
+                match parsed { Some(value) => value, None => { clock.typed = digit.to_string(); value } }
+            }
+            _ => value,
+        };
+        if clock.end { self.v.end = Some(next); } else {
+            // The end moves along with the start.
+            if let (Some(old), Some(end)) = (self.v.start, self.v.end) { self.v.end = Some(((end as i32 + next as i32 - old as i32).rem_euclid(1440)) as u32); }
+            self.v.start = Some(next);
+        }
+        self.options = Some(Options::Clock(clock));
+        self.refresh_text()
+    }
+
+    // ----- The calendar with the keyboard -----
+
+    /// The keyboard in the calendar: Tab between the side (whole days) and the 24 hours; ↑/↓ a day; ←/→ a week on the
+    /// side, an hour in the hours (Strg: a quarter); Shift draws a range from where it was first held. Enter takes it
+    /// (no range: the day, or in the hours the moment), Esc first drops the range, then goes back without a date.
+    fn calendar_key(&mut self, mut c: CalCursor, key: Key, mods: Mods) -> Effect {
+        match key {
+            Key::Enter => return self.take_options(1),
+            Key::Escape if c.anchor.is_some() => { c.anchor = None; }
+            Key::Escape => return self.cancel_options(),
+            Key::Tab => { c.hours = !c.hours; c.anchor = None; }
+            Key::Focus => return self.take_options(0),
+            Key::Up | Key::Down | Key::Left | Key::Right | Key::PageUp | Key::PageDown | Key::Home => {
+                if mods.shift { if c.anchor.is_none() { c.anchor = Some((c.day, c.minute)); } } else { c.anchor = None; }
+                let sign: i64 = if matches!(key, Key::Up | Key::Left | Key::PageUp) { -1 } else { 1 };
+                match key {
+                    Key::Up | Key::Down => c.day = repeat::shift(c.day, sign),
+                    Key::PageUp | Key::PageDown => c.day = if sign < 0 { c.day.checked_sub_months(chrono::Months::new(1)) } else { c.day.checked_add_months(chrono::Months::new(1)) }.unwrap_or(c.day),
+                    Key::Home => c.day = self.today,
+                    _ if !c.hours => c.day = repeat::shift(c.day, 7 * sign),
+                    _ => {
+                        let step = if mods.ctrl { 15 } else { 60 };
+                        let minute = (c.minute as i64 / step * step) + sign * step;
+                        c.day = repeat::shift(c.day, minute.div_euclid(1440));
+                        c.minute = minute.rem_euclid(1440) as u32;
+                    }
+                }
+            }
+            _ => return Effect::default(),
+        }
+        self.options = Some(Options::Calendar(c));
+        self.sync_options();
+        self.refresh_text()
+    }
+
+    /// The calendar's cursor and range become the entry's date and time, live.
+    fn sync_options(&mut self) {
+        let Some(Options::Calendar(c)) = self.options else { return };
+        let days = |a: NaiveDate, b: NaiveDate| -> BTreeSet<NaiveDate> { (0..=repeat::days_between(a.min(b), a.max(b)).clamp(0, 366)).map(|n| repeat::shift(a.min(b), n)).collect() };
+        self.v.mode = Mode::Continuous;
+        self.v.time_grid = c.hours;
+        match (c.hours, c.anchor) {
+            (false, None) => { self.v.days = BTreeSet::from([c.day]); self.v.start = None; self.v.end = None; }
+            (false, Some((from, _))) => { self.v.days = days(from, c.day); self.v.start = None; self.v.end = None; }
+            (true, None) => { self.v.days = BTreeSet::from([c.day]); self.v.start = Some(c.minute); self.v.end = None; }
+            (true, Some(anchor)) => {
+                let step = if anchor.1 % 60 == 0 && c.minute % 60 == 0 { 60 } else { 15 };
+                let (from, to) = if anchor <= (c.day, c.minute) { (anchor, (c.day, c.minute)) } else { ((c.day, c.minute), anchor) };
+                let end = to.1 + step;
+                let (last, end) = if end > 1440 { (repeat::shift(to.0, 1), end - 1440) } else { (to.0, end) };
+                self.v.days = days(from.0, last); self.v.start = Some(from.1); self.v.end = Some(end);
+            }
+        }
+        if self.v.typ == Type::Note && self.v.start.is_some() { self.v.typ = Type::Calendar; }
+    }
+
+    fn choice_count(&self) -> usize {
+        match self.field() { Field::Tag => self.tag_options().len(), Field::Icon => self.icon_results().len(), Field::Reminder => REMINDERS.len(), _ => 0 }
+    }
+
+    /// The choice `index` under the active line is taken (`None`: none). Typed filters stay.
+    fn choose(&mut self, index: Option<usize>) -> Effect {
+        self.row_error = None;
+        match self.field() {
+            Field::Tag => {
+                let options = self.tag_options();
+                self.pick = index.unwrap_or(0).min(options.len() - 1);
+                self.v.tag = options[self.pick].0.clone();
+                if index.is_none() { self.query.clear(); }
+            }
+            Field::Icon => {
+                let results = self.icon_results();
+                match index.and_then(|i| results.get(i)) { Some(name) => { self.pick = index.unwrap(); self.v.icon = Some(name.to_string()); } None => { self.v.icon = None; self.query.clear(); self.pick = 0; } }
+            }
+            Field::Reminder => {
+                self.pick = index.unwrap_or(0).min(REMINDERS.len() - 1);
+                self.v.reminder = REMINDERS[self.pick];
+                self.buffer = self.text_of(Field::Reminder);
+                return Effect { text: Some(self.buffer.clone()), ..Effect::default() };
+            }
+            _ => return Effect::default(),
+        }
+        if self.query.is_empty() {
+            self.buffer = self.text_of(self.field());
+            return Effect { text: Some(self.buffer.clone()), ..Effect::default() };
+        }
+        Effect::default()
+    }
+
+    /// A click on a choice under the active line.
+    pub fn choice_click(&mut self, index: usize) -> Effect { self.choose(Some(index)) }
+
+    /// A click on a choice of the repetition.
+    pub fn repeat_click(&mut self, slot: i32, value: i32) {
+        if self.field() != Field::Repeat { return; }
+        if self.options.is_none() { self.open_options(Field::Repeat); }
+        let base = self.v.days.iter().next().copied().unwrap_or(self.today);
+        self.editor.click(&mut self.v.rule, base, slot, value);
+        self.buffer = self.text_of(Field::Repeat);
+    }
+
+    // ----- The calendar beside the form -----
+
+    fn cal_close(&mut self) {
+        if matches!(self.options, Some(Options::Calendar(_))) { self.options = None; }
+        self.mark = None; self.mark_layout = None;
+    }
+
+    /// The mouse in the calendar, as in the app: the left button opens and closes days (Shift: everything up to the last
+    /// one clicked; an entry's details will open here too); the right button marks a new entry, whole days on the side,
+    /// times in the 24 hours, and writes it into the form. `button` 0 left, 1 right; `kind` 0 pressed, 1 moved, 2 released.
+    pub fn cal_mouse(&mut self, button: i32, kind: i32, x: f32, y: f32, shift: bool) -> Effect {
+        let m = self.shown_metrics;
+        if button == 0 {
+            if kind != 0 { return Effect::default(); }
+            let day = match calendar::spot(&self.shown_layout, &m, x, y) {
+                calendar::Spot::Nothing => return Effect::default(),
+                calendar::Spot::Item(_, day) | calendar::Spot::Side(day) | calendar::Spot::Time(day, _) => day,
+            };
+            match self.cal_clicked.filter(|_| shift) {
+                Some(from) => for n in 0..=repeat::days_between(from.min(day), from.max(day)).clamp(0, 400) { self.cal_open.insert(repeat::shift(from.min(day), n)); },
+                None => if !self.cal_open.remove(&day) { self.cal_open.insert(day); },
+            }
+            self.cal_clicked = Some(day);
+            return Effect::default();
+        }
+        match kind {
+            0 => {
+                if y < m.head_h { return Effect::default(); }
+                if let calendar::Spot::Item(..) = calendar::spot(&self.shown_layout, &m, x, y) { return Effect::default(); }
+                let Some(day) = calendar::day_at(&self.shown_layout, y) else { return Effect::default() };
+                if self.entry_open { if let Err(error) = self.commit() { self.status = Some((error, true)); return Effect::default(); } }
+                self.cal_close();
+                // Marking something in the calendar opens the entry form for it.
+                self.entry_open = true;
+                self.options = None;
+                self.mark = Some(if x < m.time_x() { MarkDrag::Days(day, day) } else { let minute = m.minute_at(x); MarkDrag::Time((day, minute), (day, minute)) });
+                self.mark_layout = Some((self.shown_layout.clone(), m));
+                self.apply_mark()
+            }
+            1 => {
+                let Some((layout, m)) = &self.mark_layout else { return Effect::default() };
+                let (Some(mark), Some(day), minute) = (self.mark, calendar::day_at(layout, y), m.minute_at(x)) else { return Effect::default() };
+                self.mark = Some(match mark { MarkDrag::Days(from, _) => MarkDrag::Days(from, day), MarkDrag::Time(from, _) => MarkDrag::Time(from, (day, minute)) });
+                self.apply_mark()
+            }
+            _ => {
+                self.mark_layout = None;
+                if self.mark.take().is_none() { return Effect::default(); }
+                // The title is what is missing then: the cursor goes there, as the app's composer opens.
+                let row = if self.v.title.trim().is_empty() { TITLE } else { self.active };
+                let effect = self.enter_row(row);
+                Effect { focus: Some(Pane::Entry), search: Some(String::new()), ..effect }
+            }
+        }
+    }
+
+    /// The marked range becomes the entry's day(s) and time.
+    fn apply_mark(&mut self) -> Effect {
+        let Some(mark) = self.mark else { return Effect::default() };
+        let days = |a: NaiveDate, b: NaiveDate| -> BTreeSet<NaiveDate> { (0..=repeat::days_between(a.min(b), a.max(b)).clamp(0, 366)).map(|n| repeat::shift(a.min(b), n)).collect() };
+        match mark {
+            MarkDrag::Days(a, b) => { self.v.days = days(a, b); self.v.start = None; self.v.end = None; self.v.time_grid = false; }
+            MarkDrag::Time(a, b) => {
+                let ((first, start), (last, end)) = calendar::marked(a, b);
+                self.v.days = days(first, last); self.v.start = Some(start); self.v.end = Some(end);
+                self.v.time_grid = true;
+            }
+        }
+        self.v.mode = Mode::Continuous;
+        // As in the app's calendar: a new entry there is an appointment for the calendar only, unless chosen otherwise.
+        if !self.kind_chosen || self.v.typ == Type::Note && self.v.start.is_some() { self.v.typ = Type::Calendar; }
+        self.row_error = None;
+        self.status = None;
+        self.buffer = self.text_of(self.field());
+        Effect { text: Some(if self.field().text() { self.buffer.clone() } else { String::new() }), ..Effect::default() }
+    }
+
+    /// The right button is marking a new entry.
+    pub fn marking(&self) -> bool { self.mark.is_some() }
+
+    /// Days opened in the calendar (tests).
+    #[cfg(test)]
+    pub fn opened(&self) -> &BTreeSet<NaiveDate> { &self.cal_open }
+
+    /// The wheel over the calendar (`delta` as the wheel gives it, positive away from the user): it scrolls the days;
+    /// with Strg the days grow or shrink, with Strg+Shift the hours, with Shift the hours move sideways.
+    pub fn cal_wheel(&mut self, x: f32, delta: f32, ctrl: bool, shift: bool) {
+        let m = self.metrics_now();
+        let factor = (delta * 0.002).exp();
+        match (ctrl, shift) {
+            (true, true) => { let (zoom, pan) = calendar::zoom_hours(&m, x, factor); self.zoom_hours = zoom; self.pan = pan; }
+            (true, false) => self.zoom_days = (self.zoom_days * factor).clamp(0.5, 2.5),
+            (false, true) => self.pan = m.clamp_pan(self.pan - delta / (m.time_w() * m.zoom / 1440.0)),
+            (false, false) => self.cal_scroll(-delta),
+        }
+    }
+
+    /// Scrolling the days by `delta` pixels, positive to later days.
+    pub fn cal_scroll(&mut self, delta: f32) {
+        let (outcome, _) = self.outcome();
+        let items = self.calendar_items(&outcome);
+        let none = BTreeSet::new();
+        let open = self.open_days();
+        let (top, offset) = calendar::scroll(&self.cal_input(&items, &open, &none), &self.metrics_now(), delta);
+        self.cal_top = top; self.cal_offset = offset;
+    }
+
+    /// The theme's sizes with the zoom applied.
+    pub fn metrics_now(&self) -> Metrics {
+        let (base, z) = (self.metrics, self.zoom_days);
+        Metrics {
+            day_h: (base.day_h * z).max(14.0), thin_h: (base.thin_h * z).max(3.0), row_h: (base.row_h * z).max(16.0),
+            chip_h: (base.chip_h * z).clamp(14.0, base.chip_h * 1.5), date_h: (base.date_h * z).clamp(14.0, base.date_h),
+            zoom: self.zoom_hours, pan: self.pan, ..base
+        }
+    }
+
+    /// The days shown open: the ones clicked open, and the draft's day while an entry is made (not while marking).
+    fn open_days(&self) -> BTreeSet<NaiveDate> {
+        let mut open = self.cal_open.clone();
+        if self.entry_open && self.dirty() && self.mark.is_none() { open.insert(self.v.days.iter().next().copied().unwrap_or(self.today)); }
+        open
+    }
+
+    fn cal_input<'a>(&'a self, items: &'a [Item], open: &'a BTreeSet<NaiveDate>, none: &'a BTreeSet<NaiveDate>) -> calendar::Input<'a> {
+        let cursor = match self.options { Some(Options::Calendar(c)) => Some(c), _ => None };
+        calendar::Input {
+            today: self.today, now: self.now, top: self.cal_top, offset: self.cal_offset, items, open,
+            cursor: cursor.map(|c| c.day),
+            caret: cursor.filter(|c| c.hours).map(|c| c.minute),
+            selected: none, language: self.language,
+        }
+    }
+
+    fn dirty(&self) -> bool { self.v != Values::default() }
+
+    /// The day the calendar should keep in view: the cursor, else where the draft is.
+    fn cal_wanted(&self) -> Option<NaiveDate> {
+        if let Some(Options::Calendar(c)) = self.options { return Some(c.day); }
+        if self.entry_open && self.dirty() { return self.v.days.iter().next().copied().or(Some(self.today)); }
+        None
+    }
+
+    fn color_of(&self, tag: Option<&str>) -> Option<calendar::Rgb> {
+        let tag = tag?;
+        self.snapshot.as_ref()?.tags.iter().find(|known| known.id == tag).and_then(|known| calendar::parse_color(&known.color))
+    }
+
+    /// Use the entry's own Lucide icon first, then its tag's. Old/unknown names keep the colour dot.
+    fn icon_of<'a>(&'a self, own: Option<&'a str>, tag: Option<&str>) -> &'a str {
+        own.filter(|name| icons::exists(name)).or_else(|| {
+            let id = tag?;
+            self.snapshot.as_ref()?.tags.iter().find(|known| known.id == id)?.icon.as_deref().filter(|name| icons::exists(name))
+        }).unwrap_or_default()
+    }
+
+    /// What is in the journal, plus the entry being made.
+    fn calendar_items(&self, outcome: &Outcome) -> Vec<Item> {
+        let mut items = Vec::new();
+        if let Some(snapshot) = &self.snapshot {
+            for (date, entries) in &snapshot.days {
+                for entry in entries.iter().filter(|entry| entry.plan.is_none()) {
+                    let mut item = Item::from_entry(*date, entry, self.color_of(entry.tag.as_deref()));
+                    item.icon = self.icon_of(entry.icon.as_deref(), entry.tag.as_deref()).to_string();
+                    items.push(item);
+                }
+            }
+        }
+        if self.entry_open && self.dirty() { self.draft_items(outcome, &mut items); }
+        items
+    }
+
+    fn draft_items(&self, outcome: &Outcome, items: &mut Vec<Item>) {
+        let title = if outcome.text.trim().is_empty() { "…" } else { outcome.text.as_str() };
+        let color = self.color_of(outcome.tag.as_deref());
+        let mut add = |day: NaiveDate| {
+            let mut item = Item::new(day, outcome.time.as_deref(), outcome.end.as_deref(), title, color, true, false);
+            item.time_grid = self.v.time_grid;
+            item.icon = self.icon_of(self.v.icon.as_deref(), outcome.tag.as_deref()).to_string();
+            items.push(item);
+        };
+        match &outcome.repeat {
+            Some(rule) => for day in repeat::occurrences(rule, rule.start, repeat::shift(rule.start, 366), 400) { add(day); },
+            None => add(outcome.day),
+        }
+        for copy in &outcome.copies { add(*copy); }
+        for part in &outcome.additional { self.draft_items(part, items); }
+    }
+
+    /// The calendar for what the form holds now: the days around it are read, and it moves to the cursor or the draft
+    /// when that left what is shown (but never while the mouse marks something).
+    fn calendar_view(&mut self) -> Layout {
+        if let (Some(journal), Some(snapshot)) = (&self.journal, &mut self.snapshot) {
+            let _ = snapshot.ensure(&journal.store, repeat::shift(self.cal_top, -crate::snapshot::LOOKBACK), repeat::shift(self.cal_top, crate::snapshot::AHEAD));
+        }
+        let (outcome, _) = self.outcome();
+        let items = self.calendar_items(&outcome);
+        let none = BTreeSet::new();
+        let open = self.open_days();
+        let m = self.metrics_now();
+        let wanted = if self.mark.is_some() { self.cal_target } else { self.cal_wanted() };
+        if wanted != self.cal_target {
+            if let Some(day) = wanted {
+                let layout = calendar::layout(&self.cal_input(&items, &open, &none), &m);
+                let seen = layout.rows.iter().any(|row| row.date == day && row.y >= m.head_h && row.y + row.h <= m.height);
+                if !seen { self.cal_top = repeat::shift(day, -2); self.cal_offset = 0.0; }
+            }
+            self.cal_target = wanted;
+        }
+        let layout = calendar::layout(&self.cal_input(&items, &open, &none), &m);
+        self.shown_layout = layout.clone();
+        self.shown_metrics = m;
+        layout
+    }
+
+    // ----- Reading the form -----
+
+    fn draft(&self) -> Draft {
+        let v = &self.v;
+        let mut draft = Draft { kind: Some(v.typ.kind()), text: v.title.trim().to_string(), time: v.start, end: v.start.and(v.end), tag: v.tag.clone(), repeat: v.rule.clone(), ..Draft::default() };
+        let parts = ranges(&v.days);
+        if parts.iter().all(|(first, last)| first == last) {
+            draft.dates = parts.iter().map(|(first, _)| *first).collect();
+        } else {
+            draft.span = parts.first().copied();
+            draft.spans = parts;
+            draft.mode = Some(v.mode);
+        }
+        draft
+    }
+
+    fn outcome(&self) -> (Outcome, Option<Problem>) {
+        let resolved = resolve(&self.draft(), self.today);
+        (resolved.choices.into_iter().next().expect("a choice"), resolved.problem)
+    }
+
+    fn problem_text(&self, problem: &Problem) -> String {
+        let t = self.t();
+        match problem {
+            Problem::NoText => self.ft().title_needed.into(),
+            Problem::UnknownTag(word) => format!("{} {word}", t.unknown_tag),
+            Problem::NoteWithTime => t.note_time.into(),
+            Problem::NoteRepeats => t.note_repeat.into(),
+            Problem::NoDays => t.no_days.into(),
+            Problem::Unclear(words) => format!("{} {words}", t.unclear),
+        }
+    }
+
+    /// Where a problem is mended.
+    fn problem_field(problem: &Problem) -> Field {
+        match problem {
+            Problem::NoText | Problem::Unclear(_) => Field::Title,
+            Problem::UnknownTag(_) => Field::Tag,
+            Problem::NoteWithTime => Field::Start,
+            Problem::NoteRepeats | Problem::NoDays => Field::Repeat,
+        }
+    }
+
+    /// The problem the entry has now, as it is shown: a missing title only once creating was tried.
+    fn live_problem(&self) -> Option<Problem> {
+        self.outcome().1.filter(|problem| *problem != Problem::NoText || self.tried)
+    }
+
+    fn extras(&self) -> Extras {
+        Extras { description: self.v.description.trim().to_string(), priority: self.v.priority, reminder: self.v.reminder, icon: self.v.icon.clone(), show_in_journal: self.v.typ.journal(), time_grid: self.v.time_grid && self.v.start.is_some() }
+    }
+
+    // ----- Creating -----
+
+    fn save(&mut self, stay: bool) -> Effect {
+        let t = self.t();
+        if let Err(error) = self.commit() { self.status = Some((error, true)); return Effect::default(); }
+        self.tried = true;
+        let (outcome, problem) = self.outcome();
+        if let Some(problem) = problem {
+            let message = self.problem_text(&problem);
+            let field = Self::problem_field(&problem);
+            if field.extra() { self.more_open = true; }
+            let effect = if self.field() != field && self.visible(field) { self.enter_row(field.index()) } else { Effect::default() };
+            self.status = Some((message, true));
+            return effect;
+        }
+        let extras = self.extras();
+        let Some(journal) = &mut self.journal else { self.status = Some((t.read_only.into(), true)); return Effect::default() };
+        match save::save_with(&mut journal.store, &outcome, &extras, self.today) {
+            Ok(saved) => {
+                if let Some(snapshot) = &mut self.snapshot { let _ = snapshot.reload(&journal.store); }
+                self.last_saved = Some(saved);
+                self.v = Values::default();
+                self.kind_chosen = false;
+                self.more_open = false;
+                self.tried = false;
+                let effect = self.enter_row(TITLE);
+                self.flash = Some(t.saved.into());
+                if !stay { self.entry_open = false; }
+                Effect { hide_soon: !stay, focus: Some(if stay { Pane::Entry } else { Pane::Search }), ..effect }
+            }
+            Err(error) => { self.status = Some((format!("{} {error}", t.save_failed), true)); Effect::default() }
+        }
+    }
+
+    fn undo_last(&mut self, redo: bool) -> Effect {
+        let t = self.t();
+        let Some(journal) = &mut self.journal else { return Effect::default() };
+        let done = if redo { save::step(&mut journal.store, true).unwrap_or(false) }
+            else { match self.last_saved.take() { Some(saved) => save::undo(&mut journal.store, &saved).unwrap_or(false), None => save::step(&mut journal.store, false).unwrap_or(false) } };
+        if let Some(snapshot) = &mut self.snapshot { let _ = snapshot.reload(&journal.store); }
+        self.status = Some((if done { if redo { t.saved } else { t.undone } } else { t.nothing_to_undo }.into(), !done));
+        Effect::default()
+    }
+
+    // ----- What is drawn -----
+
+    pub fn view(&mut self) -> View {
+        let calendar = CalendarView { layout: self.calendar_view(), focus: matches!(self.options, Some(Options::Calendar(_))), metrics: self.shown_metrics };
+        let ft = self.ft();
+        let field = self.field();
+        let problem = self.live_problem();
+        let problem_field = problem.as_ref().map(Self::problem_field);
+        // Lines counted as shown: the hidden ones do not take room.
+        let mut lines: Vec<usize> = FIELDS.iter().filter(|f| self.visible(**f)).map(|f| f.line()).collect();
+        lines.dedup();
+        let line_of = |f: Field| lines.iter().position(|line| *line == f.line()).unwrap_or(0);
+        let rows: Vec<RowView> = FIELDS.iter().enumerate().filter(|(_, f)| **f != Field::Kind && self.visible(**f)).map(|(index, f)| {
+            let value = self.shown_value(*f);
+            RowView {
+                field: index, line: line_of(*f), cell: f.cell(), multi: f.line() == 2,
+                label: if f.cell() == 0 { ft.labels[f.line()].to_string() } else { String::new() },
+                label_icon: if *f == Field::More { if self.more_visible() { "chevron-down" } else { "chevron-right" } } else if f.cell() == 0 { Self::line_icon(*f) } else { "" },
+                filled: !value.is_empty(), value,
+                hint: self.hint_of(*f).to_string(),
+                error: index == self.active && self.row_error.is_some() || problem_field == Some(*f),
+                color: if *f == Field::Tag { self.color_of(self.v.tag.as_deref()) } else { None },
+                icon: if *f == Field::Icon { self.v.icon.clone().unwrap_or_default() } else if *f == Field::Tag { self.icon_of(None, self.v.tag.as_deref()).to_string() } else { String::new() },
+            }
+        }).collect();
+        let (panel, panel_note, panel_hint) = self.panel();
+        let status = self.status.clone()
+            .or_else(|| self.row_error.clone().map(|error| (error, true)))
+            .or_else(|| problem.as_ref().map(|problem| (self.problem_text(problem), true)))
+            .or_else(|| self.flash.clone().map(|text| (text, false)));
+        // In the calendar, the clock and the repetition the keys belong to the options; in the lists typing filters.
+        let keys_to_options = matches!(self.options, Some(Options::Calendar(_) | Options::Clock(_) | Options::Repeat));
+        View {
+            rows,
+            active: self.active,
+            active_line: line_of(field),
+            active_cell: field.cell(),
+            active_multi: field.line() == 2,
+            editable: field.text() && !keys_to_options,
+            native_arrows: field.native_arrows() && self.options.is_none(),
+            type_names: ft.types.map(str::to_string),
+            type_icons: ["calendar", "calendar-check", "square-check", "sticky-note"],
+            options: self.options.is_some(),
+            type_selected: self.v.typ.index(),
+            panel, panel_note, panel_hint,
+            summary: String::new(),
+            calendar,
+            entry_open: self.entry_open,
+            commands: self.commands(),
+            command_selected: self.command_selected,
+            search_placeholder: ft.search.to_string(),
+            status,
+            placeholder: self.hint_of(field).to_string(),
+        }
+    }
+
+    /// The open options under the active line, a note under them and the keys for them.
+    fn panel(&self) -> (Panel, String, String) {
+        let ft = self.ft();
+        match &self.options {
+            None => (Panel::None, String::new(), String::new()),
+            Some(Options::Calendar(c)) => {
+                let label = if c.anchor.is_some() { ft.cal_range } else if c.hours { ft.cal_moment } else { ft.cal_day };
+                (Panel::Calendar { label: format!("{label}: {}", self.when_text()), hours: c.hours }, String::new(), (if c.hours { ft.hint_calendar_hours } else { ft.hint_calendar_days }).into())
+            }
+            Some(Options::Clock(clock)) => {
+                let value = if clock.end { self.v.end } else { self.v.start }.unwrap_or(0);
+                let label = if clock.end { match self.v.start { Some(start) => format!("{} · {}", ft.clock_end, length_text(((value as i64 - start as i64).rem_euclid(1440)).max(0), ft)), None => ft.clock_end.into() } } else { ft.clock_start.into() };
+                (Panel::Clock { label, hours: format!("{:02}", value / 60 % 24 + if value == 1440 { 24 } else { 0 }), minutes: format!("{:02}", value % 60), on_minutes: clock.minutes }, String::new(), ft.hint_clock.into())
+            }
+            Some(Options::Repeat) => (Panel::Repeat(self.editor.view(self.v.rule.as_ref(), self.language)), String::new(), ft.hint_repeat.into()),
+            Some(Options::Choices) => match self.field() {
+                Field::Tag => (Panel::Tags(self.tag_options().into_iter().enumerate().map(|(i, (id, name, color))| Choice { label: name, color, icon: self.icon_of(None, id.as_deref()).to_string(), selected: i == self.pick }).collect()), String::new(), ft.hint_choice.into()),
+                Field::Icon => {
+                    let results = self.icon_results();
+                    let note = if results.is_empty() { ft.no_icons.to_string() } else { results.get(self.pick).map(|name| name.to_string()).unwrap_or_default() };
+                    (Panel::Icons(results.iter().enumerate().map(|(i, name)| Choice { label: name.to_string(), color: None, icon: name.to_string(), selected: i == self.pick }).collect()), note, ft.hint_choice.into())
+                }
+                Field::Reminder => (Panel::Reminders(ft.reminder_presets.iter().enumerate().map(|(i, label)| Choice { label: label.to_string(), color: None, icon: String::new(), selected: i == self.pick }).collect()), String::new(), ft.hint_choice.into()),
+                _ => (Panel::None, String::new(), String::new()),
+            },
+        }
+    }
+
+    /// The date and time as one short line ("Do 19.11. · 14:00–15:30", "Mo 23.11. – Fr 27.11.").
+    fn when_text(&self) -> String {
+        let label = |day: NaiveDate| repeat::format_occurrence(day, self.language);
+        let (first, last) = (self.v.days.iter().next().copied().unwrap_or(self.today), self.v.days.iter().last().copied().unwrap_or(self.today));
+        let days = if first == last { label(first) } else { format!("{} – {}", label(first), label(last)) };
+        match (self.v.start, self.v.end) {
+            (Some(start), Some(end)) => format!("{days} · {}–{}", format_time(start), format_time(end)),
+            (Some(start), None) => format!("{days} · {}", format_time(start)),
+            _ => days,
+        }
+    }
+}
+
+/// The longest a reminder may come before its entry (as the app allows).
+fn storage_max_reminder() -> i64 { journal_core::storage::MAX_REMINDER_BEFORE }
+
+#[cfg(test)]
+#[path = "form_tests.rs"]
+mod tests;

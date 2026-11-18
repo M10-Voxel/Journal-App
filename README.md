@@ -4,11 +4,19 @@ Ein kleines Programm zum schnellen Eintragen und Nachsehen im [Journal](https://
 
 J-TerminaL ist ein eigener Download und läuft auch ohne die Journal-App. Es nutzt dieselbe Datenbank wie die App, also denselben Vault.
 
-> Stand: in Planung. Plan: [docs/plan.md](docs/plan.md) · Aufgaben: [docs/roadmap.md](docs/roadmap.md)
+> Stand: Links eine Suchleiste mit `/`-Befehlen (`/Entry` öffnet das Eintragsformular), rechts ein endloser Kalender, der zugleich die Live-Vorschau ist (24-h-Bänder, Anlegen per Rechtsklick wie in der App). Kompaktes Formular mit vier Typen, „Wann“ (Datum │ Start – Ende), Wiederholung als Satz mit Lücken, Tag-, Symbol- und Erinnerungsauswahl. Enter bestätigt nur das Feld, Shift+Enter erstellt und lässt offen, Strg+Enter erstellt und schließt. (docs/input.md) · Plan: [docs/plan.md](docs/plan.md) · Aufgaben: [docs/roadmap.md](docs/roadmap.md)
 
 ## Entwicklung
 
 Technik: **Rust**, **Slint** und **SQLite** über `journal-core` aus der Journal-App (Branch `Windows`).
+
+```
+cd j-terminal
+cargo test
+cargo run -- --data <Test-Ordner>   # nie gegen die echten Journal-Daten
+```
+
+`journal-core` wird beim Entwickeln aus `../Journal-App/crates/journal-core` eingebunden (Branch `Windows` als Nachbarordner).
 
 <a href="https://slint.dev"><img src="https://raw.githubusercontent.com/slint-ui/slint/master/logo/MadeWithSlint-logo-whitebg.png" alt="Made with Slint" height="60"></a>
 
