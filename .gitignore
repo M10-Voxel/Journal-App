@@ -1,17 +1,8 @@
-node_modules/
-dist/
-src-tauri/target/
-src-tauri/gen/
+target/
 *.sqlite*
-
-# Generated knowledge graph, caches and agent work memory (kept locally).
-graphify-out/
 
 # Machine-specific agent permissions.
 .claude/settings.local.json
 
-# Temporary verification scripts.
-scripts/*.tmp.mjs
-
-# Private updater signing material (back up separately; never commit).
+# Private signing material (back up separately; never commit).
 .release-keys/

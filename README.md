@@ -1,56 +1,17 @@
-# Journal
+# J-TerminaL
 
-Eine Windows-App für Tagesnotizen, Aufgaben und Kalender. Deine Daten werden lokal gespeichert; Google Drive lässt sich optional zur Synchronisierung verbinden.
+Ein kleines Programm zum schnellen Eintragen und Nachsehen im [Journal](https://github.com/M10-Voxel/Journal-App/tree/Windows), wie Raycast oder Spotlight. Es wird nur per Tastatur bedient, hat keine Knöpfe und öffnet sich überall mit **Strg+Alt+Leertaste**.
 
-## Download
+J-TerminaL ist ein eigener Download und läuft auch ohne die Journal-App. Es nutzt dieselbe Datenbank wie die App, also denselben Vault.
 
-- **[Aktuelle Version](https://github.com/M10-Voxel/Journal-App/releases/latest):** EXE zum direkten Start oder Windows-Installer.
-- **[Entwicklungsbuilds](https://github.com/M10-Voxel/Journal-App/actions/workflows/windows-build.yml):** EXE und Installer unter „Artifacts“ des jeweiligen Laufs. GitHub-Anmeldung erforderlich; 30 Tage verfügbar.
-
-Neue Updates werden beim Start gemeldet und lassen sich unter **Einstellungen → Updates** herunterladen.
-Pushes auf `Windows` veröffentlichen nach erfolgreichen Prüfungen automatisch ein signiertes Update.
-
-## Funktionen
-
-- Tagesnotizen mit Markdown, Aufgaben, Ereignissen und Erinnerungen.
-- Kalender mit Wiederholungen, mehrtägigen Einträgen sowie ICS-Import und -Export.
-- Notizblock sowie Pinnwände für Tag, Woche, Monat, Quartal und Jahr mit verbundenen Notizen, Bildern und Links.
-- Einstellbare Funktionen: jede Ansicht (Tag … Jahr) und ihre Bereiche – Einträge, Notiz, Bewertung, Werte, Checkliste, Auswertung, Pinnwand – einzeln ein- und ausschaltbar.
-- Aktivitäten, Zeiterfassung und Tagesbewertungen.
-- Farbige Tags, Filter, anpassbare Themes und optionaler Pixelstil.
-- Deutsche und englische Oberfläche, Tastenkürzel und Rückgängig/Wiederherstellen.
-- Optional: Google-Drive-Synchronisierung und lokale Erkennung von Terminen in E-Mails.
-
-**F1** öffnet die Tastenkürzelübersicht. Den Speicherort deiner Daten wählst du unter **Einstellungen → Speicherort**.
+> Stand: in Planung. Plan: [docs/plan.md](docs/plan.md) · Aufgaben: [docs/roadmap.md](docs/roadmap.md)
 
 ## Entwicklung
 
-Technik: **Tauri 2 / Rust**, **React / TypeScript** und **SQLite**.
+Technik: **Rust**, **Slint** und **SQLite** über `journal-core` aus der Journal-App (Branch `Windows`).
 
-Benötigt werden Windows, Node.js 24, Rust mit MSVC-Toolchain, Microsoft C++ Build Tools mit Windows SDK und WebView2. Siehe [Tauri-Voraussetzungen](https://v2.tauri.app/start/prerequisites/).
+<a href="https://slint.dev"><img src="https://raw.githubusercontent.com/slint-ui/slint/master/logo/MadeWithSlint-logo-whitebg.png" alt="Made with Slint" height="60"></a>
 
-```powershell
-npm.cmd ci
-npm.cmd run tauri dev
-```
+Die Oberfläche ist mit [Slint](https://slint.dev) gebaut, unter der [Slint Royalty-free License 2.0](https://github.com/slint-ui/slint/blob/master/LICENSES/LicenseRef-Slint-Royalty-free-2.0.md).
 
-Tests und Windows-Build in einer Entwicklerumgebung mit C++ Build Tools:
-
-```powershell
-npm.cmd test
-cargo test --manifest-path src-tauri/Cargo.toml
-npm.cmd run tauri build
-```
-
-EXE und Installer entstehen unter `src-tauri/target/release/` bzw. `src-tauri/target/release/bundle/nsis/`.
-
-## Dokumentation
-
-- [Übersicht](docs/README.md), [erste Schritte](docs/getting-started.md) und [Entwicklung & Tests](docs/development.md)
-- [Vault, Updates und automatische Releases](docs/vault-and-updates.md)
-- [Google Drive](docs/google-drive.md)
-- [E-Mail-Konten](docs/mail-accounts.md) und [lokale Terminerkennung](docs/mail-context-ml.md)
-- [Notizblock](docs/notebook.md) und [Pinnwand](docs/bulletin-board.md)
-- [Kalenderimport](docs/ics-import.md) und [mehrtägige Einträge](docs/multiday-calendar.md)
-- [Journal-Stil](docs/journal-style.md), [Nebula-Stil](docs/nebula-style.md) und [Popup-Stile](docs/popup-styles.md)
-- [Ressourcenverwaltung und Backend-Optimierungen](docs/performance.md)
+Dieser Branch enthält nur J-TerminaL. Die Journal-App liegt im Branch `Windows` und wird nie hierher gemergt, und umgekehrt auch nicht.
