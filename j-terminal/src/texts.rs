@@ -1,6 +1,8 @@
 //! Every text J-TerminaL shows, German first with the English beside it. The language follows the Journal app's
 //! setting (`ui-language`); keywords typed into the line work in both languages regardless (docs/plan.md, 1.4).
 
+pub mod settings;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Language { De, En }
 
@@ -101,39 +103,41 @@ pub fn texts(language: Language) -> &'static Texts {
 
 pub struct ShortcutTexts {
     pub settings: &'static str,
-    pub title: &'static str,
     pub search: &'static str,
     pub empty: &'static str,
-    pub close: &'static str,
     pub record: &'static str,
     pub reset: &'static str,
     pub change: &'static str,
     pub reserved: &'static str,
     pub conflict: &'static str,
     pub persist_error: &'static str,
+    /// Own keys left out on loading (now taken): followed by the actions' names.
+    pub reset_taken: &'static str,
     pub system_error: &'static str,
 }
 
 pub fn shortcut_labels(language: Language) -> ShortcutTexts {
     match language {
         Language::De => ShortcutTexts {
-            settings: "Einstellungen", title: "Tastenkürzel", search: "Tastenkürzel suchen …",
-            empty: "Keine passenden Tastenkürzel", close: "Einstellungen schließen",
+            settings: "Einstellungen", search: "Einstellungen suchen …",
+            empty: "Keine passenden Einstellungen",
             record: "Neues Kürzel drücken. Esc bricht ab.",
             reset: "Auf Standard zurücksetzen", change: "Tastenkürzel ändern",
             reserved: "Wähle eine Funktionstaste oder eine Kombination mit Strg oder Alt.",
             conflict: "Dieses Kürzel ist bereits belegt für",
             persist_error: "Tastenkürzel konnten nicht gespeichert werden.",
+            reset_taken: "Eigenes Kürzel ist jetzt belegt, zurückgesetzt:",
             system_error: "Das globale Kürzel ist im System nicht verfügbar.",
         },
         Language::En => ShortcutTexts {
-            settings: "Settings", title: "Keyboard shortcuts", search: "Find shortcuts …",
-            empty: "No matching shortcuts", close: "Close settings",
+            settings: "Settings", search: "Search settings…",
+            empty: "No matching settings",
             record: "Press the new shortcut. Esc cancels.",
             reset: "Restore default", change: "Change shortcut",
             reserved: "Choose a function key or a combination with Ctrl or Alt.",
             conflict: "This shortcut is already assigned to",
             persist_error: "The shortcuts could not be saved.",
+            reset_taken: "Own shortcut is taken now and was reset:",
             system_error: "The system shortcut is unavailable.",
         },
     }
@@ -283,8 +287,6 @@ pub struct FormTexts {
     pub empty_icon: &'static str,
     pub priority_on: &'static str,
     pub priority_off: &'static str,
-    pub more: &'static str,
-    pub less: &'static str,
     pub no_tag: &'static str,
     pub no_icons: &'static str,
     /// Reminders ready to choose; the rest is typed ("45", "2 h", "1 Tag").
@@ -313,7 +315,7 @@ pub struct FormTexts {
     pub cmd_entry: &'static str,
     pub cmd_unknown: &'static str,
     /// The repetition's sentence.
-    pub repeat_presets: [&'static str; 7],
+    pub repeat_presets: [&'static str; 6],
     pub rp_rhythm: &'static str,
     pub rp_unit: &'static str,
     pub rp_every: &'static str,
@@ -342,8 +344,6 @@ const FORM_DE: FormTexts = FormTexts {
     empty_icon: "Keines",
     priority_on: "★ Wichtig",
     priority_off: "Normal",
-    more: "Beschreibung · Wichtig · Erinnerung · Symbol",
-    less: "Weniger anzeigen",
     no_tag: "Ohne Tag",
     no_icons: "Kein Symbol mit diesem Namen",
     reminder_presets: ["Keine", "Zur Uhrzeit", "5 Min.", "10 Min.", "15 Min.", "30 Min.", "1 Std.", "2 Std.", "1 Tag", "2 Tage", "1 Woche"],
@@ -361,10 +361,10 @@ const FORM_DE: FormTexts = FormTexts {
     bad_tag: "Diesen Tag gibt es nicht",
     bad_reminder: "Erinnerung nicht verstanden (z. B. 45, 2 h, 1 Tag; höchstens 30 Tage)",
     title_needed: "Der Titel fehlt",
-    search: "Journal durchsuchen · / für Befehle",
+    search: "Suchen oder / für Befehle",
     cmd_entry: "Neuen Eintrag anlegen",
     cmd_unknown: "Unbekannter Befehl:",
-    repeat_presets: ["Einmalig", "Täglich", "Werktags", "Wöchentlich", "Zweiwöchentlich", "Monatlich", "Jährlich"],
+    repeat_presets: ["D", "M-F", "W", "2W", "M", "Y"],
     rp_every: "Alle",
     rp_from: "Ab",
     rp_until: "Bis",
@@ -398,8 +398,6 @@ const FORM_EN: FormTexts = FormTexts {
     empty_icon: "None",
     priority_on: "★ Important",
     priority_off: "Normal",
-    more: "Description · Important · Reminder · Icon",
-    less: "Show less",
     no_tag: "No tag",
     no_icons: "No icon by that name",
     reminder_presets: ["None", "At the time", "5 min", "10 min", "15 min", "30 min", "1 h", "2 h", "1 day", "2 days", "1 week"],
@@ -417,10 +415,10 @@ const FORM_EN: FormTexts = FormTexts {
     bad_tag: "There is no such tag",
     bad_reminder: "Reminder not understood (e.g. 45, 2 h, 1 day; 30 days at most)",
     title_needed: "The title is missing",
-    search: "Search the journal · / for commands",
+    search: "Search, or / for commands",
     cmd_entry: "Make a new entry",
     cmd_unknown: "Unknown command:",
-    repeat_presets: ["Once", "Daily", "Workdays", "Weekly", "Every 2 weeks", "Monthly", "Yearly"],
+    repeat_presets: ["D", "M-F", "W", "2W", "M", "Y"],
     rp_every: "Every",
     rp_from: "From",
     rp_until: "Until",
@@ -449,8 +447,6 @@ pub struct DayTexts {
     /// Monday first.
     pub weekdays: [&'static str; 7],
     pub today: &'static str,
-    pub tomorrow: &'static str,
-    pub yesterday: &'static str,
     /// `%d` is the number of days.
     pub in_days: &'static str,
     pub days_ago: &'static str,
@@ -493,6 +489,7 @@ pub struct DayTexts {
     pub description: &'static str,
     pub description_placeholder: &'static str,
     pub icon_search: &'static str,
+    pub tag_search: &'static str,
     pub tomorrow_action: &'static str,
     pub plan: &'static str,
     pub plan_days: &'static str,
@@ -505,10 +502,8 @@ pub struct DayTexts {
 const DAY_DE: DayTexts = DayTexts {
     weekdays: ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"],
     today: "Heute",
-    tomorrow: "Morgen",
-    yesterday: "Gestern",
-    in_days: "in %d Tagen",
-    days_ago: "vor %d Tagen",
+    in_days: "in %d d",
+    days_ago: "vor %d d",
     minutes: "Min.",
     hours: "Std.",
     untitled: "ohne Text",
@@ -544,6 +539,7 @@ const DAY_DE: DayTexts = DayTexts {
     description: "Beschreibung",
     description_placeholder: "Beschreibung hinzufügen …",
     icon_search: "Symbol suchen …",
+    tag_search: "Tag suchen …",
     tomorrow_action: "Auf morgen",
     plan: "Planen",
     plan_days: "Mehrere Tage",
@@ -556,10 +552,8 @@ const DAY_DE: DayTexts = DayTexts {
 const DAY_EN: DayTexts = DayTexts {
     weekdays: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
     today: "Today",
-    tomorrow: "Tomorrow",
-    yesterday: "Yesterday",
-    in_days: "in %d days",
-    days_ago: "%d days ago",
+    in_days: "in %d d",
+    days_ago: "%d d ago",
     minutes: "min",
     hours: "h",
     untitled: "no text",
@@ -595,6 +589,7 @@ const DAY_EN: DayTexts = DayTexts {
     description: "Description",
     description_placeholder: "Add a description …",
     icon_search: "Search icons …",
+    tag_search: "Search tags …",
     tomorrow_action: "To tomorrow",
     plan: "Plan",
     plan_days: "Several days",
@@ -606,6 +601,77 @@ const DAY_EN: DayTexts = DayTexts {
 
 pub fn day_texts(language: Language) -> &'static DayTexts {
     match language { Language::De => &DAY_DE, Language::En => &DAY_EN }
+}
+
+/// The actions behind Strg+K and the footer (as Raycast's action panel and action bar).
+pub struct ActionTexts {
+    pub menu: &'static str,
+    pub actions: &'static str,
+    pub search: &'static str,
+    pub nothing: &'static str,
+    pub section_entry: &'static str,
+    pub section_general: &'static str,
+    pub section_note: &'static str,
+    pub new_task: &'static str,
+    pub new_event: &'static str,
+    pub new_note: &'static str,
+    pub today: &'static str,
+    pub notebook: &'static str,
+    pub undo: &'static str,
+    pub redo: &'static str,
+    pub settings: &'static str,
+    pub save: &'static str,
+    pub save_stay: &'static str,
+    pub priority: &'static str,
+    pub description: &'static str,
+    pub reminder: &'static str,
+    pub icon: &'static str,
+    pub discard: &'static str,
+    pub notes_new: &'static str,
+    pub notes_edit: &'static str,
+    pub notes_save: &'static str,
+    pub notes_preview: &'static str,
+    pub notes_tag: &'static str,
+    pub notes_attachments: &'static str,
+    pub notes_list: &'static str,
+    pub notes_close: &'static str,
+    /// The footer's main action.
+    pub edit: &'static str,
+    pub create: &'static str,
+    /// The footer's context.
+    pub new_entry: &'static str,
+    pub notepad: &'static str,
+    pub search_title: &'static str,
+}
+
+const ACTIONS_DE: ActionTexts = ActionTexts {
+    menu: "Menü",
+    actions: "Aktionen", search: "Aktionen suchen …", nothing: "Keine passende Aktion",
+    section_entry: "Eintrag", section_general: "Allgemein", section_note: "Notiz",
+    new_task: "Neue Aufgabe", new_event: "Neues Ereignis", new_note: "Neue Notiz", today: "Zu heute", notebook: "Notizblock öffnen",
+    undo: "Rückgängig", redo: "Wiederherstellen", settings: "Einstellungen",
+    save: "Erstellen", save_stay: "Erstellen und weiter", priority: "Wichtig", description: "Beschreibung", reminder: "Erinnerung", icon: "Symbol", discard: "Verwerfen",
+    notes_new: "Neue Notiz", notes_edit: "Bearbeiten", notes_save: "Speichern", notes_preview: "Vorschau umschalten", notes_tag: "Tag zuweisen",
+    notes_attachments: "Anhänge", notes_list: "Zettelliste", notes_close: "Schließen",
+    edit: "Bearbeiten", create: "Erstellen",
+    new_entry: "Neuer Eintrag", notepad: "Notizblock", search_title: "Titel des Eintrags …",
+};
+
+const ACTIONS_EN: ActionTexts = ActionTexts {
+    menu: "Menu",
+    actions: "Actions", search: "Search for actions …", nothing: "No matching action",
+    section_entry: "Entry", section_general: "General", section_note: "Note",
+    new_task: "New task", new_event: "New event", new_note: "New note", today: "Go to today", notebook: "Open the notebook",
+    undo: "Undo", redo: "Redo", settings: "Settings",
+    save: "Create", save_stay: "Create and continue", priority: "Important", description: "Description", reminder: "Reminder", icon: "Icon", discard: "Discard",
+    notes_new: "New note", notes_edit: "Edit", notes_save: "Save", notes_preview: "Toggle preview", notes_tag: "Assign a tag",
+    notes_attachments: "Attachments", notes_list: "Note list", notes_close: "Close",
+    edit: "Edit", create: "Create",
+    new_entry: "New entry", notepad: "Notebook", search_title: "Title of the entry …",
+};
+
+pub fn action_texts(language: Language) -> &'static ActionTexts {
+    match language { Language::De => &ACTIONS_DE, Language::En => &ACTIONS_EN }
 }
 
 #[cfg(test)]

@@ -1,6 +1,7 @@
 //! J-TerminaL waits in the background for `Strg+Alt+Leertaste` and then shows the entry form for the journal.
 //! The window is made hidden at start, so the shortcut only has to show it (docs/plan.md, section 3).
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+mod actions;
 mod autostart;
 mod calendar;
 mod day;
@@ -22,6 +23,7 @@ mod placement;
 mod engine;
 mod repeat;
 mod shortcuts;
+mod settings;
 mod texts;
 mod turned;
 
@@ -65,6 +67,11 @@ struct App {
     notepad_media: NotepadMedia,
     notepad_list_query: slint::SharedString,
     bar: Bar,
+    settings: Option<SettingsWindow>,
+    settings_navigation: settings::Navigation,
+    preferences_path: Option<PathBuf>,
+    journal_language: texts::Language,
+    restore_launcher: bool,
     state: form::Form,
     notice: Option<String>,
     hide_timer: slint::Timer,
@@ -90,6 +97,11 @@ fn with_bar(f: impl FnOnce(&Bar)) {
 
 fn with_app(f: impl FnOnce(&mut App)) {
     APP.with(|app| if let Some(app) = app.borrow_mut().as_mut() { f(app) });
+}
+
+#[cfg(windows)]
+thread_local! {
+    static CREATING_LAUNCHER: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
 thread_local! {
@@ -296,6 +308,11 @@ fn dial_image(size: f32, thickness: f32, fill: Option<f32>, track: [u8; 4], colo
     })
 }
 
+/// How many dials stand side by side: all of up to three, four as two by two, more three to a line.
+fn dial_layout_columns(count: usize) -> usize {
+    match count { 0..=3 => count.max(1), 4 => 2, _ => 3 }
+}
+
 fn rgba(color: slint::Color) -> [u8; 4] { [color.red(), color.green(), color.blue(), color.alpha()] }
 
 /// A key of the day view from its text (Slint's key codes).
@@ -354,7 +371,104 @@ impl App {
             self.active_hotkey = Some(new_hotkey);
         }
         self.bindings = next;
+        self.draw();
+        if let Some(window) = &self.settings { self.draw_settings_rows(window); }
         String::new()
+    }
+
+    fn change_preference(&mut self, key: PreferenceKey, index: i32) -> String {
+        let mut next = self.state.preferences;
+        if next.change(key, index).is_none() { return String::new(); }
+        if let Some(path) = &self.preferences_path {
+            if let Err(error) = settings::write_json(path, &next) {
+                return format!("{} {error}", texts::settings::tr(texts::settings::WRITE_ERROR, self.state.language));
+            }
+        }
+        self.state.preferences = next;
+        self.state.language = next.effective_language(self.journal_language);
+        self.draw();
+        if let Some(window) = &self.settings {
+            if key == PreferenceKey::Language { self.draw_settings_labels(window); }
+            self.draw_settings_rows(window);
+        }
+        String::new()
+    }
+
+    fn show_settings(&mut self) {
+        self.hide_timer.stop();
+        if self.settings.is_none() {
+            match SettingsWindow::new() {
+                Ok(settings) => {
+                    connect_settings(&settings);
+                    self.bar.window().with_winit_window(|launcher| {
+                        let Some(monitor) = launcher.current_monitor() else { return; };
+                        let area = placement::work_area(screen_for_monitor(monitor));
+                        let theme = settings.global::<Theme>();
+                        let physical = |length: f32| (f64::from(length) * area.scale).round() as i32;
+                        let margin = physical(theme.get_settings_padding()) * 2;
+                        let width = physical(theme.get_settings_width()).min((area.width - margin).max(1));
+                        let height = physical(theme.get_settings_height()).min((area.height - margin).max(1));
+                        settings.window().set_size(slint::PhysicalSize::new(width as u32, height as u32));
+                        settings.window().set_position(slint::PhysicalPosition::new(
+                            area.left + (area.width - width) / 2, area.top + (area.height - height) / 2,
+                        ));
+                    });
+                    self.settings = Some(settings);
+                }
+                Err(error) => { eprintln!("J-TerminaL: {}: {error}", texts::shortcut_labels(self.state.language).settings); return; }
+            }
+        }
+        let settings = self.settings.as_ref().unwrap();
+        if !settings.window().is_visible() {
+            self.settings_navigation = settings::Navigation::default();
+            self.draw_settings_labels(settings);
+            self.draw_settings_rows(settings);
+            settings.invoke_begin_session();
+            if let Err(error) = settings.show() { eprintln!("J-TerminaL: {error}"); return; }
+            self.restore_launcher = self.bar.window().is_visible();
+            if self.restore_launcher { let _ = self.bar.hide(); }
+        }
+        settings.window().with_winit_window(|window| {
+            window.set_minimized(false);
+            window.focus_window();
+        });
+    }
+
+    fn close_settings(&mut self) {
+        let Some(settings) = self.settings.as_ref() else { return };
+        settings.invoke_stop_recording();
+        let _ = settings.hide();
+        if std::mem::take(&mut self.restore_launcher) {
+            let _ = self.bar.show();
+            self.bar.window().with_winit_window(|window| window.focus_window());
+        }
+    }
+
+    fn draw_settings_labels(&self, window: &SettingsWindow) {
+        use texts::settings as copy;
+        let lang = self.state.language;
+        let labels = texts::shortcut_labels(lang);
+        window.set_labels(SettingsLabels {
+            settings: labels.settings.into(), search: labels.search.into(), empty: labels.empty.into(),
+            record: labels.record.into(), reset: labels.reset.into(), change: labels.change.into(),
+            back: copy::tr(copy::BACK, lang).into(), forward: copy::tr(copy::FORWARD, lang).into(),
+            minimize: copy::tr(copy::MINIMIZE, lang).into(), close: copy::tr(copy::CLOSE, lang).into(),
+        });
+        window.set_categories(settings::categories(window, lang));
+        window.set_version(env!("CARGO_PKG_VERSION").into());
+        window.set_terminal_icon(icon_image("terminal", window.global::<Theme>().get_search_icon_size(), window.window().scale_factor()));
+    }
+
+    fn draw_settings_rows(&self, window: &SettingsWindow) {
+        let nav = &self.settings_navigation;
+        let location = nav.location();
+        window.set_category(location.page as i32);
+        window.set_can_go_back(nav.back());
+        window.set_can_go_forward(nav.forward());
+        window.set_searching(!location.query.trim().is_empty());
+        if window.get_query().as_str() != location.query { window.set_query(location.query.as_str().into()); }
+        let rows = settings::rows(location, &self.state.preferences, &self.bindings, self.state.language);
+        window.set_rows(std::rc::Rc::new(slint::VecModel::from(rows)).into());
     }
 
     fn draw(&mut self) {
@@ -365,14 +479,22 @@ impl App {
         let scale = self.bar.window().scale_factor();
         let icon_px = theme.get_icon_size();
         let label_px = theme.get_label_icon_size();
-        self.bar.set_more_open(view.rows.iter().any(|row| row.field > form::Field::More.index()));
         self.bar.set_search_icon(control_image(&self.bar, "search", theme.get_search_icon_size(), scale));
-        self.bar.set_settings_icon(icon_image("settings", label_px, scale));
-        let labels = texts::shortcut_labels(self.state.language);
-        self.bar.set_shortcut_labels(ShortcutLabels {
-            settings: labels.settings.into(), title: labels.title.into(), search: labels.search.into(), empty: labels.empty.into(), close: labels.close.into(),
-            record: labels.record.into(), reset: labels.reset.into(), change: labels.change.into(),
-        });
+        self.bar.set_icon_arrow_back(icon_image("arrow-left", label_px, scale));
+        self.bar.set_icon_flag(icon_image("flag", label_px, scale));
+        self.bar.set_icon_chevron_down(icon_image("chevron-down", theme.get_footer_icon_size(), scale));
+        self.bar.set_icon_success(icon_image("circle-check", theme.get_footer_icon_size(), scale));
+        self.bar.set_icon_error(icon_image("circle-exclamation-point", theme.get_footer_icon_size(), scale));
+        let keys = self.bar.global::<KeyIcons>();
+        keys.set_enter(icon_image("corner-down-left", theme.get_keycap_size(), scale));
+        keys.set_shift(icon_image("arrow-big-up", theme.get_keycap_size(), scale));
+        self.bar.set_title_text(view.title.clone().into());
+        self.bar.set_title_hint(view.title_hint.clone().into());
+        self.bar.set_in_header(view.in_header);
+        self.bar.set_title_error(view.title_error);
+        self.bar.set_entry_priority(view.priority);
+        self.draw_menu(view.menu.clone(), view.context);
+        self.draw_footer(view.context, &view.day.heading);
         self.bar.set_command_icon(control_image(&self.bar, "square-pen", label_px, scale));
         self.bar.set_line_count(view.rows.iter().map(|row| row.line + 1).max().unwrap_or(1) as i32);
         self.bar.set_rows(std::rc::Rc::new(slint::VecModel::from(view.rows.into_iter().map(|row| FormRow {
@@ -427,15 +549,78 @@ impl App {
         self.bar.set_sentence(std::rc::Rc::new(slint::VecModel::from(sentence)).into());
         self.bar.set_panel_note(view.panel_note.into());
         self.draw_calendar(view.calendar);
-        self.draw_day(view.day, view.side, view.day_message);
+        self.draw_day(view.day, view.side);
         self.bar.set_entry_open(view.entry_open);
         self.draw_notepad();
         self.bar.set_search_placeholder(view.search_placeholder.into());
         self.bar.set_command_selected(view.command_selected as i32);
         self.bar.set_commands(std::rc::Rc::new(slint::VecModel::from(view.commands.into_iter().map(|c| CommandRow { name: c.name.into(), detail: c.detail.into() }).collect::<Vec<_>>())).into());
-        let status = view.status.or_else(|| self.notice.clone().map(|notice| (notice, true)));
+        // One short message in the footer: the day view's, the form's, or a problem from the start.
+        let status = view.day_message.filter(|_| !view.entry_open).or(view.status).or_else(|| self.notice.clone().map(|notice| (notice, true)));
         self.bar.set_notice_is_error(status.as_ref().is_some_and(|(_, error)| *error));
         self.bar.set_notice(status.map_or_else(String::new, |(text, _)| text).into());
+    }
+
+    /// The actions behind Strg+K: their lines with sections and the keys they have now.
+    fn draw_menu(&mut self, menu: Option<form::MenuView>, context: form::Context) {
+        let at = texts::action_texts(self.state.language);
+        self.bar.set_menu_placeholder(at.search.into());
+        self.bar.set_menu_empty(at.nothing.into());
+        let Some(menu) = menu else { self.bar.set_menu_open(false); return; };
+        let theme = self.bar.global::<Theme>();
+        let (scale, px) = (self.bar.window().scale_factor(), theme.get_label_icon_size());
+        let first = match context { form::Context::NotesList | form::Context::NotesRead | form::Context::NotesEdit => at.section_note, _ => at.section_entry };
+        let mut previous = usize::MAX;
+        // Where each line is in the list (a section's line and heading come before its first): the list follows the keys.
+        let (row_h, spacing, heading) = (theme.get_side_row_height(), theme.get_choice_spacing(), theme.get_border_width() + theme.get_section_height());
+        let mut y = 0.0;
+        let rows: Vec<MenuRow> = menu.items.iter().enumerate().map(|(i, item)| {
+            let section = if item.section != previous { if item.section == 0 { first } else { at.section_general } } else { "" };
+            previous = item.section;
+            let extra = if !section.is_empty() && i > 0 { heading } else { 0.0 };
+            let top = y + extra;
+            y = top + row_h + spacing;
+            let keys = item.id.binding().map(|id| shortcuts::keys(&self.bindings, id, self.state.language)).unwrap_or_else(|| item.id.fixed_keys().to_string());
+            let icon = journal_image(&self.bar, &item.icon, px, scale);
+            MenuRow {
+                top, section: section.into(), has_icon: !item.icon.is_empty(), icon, label: item.label.clone().into(), value: item.value.clone().into(),
+                caps: strings(shortcuts::caps(&keys)), on: item.on, danger: item.danger,
+                has_color: item.color.is_some(), color: item.color.map_or_else(slint::Color::default, |[r, g, b]| slint::Color::from_rgb_u8(r, g, b)),
+            }
+        }).collect();
+        self.bar.set_menu_title(menu.title.into());
+        self.bar.set_menu_rows(std::rc::Rc::new(slint::VecModel::from(rows)).into());
+        self.bar.set_menu_pick(menu.pick as i32);
+        self.bar.set_app_menu(menu.app_menu);
+        self.bar.set_menu_open(true);
+    }
+
+    /// The footer: where one is, the main action there and the actions, each with its keys.
+    fn draw_footer(&mut self, context: form::Context, day: &str) {
+        use form::Context as C;
+        let at = texts::action_texts(self.state.language);
+        let language = self.state.language;
+        let keys = |id: &str| strings(shortcuts::caps(&shortcuts::keys(&self.bindings, id, language)));
+        let label = match context {
+            C::Day | C::DayLine => day,
+            C::Entry => at.new_entry,
+            C::NotesList | C::NotesRead | C::NotesEdit => at.notepad,
+        };
+        let (primary, primary_keys) = match context {
+            C::Day => (at.new_task, keys("day-task")),
+            C::DayLine => (at.edit, strings(["↵".to_string()])),
+            C::Entry => (at.create, keys("form-save")),
+            C::NotesList => (at.notes_new, keys("notes-new")),
+            C::NotesRead => (at.notes_edit, keys("notes-edit")),
+            C::NotesEdit => (at.notes_save, keys("notes-save")),
+        };
+        self.bar.set_footer_date(matches!(context, C::Day | C::DayLine));
+        self.bar.set_footer_menu_label(at.menu.into());
+        self.bar.set_footer_label(label.into());
+        self.bar.set_footer_hints(std::rc::Rc::new(slint::VecModel::from(vec![
+            FooterHint { label: primary.into(), caps: if self.state.preferences.keycaps { primary_keys } else { Default::default() }, action: 0 },
+            FooterHint { label: at.actions.into(), caps: if self.state.preferences.keycaps { keys("day-actions") } else { Default::default() }, action: 1 },
+        ])).into());
     }
 
     fn draw_notepad(&mut self) {
@@ -639,14 +824,17 @@ impl App {
         self.bar.set_cal_focus(calendar.focus);
         self.bar.set_cal_time_x(m.time_x());
         self.bar.set_cal_title(layout.title.into());
-        self.bar.set_cal_has_now(layout.now.is_some());
+        let prefs = &self.state.preferences;
+        self.bar.set_cal_has_now(prefs.now_line && layout.now.is_some());
         self.bar.set_cal_has_caret(layout.caret.is_some());
         if let Some((x, y, w, h)) = layout.caret { self.bar.set_cal_caret_x(x); self.bar.set_cal_caret_y(y); self.bar.set_cal_caret_w(w); self.bar.set_cal_caret_h(h); }
         if let Some((x, y, h)) = layout.now { self.bar.set_cal_now_x(x); self.bar.set_cal_now_y(y); self.bar.set_cal_now_h(h); }
         self.bar.set_cal_ticks(std::rc::Rc::new(slint::VecModel::from(layout.ticks.into_iter().map(|tick| CalTick { x: tick.x, label: tick.label.into(), strong: tick.strong }).collect::<Vec<_>>())).into());
         self.bar.set_cal_bands(std::rc::Rc::new(slint::VecModel::from(layout.bands.into_iter().map(|band| CalBand {
             y: band.y, h: band.h, kind: match band.kind { calendar::BandKind::Day => 0, calendar::BandKind::Month => 1 },
-            label: band.label.into(), week: band.week.into(), week_start: band.week_start, tint: band.tint, weekend: band.weekend, sunday: chrono::Datelike::weekday(&band.date) == chrono::Weekday::Sun, today: band.today, selected: band.selected, cursor: band.cursor, open: band.open,
+            label: band.label.into(), week: if prefs.week_numbers { band.week.into() } else { Default::default() },
+            week_start: band.week_start, tint: band.tint, weekend: prefs.weekends && band.weekend,
+            sunday: prefs.weekends && chrono::Datelike::weekday(&band.date) == chrono::Weekday::Sun, today: band.today, selected: band.selected, cursor: band.cursor, open: band.open,
         }).collect::<Vec<_>>())).into());
         self.bar.set_cal_blocks(std::rc::Rc::new(slint::VecModel::from(layout.blocks.into_iter().map(|block| CalBlock {
             x: block.x, y: block.y, w: block.w, h: block.h, title: block.title.into(), time: block.time.into(), color: color(block.color),
@@ -667,7 +855,7 @@ impl App {
     }
 
     /// The day view under the search bar, and the panel at the left.
-    fn draw_day(&mut self, day: day_view::DayView, side: Option<day::SidePanel>, message: Option<(String, bool)>) {
+    fn draw_day(&mut self, day: day_view::DayView, side: Option<day::SidePanel>) {
         let theme = self.bar.global::<Theme>();
         let scale = self.bar.window().scale_factor();
         let dt = texts::day_texts(self.state.language);
@@ -676,9 +864,6 @@ impl App {
         self.bar.set_day_relative(day.relative.clone().into());
         self.bar.set_day_is_today(day.is_today);
         self.bar.set_day_title_placeholder(dt.title_placeholder.into());
-        self.bar.set_day_message_is_error(message.as_ref().is_some_and(|(_, error)| *error));
-        self.bar.set_day_message(message.map(|(text, _)| text).unwrap_or_default().into());
-        self.bar.set_day_new_icons(std::rc::Rc::new(slint::VecModel::from(["journal-event", "journal-task", "journal-note"].iter().map(|name| journal_image(&self.bar, name, heading_icon, scale)).collect::<Vec<_>>())).into());
         for (name, set) in [("play", Bar::set_icon_play as fn(&Bar, slint::Image)), ("pause", Bar::set_icon_pause), ("square", Bar::set_icon_stop), ("x", Bar::set_icon_close), ("chevron-left", Bar::set_icon_back), ("chevron-right", Bar::set_icon_forward)] {
             set(&self.bar, control_image(&self.bar, name, tag_icon, scale));
         }
@@ -712,17 +897,24 @@ impl App {
             }
             let inner = self.bar.get_form_space() - 2.0 * theme.get_padding();
             let width = if column == 0 { inner } else { (inner - theme.get_gap()) / 2.0 };
-            let columns = ((width + theme.get_dial_spacing()) / (theme.get_dial_cell_width() + theme.get_dial_spacing())).floor().max(1.0) as usize;
+            // The dials: up to three side by side, four as two by two, five and six three to a line; smaller where
+            // the room asks for it.
+            let dial_count = row.dials.len();
+            let columns = dial_layout_columns(dial_count);
+            let spacing = theme.get_dial_spacing();
+            let cell = theme.get_dial_cell_width().min((width - spacing * (columns as f32 - 1.0)) / columns as f32);
+            let dial_size = (theme.get_dial_size() * cell / theme.get_dial_cell_width()).floor();
+            let dial_row = theme.get_dial_row_height() - (theme.get_dial_size() - dial_size);
             let tall = match row.kind {
                 K::Heading => theme.get_day_heading_height(), K::Title => theme.get_day_title_height(),
-                K::Dials => theme.get_dial_row_height() * row.dials.len().div_ceil(columns) as f32, _ => theme.get_day_row_height(),
+                K::Dials => dial_row * dial_count.div_ceil(columns) as f32, _ => theme.get_day_row_height(),
             };
             let y = top;
             top += tall;
             if footer { bottom = bottom.max(top); }
             if row.selected || row.editing || row.dials.iter().any(|d| d.selected) {
                 let line = row.dials.iter().position(|d| d.selected).unwrap_or_default() / columns;
-                focus = (footer, y + line as f32 * theme.get_dial_row_height(), tall.min(theme.get_dial_row_height()));
+                focus = (footer, y + line as f32 * dial_row, tall.min(dial_row));
             }
             let model = DayRow {
                 column, top: y, tall, kind, item: index_of(&row.item), icon: journal_image(&self.bar, row.icon, if kind == 0 { heading_icon } else { symbol }, scale),
@@ -731,9 +923,10 @@ impl App {
                 selected: row.selected, editing: row.editing, track: row.track, has_timer: row.timer.is_some(),
                 timer_running: row.timer.as_ref().is_some_and(|t| t.running), timer_clock: row.timer.as_ref().map(|t| t.clock.clone()).unwrap_or_default().into(),
                 label: row.label.clone().into(), detail: row.detail.clone().into(),
+                dial_columns: columns as i32, dial_cell: cell, dial_size, dial_row,
                 dials: std::rc::Rc::new(slint::VecModel::from(row.dials.iter().map(|d| DialCell {
                     raw: d.raw.unwrap_or(d.min) as i32, low: d.min as i32, high: d.max as i32, item: index_of(&Some(d.item.clone())), label: d.label.clone().into(), value: d.value.clone().into(), selected: d.selected,
-                    color: color(Some(d.color)), image: dial_image(dial_px, thickness, d.fill, track, rgba(color(Some(d.color))), scale),
+                    color: color(Some(d.color)), image: dial_image(dial_size, thickness * dial_size / dial_px, d.fill, track, rgba(color(Some(d.color))), scale),
                 }).collect::<Vec<_>>())).into(),
             };
             if footer { footer_rows.push(model); } else { entries.push(model); }
@@ -768,7 +961,7 @@ impl App {
         self.bar.set_side_weekdays(strings(side.weekdays));
         self.side_cells = side.cells.iter().map(|c| c.date).collect();
         self.bar.set_side_cells(std::rc::Rc::new(slint::VecModel::from(side.cells.iter().map(|c| MonthCell {
-            label: c.label.clone().into(), in_month: c.in_month, today: c.today, cursor: c.cursor, picked: c.picked, own: c.own,
+            label: c.label.clone().into(), in_month: c.in_month, today: c.today, cursor: c.cursor, picked: c.picked, own: c.own, disabled: c.disabled,
         }).collect::<Vec<_>>())).into());
         self.bar.set_side_confirm_text(if side.kind == 4 { dt.take.into() } else { side.confirm.into() });
         self.bar.set_side_text_shown(side.text.into());
@@ -795,12 +988,16 @@ impl App {
             Some(form::Pane::Entry) => self.bar.invoke_focus_entry(),
             Some(form::Pane::Search) => self.bar.invoke_focus_search(),
             Some(form::Pane::Day) => self.bar.invoke_focus_day(),
-            // The inputs of the day view focus themselves when they appear.
-            Some(form::Pane::DayEdit | form::Pane::SideText) | None => {}
+            Some(form::Pane::Menu) => self.bar.invoke_focus_menu(),
+            Some(form::Pane::Notes) => self.bar.invoke_focus_notepad(),
+            // The inputs of the day view and the popover's pickers focus themselves when they appear.
+            Some(form::Pane::SideText) => self.bar.invoke_focus_menu(),
+            Some(form::Pane::DayEdit) | None => {}
         }
+        if effect.settings { self.show_settings(); }
         if effect.hide { let _ = self.bar.hide(); }
         if effect.hide_soon {
-            self.hide_timer.start(slint::TimerMode::SingleShot, Duration::from_millis(450), || with_bar(|bar| { let _ = bar.hide(); }));
+            self.hide_timer.start(slint::TimerMode::SingleShot, self.state.preferences.save_delay.duration(), || with_bar(|bar| { let _ = bar.hide(); }));
         }
         if effect.quit {
             QUITS.with(|quits| quits.set(quits.get() + 1));
@@ -828,17 +1025,31 @@ fn release_opening_modifiers(window: &slint::Window) {
     }
 }
 
+fn filter_opening_modifiers(window: &slint::Window, event: &WindowEvent) -> EventResult {
+    use slint::winit_030::winit::{event::ElementState, keyboard::{Key, NamedKey}};
+    if matches!(event, WindowEvent::Focused(true)) {
+        release_opening_modifiers(window);
+    }
+    if let WindowEvent::KeyboardInput { event, is_synthetic: true, .. } = event {
+        if event.state == ElementState::Pressed && matches!(event.logical_key, Key::Named(NamedKey::Control | NamedKey::Alt | NamedKey::Shift)) {
+            return EventResult::PreventDefault;
+        }
+    }
+    EventResult::Propagate
+}
+
 fn present(bar: &Bar) {
     // Defer access to APP: present can itself be called while with_bar borrows it.
     slint::Timer::single_shot(Duration::ZERO, || with_app(|app| {
         app.hide_timer.stop();
+        app.restore_launcher = false;
         let effect = app.state.shown();
         app.effect(effect);
     }));
-    bar.invoke_close_settings();
     release_opening_modifiers(bar.window());
     if let Err(e) = bar.show() { eprintln!("J-TerminaL: Fenster: {e}"); return; }
-    place_and_focus(bar, 50);
+    let centered = APP.with(|slot| slot.borrow().as_ref().is_some_and(|app| app.state.preferences.center_window));
+    place_and_focus(bar, centered, 50);
 }
 
 fn screen_for_monitor(monitor: slint::winit_030::winit::monitor::MonitorHandle) -> placement::Screen {
@@ -846,31 +1057,36 @@ fn screen_for_monitor(monitor: slint::winit_030::winit::monitor::MonitorHandle) 
     placement::Screen { left: position.x, top: position.y, width: size.width as i32, height: size.height as i32, scale: monitor.scale_factor() }
 }
 
-fn center_resized_window(bar: &Bar) {
+fn center_resized_window(bar: &Bar, vertically: bool) {
     if !bar.window().is_visible() { return; }
     bar.window().with_winit_window(|window| {
         let (Some(monitor), Ok(position)) = (window.current_monitor(), window.outer_position()) else { return; };
-        let width = window.outer_size().width;
-        if width == 0 { return; }
+        let size = window.outer_size();
+        if size.width == 0 || size.height == 0 { return; }
         let area = placement::work_area(screen_for_monitor(monitor));
-        let x = placement::centered_left(area, width as i32);
-        if x != position.x {
-            window.set_outer_position(slint::winit_030::winit::dpi::PhysicalPosition::new(x, position.y));
+        let x = placement::centered_left(area, size.width as i32);
+        let y = if vertically { area.top + (area.height - size.height as i32).max(0) / 2 } else { position.y };
+        if x != position.x || y != position.y {
+            window.set_outer_position(slint::winit_030::winit::dpi::PhysicalPosition::new(x, y));
         }
     });
 }
 
 /// The native window exists once the event loop has made it; while waiting in the background it already does. Only
 /// right after a direct start it may still be missing, so this tries again a few milliseconds later.
-fn place_and_focus(bar: &Bar, tries: u32) {
+fn place_and_focus(bar: &Bar, centered: bool, tries: u32) {
     let placed = bar.window().with_winit_window(|window| {
         let screens: Vec<placement::Screen> = window.available_monitors().map(screen_for_monitor).collect();
         if let Some(screen) = placement::pick(&screens, placement::mouse()).map(placement::work_area) {
             bar.set_screen_width((screen.width as f64 / screen.scale) as f32);
-            let preferred_height = bar.global::<Theme>().get_calendar_height() * if bar.get_stacked() { 2.0 } else { 1.0 };
+            let preferred_height = if centered {
+                bar.set_screen_height((screen.height as f64 / screen.scale) as f32);
+                bar.get_content_height()
+            } else { bar.global::<Theme>().get_calendar_height() * if bar.get_stacked() { 2.0 } else { 1.0 } };
             let (x, y) = placement::top_center(screen, bar.get_content_width());
-            let y = y.min(screen.top + screen.height - (preferred_height as f64 * screen.scale).round() as i32).max(screen.top);
-            bar.set_screen_height(((screen.top + screen.height - y) as f64 / screen.scale) as f32);
+            let room = (screen.height - (preferred_height as f64 * screen.scale).round() as i32).max(0);
+            let y = if centered { screen.top + room / 2 } else { y.min(screen.top + room) };
+            if !centered { bar.set_screen_height(((screen.top + screen.height - y) as f64 / screen.scale) as f32); }
             window.set_outer_position(slint::winit_030::winit::dpi::PhysicalPosition::new(x, y));
         }
         window.focus_window();
@@ -880,7 +1096,7 @@ fn place_and_focus(bar: &Bar, tries: u32) {
         round_window(bar);
         bar.invoke_focus_line();
     } else if tries > 0 {
-        slint::Timer::single_shot(std::time::Duration::from_millis(5), move || with_bar(|bar| place_and_focus(bar, tries - 1)));
+        slint::Timer::single_shot(std::time::Duration::from_millis(5), move || with_bar(|bar| place_and_focus(bar, centered, tries - 1)));
     }
 }
 
@@ -943,38 +1159,59 @@ fn native_window_rounds_both_right_corners() {
 
 fn toggle(bar: &Bar) {
     if bar.window().is_visible() {
-        bar.invoke_close_settings();
+        with_app(|app| app.restore_launcher = false);
         let _ = bar.hide();
     } else { present(bar); }
 }
 
-fn connect(bar: &Bar) {
-    bar.global::<KeyBindings>().on_resolve(|context, text, mask| {
-        let context = match context {
-            ShortcutContext::Window => shortcuts::WINDOW,
-            ShortcutContext::Search => shortcuts::SEARCH,
-            ShortcutContext::Form => shortcuts::FORM,
-            ShortcutContext::Day => shortcuts::DAY,
-            ShortcutContext::DayEdit => shortcuts::DAY_EDIT,
-            ShortcutContext::Side => shortcuts::SIDE,
-            ShortcutContext::Notes => shortcuts::NOTES,
-        };
-        APP.with(|slot| {
-            slot.borrow().as_ref().and_then(|app| app.bindings.route(context, &text, mask))
-                .map(|(text, mask)| RoutedKey { text: text.into(), mask })
-                .unwrap_or(RoutedKey { text, mask })
-        })
+fn route_key(context: ShortcutContext, text: slint::SharedString, mask: i32) -> RoutedKey {
+    let context = match context {
+        ShortcutContext::Window => shortcuts::WINDOW,
+        ShortcutContext::Search => shortcuts::SEARCH,
+        ShortcutContext::Form => shortcuts::FORM,
+        ShortcutContext::Day => shortcuts::DAY,
+        ShortcutContext::DayEdit => shortcuts::DAY_EDIT,
+        ShortcutContext::Side => shortcuts::SIDE,
+        ShortcutContext::Notes => shortcuts::NOTES,
+    };
+    APP.with(|slot| {
+        slot.borrow().as_ref().and_then(|app| app.bindings.route(context, &text, mask))
+            .map(|(text, mask)| RoutedKey { text: text.into(), mask })
+            .unwrap_or(RoutedKey { text, mask })
+    })
+}
+
+fn connect_settings(settings: &SettingsWindow) {
+    settings.global::<KeyBindings>().on_resolve(route_key);
+    settings.on_dismiss(|| with_app(App::close_settings));
+    settings.window().on_close_requested(|| {
+        with_app(App::close_settings);
+        slint::CloseRequestResponse::KeepWindowShown
     });
-    bar.on_shortcut_update(|id, text, mask| APP.with(|app| {
+    settings.window().on_winit_window_event(|window, event| {
+        if matches!(event, WindowEvent::Focused(true) | WindowEvent::ScaleFactorChanged { .. }) {
+            slint::Timer::single_shot(Duration::ZERO, || with_app(|app| {
+                if let Some(window) = &app.settings { app.draw_settings_labels(window); }
+            }));
+        }
+        filter_opening_modifiers(window, event)
+    });
+    let weak = settings.as_weak();
+    settings.on_system_menu(move |x, y| {
+        if let Some(settings) = weak.upgrade() {
+            settings.window().with_winit_window(|window| window.show_window_menu(slint::winit_030::winit::dpi::LogicalPosition::new(x, y)));
+        }
+    });
+    settings.on_update_binding(|id, text, mask| APP.with(|app| {
         app.borrow_mut().as_mut().map_or_else(slint::SharedString::default, |app| app.change_shortcut(&id, &text, mask).into())
     }));
-    let weak = bar.as_weak();
-    bar.on_shortcut_editable_row(move |index, direction| {
+    let weak = settings.as_weak();
+    settings.on_editable_row(move |index, direction| {
         use slint::Model;
-        let Some(bar) = weak.upgrade() else { return -1; };
-        let rows = bar.get_shortcut_rows();
+        let Some(settings) = weak.upgrade() else { return -1; };
+        let rows = settings.get_rows();
         let end = rows.row_count() as i32;
-        let editable = |i: &i32| rows.row_data(*i as usize).is_some_and(|row| !row.id.is_empty());
+        let editable = |i: &i32| rows.row_data(*i as usize).is_some_and(|row| row.control != RowControl::Fixed);
         let found = if direction < 0 {
             (0..(index + 1).min(end)).rev().find(editable)
         } else {
@@ -982,16 +1219,26 @@ fn connect(bar: &Bar) {
         };
         found.unwrap_or(-1)
     });
-    bar.on_shortcut_lookup(|group, query| with_app(|app| {
-        let language = app.state.language;
-        let rows = shortcuts::rows(&app.bindings, language, group.max(0) as usize, &query).into_iter().map(|row| {
-            ShortcutRow { id: row.id.into(), heading: row.heading.into(), action: row.action.into(), keys: row.keys.into(), changed: row.changed }
-        }).collect::<Vec<_>>();
-        if group == 0 && query.is_empty() {
-            app.bar.set_shortcut_groups(strings(shortcuts::group_names(language).map(str::to_owned)));
-        }
-        app.bar.set_shortcut_rows(std::rc::Rc::new(slint::VecModel::from(rows)).into());
+    settings.on_lookup(|query| with_app(|app| {
+        app.settings_navigation.search(&query);
+        if let Some(settings) = &app.settings { app.draw_settings_rows(settings); }
     }));
+    settings.on_navigate(|index| with_app(|app| {
+        app.settings_navigation.visit(index);
+        if let Some(settings) = &app.settings { app.draw_settings_rows(settings); }
+    }));
+    settings.on_travel(|forward| with_app(|app| {
+        app.settings_navigation.travel(forward);
+        if let Some(settings) = &app.settings { app.draw_settings_rows(settings); }
+    }));
+    settings.on_set_preference(|key, index| APP.with(|app| {
+        app.borrow_mut().as_mut().map_or_else(Default::default, |app| app.change_preference(key, index).into())
+    }));
+}
+
+fn connect(bar: &Bar) {
+    bar.global::<KeyBindings>().on_resolve(route_key);
+    bar.on_open_settings(|| with_app(App::show_settings));
     let weak = bar.as_weak();
     bar.on_dial_preview(move |value, low, high, color| {
         let Some(bar) = weak.upgrade() else { return slint::Image::default(); };
@@ -1028,10 +1275,25 @@ fn connect(bar: &Bar) {
         let effect = app.state.pane_effect(out);
         app.effect(effect);
     }));
-    bar.on_day_create(|kind| with_app(|app| {
-        let kind = ["event", "task", "note"][kind.clamp(0, 2) as usize];
-        let out = app.state.with_pane(|pane, cx| pane.create(cx, kind));
-        let effect = app.state.pane_effect(out);
+    bar.on_field_clicked(|index| with_app(|app| { let effect = app.state.click_field(index.max(0) as usize); app.effect(effect); }));
+    bar.on_toggle_menu(|| with_app(|app| { app.hide_timer.stop(); let effect = app.state.toggle_menu(); app.effect(effect); }));
+    bar.on_app_menu_clicked(|| with_app(|app| { app.hide_timer.stop(); let effect = app.state.toggle_app_menu(); app.effect(effect); }));
+    bar.on_menu_edited(|text| with_app(|app| { app.state.menu_edited(&text); app.draw(); }));
+    bar.on_menu_key(|text, _mods| with_app(|app| {
+        let key = match day_key(&text) {
+            Some(day::K::Up | day::K::BackTab) => form::Key::Up,
+            Some(day::K::Down | day::K::Tab) => form::Key::Down,
+            Some(day::K::Enter) => form::Key::Enter,
+            Some(day::K::Escape) => form::Key::Escape,
+            _ => return,
+        };
+        let effect = app.state.menu_key(key);
+        app.effect(effect);
+    }));
+    bar.on_menu_choose(|index| with_app(|app| { let effect = app.state.menu_choose(index.max(0) as usize); app.effect(effect); }));
+    bar.on_footer_action(|which| with_app(|app| {
+        app.hide_timer.stop();
+        let effect = if which == 1 { app.state.toggle_menu() } else { app.state.footer_primary() };
         app.effect(effect);
     }));
     bar.on_dial_set(|item, value, clear| with_app(|app| {
@@ -1058,13 +1320,42 @@ fn connect(bar: &Bar) {
     bar.on_side_edited(|text| with_app(|app| { app.state.pane.side_edited(&text); app.draw(); }));
     bar.on_side_day(|index| with_app(|app| {
         let Some(date) = app.side_cells.get(index.max(0) as usize).copied() else { return };
-        let out = app.state.with_pane(|pane, cx| pane.plan_click(cx, date));
-        let effect = app.state.pane_effect(out);
+        let effect = if app.state.repeat_date_open() {
+            app.state.take_repeat_date(date)
+        } else {
+            let out = app.state.with_pane(|pane, cx| pane.plan_click(cx, date));
+            app.state.pane_effect(out)
+        };
         app.effect(effect);
     }));
-    bar.on_side_month(|by| with_app(|app| { let out = app.state.pane.plan_month(by); let effect = app.state.pane_effect(out); app.effect(effect); }));
-    bar.on_side_confirm(|| with_app(|app| { let out = app.state.with_pane(|pane, cx| pane.side_confirm(cx)); let effect = app.state.pane_effect(out); app.effect(effect); }));
-    bar.on_side_back(|| with_app(|app| { let out = app.state.with_pane(|pane, cx| pane.side_back(cx)); let effect = app.state.pane_effect(out); app.effect(effect); }));
+    bar.on_side_month(|by| with_app(|app| {
+        let effect = if app.state.repeat_date_open() {
+            let key = if by < 0 { form::Key::PageUp } else { form::Key::PageDown };
+            app.state.key(key, form::Mods::default())
+        } else {
+            let out = app.state.pane.plan_month(by);
+            app.state.pane_effect(out)
+        };
+        app.effect(effect);
+    }));
+    bar.on_side_confirm(|| with_app(|app| {
+        let effect = if app.state.repeat_date_open() {
+            app.state.key(form::Key::Enter, form::Mods::default())
+        } else {
+            let out = app.state.with_pane(|pane, cx| pane.side_confirm(cx));
+            app.state.pane_effect(out)
+        };
+        app.effect(effect);
+    }));
+    bar.on_side_back(|| with_app(|app| {
+        let effect = if app.state.repeat_date_open() {
+            app.state.key(form::Key::Escape, form::Mods::default())
+        } else {
+            let out = app.state.with_pane(|pane, cx| pane.side_back(cx));
+            app.state.pane_effect(out)
+        };
+        app.effect(effect);
+    }));
     bar.on_side_close(|| with_app(|app| { let out = app.state.pane.close_side(); let effect = app.state.pane_effect(out); app.effect(effect); }));
     bar.on_side_clock(|minutes, steps| with_app(|app| {
         let out = if steps == 0 { app.state.pane.clock_part(minutes) } else { app.state.pane.clock_wheel(minutes, steps) };
@@ -1146,6 +1437,7 @@ fn connect(bar: &Bar) {
         let key = match code {
             0 => Key::Tab, 1 => Key::Up, 2 => Key::Down, 3 => Key::Enter, 4 => Key::Escape, 5 => Key::Left, 6 => Key::Right, 7 => Key::PageUp, 8 => Key::PageDown,
             9 => Key::Home, 10 => Key::Space, 11 => Key::Insert, 12 => Key::Delete, 15 => Key::Focus, 50 => Key::Undo, 51 => Key::Redo, 52 => Key::Quit,
+            30 => Key::Priority, 31 => Key::Extra(form::Field::Description), 32 => Key::Extra(form::Field::Reminder), 33 => Key::Extra(form::Field::Icon), 34 => Key::Close,
             digit if (20..=29).contains(&digit) => Key::Digit((digit - 20) as u8), _ => return,
         };
         app.hide_timer.stop();
@@ -1171,7 +1463,7 @@ fn main() {
         Err(e) => eprintln!("J-TerminaL: Instanz: {e}"),
     }
 
-    // Not in the taskbar; a frameless tool window.
+    // Both windows paint their own frame. Settings are resizable and have a taskbar entry.
     let selected = slint::BackendSelector::new()
         .backend_name("winit".into())
         .renderer_name("software".into())
@@ -1179,9 +1471,15 @@ fn main() {
             #[cfg(windows)]
             let attributes = {
                 use slint::winit_030::winit::platform::windows::WindowAttributesExtWindows;
-                // The window region already cuts out the corners. A transparent native
-                // surface also enables DWM glass underneath the header on reactivation.
-                attributes.with_skip_taskbar(true).with_decorations(false).with_transparent(false)
+                let attributes = attributes.with_transparent(false);
+                if CREATING_LAUNCHER.with(|creating| creating.get()) {
+                    attributes.with_skip_taskbar(true).with_decorations(false)
+                } else {
+                    use slint::winit_030::winit::platform::windows::CornerPreference;
+                    attributes.with_decorations(false).with_undecorated_shadow(true)
+                        .with_corner_preference(CornerPreference::Round)
+                        .with_theme(Some(slint::winit_030::winit::window::Theme::Dark))
+                }
             };
             attributes
         })
@@ -1194,10 +1492,16 @@ fn main() {
 
     let data = args.data.clone().or_else(journal_core::vault::app_data_folder);
     let opened = match &data { Some(data) => journal::open(data), None => Err(journal::Problem::NoVault) };
-    let language = match &opened {
+    let journal_language = match &opened {
         Ok(journal) => texts::Language::from_setting(&journal.store.interface_language().unwrap_or_default()),
         Err(_) => texts::Language::De,
     };
+    let preferences_path = data.as_ref().map(|directory| directory.join("j-terminal-settings.json"));
+    let preferences = settings::Preferences::load(preferences_path.as_deref()).unwrap_or_else(|error| {
+        eprintln!("J-TerminaL: {}: {error}", texts::shortcut_labels(journal_language).settings);
+        settings::Preferences::default()
+    });
+    let language = preferences.effective_language(journal_language);
     let t = texts::texts(language);
     let mut notice = match &opened {
         Ok(_) => None,
@@ -1207,14 +1511,27 @@ fn main() {
         Err(journal::Problem::Failed(e)) => Some(format!("{} {e}", t.open_failed)),
     };
 
+    #[cfg(windows)]
+    CREATING_LAUNCHER.with(|creating| creating.set(true));
     let bar = match Bar::new() {
         Ok(bar) => bar,
         Err(e) => { eprintln!("J-TerminaL: Fenster: {e}"); std::process::exit(1); }
     };
+    // The backend's attribute hook runs when the Slint window adapter is created.
+    let _ = bar.window();
+    #[cfg(windows)]
+    CREATING_LAUNCHER.with(|creating| creating.set(false));
 
     let mut bindings = shortcuts::Bindings::at(data.as_ref().map(|directory| directory.join("j-terminal-shortcuts.json")));
-    if let Err(error) = bindings.load() {
-        notice.get_or_insert_with(|| format!("{} {error}", texts::shortcut_labels(language).persist_error));
+    match bindings.load() {
+        Err(error) => { notice.get_or_insert_with(|| format!("{} {error}", texts::shortcut_labels(language).persist_error)); }
+        // Said once: the cleaned keys are written back.
+        Ok(dropped) if !dropped.is_empty() => {
+            let names: Vec<&str> = dropped.iter().map(|id| shortcuts::Bindings::action_label(id, language)).collect();
+            notice.get_or_insert_with(|| format!("{} {}", texts::shortcut_labels(language).reset_taken, names.join(", ")));
+            let _ = bindings.save();
+        }
+        Ok(_) => {}
     }
     let hotkeys = match GlobalHotKeyManager::new() {
         Ok(manager) => Some(manager),
@@ -1240,7 +1557,8 @@ fn main() {
         if event.state != HotKeyState::Pressed { return; }
         let _ = slint::invoke_from_event_loop(move || {
             let bar = APP.with(|slot| slot.borrow().as_ref().and_then(|app| {
-                (app.active_hotkey.is_some_and(|key| key.id() == event.id) && !app.bar.get_shortcut_recording())
+                (app.active_hotkey.is_some_and(|key| key.id() == event.id)
+                    && !app.settings.as_ref().is_some_and(|settings| settings.get_recording()))
                     .then(|| app.bar.clone_strong())
             }));
             if let Some(bar) = bar { toggle(&bar); }
@@ -1248,30 +1566,22 @@ fn main() {
     }));
 
     connect(&bar);
-    // Gone as soon as another window has the focus; what was typed stays for the next time.
+    // Preserve drafts when the launcher hides on focus loss.
     bar.window().on_winit_window_event(|window, event| {
-        use slint::winit_030::winit::{event::ElementState, keyboard::{Key, NamedKey}};
-        if matches!(event, WindowEvent::Focused(true)) {
-            release_opening_modifiers(window);
-        }
-        // Winit can synthesize presses for the opening chord as the new window gains focus.
-        if let WindowEvent::KeyboardInput { event, is_synthetic: true, .. } = event {
-            if event.state == ElementState::Pressed && matches!(event.logical_key, Key::Named(NamedKey::Control | NamedKey::Alt | NamedKey::Shift)) {
-                return EventResult::PreventDefault;
-            }
+        if matches!(filter_opening_modifiers(window, event), EventResult::PreventDefault) {
+            return EventResult::PreventDefault;
         }
         if matches!(event, WindowEvent::Resized(_) | WindowEvent::ScaleFactorChanged { .. }) {
             // Use the applied outer width, including intermediate sizes of the side panel animation.
-            slint::Timer::single_shot(Duration::ZERO, || with_bar(|bar| {
+            slint::Timer::single_shot(Duration::ZERO, || with_app(|app| {
                 #[cfg(windows)]
-                round_window(bar);
-                center_resized_window(bar);
+                round_window(&app.bar);
+                center_resized_window(&app.bar, app.state.preferences.center_window);
             }));
         }
         if matches!(event, WindowEvent::Focused(false)) && !PICKING_IMAGE.with(|picking| picking.get()) {
-            slint::Timer::single_shot(std::time::Duration::ZERO, || with_bar(|bar| {
-                bar.invoke_close_settings();
-                let _ = bar.hide();
+            slint::Timer::single_shot(Duration::ZERO, || with_app(|app| {
+                if app.state.preferences.hide_on_blur { let _ = app.bar.hide(); }
             }));
         }
         if matches!(event, WindowEvent::ScaleFactorChanged { .. }) {
@@ -1283,8 +1593,10 @@ fn main() {
 
     let show_now = !args.background;
     let mut state = form::Form::new(opened.ok(), language);
+    state.preferences = preferences;
     state.metrics = metrics(&bar);
-    APP.with(|app| *app.borrow_mut() = Some(App { notepad_media: NotepadMedia::default(), notepad_list_query: Default::default(), bar, state, notice,
+    APP.with(|app| *app.borrow_mut() = Some(App { notepad_media: NotepadMedia::default(), notepad_list_query: Default::default(),
+        bar, settings: None, settings_navigation: Default::default(), preferences_path, journal_language, restore_launcher: false, state, notice,
         hide_timer: slint::Timer::default(), bindings, hotkeys, active_hotkey, day_items: Vec::new(), side_cells: Vec::new(), tick: slint::Timer::default() }));
     with_app(|app| app.draw());
     with_app(|app| app.tick.start(slint::TimerMode::Repeated, Duration::from_secs(1), || with_app(|app| {
@@ -1301,6 +1613,13 @@ mod tests {
     fn parse(args: &[&str]) -> Result<Args, String> { parse_args(args.iter().map(|arg| arg.to_string())) }
 
     #[test]
+    fn dials_stand_three_four_or_three_to_a_line() {
+        let lines = |count: usize| count.div_ceil(dial_layout_columns(count));
+        assert_eq!((1..=6).map(dial_layout_columns).collect::<Vec<_>>(), [1, 2, 3, 2, 3, 3]);
+        assert_eq!((1..=6).map(lines).collect::<Vec<_>>(), [1, 1, 1, 2, 2, 2]);
+    }
+
+    #[test]
     fn reads_the_arguments() {
         assert_eq!(parse(&[]).unwrap(), Args::default());
         assert_eq!(parse(&["--background"]).unwrap(), Args { background: true, data: None });
@@ -1313,19 +1632,19 @@ mod tests {
     fn keyboard_walks_through_the_form_in_the_real_ui() {
         use i_slint_backend_testing::{TestingBackend, TestingBackendOptions};
         use slint::Model;
-        fn send_key_combo(bar: &Bar, keys: impl IntoIterator<Item = slint::platform::Key>) {
+        fn send_key_combo(bar: &impl ComponentHandle, keys: impl IntoIterator<Item = slint::platform::Key>) {
             let keys: Vec<slint::SharedString> = keys.into_iter().map(|key| char::from(key).into()).collect();
             for text in &keys { bar.window().dispatch_event(slint::platform::WindowEvent::KeyPressed { text: text.clone() }); }
             for text in keys.into_iter().rev() { bar.window().dispatch_event(slint::platform::WindowEvent::KeyReleased { text }); }
         }
-        fn type_text(bar: &Bar, text: &str) {
+        fn type_text(bar: &impl ComponentHandle, text: &str) {
             for c in text.chars() {
                 bar.window().dispatch_event(slint::platform::WindowEvent::KeyPressed { text: c.into() });
                 bar.window().dispatch_event(slint::platform::WindowEvent::KeyReleased { text: c.into() });
             }
         }
         use slint::platform::Key as K;
-        fn key_with_modifiers(bar: &Bar, modifiers: &[K], text: &str) {
+        fn key_with_modifiers(bar: &impl ComponentHandle, modifiers: &[K], text: &str) {
             use slint::platform::WindowEvent;
             for &key in modifiers {
                 bar.window().dispatch_event(WindowEvent::KeyPressed { text: char::from(key).into() });
@@ -1335,7 +1654,7 @@ mod tests {
                 bar.window().dispatch_event(WindowEvent::KeyReleased { text: char::from(key).into() });
             }
         }
-        fn click(bar: &Bar, position: slint::LogicalPosition) {
+        fn click(bar: &impl ComponentHandle, position: slint::LogicalPosition) {
             use slint::platform::{PointerEventButton, WindowEvent};
             bar.window().dispatch_event(WindowEvent::PointerPressed { position, button: PointerEventButton::Left });
             bar.window().dispatch_event(WindowEvent::PointerReleased { position, button: PointerEventButton::Left });
@@ -1354,10 +1673,14 @@ mod tests {
         }
         fn capture(bar: &Bar, name: &str) {
             if std::env::var_os("J_TERMINAL_UI_CAPTURE").is_none() { return; }
+            fit_viewport(bar);
+            capture_window(bar.window(), name);
+        }
+        fn capture_window(window: &slint::Window, name: &str) {
+            if std::env::var_os("J_TERMINAL_UI_CAPTURE").is_none() { return; }
             i_slint_backend_testing::mock_elapsed_time(Duration::from_millis(1));
             i_slint_backend_testing::mock_elapsed_time(Duration::from_millis(200));
-            fit_viewport(bar);
-            let pixels = bar.window().take_snapshot().unwrap();
+            let pixels = window.take_snapshot().unwrap();
             let mut bytes = format!("P6\n{} {}\n255\n", pixels.width(), pixels.height()).into_bytes();
             for pixel in pixels.as_slice() { bytes.extend_from_slice(&[pixel.r, pixel.g, pixel.b]); }
             let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("target/ui-check");
@@ -1389,7 +1712,22 @@ mod tests {
         connect(&bar);
         let mut state = form::Form::at(Some(journal), texts::Language::De, repeat::d("2026-11-18"), 800);
         state.metrics = metrics(&bar);
-        APP.with(|slot| *slot.borrow_mut() = Some(App { notepad_media: NotepadMedia::default(), notepad_list_query: Default::default(), bar: bar.clone_strong(), state, notice: None, hide_timer: slint::Timer::default(), bindings: shortcuts::Bindings::default(), hotkeys: None, active_hotkey: None, day_items: Vec::new(), side_cells: Vec::new(), tick: slint::Timer::default() }));
+        APP.with(|slot| *slot.borrow_mut() = Some(App { notepad_media: NotepadMedia::default(), notepad_list_query: Default::default(),
+            bar: bar.clone_strong(), settings: None, settings_navigation: Default::default(), preferences_path: None,
+            journal_language: texts::Language::De, restore_launcher: false, state, notice: None, hide_timer: slint::Timer::default(),
+            bindings: shortcuts::Bindings::default(), hotkeys: None, active_hotkey: None, day_items: Vec::new(), side_cells: Vec::new(), tick: slint::Timer::default() }));
+        let settings_open = || with_app_value(|app| app.settings.as_ref().is_some_and(|settings| settings.window().is_visible()));
+        let settings = || with_app_value(|app| app.settings.as_ref().unwrap().clone_strong());
+        let open_footer_menu = || {
+            fit_viewport(&bar);
+            let theme = bar.global::<Theme>();
+            click(&bar, slint::LogicalPosition::new(
+                theme.get_padding() + 8.0,
+                bar.get_content_height() - theme.get_footer_height() / 2.0,
+            ));
+            assert!(bar.get_menu_open() && bar.get_app_menu(), "The footer icon opens the app menu.");
+            assert_eq!(bar.get_menu_rows().row_data(0).unwrap().label.as_str(), "Einstellungen");
+        };
         bar.show().unwrap();
         with_app(|app| { let effect = app.state.shown(); app.effect(effect); });
         bar.invoke_focus_line();
@@ -1446,7 +1784,8 @@ mod tests {
         bar.window().dispatch_event(slint::platform::WindowEvent::KeyPressed { text: char::from(K::Alt).into() });
         send_key_combo(&bar, [K::RightArrow]);
         bar.window().dispatch_event(slint::platform::WindowEvent::KeyReleased { text: char::from(K::Alt).into() });
-        assert_eq!(bar.get_day_relative().as_str(), "Morgen");
+        assert_eq!(bar.get_day_relative().as_str(), "in 1 d");
+        assert_eq!(bar.get_footer_label().as_str(), "Donnerstag, 19. November 2026");
         assert_eq!(day_labels(&bar), ["Zahnarzt"]);
         assert!(bar.get_cal_bands().iter().any(|band| band.selected), "The calendar marks the day the view shows.");
         capture(&bar, "day-view-tomorrow");
@@ -1459,13 +1798,14 @@ mod tests {
         send_key_combo(&bar, [K::Escape]);
         assert!(!bar.get_notepad_open());
         {
-            let theme = bar.global::<Theme>();
-            let position = slint::LogicalPosition::new(
-                bar.get_form_space() - theme.get_padding() - theme.get_day_symbol_box() / 2.0,
-                theme.get_line_height() / 2.0,
-            );
-            click(&bar, position);
-            assert!(bar.get_notepad_open(), "The search bar shortcut opens the notepad.");
+            // Strg+K, a few letters and Enter: the notepad from the actions.
+            key_with_modifiers(&bar, &[K::Control], "k");
+            assert!(bar.get_menu_open());
+            type_text(&bar, "notiz");
+            assert_eq!(bar.get_menu_rows().row_data(0).unwrap().label.as_str(), "Notizblock öffnen");
+            send_key_combo(&bar, [K::Return]);
+            assert!(!bar.get_menu_open());
+            assert!(bar.get_notepad_open(), "The actions open the notepad.");
             assert_eq!(bar.get_notepad_panel(), 1);
             assert_eq!(bar.get_notepad_title().as_str(), "");
             key_with_modifiers(&bar, &[K::Control], "n");
@@ -1518,19 +1858,22 @@ mod tests {
         send_key_combo(&bar, [K::Return]);
         assert_eq!(bar.get_notepad_choices().row_count(), 1);
         send_key_combo(&bar, [K::Escape]);
-        send_key_combo(&bar, [K::F1]);
-        type_text(&bar, "Markdown");
+        open_footer_menu();
         send_key_combo(&bar, [K::Return]);
-        assert!(bar.get_shortcut_recording());
-        ctrl("l");
-        assert!(bar.get_shortcut_recording(), "A conflicting shortcut is rejected.");
-        assert_eq!(bar.get_shortcut_rows().row_data(0).unwrap().keys, "Strg+M");
-        send_key_combo(&bar, [K::F8]);
-        assert!(!bar.get_shortcut_recording());
-        assert_eq!(bar.get_shortcut_rows().row_data(0).unwrap().keys, "F8");
-        capture(&bar, "shortcut-assignment");
-        send_key_combo(&bar, [K::F1]);
-        assert!(!bar.get_settings_open());
+        assert!(settings_open() && !bar.window().is_visible(), "Settings have their own window.");
+        let keys_window = settings();
+        type_text(&keys_window, "Markdown");
+        send_key_combo(&keys_window, [K::Return]);
+        assert!(keys_window.get_recording());
+        key_with_modifiers(&keys_window, &[K::Control], "l");
+        assert!(keys_window.get_recording(), "A conflicting shortcut is rejected.");
+        assert_eq!(keys_window.get_rows().row_data(0).unwrap().value, "Strg+M");
+        send_key_combo(&keys_window, [K::F8]);
+        assert!(!keys_window.get_recording());
+        assert_eq!(keys_window.get_rows().row_data(0).unwrap().value, "F8");
+        capture_window(keys_window.window(), "shortcut-assignment");
+        send_key_combo(&keys_window, [K::F1]);
+        assert!(!settings_open() && bar.get_notepad_open());
         ctrl("m");
         assert!(!bar.get_notepad_preview(), "The old binding gives way to the replacement.");
         send_key_combo(&bar, [K::F8]);
@@ -1546,11 +1889,9 @@ mod tests {
         send_key_combo(&bar, [K::Return]);
         ctrl("v");
         assert!(bar.get_notepad_body().ends_with("let test = 42;\n"), "The code action copies only the contents of the block.");
-        let theme = bar.global::<Theme>();
-        click(&bar, slint::LogicalPosition::new(
-            bar.get_form_space() - theme.get_padding() - theme.get_field_inset() * 2.0,
-            theme.get_notepad_header_height() / 2.0,
-        ));
+        // The footer's main action saves (as Strg+Enter).
+        assert_eq!(bar.get_footer_hints().row_data(0).unwrap().label.as_str(), "Speichern");
+        bar.invoke_footer_action(0);
         assert!(bar.get_notepad_open() && bar.get_notepad_preview() && !bar.get_notepad_editing());
         assert!(bar.get_notepad_date().ends_with("Arbeit"));
         capture(&bar, "notebook-reader");
@@ -1573,12 +1914,13 @@ mod tests {
         bar.window().dispatch_event(slint::platform::WindowEvent::KeyReleased { text: char::from(K::Alt).into() });
         assert!(bar.get_day_is_today());
         assert_eq!(bar.get_search_text(), "", "Alt+H typed nothing.");
-        // The middle button on a day in the calendar; a click on the date goes back to today.
+        // The middle button on a day in the calendar; a click on the distance goes back to today.
         let urlaub = with_app_value(|app| app.state.view().calendar.layout.rows.iter().find(|row| row.date == repeat::d("2026-11-23")).map(|row| row.y + 2.0).unwrap());
         bar.invoke_cal_mouse(2, 0, 30.0, urlaub, false);
         assert_eq!(day_labels(&bar), ["Urlaub", "Team"], "A multiday entry shows on every day it covers, before the timed ones.");
         capture(&bar, "day-view-holiday");
-        bar.invoke_day_today();
+        let theme = bar.global::<Theme>();
+        click(&bar, slint::LogicalPosition::new(theme.get_form_width() - 75.0, theme.get_line_height() / 2.0));
         assert!(bar.get_day_is_today());
         let alt = |bar: &Bar, text: &str| {
             bar.window().dispatch_event(slint::platform::WindowEvent::KeyPressed { text: char::from(K::Alt).into() });
@@ -1599,28 +1941,62 @@ mod tests {
         alt(&bar, "d");
         assert!(bar.get_day_rows().iter().any(|row| row.label == "Post" && row.done));
         capture(&bar, "day-entries");
-        // A click on an entry's symbol: its settings come out at the left, the window widens.
+        // A click on an entry's symbol: its actions (as Strg+K) open over the footer; the window keeps its size.
         let item = bar.get_day_rows().iter().find(|row| row.label == "Brot kaufen").unwrap().item;
         let footer_before = bar.get_day_footer_height();
         let top_before = bar.get_day_footer_rows().iter().find(|row| row.kind == 7).unwrap().top;
         assert_eq!(top_before, bar.global::<Theme>().get_day_heading_height(), "The dial positions do not include the entries.");
         let closed_width = bar.get_content_width();
         bar.invoke_day_click(item, 1);
-        assert!(bar.get_side_open());
-        let _ = bar.get_content_width();
-        i_slint_backend_testing::mock_elapsed_time(Duration::from_millis(60));
-        let opening_width = bar.get_content_width();
-        assert!(opening_width > closed_width && opening_width < closed_width + bar.global::<Theme>().get_side_width(), "The side panel expands the window over time.");
-        i_slint_backend_testing::mock_elapsed_time(Duration::from_millis(200));
-        assert_eq!((bar.get_side_kind(), bar.get_side_title().as_str()), (0, "Brot kaufen"));
-        capture(&bar, "side-actions");
-        // Planning: Alt+T opens a month in the same place; Enter plans on the chosen day (tomorrow).
-        alt(&bar, "t");
+        assert!(bar.get_menu_open());
+        assert_eq!(bar.get_content_width(), closed_width, "The actions do not widen the window.");
+        assert_eq!(bar.get_menu_title().as_str(), "Brot kaufen");
+        let labels = |bar: &Bar| bar.get_menu_rows().iter().map(|row| row.label.to_string()).collect::<Vec<_>>();
+        assert!(labels(&bar).contains(&"Status".to_string()) && labels(&bar).contains(&"Neue Aufgabe".to_string()), "{:?}", labels(&bar));
+        let status = bar.get_menu_rows().iter().find(|row| row.label == "Status").unwrap();
+        assert_eq!(status.caps.iter().map(|cap| cap.to_string()).collect::<Vec<_>>(), ["Alt", "D"], "Each action shows its keys.");
+        capture(&bar, "actions-entry");
+        // Typing filters; Enter on "Planen" opens the month in the same card, Enter there plans on tomorrow.
+        type_text(&bar, "plan");
+        assert_eq!(labels(&bar)[0], "Planen", "{:?}", labels(&bar));
+        capture(&bar, "actions-search");
+        send_key_combo(&bar, [K::Return]);
+        assert!(!bar.get_menu_open() && bar.get_side_open());
         assert_eq!(bar.get_side_kind(), 5);
         assert_eq!(bar.get_side_cells().row_count(), 42);
-        capture(&bar, "side-plan");
+        capture(&bar, "actions-plan");
         send_key_combo(&bar, [K::Return]);
-        assert!(!bar.get_side_open(), "Planned: the panel goes.");
+        assert!(!bar.get_side_open() && !bar.get_menu_open(), "Planned: the card goes.");
+        // A tag only with the keyboard: Strg+K on "Post", "tag", Enter; the search has the keys, ↓ and Enter choose.
+        let post = bar.get_day_rows().iter().find(|row| row.label == "Post").unwrap().item;
+        bar.invoke_day_click(post, 4);
+        type_text(&bar, "tag");
+        send_key_combo(&bar, [K::Return]);
+        assert_eq!(bar.get_side_kind(), 1, "The tags in the card.");
+        let tags = bar.get_side_rows().row_count();
+        assert!(tags > 1);
+        type_text(&bar, "x");
+        assert!(bar.get_side_rows().row_count() < tags, "Typing filters the tags.");
+        send_key_combo(&bar, [K::Backspace]);
+        assert_eq!(bar.get_side_rows().row_count(), tags);
+        send_key_combo(&bar, [K::DownArrow, K::Return]);
+        assert!(!bar.get_side_open() && !bar.get_menu_open());
+        assert!(bar.get_day_rows().iter().any(|row| row.label == "Post" && row.has_color), "The tag is set.");
+        // Backspace in an empty search goes a step back: out of a picker into the actions, then out of them.
+        bar.invoke_day_click(post, 4);
+        type_text(&bar, "uhr");
+        send_key_combo(&bar, [K::Return]);
+        assert_eq!(bar.get_side_kind(), 4, "The clock.");
+        send_key_combo(&bar, [K::Backspace]);
+        assert!(bar.get_menu_open() && !bar.get_side_open(), "Backspace: back to the actions.");
+        // ↓ to the last line: the list follows.
+        let rows = bar.get_menu_rows().row_count();
+        for _ in 1..rows { send_key_combo(&bar, [K::DownArrow]); }
+        assert_eq!(bar.get_menu_pick() as usize, rows - 1);
+        assert!(bar.get_menu_rows().row_data(rows - 1).unwrap().top > 200.0, "The last line lies below the first view.");
+        capture(&bar, "actions-scrolled");
+        send_key_combo(&bar, [K::Backspace]);
+        assert!(!bar.get_menu_open(), "Backspace in the empty search closes the actions.");
         assert!(bar.get_day_rows().iter().any(|row| row.label == "Brot kaufen" && row.trace));
         // The dials: a click on the ring sets by its place.
         let dial = bar.get_day_footer_rows().iter().find(|row| row.kind == 7).unwrap().dials.row_data(0).unwrap();
@@ -1641,21 +2017,16 @@ mod tests {
         assert_eq!(bar.get_day_footer_height(), footer_before);
         fit_viewport(&bar);
         capture(&bar, "portrait-day");
-        bar.invoke_day_click(item, 1);
-        assert!(bar.get_side_open());
+        bar.invoke_day_click(item, 4);
+        assert!(bar.get_menu_open(), "A right click opens the entry's actions too.");
         fit_viewport(&bar);
-        i_slint_backend_testing::mock_elapsed_time(Duration::from_millis(200));
-        fit_viewport(&bar);
-        capture(&bar, "portrait-side-actions");
-        let theme = bar.global::<Theme>();
-        let close = slint::LogicalPosition::new(
-            bar.get_content_width() - theme.get_side_padding() - theme.get_day_symbol_box() / 2.0,
-            theme.get_side_padding() + theme.get_day_symbol_box() / 2.0,
-        );
+        capture(&bar, "portrait-actions");
+        // A click beside the card closes it.
+        let beside = slint::LogicalPosition::new(20.0, 20.0);
         use slint::platform::{PointerEventButton, WindowEvent};
-        bar.window().dispatch_event(WindowEvent::PointerPressed { position: close, button: PointerEventButton::Left });
-        bar.window().dispatch_event(WindowEvent::PointerReleased { position: close, button: PointerEventButton::Left });
-        assert!(!bar.get_side_open(), "The close button is at the top right of the portrait panel.");
+        bar.window().dispatch_event(WindowEvent::PointerPressed { position: beside, button: PointerEventButton::Left });
+        bar.window().dispatch_event(WindowEvent::PointerReleased { position: beside, button: PointerEventButton::Left });
+        assert!(!bar.get_menu_open() && !bar.get_side_open(), "A click beside the actions closes them.");
         bar.set_screen_width(2000.0);
         bar.set_screen_height(2200.0);
         i_slint_backend_testing::mock_elapsed_time(Duration::from_millis(200));
@@ -1666,52 +2037,146 @@ mod tests {
         for key in [K::Control, K::Alt] {
             bar.window().dispatch_event(WindowEvent::KeyPressed { text: char::from(key).into() });
         }
-        assert!(!bar.get_settings_open());
+        assert!(!settings_open());
         release_opening_modifiers(bar.window());
         type_text(&bar, "probe");
         assert_eq!(bar.get_search_text().as_str(), "probe");
         assert_eq!(QUITS.with(|quits| quits.get()), 0);
 
+        open_footer_menu();
+        capture(&bar, "app-menu");
+        send_key_combo(&bar, [K::Return]);
+        assert!(settings_open());
+        assert!(!bar.get_menu_open());
+        keys_window.window().dispatch_event(WindowEvent::CloseRequested);
+        assert!(!settings_open() && bar.window().is_visible());
+
         send_key_combo(&bar, [K::F1]);
-        assert!(bar.get_settings_open());
-        assert_eq!(bar.get_shortcut_rows().row_data(0).unwrap().heading, "Allgemein");
-        capture(&bar, "shortcut-settings");
-        send_key_combo(&bar, [K::DownArrow]);
-        assert_eq!(bar.get_shortcut_rows().row_data(0).unwrap().heading, "Tagesansicht");
-        type_text(&bar, "Markdown");
-        let rows: Vec<_> = bar.get_shortcut_rows().iter().collect();
+        assert!(settings_open());
+        let settings_theme = keys_window.global::<Theme>();
+        let key_position = |x, y| slint::LogicalPosition::new(x, y);
+        assert_eq!(keys_window.get_category(), 0);
+        assert_eq!(keys_window.get_rows().row_data(0).unwrap().control, RowControl::Featured);
+        capture_window(keys_window.window(), "settings-general");
+        let pixels = keys_window.window().take_snapshot().unwrap();
+        let scale = keys_window.window().scale_factor();
+        let right = pixels.width() as f32 - (settings_theme.get_settings_padding() + settings_theme.get_settings_row_inset()) * scale;
+        let left = right - settings_theme.get_settings_switch_width() * scale;
+        let mut colored_pixels = 0;
+        for (i, p) in pixels.as_slice().iter().enumerate() {
+            if p.r != p.g || p.g != p.b {
+                let x = (i % pixels.width() as usize) as f32;
+                assert!(x >= left.floor() && x < right.ceil(), "Only the active switch tracks carry color");
+                colored_pixels += 1;
+            }
+        }
+        assert!(colored_pixels > 0);
+        let profile = path.with_extension("settings.json");
+        with_app(|app| app.preferences_path = Some(profile.clone()));
+        type_text(&keys_window, "Sprache");
+        send_key_combo(&keys_window, [K::Return]);
+        send_key_combo(&keys_window, [K::End]);
+        send_key_combo(&keys_window, [K::Return]);
+        assert_eq!(keys_window.get_labels().settings, "Settings");
+        assert_eq!(bar.get_footer_menu_label(), "Menu");
+        key_with_modifiers(&keys_window, &[K::Control], "f");
+        type_text(&keys_window, "Language");
+        send_key_combo(&keys_window, [K::Return]);
+        send_key_combo(&keys_window, [K::Home]);
+        send_key_combo(&keys_window, [K::Return]);
+        assert_eq!(keys_window.get_labels().settings, "Einstellungen");
+        key_with_modifiers(&keys_window, &[K::Control], "f");
+        // Global search finds an option outside the current category; Enter operates its real switch.
+        type_text(&keys_window, "Kalenderwochen");
+        with_app(|app| app.preferences_path = Some(path.join("unwritable.json")));
+        send_key_combo(&keys_window, [K::Return]);
+        assert!(with_app_value(|app| app.state.preferences.week_numbers), "A failed write leaves the live value intact");
+        with_app(|app| app.preferences_path = Some(profile.clone()));
+        send_key_combo(&keys_window, [K::Return]);
+        assert!(!with_app_value(|app| app.state.preferences.week_numbers));
+        assert!(!settings::Preferences::load(Some(&profile)).unwrap().week_numbers);
+        assert!(bar.get_cal_bands().iter().all(|band| band.week.is_empty()));
+        send_key_combo(&keys_window, [K::Return]);
+        assert!(with_app_value(|app| app.state.preferences.week_numbers));
+        key_with_modifiers(&keys_window, &[K::Control], "f");
+        type_text(&keys_window, "Startansicht");
+        send_key_combo(&keys_window, [K::Return]);
+        send_key_combo(&keys_window, [K::DownArrow]);
+        send_key_combo(&keys_window, [K::Return]);
+        assert_eq!(with_app_value(|app| app.state.preferences.start_view), settings::StartView::Entry);
+        send_key_combo(&keys_window, [K::Return]);
+        send_key_combo(&keys_window, [K::UpArrow]);
+        send_key_combo(&keys_window, [K::Return]);
+        assert_eq!(with_app_value(|app| app.state.preferences.start_view), settings::StartView::Day);
+
+        let first_category_y = settings_theme.get_settings_caption_height() + settings_theme.get_settings_padding()
+            + settings_theme.get_settings_search_height() + settings_theme.get_settings_text_gap()
+            + settings_theme.get_settings_identity_height() + settings_theme.get_settings_category_gap()
+            + settings_theme.get_settings_category_height() / 2.0;
+        let category_step = settings_theme.get_settings_category_height() + settings_theme.get_settings_category_gap();
+        click(&keys_window, key_position(settings_theme.get_settings_navigation_width() / 2.0, first_category_y + category_step));
+        assert_eq!(keys_window.get_categories().row_data(1).unwrap().name, "Tastatur");
+        assert_eq!(keys_window.get_category(), 1);
+        assert!(keys_window.get_query().is_empty() && keys_window.get_can_go_back());
+        send_key_combo(&keys_window, [K::Alt, K::LeftArrow]);
+        assert_eq!(keys_window.get_query(), "Startansicht");
+        send_key_combo(&keys_window, [K::Alt, K::RightArrow]);
+        assert_eq!(keys_window.get_category(), 1);
+        assert_eq!(keys_window.get_rows().row_data(0).unwrap().heading, "Allgemein");
+        assert!(keys_window.get_rows().iter().any(|row| row.heading == "Tagesansicht"));
+        capture_window(keys_window.window(), "shortcut-settings");
+        click(&keys_window, slint::LogicalPosition::new(
+            settings_theme.get_settings_navigation_width() + settings_theme.get_settings_padding() + settings_theme.get_padding() * 2.0,
+            settings_theme.get_settings_caption_height() + settings_theme.get_settings_padding() + settings_theme.get_settings_hero_height()
+                + settings_theme.get_settings_section_height() + settings_theme.get_settings_row_height() / 2.0,
+        ));
+        assert!(keys_window.get_recording(), "Clicking the action text records its shortcut.");
+        send_key_combo(&keys_window, [K::Escape]);
+        assert!(settings_open() && !keys_window.get_recording());
+        type_text(&keys_window, "Markdown");
+        let rows: Vec<_> = keys_window.get_rows().iter().collect();
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].heading, "Notizblock");
-        assert_eq!(rows[0].keys, "F8");
-        send_key_combo(&bar, [K::Tab]);
-        send_key_combo(&bar, [K::Delete]);
-        assert_eq!(bar.get_shortcut_rows().row_data(0).unwrap().keys, "Strg+M");
-        send_key_combo(&bar, [K::F1]);
-        assert!(!bar.get_settings_open());
+        assert_eq!(rows[0].value, "F8");
+        let first_row_y = settings_theme.get_settings_caption_height() + settings_theme.get_settings_padding() + settings_theme.get_settings_section_height()
+            + settings_theme.get_settings_row_height() / 2.0;
+        let row_right = settings_theme.get_settings_width() - settings_theme.get_settings_padding()
+            - settings_theme.get_settings_row_inset();
+        let edit_x = row_right - settings_theme.get_settings_key_inset() - settings_theme.get_settings_action_icon_size() / 2.0;
+        click(&keys_window, slint::LogicalPosition::new(edit_x, first_row_y));
+        assert!(keys_window.get_recording());
+        send_key_combo(&keys_window, [K::F9]);
+        assert_eq!(keys_window.get_rows().row_data(0).unwrap().value, "F9");
+        // Tab from the selected row to the search and back before resetting with Delete.
+        send_key_combo(&keys_window, [K::Tab]);
+        send_key_combo(&keys_window, [K::Tab]);
+        send_key_combo(&keys_window, [K::Delete]);
+        assert_eq!(keys_window.get_rows().row_data(0).unwrap().value, "Strg+M");
+        send_key_combo(&keys_window, [K::F1]);
+        assert!(!settings_open());
         type_text(&bar, "x");
         assert_eq!(bar.get_search_text().as_str(), "probex", "Closing restores focus to the search field.");
-        let theme = bar.global::<Theme>();
-        click(&bar, slint::LogicalPosition::new(
-            bar.get_form_space() - theme.get_padding() - theme.get_day_symbol_box() * 1.5 - theme.get_gap(),
-            theme.get_line_height() / 2.0,
-        ));
-        assert!(bar.get_settings_open());
-        type_text(&bar, "Einstellungen öffnen");
+        // The settings from the actions (Strg+K).
+        key_with_modifiers(&bar, &[K::Control], "k");
+        type_text(&bar, "einst");
         send_key_combo(&bar, [K::Return]);
-        assert!(bar.get_shortcut_recording());
+        assert!(settings_open());
+        type_text(&keys_window, "Einstellungen öffnen");
+        send_key_combo(&keys_window, [K::Return]);
+        assert!(keys_window.get_recording());
+        send_key_combo(&keys_window, [K::F9]);
+        assert_eq!(keys_window.get_rows().row_data(0).unwrap().value, "F9");
+        send_key_combo(&keys_window, [K::F1]);
+        assert!(settings_open());
+        send_key_combo(&keys_window, [K::F9]);
+        assert!(!settings_open());
         send_key_combo(&bar, [K::F9]);
-        assert_eq!(bar.get_shortcut_rows().row_data(0).unwrap().keys, "F9");
-        send_key_combo(&bar, [K::F1]);
-        assert!(bar.get_settings_open());
-        send_key_combo(&bar, [K::F9]);
-        assert!(!bar.get_settings_open());
-        send_key_combo(&bar, [K::F9]);
-        type_text(&bar, "Einstellungen öffnen");
-        send_key_combo(&bar, [K::Tab]);
-        send_key_combo(&bar, [K::Delete]);
-        assert_eq!(bar.get_shortcut_rows().row_data(0).unwrap().keys, "F1");
-        send_key_combo(&bar, [K::F1]);
-        assert!(!bar.get_settings_open());
+        type_text(&keys_window, "Einstellungen öffnen");
+        send_key_combo(&keys_window, [K::Tab]);
+        send_key_combo(&keys_window, [K::Delete]);
+        assert_eq!(keys_window.get_rows().row_data(0).unwrap().value, "F1");
+        send_key_combo(&keys_window, [K::F1]);
+        assert!(!settings_open());
         send_key_combo(&bar, [K::Escape]);
         type_text(&bar, "/ein");
         assert_eq!(bar.get_commands().row_data(0).unwrap().name, "/Entry");
@@ -1728,10 +2193,11 @@ mod tests {
 
         // A bare title: Enter never creates, it goes on to the date.
         type_text(&bar, "Zahnarzt");
-        send_key_combo(&bar, [K::F1]);
-        assert!(bar.get_settings_open());
-        send_key_combo(&bar, [K::Escape]);
-        assert!(!bar.get_settings_open());
+        open_footer_menu();
+        send_key_combo(&bar, [K::Return]);
+        assert!(settings_open());
+        send_key_combo(&keys_window, [K::Escape]);
+        assert!(!settings_open());
         assert_eq!(bar.get_text().as_str(), "Zahnarzt");
         key_with_modifiers(&bar, &[K::Control, K::Shift], "N");
         assert!(bar.get_notepad_open() && !bar.get_entry_open());
@@ -1747,7 +2213,7 @@ mod tests {
         assert_eq!(value(F::Day), "Do 19.11.2026 · morgen");
         send_key_combo(&bar, [K::Tab]);
         assert_eq!(bar.get_active(), F::Start.index() as i32);
-        assert_eq!(bar.get_active_line(), 2, "Still the line of the date.");
+        assert_eq!(bar.get_active_line(), 0, "Still the line of the date (the first under the top line).");
         type_text(&bar, "1430");
         send_key_combo(&bar, [K::Tab]);
         assert_eq!(bar.get_active(), F::End.index() as i32);
@@ -1782,12 +2248,32 @@ mod tests {
         assert_eq!(bar.get_panel_kind(), 0, "Closed until Enter.");
         send_key_combo(&bar, [K::Return]);
         assert_eq!(bar.get_panel_kind(), 4);
+        type_text(&bar, "5");
+        send_key_combo(&bar, [K::Backspace]);
+        assert_eq!(bar.get_sentence().row_count(), 1, "Backspace on the presets turns repetition off.");
         for _ in 0..3 { send_key_combo(&bar, [K::RightArrow]); }
         assert!(bar.get_sentence().row_count() >= 6, "Weekly: all its lines.");
-        for _ in 0..4 { send_key_combo(&bar, [K::DownArrow]); }
+        for _ in 0..3 { send_key_combo(&bar, [K::DownArrow]); }
         type_text(&bar, "1");
         capture(&bar, "repeat-sentence");
         with_app(|app| assert_eq!(app.state.view().rows.iter().find(|r| r.field == F::Repeat.index()).unwrap().value, "Wöchentlich am Mo, Do"));
+        send_key_combo(&bar, [K::DownArrow]);
+        type_text(&bar, " ");
+        assert!(bar.get_side_open());
+        assert_eq!(bar.get_side_heading().as_str(), "Ab");
+        capture(&bar, "repeat-date");
+        send_key_combo(&bar, [K::Escape]);
+        assert!(!bar.get_side_open());
+        assert_eq!(bar.get_panel_kind(), 4, "Escape returns from the popup to the repetition.");
+        send_key_combo(&bar, [K::DownArrow]);
+        send_key_combo(&bar, [K::RightArrow]);
+        send_key_combo(&bar, [K::RightArrow]);
+        type_text(&bar, " ");
+        assert!(bar.get_side_open());
+        assert_eq!(bar.get_side_heading().as_str(), "Bis");
+        send_key_combo(&bar, [K::Return]);
+        assert!(!bar.get_side_open());
+        send_key_combo(&bar, [K::Delete]);
         send_key_combo(&bar, [K::Return]);
         assert_eq!(bar.get_active(), F::Tag.index() as i32);
         send_key_combo(&bar, [K::Return]);
@@ -1796,35 +2282,46 @@ mod tests {
         assert!(!value(F::Tag).is_empty());
         capture(&bar, "tags");
         send_key_combo(&bar, [K::Return]);
-        send_key_combo(&bar, [K::Return]);
-        assert_eq!(bar.get_active(), F::Description.index() as i32, "Enter on more opens it.");
-        // Reopen the weekly editor with More expanded, as in the reported blank area.
-        for _ in 0..3 { send_key_combo(&bar, [K::UpArrow]); }
+        assert_eq!(bar.get_active(), F::Tag.index() as i32, "The tag is the last line while nothing more is set.");
+        // Alt+B: the description gets its line.
+        let alt = |bar: &Bar, text: &str| {
+            bar.window().dispatch_event(slint::platform::WindowEvent::KeyPressed { text: char::from(K::Alt).into() });
+            type_text(bar, text);
+            bar.window().dispatch_event(slint::platform::WindowEvent::KeyReleased { text: char::from(K::Alt).into() });
+        };
+        alt(&bar, "b");
+        assert_eq!(bar.get_active(), F::Description.index() as i32, "Alt+B opens the description.");
+        type_text(&bar, "Unterlagen mitbringen");
+        alt(&bar, "p");
+        assert!(bar.get_entry_priority(), "Alt+P sets the flag beside the title.");
+        capture(&bar, "form-extras");
+        // Reopen the weekly editor with the description shown, as in the reported blank area.
+        for _ in 0..2 { send_key_combo(&bar, [K::UpArrow]); }
         assert_eq!(bar.get_active(), F::Repeat.index() as i32);
         send_key_combo(&bar, [K::Return]);
         let theme = bar.global::<Theme>();
         let expanded = bar.get_content_height();
-        assert!(expanded > theme.get_calendar_height());
+        assert!(expanded >= theme.get_calendar_height());
         let resize_and_check_calendar = |height| {
             let size = slint::LogicalSize::new(theme.get_width(), height);
             bar.window().dispatch_event(slint::platform::WindowEvent::Resized { size });
             i_slint_backend_testing::mock_elapsed_time(Duration::from_millis(1));
             let bands = bar.get_cal_bands();
-            let last = bands.row_data(bands.row_count() - 1).unwrap();
-            assert!(last.y < height && last.y + last.h >= height, "The last day must cover the viewport bottom at {height}.");
+            // A month heading can cover the bottom while its first day starts below the viewport.
+            let last = bands.iter().filter(|band| band.y < height).last().unwrap();
+            let layout_height = with_app_value(|app| app.state.metrics.height);
+            assert!(last.y < height && last.y + last.h >= height,
+                "The last visible band spans {}–{} at viewport height {height} (layout height {layout_height}).", last.y, last.y + last.h);
         };
         resize_and_check_calendar(expanded);
         send_key_combo(&bar, [K::Escape]);
         resize_and_check_calendar(bar.get_content_height());
-        for _ in 0..3 { send_key_combo(&bar, [K::DownArrow]); }
+        for _ in 0..2 { send_key_combo(&bar, [K::DownArrow]); }
         assert_eq!(bar.get_active(), F::Description.index() as i32);
-        send_key_combo(&bar, [K::Tab]);
-        send_key_combo(&bar, [K::Tab]);
-        send_key_combo(&bar, [K::Return]);
-        assert_eq!(bar.get_panel_kind(), 3, "The reminders.");
-        send_key_combo(&bar, [K::Tab]);
-        send_key_combo(&bar, [K::Return]);
-        assert_eq!(bar.get_panel_kind(), 2, "The icons.");
+        alt(&bar, "r");
+        assert_eq!(bar.get_panel_kind(), 3, "Alt+R: the reminders.");
+        alt(&bar, "i");
+        assert_eq!(bar.get_panel_kind(), 2, "Alt+I: the icons.");
         type_text(&bar, "stetho");
         assert_eq!(value(F::Icon), "stethoscope");
         capture(&bar, "icons");
@@ -1959,11 +2456,15 @@ mod tests {
         let pixel = |x: usize, y: usize| pixels.as_slice()[y * width + x];
         // The shared window frame must also clip the calendar header and the last day.
         let bottom = pixels.height() as usize - 1;
-        let frame = theme.get_border();
+        // The outline is a light veil over the surface.
+        let (frame, surface) = (theme.get_border(), theme.get_background());
+        let veil = |over: u8, under: u8| (under as f32 + (over as f32 - under as f32) * frame.alpha() as f32 / 255.0).round() as i32;
+        let expected = (veil(frame.red(), surface.red()), veil(frame.green(), surface.green()), veil(frame.blue(), surface.blue()));
         let inset = theme.get_frame_inset() as usize;
         for (x, y) in [(32, inset), (width - 33, inset), (width - 1 - inset, bottom / 2), (width - 33, bottom - inset), (inset, bottom / 2)] {
             let p = pixel(x, y);
-            assert_eq!((p.r, p.g, p.b), (frame.red(), frame.green(), frame.blue()), "Visible frame at ({x}, {y})");
+            let near = (p.r as i32 - expected.0).abs() <= 2 && (p.g as i32 - expected.1).abs() <= 2 && (p.b as i32 - expected.2).abs() <= 2;
+            assert!(near, "Visible frame at ({x}, {y}): {:?} instead of {expected:?}", (p.r, p.g, p.b));
         }
         for y in [0, 2, bottom - 2, bottom] {
             for x in 0..theme.get_radius() as usize {
@@ -1996,11 +2497,14 @@ mod tests {
         let marker = pixel(calendar_x + 502, 108);
         let accent = theme.get_accent();
         assert_eq!((marker.r,marker.g,marker.b),(accent.red(),accent.green(),accent.blue()), "A point has a strong exact-time stroke.");
-        assert_eq!(pixel(calendar_x + 530,105).b,0,"The caption does not fill the entire height like a time interval.");
-        assert!(pixel(calendar_x + 630,128).b>0,"The point's caption is a narrow bar at the bottom of the stroke.");
-        assert!(pixel(calendar_x + 638,117).b>0,"The caption ends have small corners instead of a pill-shaped cap.");
-        assert!(pixel(calendar_x + 630,225).b>0,"An upper caption is attached to the top of the time marker.");
-        assert_eq!(pixel(calendar_x + 530,245).b,0,"An upper caption leaves the bottom of the marker clear.");
+        // Empty: the surface; filled: tinted by the event's colour.
+        let ground = theme.get_background().blue();
+        let filled = |p: slint::Rgba8Pixel| p.b > ground.saturating_add(20);
+        assert_eq!(pixel(calendar_x + 530,105).b,ground,"The caption does not fill the entire height like a time interval.");
+        assert!(filled(pixel(calendar_x + 630,128)),"The point's caption is a narrow bar at the bottom of the stroke.");
+        assert!(filled(pixel(calendar_x + 638,117)),"The caption ends have small corners instead of a pill-shaped cap.");
+        assert!(filled(pixel(calendar_x + 630,225)),"An upper caption is attached to the top of the time marker.");
+        assert_eq!(pixel(calendar_x + 530,245).b,ground,"An upper caption leaves the bottom of the marker clear.");
         assert!(count(calendar_x + 510,222,12,12, |p| p.b>160 && p.g>90)>5,"The icon follows the caption to the top of the marker.");
         let line = theme.get_cal_month_line();
         let at_line = pixel(calendar_x + 200, 160);
@@ -2016,5 +2520,6 @@ mod tests {
             std::fs::copy(&path, dir.join("journal.sqlite3")).unwrap();
         }
         for suffix in ["", "-wal", "-shm"] { let _ = std::fs::remove_file(format!("{}{suffix}", path.display())); }
+        std::fs::remove_file(profile).unwrap();
     }
 }

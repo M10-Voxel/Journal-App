@@ -1,307 +1,441 @@
 import { Theme } from "theme.slint";
 import { KeyBindings, ShortcutContext } from "key-bindings.slint";
 import { JournalIcons } from "journal-icons.slint";
+import { PreferenceKey, RowControl, SettingsRow, SettingsCategory, SettingsLabels, Emblem, CaptionButton, CaptionAction, SettingsOption } from "settings-controls.slint";
+export { PreferenceKey, RowControl, SettingsRow, SettingsCategory, SettingsLabels }
 
-export struct ShortcutRow { id: string, heading: string, action: string, keys: string, changed: bool }
-export struct ShortcutLabels {
-    settings: string, title: string, search: string, empty: string, close: string,
-    record: string, reset: string, change: string,
-}
+enum SettingsFocus { search, categories, options }
 
-export component ShortcutSettings inherits FocusScope {
-    in property <[string]> groups;
-    in property <[ShortcutRow]> rows;
-    in property <ShortcutLabels> labels;
-    in property <image> search-icon;
-    in property <image> close-icon;
-    private property <int> group;
+export component SettingsWindow inherits Window {
+    title: root.labels.settings + " · J-TerminaL";
+    icon: @image-url("../../icon-source.svg");
+    default-font-family: Theme.settings-font;
+    default-font-size: Theme.settings-row-size;
+    background: Theme.settings-background;
+    preferred-width: Theme.settings-width; preferred-height: Theme.settings-height;
+    min-width: Theme.settings-min-width; min-height: Theme.settings-min-height;
+    no-frame: true;
+    resize-border-width: self.maximized ? 0px : Theme.settings-resize-border;
+
+    in property <[SettingsCategory]> categories;
+    in property <[SettingsRow]> rows;
+    in property <SettingsLabels> labels;
+    in property <image> terminal-icon;
+    in property <string> version;
+    in property <int> category;
+    in-out property <string> query;
+    in property <bool> can-go-back;
+    in property <bool> can-go-forward;
+    out property <bool> recording: root.recording-id != "";
+    private property <string> recording-id;
     private property <int> selected: -1;
-    private property <string> recording;
-    private property <string> recording-action;
     private property <string> error;
-    callback lookup(int, string);
-    callback dismiss;
+    private property <SettingsFocus> area: SettingsFocus.search;
+    private property <bool> keyboard-focus;
+    private property <int> choice-row: -1;
+    private property <int> choice-index;
+    private property <length> anchor-top;
+    private property <length> anchor-height;
+    private property <length> sidebar-width: clamp(root.width * Theme.settings-navigation-share,
+        Theme.settings-navigation-compact, Theme.settings-navigation-width);
+    in property <bool> searching;
+    callback lookup(string);
+    callback navigate(int);
+    callback travel(bool);
+    callback dismiss();
+    callback system-menu(length, length);
     callback update-binding(string, string, int) -> string;
-    callback capture-changed(bool);
+    callback set-preference(PreferenceKey, int) -> string;
     callback editable-row(int, int) -> int;
 
-    function choose(group: int) {
+    public function stop-recording() {
+        root.recording-id = "";
+        root.choice-row = -1;
+        root.error = "";
+    }
+    function clear-selection() {
         root.stop-recording();
-        root.group = group;
         root.selected = -1;
-        root.error = "";
-        search.text = "";
         list.content-y = 0px;
-        root.lookup(group, "");
+    }
+    public function begin-session() {
+        root.clear-selection();
+        root.area = SettingsFocus.search;
+        root.keyboard-focus = false;
+        sidebar-list.content-y = 0px;
         search.focus();
     }
-
-    function edit-row(row: ShortcutRow) {
-        if row.id == "" { return; }
-        root.recording = row.id;
-        root.recording-action = row.action;
-        root.error = "";
-        root.capture-changed(true);
+    function visit(index: int) {
+        root.clear-selection();
+        root.area = SettingsFocus.categories;
+        root.navigate(index);
         search.focus();
     }
-
-    function stop-recording() {
-        root.recording = "";
-        root.error = "";
-        root.capture-changed(false);
+    function history(forward: bool) {
+        if (forward && !root.can-go-forward) || (!forward && !root.can-go-back) { return; }
+        root.clear-selection();
+        root.travel(forward);
+        root.area = root.searching ? SettingsFocus.search : SettingsFocus.categories;
+        search.focus();
     }
-
-    function save-key(id: string, text: string, mask: int) {
-        root.error = root.update-binding(id, text, mask);
-        if root.error == "" {
-            root.stop-recording();
-            root.lookup(root.group, search.text);
+    function select-option(from: int, direction: int) {
+        let candidate = root.editable-row(from, direction);
+        if candidate >= 0 {
+            root.area = SettingsFocus.options;
+            root.selected = candidate;
+            root.error = "";
         }
     }
-
-    function select(index: int, direction: int) {
-        let candidate = root.editable-row(index, direction);
-        if candidate >= 0 { root.selected = candidate; }
+    function reset-binding(index: int) {
+        root.selected = index;
+        root.area = SettingsFocus.options;
+        root.recording-id = "";
+        root.error = root.update-binding(root.rows[index].id, "", 0);
+        search.focus();
+    }
+    function activate(index: int) {
+        if index < 0 || index >= root.rows.length { return; }
+        let row = root.rows[index];
+        root.area = SettingsFocus.options;
+        root.selected = index;
+        root.error = "";
+        if row.control == RowControl.toggle {
+            root.error = root.set-preference(row.preference, 1 - row.index);
+        } else if row.control == RowControl.choice {
+            root.choice-index = row.index;
+            root.choice-row = index;
+        } else if row.id != "" {
+            root.recording-id = row.id;
+        }
+        search.focus();
+    }
+    function choose(index: int) {
+        if root.choice-row < 0 { return; }
+        let key = root.rows[root.choice-row].preference;
+        root.choice-row = -1;
+        root.error = root.set-preference(key, index);
+        search.focus();
+    }
+    function tab-area(reverse: bool) {
+        root.keyboard-focus = true;
+        if root.area == SettingsFocus.search {
+            if root.searching || reverse { root.select-option(0, 1); }
+            else { root.area = SettingsFocus.categories; }
+        } else if root.area == SettingsFocus.categories && !reverse { root.select-option(0, 1); }
+        else if root.area == SettingsFocus.options && reverse && !root.searching {
+            root.area = SettingsFocus.categories; root.selected = -1;
+        } else { root.area = SettingsFocus.search; root.selected = -1; }
+        search.focus();
     }
 
-    init => { search.focus(); }
-    capture-key-pressed(raw-event) => {
-        if root.recording != "" {
-            if raw-event.text == Key.Escape {
-                if !raw-event.repeat { root.stop-recording(); }
-            } else if !raw-event.repeat && raw-event.text != Key.Control && raw-event.text != Key.Shift
-                && raw-event.text != Key.Alt && raw-event.text != Key.Meta {
-                root.save-key(root.recording, raw-event.text, KeyBindings.modifier-mask(raw-event));
+    FocusScope {
+        capture-key-pressed(raw) => {
+            if root.recording {
+                if raw.text == Key.Escape {
+                    if !raw.repeat { root.stop-recording(); }
+                } else if !raw.repeat && raw.text != Key.Control && raw.text != Key.Shift && raw.text != Key.Alt && raw.text != Key.Meta {
+                    root.error = root.update-binding(root.recording-id, raw.text, KeyBindings.modifier-mask(raw));
+                    if root.error == "" { root.stop-recording(); }
+                }
+                return accept;
             }
-            return accept;
-        }
-        let event = KeyBindings.translate(ShortcutContext.window, raw-event);
-        if event.text == Key.F1 || event.text == Key.Escape {
-            if !event.repeat { root.dismiss(); }
-            return accept;
-        }
-        if event.text == Key.PageUp || event.text == Key.PageDown {
-            let step = event.text == Key.PageUp ? list.height : -list.height;
-            list.content-y = clamp(list.content-y + step, min(0px, list.height - list.content-height), 0px);
-            return accept;
-        }
-        if raw-event.text == Key.UpArrow || raw-event.text == Key.DownArrow {
-            if root.selected >= 0 {
-                let step = raw-event.text == Key.UpArrow ? -1 : 1;
-                root.select(root.selected + step, step);
-            } else if search.text == "" && root.groups.length > 0 {
-                let step = event.text == Key.UpArrow ? -1 : 1;
-                root.choose(Math.mod(root.group + step + root.groups.length, root.groups.length));
-            } else {
-                let step = event.text == Key.UpArrow ? Theme.row-height : -Theme.row-height;
+            let event = KeyBindings.translate(ShortcutContext.window, raw);
+            if event.text == Key.F1 {
+                if !event.repeat { root.dismiss(); }
+                return accept;
+            }
+            if root.choice-row >= 0 {
+                let count = root.rows[root.choice-row].choices.length;
+                if raw.text == Key.UpArrow || raw.text == Key.DownArrow {
+                    root.choice-index = clamp(root.choice-index + (raw.text == Key.UpArrow ? -1 : 1), 0, count - 1);
+                } else if raw.text == Key.Home || raw.text == Key.End {
+                    root.choice-index = raw.text == Key.Home ? 0 : count - 1;
+                } else if raw.text == Key.Return || raw.text == " " {
+                    if !raw.repeat { root.choose(root.choice-index); }
+                } else if raw.text == Key.Escape || raw.text == Key.Tab || raw.text == Key.Backtab { root.choice-row = -1; }
+                return accept;
+            }
+            if event.text == Key.Escape {
+                if !event.repeat { root.dismiss(); }
+                return accept;
+            }
+            if raw.modifiers.alt && raw.text == " " { root.system-menu(Theme.settings-padding, Theme.settings-caption-height); return accept; }
+            if raw.modifiers.alt && (raw.text == Key.LeftArrow || raw.text == Key.RightArrow) {
+                root.history(raw.text == Key.RightArrow); return accept;
+            }
+            if raw.modifiers.control && raw.text.to-lowercase() == "f" {
+                root.keyboard-focus = true; root.area = SettingsFocus.search; root.selected = -1;
+                search.focus(); search.select-all(); return accept;
+            }
+            if raw.text == Key.Tab || raw.text == Key.Backtab { root.tab-area(raw.modifiers.shift || raw.text == Key.Backtab); return accept; }
+            if raw.text == Key.PageUp || raw.text == Key.PageDown {
+                let step = raw.text == Key.PageUp ? list.height : -list.height;
                 list.content-y = clamp(list.content-y + step, min(0px, list.height - list.content-height), 0px);
+                return accept;
             }
-            return accept;
-        }
-        if raw-event.text == Key.Tab || raw-event.text == Key.Backtab {
-            if root.selected < 0 { root.select(0, 1); }
-            else { root.selected = -1; }
-            search.focus();
-            return accept;
-        }
-        if raw-event.text == Key.Return && !raw-event.repeat {
-            if root.selected < 0 { root.select(0, 1); }
-            if root.selected >= 0 && root.selected < root.rows.length { root.edit-row(root.rows[root.selected]); }
-            return accept;
-        }
-        if raw-event.text == Key.Delete && root.selected >= 0 && root.selected < root.rows.length
-            && root.rows[root.selected].changed {
-            root.save-key(root.rows[root.selected].id, "", 0);
-            return accept;
-        }
-        reject
-    }
-
-    Rectangle {
-        width: parent.width;
-        height: parent.height;
-        border-radius: Theme.radius;
-        background: Theme.settings-scrim;
-        TouchArea { clicked => { root.dismiss(); } }
-    }
-
-    Rectangle {
-        x: (parent.width - self.width) / 2;
-        y: (parent.height - self.height) / 2;
-        width: min(parent.width - Theme.gap * 2, Theme.settings-width);
-        height: min(parent.height - Theme.gap * 2, Theme.settings-height);
-        background: Theme.background;
-        border-color: Theme.border;
-        border-width: Theme.border-width;
-        border-radius: Theme.radius;
-        clip: true;
-        accessible-role: groupbox;
-        accessible-label: root.labels.settings;
-        TouchArea {}
-
-        VerticalLayout {
-            width: parent.width; height: parent.height;
-            padding: Theme.padding;
-            spacing: Theme.gap;
-            HorizontalLayout {
-                spacing: Theme.gap;
-                VerticalLayout {
-                    horizontal-stretch: 1;
-                    Text { text: root.labels.settings; color: Theme.muted; font-size: Theme.small-size; }
-                    Text { text: root.labels.title; color: Theme.strong; font-size: Theme.notepad-title-size; font-weight: Theme.weight-semibold; }
+            if raw.text == Key.UpArrow || raw.text == Key.DownArrow {
+                root.keyboard-focus = true;
+                let step = raw.text == Key.UpArrow ? -1 : 1;
+                if root.area == SettingsFocus.categories { root.visit(clamp(root.category + step, 0, root.categories.length - 1)); }
+                else { root.select-option(root.selected < 0 ? (step < 0 ? root.rows.length - 1 : 0) : root.selected + step, step); }
+                return accept;
+            }
+            if root.area == SettingsFocus.categories && (raw.text == Key.RightArrow || raw.text == Key.Return || raw.text == " ") {
+                root.keyboard-focus = true; root.select-option(0, 1); return accept;
+            }
+            if root.area == SettingsFocus.options && raw.text == Key.LeftArrow {
+                root.keyboard-focus = true; root.area = SettingsFocus.categories; root.selected = -1; return accept;
+            }
+            if root.area == SettingsFocus.options && (raw.text == Key.Home || raw.text == Key.End) {
+                root.select-option(raw.text == Key.Home ? 0 : root.rows.length - 1, raw.text == Key.Home ? 1 : -1); return accept;
+            }
+            if raw.text == Key.Return || (raw.text == " " && root.area == SettingsFocus.options) {
+                if !raw.repeat {
+                    if root.selected < 0 { root.select-option(0, 1); }
+                    root.activate(root.selected);
                 }
-                Rectangle {
-                    width: Theme.search-height; height: self.width;
-                    y: (parent.height - self.height) / 2;
-                    border-radius: Theme.block-radius;
-                    background: close-hit.has-hover ? Theme.hover : Theme.inset;
-                    accessible-role: button;
-                    accessible-label: root.labels.close;
-                    accessible-action-default => { root.dismiss(); }
-                    Image {
-                        width: Theme.label-icon-size; height: self.width;
-                        x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2;
-                        source: root.close-icon; colorize: Theme.text;
+                return accept;
+            }
+            if raw.text == Key.Delete && root.selected >= 0 && root.selected < root.rows.length && root.rows[root.selected].changed {
+                root.reset-binding(root.selected); return accept;
+            }
+            reject
+        }
+
+        // Draw the title and both columns against the same vertical divider.
+        Rectangle {
+            x: 0px; y: 0px; height: Theme.settings-caption-height; background: Theme.settings-caption;
+            accessible-role: window-title-bar;
+            WindowMoveArea {
+                TouchArea {
+                    double-clicked => { root.maximized = !root.maximized; }
+                    pointer-event(e) => {
+                        if e.kind == PointerEventKind.down && e.button == PointerEventButton.right {
+                            root.system-menu(self.mouse-x, self.mouse-y);
+                        }
                     }
-                    close-hit := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.dismiss(); } }
                 }
             }
-            Rectangle {
-                height: Theme.search-height;
-                background: Theme.field-background;
-                border-radius: Theme.field-radius;
+            Text {
+                x: Theme.settings-padding; width: root.sidebar-width - self.x;
+                text: root.labels.settings; color: Theme.settings-secondary-text;
+                font-size: Theme.row-size; vertical-alignment: center;
+            }
+            HorizontalLayout {
+                x: root.sidebar-width + Theme.settings-padding - Theme.footer-gap; width: self.preferred-width;
+                CaptionButton { action: back; label: root.labels.back; available: root.can-go-back; activated => { root.history(false); } }
+                CaptionButton { action: forward; label: root.labels.forward; available: root.can-go-forward; activated => { root.history(true); } }
+            }
+            HorizontalLayout {
+                x: parent.width - self.width; width: self.preferred-width;
+                CaptionButton { action: minimize; label: root.labels.minimize; activated => { root.minimized = true; } }
+                CaptionButton { action: close; label: root.labels.close; activated => { root.dismiss(); } }
+            }
+            Rectangle { y: parent.height - self.height; height: Theme.border-width; background: Theme.settings-divider; }
+        }
+
+        Rectangle {
+            x: 0px; y: Theme.settings-caption-height; height: parent.height - self.y; width: root.sidebar-width;
+            search-box := Rectangle {
+                x: Theme.settings-navigation-inset; y: Theme.settings-padding;
+                width: parent.width - self.x * 2; height: Theme.settings-search-height;
+                border-radius: Theme.settings-tile-radius; background: Theme.settings-category-background;
                 border-width: Theme.border-width;
-                border-color: search.has-focus ? Theme.field-focus : Theme.edge;
+                border-color: root.area == SettingsFocus.search && root.keyboard-focus ? Theme.settings-focus-outline : transparent;
                 Image {
-                    x: Theme.field-inset; y: (parent.height - self.height) / 2;
-                    width: Theme.search-icon-size; height: self.width;
-                    source: root.search-icon; colorize: Theme.muted;
+                    x: Theme.gap; width: Theme.search-icon-size; height: self.width;
+                    y: (parent.height - self.height) / 2;
+                    source: JournalIcons.search-icon; colorize: Theme.settings-placeholder;
                 }
-                if search.text == "": Text {
-                    x: search.x; width: search.width; height: parent.height;
-                    text: root.labels.search; color: Theme.muted; font-size: Theme.row-size; vertical-alignment: center;
+                if root.query == "": Text {
+                    x: search.x; width: search.width; text: root.labels.search;
+                    color: Theme.settings-placeholder; font-size: Theme.settings-row-size; vertical-alignment: center; overflow: elide;
+                }
+                TouchArea {
+                    mouse-cursor: text;
+                    clicked => { root.area = SettingsFocus.search; root.selected = -1; root.keyboard-focus = true; search.focus(); }
                 }
                 search := TextInput {
-                    x: Theme.field-inset + Theme.search-icon-size + Theme.gap;
-                    width: parent.width - self.x - Theme.field-inset; height: parent.height;
-                    single-line: true; vertical-alignment: center;
-                    accessible-label: root.labels.search;
-                    font-size: Theme.row-size; color: Theme.strong;
-                    selection-background-color: Theme.selection; selection-foreground-color: Theme.strong;
-                    edited => { root.selected = -1; root.error = ""; list.content-y = 0px; root.lookup(root.group, self.text); }
+                    x: Theme.gap + Theme.search-icon-size + Theme.footer-gap; width: parent.width - self.x - Theme.gap;
+                    height: parent.height; single-line: true; vertical-alignment: center;
+                    text <=> root.query;
+                    read-only: root.recording || root.choice-row >= 0;
+                    text-cursor-width: root.area == SettingsFocus.search && (root.keyboard-focus || root.searching) ? Theme.border-width : 0px;
+                    selection-background-color: Theme.settings-selection; selection-foreground-color: Theme.settings-text;
+                    color: Theme.settings-text; font-size: Theme.settings-row-size; accessible-label: root.labels.search;
+                    edited => {
+                        root.clear-selection(); root.area = SettingsFocus.search;
+                        root.lookup(self.text);
+                    }
+                }
+                if root.area != SettingsFocus.search || (!root.keyboard-focus && !root.searching): TouchArea {
+                    mouse-cursor: text;
+                    clicked => {
+                        root.stop-recording(); root.area = SettingsFocus.search; root.selected = -1;
+                        root.keyboard-focus = true; search.focus();
+                    }
                 }
             }
-            if root.recording != "" || root.error != "": Text {
-                text: root.error != "" ? root.error : root.labels.record + " · " + root.recording-action;
-                color: root.error != "" ? Theme.error : Theme.accent;
-                wrap: word-wrap; font-size: Theme.row-size;
-            }
-            HorizontalLayout {
-                vertical-stretch: 1;
-                spacing: Theme.gap;
-                Flickable {
-                    width: min(Theme.settings-navigation-width, parent.width * Theme.settings-navigation-share);
-                    min-height: 0px; max-height: Theme.settings-height;
-                    content-width: self.width;
-                    content-height: categories.preferred-height;
-                    categories := VerticalLayout {
-                        width: parent.width; height: self.preferred-height;
-                        for name[i] in root.groups: Rectangle {
-                            height: Theme.row-height;
-                            border-radius: Theme.block-radius;
-                            background: root.group == i && search.text == "" ? Theme.chip-selected : category-hit.has-hover ? Theme.hover : transparent;
-                            accessible-role: button;
-                            accessible-label: name;
-                            accessible-action-default => { root.choose(i); }
-                            Text {
-                                x: Theme.field-inset; width: parent.width - 2 * self.x;
-                                text: name; color: root.group == i && search.text == "" ? Theme.chip-selected-text : Theme.text;
-                                font-size: Theme.row-size; overflow: elide; vertical-alignment: center;
+            sidebar-list := Flickable {
+                y: search-box.y + search-box.height + Theme.settings-text-gap;
+                height: max(0px, parent.height - self.y); width: parent.width;
+                content-width: self.width; content-height: side-entries.preferred-height;
+                side-entries := VerticalLayout {
+                    width: parent.width; height: self.preferred-height;
+                    padding-left: Theme.settings-navigation-inset; padding-right: Theme.settings-navigation-inset;
+                    padding-bottom: Theme.settings-navigation-inset; spacing: Theme.settings-category-gap;
+                    Rectangle {
+                        height: Theme.settings-identity-height;
+                        Rectangle {
+                            x: Theme.footer-gap; y: (parent.height - self.height) / 2;
+                            width: Theme.settings-profile-size; height: self.width; border-radius: self.width / 2;
+                            background: Theme.settings-category-hover;
+                            Image {
+                                width: Theme.search-icon-size; height: self.width;
+                                x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2;
+                                source: root.terminal-icon; colorize: Theme.settings-secondary-text;
                             }
-                            category-hit := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.choose(i); } }
+                        }
+                        VerticalLayout {
+                            x: Theme.footer-gap + Theme.settings-profile-size + Theme.gap;
+                            width: parent.width - self.x; height: self.preferred-height; y: (parent.height - self.height) / 2;
+                            Text { text: "J-TerminaL"; color: Theme.settings-text; font-weight: Theme.weight-semibold; }
+                            Text { text: "v" + root.version; color: Theme.settings-secondary-text; font-size: Theme.settings-detail-size; }
+                        }
+                    }
+                    for cat[i] in root.categories: VerticalLayout {
+                        if i == 2: Rectangle { height: Theme.settings-row-inset; }
+                        item := Rectangle {
+                            property <bool> current: i == root.category && !root.searching;
+                            property <bool> focused: i == root.category && root.area == SettingsFocus.categories && root.keyboard-focus;
+                            changed focused => {
+                                if self.focused {
+                                    let y = self.absolute-position.y - side-entries.absolute-position.y;
+                                    sidebar-list.content-y = clamp(sidebar-list.content-y, sidebar-list.height - y - self.height, -y);
+                                    sidebar-list.content-y = clamp(sidebar-list.content-y, min(0px, sidebar-list.height - sidebar-list.content-height), 0px);
+                                }
+                            }
+                            height: Theme.settings-category-height; border-radius: Theme.settings-tile-radius;
+                            background: self.current ? Theme.settings-category-background : cat-hit.has-hover ? Theme.settings-category-hover : transparent;
+                            border-width: Theme.border-width; border-color: self.focused ? Theme.settings-focus-outline : transparent;
+                            accessible-role: tab; accessible-label: cat.name; accessible-item-selected: self.current;
+                            accessible-action-default => { root.visit(i); }
+                            Emblem {
+                                x: Theme.settings-tile-radius; y: (parent.height - self.height) / 2; icon: cat.icon;
+                            }
+                            Text {
+                                x: Theme.settings-tile-radius + Theme.settings-icon-box + Theme.gap; width: parent.width - self.x - Theme.gap;
+                                text: cat.name; color: Theme.settings-text; font-weight: Theme.settings-label-weight;
+                                vertical-alignment: center; overflow: elide;
+                            }
+                            cat-hit := TouchArea { mouse-cursor: pointer; clicked => { root.keyboard-focus = false; root.visit(i); } }
                         }
                     }
                 }
-                Rectangle {
-                    horizontal-stretch: 1;
-                    background: Theme.inset;
-                    border-radius: Theme.block-radius;
-                    list := Flickable {
-                        x: Theme.field-inset; y: Theme.field-inset;
-                        width: parent.width - 2 * self.x; height: parent.height - 2 * self.y;
-                        content-width: self.width;
-                        content-height: entries.preferred-height;
-                        entries := VerticalLayout {
-                            width: parent.width; height: self.preferred-height;
-                            for row[i] in root.rows: shortcut := VerticalLayout {
-                                property <bool> focused: i == root.selected;
-                                changed focused => {
-                                    if self.focused {
-                                        list.content-y = clamp(
-                                            max(min(list.content-y, -self.y), list.height - self.y - self.height),
-                                            min(0px, list.height - list.content-height), 0px
-                                        );
-                                    }
-                                }
-                                if search.text != "" && row.heading != "": Text {
-                                    height: Theme.row-height; vertical-alignment: center;
-                                    text: row.heading; color: Theme.accent; font-size: Theme.label-size; font-weight: Theme.weight-semibold;
-                                }
-                                HorizontalLayout {
-                                    padding-top: Theme.gap; padding-bottom: Theme.gap;
-                                    spacing: Theme.gap;
-                                    Text {
-                                        text: row.action; wrap: word-wrap; vertical-alignment: center;
-                                        color: shortcut.focused ? Theme.accent : Theme.strong; font-size: Theme.row-size; horizontal-stretch: 1;
-                                    }
-                                    if row.changed: Rectangle {
-                                        width: Theme.label-icon-size + Theme.gap;
-                                        height: self.width;
-                                        y: (parent.height - self.height) / 2;
-                                        border-radius: Theme.block-radius;
-                                        background: reset-hit.has-hover ? Theme.hover : transparent;
-                                        accessible-role: button;
-                                        accessible-label: root.labels.reset;
-                                        accessible-action-default => { root.save-key(row.id, "", 0); }
-                                        Image {
-                                            x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2;
-                                            width: Theme.label-icon-size; height: self.width;
-                                            source: JournalIcons.undo-icon; colorize: reset-hit.has-hover ? Theme.accent : Theme.muted;
-                                        }
-                                        reset-hit := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.save-key(row.id, "", 0); } }
-                                    }
-                                    Rectangle {
-                                        width: min(key-label.preferred-width + Theme.field-inset * 2, parent.width * Theme.settings-keys-share);
-                                        height: key-label.preferred-height + Theme.gap;
-                                        y: (parent.height - self.height) / 2;
-                                        background: row.id != "" && (root.recording == row.id || key-hit.has-hover)
-                                            ? Theme.chip-selected : Theme.background;
-                                        border-width: Theme.border-width; border-color: shortcut.focused ? Theme.field-focus : Theme.edge;
-                                        border-radius: Theme.block-radius;
-                                        accessible-role: button;
-                                        accessible-enabled: row.id != "";
-                                        accessible-label: root.labels.change + " · " + row.action + " · " + row.keys;
-                                        accessible-action-default => { root.selected = i; root.edit-row(row); }
-                                        key-label := Text {
-                                            x: Theme.field-inset; width: parent.width - 2 * self.x;
-                                            text: row.keys; wrap: word-wrap; vertical-alignment: center; horizontal-alignment: center;
-                                            color: row.id != "" ? Theme.chip-selected-text : Theme.text;
-                                            font-size: Theme.small-size; font-family: Theme.write-font;
-                                        }
-                                        key-hit := TouchArea {
-                                            enabled: row.id != "";
-                                            mouse-cursor: MouseCursor.pointer;
-                                            clicked => { root.selected = i; root.edit-row(row); }
-                                        }
-                                    }
-                                }
-                                Rectangle { height: Theme.border-width; background: Theme.divider; }
-                            }
-                            if root.rows.length == 0: Text {
-                                height: Theme.row-height; vertical-alignment: center;
-                                text: root.labels.empty; color: Theme.muted; font-size: Theme.row-size; wrap: word-wrap;
+            }
+        }
+        Rectangle { x: root.sidebar-width; width: Theme.border-width; background: Theme.settings-divider; }
+
+        list := Flickable {
+            x: root.sidebar-width + Theme.border-width; y: Theme.settings-caption-height;
+            width: parent.width - self.x; height: parent.height - self.y;
+            content-width: self.width; content-height: entries.preferred-height;
+            entries := VerticalLayout {
+                width: parent.width; height: self.preferred-height;
+                padding: Theme.settings-padding;
+                if root.category > 0 && !root.searching: Rectangle {
+                    height: Theme.settings-hero-height;
+                    Emblem {
+                        y: Theme.settings-hero-top; x: (parent.width - self.width) / 2;
+                        width: Theme.settings-hero-icon; height: self.width; border-radius: Theme.settings-hero-radius;
+                        symbol-size: Theme.settings-hero-symbol; icon: root.categories[root.category].hero-icon;
+                    }
+                    VerticalLayout {
+                        y: Theme.settings-hero-top + Theme.settings-hero-icon + Theme.settings-hero-gap;
+                        width: parent.width; height: self.preferred-height; spacing: Theme.settings-text-gap;
+                        Text {
+                            text: root.categories[root.category].name; horizontal-alignment: center;
+                            color: Theme.settings-text; font-size: Theme.settings-hero-title; font-weight: Theme.weight-semibold;
+                        }
+                        Text {
+                            text: root.categories[root.category].description; horizontal-alignment: center; wrap: word-wrap;
+                            color: Theme.settings-secondary-text; font-size: Theme.settings-row-size;
+                        }
+                    }
+                }
+                for row[i] in root.rows: VerticalLayout {
+                    if row.starts-group && i > 0: Rectangle { height: Theme.settings-padding; }
+                    if row.heading != "": Rectangle {
+                        height: Theme.settings-section-height;
+                        Text {
+                            x: Theme.settings-row-inset; width: parent.width - self.x * 2;
+                            text: row.heading; color: Theme.settings-text; font-weight: Theme.settings-label-weight; vertical-alignment: center;
+                        }
+                    }
+                    option := SettingsOption {
+                        data: row; labels: root.labels; terminal-icon: root.terminal-icon;
+                        previews: row.preference == PreferenceKey.start-view && !root.searching && self.width >= Theme.settings-preview-min-room;
+                        first: row.starts-group; last: i + 1 >= root.rows.length || root.rows[i + 1].starts-group;
+                        property <bool> selected: root.selected == i && root.area == SettingsFocus.options;
+                        focused: self.selected && root.keyboard-focus;
+                        recording: root.recording && root.recording-id == row.id;
+                        error: self.selected ? root.error : "";
+                        property <length> screen-y: self.absolute-position.y;
+                        changed selected => {
+                            if self.selected {
+                                let y = self.screen-y - entries.absolute-position.y;
+                                list.content-y = clamp(max(min(list.content-y, -y), list.height - y - self.height),
+                                    min(0px, list.height - list.content-height), 0px);
+                                root.anchor-top = self.screen-y; root.anchor-height = self.height;
                             }
                         }
+                        changed screen-y => { if self.selected { root.anchor-top = self.screen-y; } }
+                        activate => {
+                            root.stop-recording(); root.keyboard-focus = false;
+                            root.anchor-top = self.screen-y; root.anchor-height = self.height;
+                            root.activate(i);
+                        }
+                        reset => { root.keyboard-focus = false; root.reset-binding(i); }
+                        choose(index) => {
+                            root.stop-recording(); root.selected = i; root.area = SettingsFocus.options; root.keyboard-focus = false;
+                            root.error = root.set-preference(row.preference, index); search.focus();
+                        }
+                    }
+                }
+                if root.rows.length == 0: Text {
+                    height: Theme.settings-row-height; vertical-alignment: center; horizontal-alignment: center;
+                    text: root.labels.empty; color: Theme.settings-secondary-text;
+                }
+            }
+        }
+
+        if root.choice-row >= 0 && root.choice-row < root.rows.length: Rectangle {
+            property <SettingsRow> data: root.rows[root.choice-row];
+            TouchArea { clicked => { root.choice-row = -1; } }
+            menu := Rectangle {
+                width: Theme.settings-menu-width;
+                height: parent.data.choices.length * Theme.settings-menu-row + Theme.settings-menu-padding * 2;
+                x: parent.width - self.width - Theme.settings-padding - Theme.settings-row-inset;
+                y: clamp(root.anchor-top + root.anchor-height + self.height < root.height
+                    ? root.anchor-top + root.anchor-height : root.anchor-top - self.height,
+                    Theme.settings-caption-height, root.height - self.height);
+                background: Theme.settings-category-background; border-radius: Theme.settings-card-radius;
+                border-width: Theme.border-width; border-color: Theme.settings-frame;
+                VerticalLayout {
+                    padding: Theme.settings-menu-padding;
+                    for choice[i] in root.rows[root.choice-row].choices: Rectangle {
+                        height: Theme.settings-menu-row; border-radius: Theme.settings-tile-radius;
+                        background: choice-hit.has-hover || i == root.choice-index ? Theme.settings-key-hover : transparent;
+                        accessible-role: list-item; accessible-label: choice; accessible-item-selected: i == root.rows[root.choice-row].index;
+                        accessible-action-default => { root.choose(i); }
+                        Text { x: Theme.gap; text: choice; color: Theme.settings-text; vertical-alignment: center; }
+                        if i == root.rows[root.choice-row].index: Path {
+                            x: parent.width - self.width - Theme.gap; y: (parent.height - self.height) / 2;
+                            width: Theme.settings-icon-size; height: self.width;
+                            viewbox-width: 16; viewbox-height: 16; commands: "M 2.5 8 L 6.5 12 L 13.5 4";
+                            stroke: Theme.settings-text; stroke-width: Theme.footer-menu-stroke;
+                        }
+                        choice-hit := TouchArea { mouse-cursor: pointer; clicked => { root.choose(i); } }
                     }
                 }
             }

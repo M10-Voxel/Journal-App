@@ -133,7 +133,7 @@ fn the_panel_at_the_left_sets_tag_time_reminder_icon_description_and_plans_on_a_
     t.press(K::Down);
     t.press(K::Enter);
     assert_eq!(t.day("2026-11-19").entries[0].tag.as_deref(), Some(WORK));
-    assert_eq!(t.side().unwrap().kind, 0, "Back to the actions.");
+    assert!(t.side().is_none(), "Chosen: the card closes (as in Raycast).");
     // The time on the clock: digits, Enter.
     t.alt('u');
     for c in "1430".chars() { t.press(K::Char(c)); }

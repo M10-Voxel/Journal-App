@@ -35,14 +35,58 @@ fn open(form: &mut Form) {
     assert!(form.view().entry_open);
 }
 
-/// Tab until the field has the keyboard ("more" opened on the way when needed).
+/// Tab until the field has the keyboard (the description, reminder and icon are taken directly, as with a click).
 fn go(form: &mut Form, field: Field) {
-    if field.extra() && !form.more_visible() { go(form, Field::More); form.key(Key::Enter, NONE); }
+    if !form.visible(field) { form.click_field(field.index()); }
     let back = field.index() < form.field().index();
     for _ in 0..20 { if form.field() == field { return; } form.key(Key::Tab, if back { SHIFT } else { NONE }); }
     panic!("{field:?} not reached");
 }
 fn type_in(form: &mut Form, text: &str) { form.edited(text); }
+
+#[test]
+fn opening_and_title_preferences_preserve_the_selected_day_and_a_literal_draft() {
+    let mut t = test();
+    t.form.close_entry();
+    t.form.preferences.start_view = crate::settings::StartView::Entry;
+    t.form.preferences.return_today = false;
+    t.form.preferences.parse_titles = false;
+    let chosen = d("2026-11-24");
+    t.form.show_day(chosen);
+    assert!(matches!(t.form.shown().focus, Some(Pane::Entry)));
+    assert_eq!(t.form.day_shown(), chosen);
+    type_in(&mut t.form, "Plan morgen 14:00");
+    t.form.key(Key::Tab, NONE);
+    assert_eq!(t.form.title(), "Plan morgen 14:00");
+    assert!(t.form.v.days.is_empty() && t.form.v.start.is_none());
+    t.form.preferences.start_view = crate::settings::StartView::Day;
+    t.form.preferences.return_today = true;
+    t.form.shown();
+    assert!(t.form.entry_shown());
+    assert_eq!(t.form.title(), "Plan morgen 14:00");
+    assert_eq!(t.form.day_shown(), t.form.today);
+}
+
+#[test]
+fn notebook_defaults_apply_on_open_and_leave_the_current_session_in_control() {
+    let mut t = test();
+    t.form.close_entry();
+    t.form.preferences.notes_on_day = true;
+    t.form.preferences.edit_notes = true;
+    t.form.open_notepad();
+    assert!(t.form.notepad().unwrap().notes_on_day);
+    t.form.set_notepad_day_filter(false);
+    t.form.new_notepad_note();
+    let id = t.form.notepad().unwrap().card.id.to_string();
+    t.form.notepad.as_mut().unwrap().edit(false, "Testnotiz");
+    t.form.finish_notepad(true);
+    t.form.notepad_panel(1);
+    t.form.pick_notepad(&id);
+    let note = t.form.notepad().unwrap();
+    assert!(note.editing && !note.preview && !note.notes_on_day);
+    assert_eq!(note.title(), "Testnotiz");
+}
+
 fn day(test: &Test, date: &str) -> Vec<Entry> { test.form.journal.as_ref().unwrap().store.load(date).unwrap().entries }
 fn row(form: &mut Form, field: Field) -> RowView { form.view().rows.into_iter().find(|row| row.field == field.index()).unwrap() }
 fn value(form: &mut Form, field: Field) -> String { form.view().rows.into_iter().find(|row| row.field == field.index()).map(|row| row.value).unwrap_or_default() }
@@ -257,8 +301,7 @@ fn tab_always_goes_to_the_next_field() {
     let mut t = test();
     let mut seen = vec![t.form.field()];
     for _ in 0..6 { t.form.key(Key::Tab, NONE); seen.push(t.form.field()); }
-    assert_eq!(seen, [Field::Title, Field::Day, Field::Start, Field::Repeat, Field::Tag, Field::More, Field::More], "No end without a start; more is the last until opened.");
-    t.form.key(Key::Tab, SHIFT);
+    assert_eq!(seen, [Field::Title, Field::Day, Field::Start, Field::Repeat, Field::Tag, Field::Tag, Field::Tag], "No end without a start; the tag is the last while nothing more is set.");
     t.form.key(Key::Tab, SHIFT);
     assert_eq!(t.form.field(), Field::Repeat, "Also from the repetition, Tab goes on (Shift+Tab back).");
     t.form.key(Key::Tab, NONE);
@@ -503,21 +546,23 @@ fn the_calendar_without_a_range_takes_the_day_or_the_moment_and_esc_twice_goes_b
 }
 
 #[test]
-fn more_opens_the_rest_and_every_field_reaches_the_journal() {
+fn the_extras_come_with_their_keys_and_every_field_reaches_the_journal() {
     let mut t = test();
     type_in(&mut t.form, "Bericht");
-    assert!(t.form.view().rows.iter().all(|r| r.field != Field::Description.index()), "Behind more at first.");
+    assert!(t.form.view().rows.iter().all(|r| r.field != Field::Description.index()), "Not a line while empty.");
     go(&mut t.form, Field::Day); type_in(&mut t.form, "morgen");
     go(&mut t.form, Field::Start); type_in(&mut t.form, "9");
     go(&mut t.form, Field::End); type_in(&mut t.form, "10");
     go(&mut t.form, Field::Tag); type_in(&mut t.form, "arb");
-    go(&mut t.form, Field::More);
-    t.form.key(Key::Enter, NONE);
-    assert_eq!(t.form.field(), Field::Description, "Enter on more opens it and goes in.");
+    t.form.key(Key::Extra(Field::Description), ALT);
+    assert_eq!(t.form.field(), Field::Description, "Alt+B goes into the description.");
     type_in(&mut t.form, "Zahlen von Q3");
-    go(&mut t.form, Field::Priority); t.form.key(Key::Space, NONE);
-    go(&mut t.form, Field::Reminder); type_in(&mut t.form, "45");
-    go(&mut t.form, Field::Icon); type_in(&mut t.form, "bell-ring");
+    t.form.key(Key::Priority, ALT);
+    assert!(t.form.view().priority, "Alt+P sets the flag.");
+    t.form.key(Key::Extra(Field::Reminder), ALT); type_in(&mut t.form, "45");
+    assert_eq!(t.form.field(), Field::Reminder);
+    t.form.key(Key::Extra(Field::Icon), ALT); type_in(&mut t.form, "bell-ring");
+    assert!(t.form.view().rows.iter().any(|r| r.field == Field::Description.index()), "A filled extra keeps its line.");
     t.form.key(Key::Enter, CTRL);
     let e = &day(&t, "2026-11-19")[0];
     assert_eq!((e.text.as_str(), e.kind.as_str(), e.time.as_deref(), e.end.as_deref()), ("Bericht", "task", Some("09:00"), Some("10:00")));
@@ -547,7 +592,7 @@ fn tags_are_chosen_in_their_options_with_their_colours() {
     assert_eq!(choices.len(), 2, "Typing filters.");
     t.form.choice_click(1);
     t.form.key(Key::Enter, NONE);
-    assert_eq!((t.form.field(), value(&mut t.form, Field::Tag)), (Field::More, "Arbeit".to_string()), "Enter takes it and goes on.");
+    assert_eq!((t.form.field(), value(&mut t.form, Field::Tag)), (Field::Tag, "Arbeit".to_string()), "Enter takes it; the tag is the last line while nothing more is set.");
     go(&mut t.form, Field::Tag);
     type_in(&mut t.form, "xyz");
     assert!(row(&mut t.form, Field::Tag).error);
@@ -626,15 +671,13 @@ fn the_repetition_opens_with_enter_and_the_calendar_follows_every_change() {
     go(&mut t.form, Field::Repeat);
     t.form.key(Key::Enter, NONE);
     let Panel::Repeat(lines) = t.form.view().panel else { panic!("the repetition's lines") };
-    assert_eq!(lines.len(), 2, "Once: only the rhythms (two rows).");
+    assert_eq!(lines.len(), 1, "Without a rule, one row of rhythms.");
     assert!(!t.form.view().editable, "The keys belong to the options.");
     for _ in 0..3 { t.form.key(Key::Right, NONE); }
     assert_eq!(t.form.v.rule.as_ref().map(|r| r.unit), Some(repeat::Unit::Week));
     let fresh = |form: &mut Form| { let layout = form.view().calendar.layout; layout.blocks.iter().filter(|b| b.fresh).count() + layout.chips.iter().filter(|c| c.fresh).count() };
     let weekly = fresh(&mut t.form);
     for _ in 0..3 { t.form.key(Key::Down, NONE); }
-    assert_eq!(t.form.view().panel, t.form.view().panel);
-    t.form.key(Key::Down, NONE);
     t.form.key(Key::Digit(1), NONE);
     t.form.key(Key::Digit(5), NONE);
     assert_eq!(t.form.v.rule.as_ref().unwrap().weekdays, Some(vec![0, 2, 4]));
@@ -659,8 +702,42 @@ fn a_repetition_can_still_be_typed_and_clicked() {
     assert!(row(&mut t.form, Field::Repeat).filled);
     t.form.repeat_click(0, 5);
     assert_eq!(t.form.v.rule.as_ref().map(|r| r.unit), Some(repeat::Unit::Month), "A click on Monatlich.");
-    t.form.repeat_click(0, 0);
+    t.form.key(Key::Delete, NONE);
     assert!(t.form.v.rule.is_none());
+}
+
+#[test]
+fn the_repeat_month_picker_confirms_only_valid_dates_and_escape_keeps_the_rule() {
+    let mut t = test();
+    go(&mut t.form, Field::Repeat);
+    t.form.key(Key::Enter, NONE);
+    t.form.key(Key::Digit(5), NONE);
+    let date_part = |form: &mut Form, label: &str| {
+        let Panel::Repeat(lines) = form.view().panel else { panic!("the repetition's lines") };
+        lines.into_iter().find(|line| line.label == label).unwrap().parts.pop().unwrap()
+    };
+    let start = date_part(&mut t.form, "Ab");
+    t.form.repeat_click(start.slot, start.value);
+    assert!(t.form.repeat_date_open());
+    t.form.key(Key::PageDown, NONE);
+    t.form.key(Key::Right, NONE);
+    t.form.key(Key::Enter, NONE);
+    assert_eq!(t.form.v.rule.as_ref().unwrap().start, d("2026-12-19"));
+    assert!(!t.form.repeat_date_open());
+
+    let until = date_part(&mut t.form, "Bis");
+    t.form.repeat_click(until.slot, until.value);
+    t.form.key(Key::Home, NONE);
+    let panel = t.form.view().side.unwrap();
+    assert!(panel.cells.iter().any(|cell| cell.date == d("2026-12-18") && cell.disabled));
+    t.form.take_repeat_date(d("2026-12-18"));
+    assert!(t.form.repeat_date_open());
+    t.form.key(Key::Escape, NONE);
+    assert!(t.form.v.rule.as_ref().unwrap().end.is_none());
+    t.form.key(Key::Space, NONE);
+    assert!(t.form.repeat_date_open(), "Escape returns focus to the end date.");
+    t.form.take_repeat_date(d("2026-12-20"));
+    assert_eq!(t.form.v.rule.as_ref().unwrap().end.unwrap().until, Some(d("2026-12-20")));
 }
 
 #[test]
@@ -670,7 +747,7 @@ fn problems_are_shown_at_their_field() {
     go(&mut t.form, Field::Tag);
     t.form.key(Key::Enter, CTRL);
     assert_eq!(t.form.field(), Field::Title, "The missing title is where the cursor goes.");
-    assert!(row(&mut t.form, Field::Title).error);
+    assert!(t.form.view().title_error, "The title in the top line is marked.");
     assert_eq!(t.form.view().status, Some(("Der Titel fehlt".into(), true)));
     type_in(&mut t.form, "Idee");
     t.form.key(Key::Digit(4), ALT);
@@ -778,7 +855,7 @@ fn the_day_view_shows_today_follows_the_calendar_and_comes_back_after_the_form()
     // Alt+→: tomorrow, marked in the calendar, with its own rating; Alt+← back, Alt+H today.
     t.form.key(Key::Right, ALT);
     let view = t.form.view();
-    assert_eq!((view.day.date, view.day.relative.as_str()), (d("2026-11-19"), "Morgen"));
+    assert_eq!((view.day.date, view.day.relative.as_str()), (d("2026-11-19"), "in 1 d"));
     assert_eq!(entries(&view), ["Zahnarzt"]);
     assert_eq!(view.day.rows.iter().find(|row| row.kind == day_view::RowKind::Dials).unwrap().dials[0].value, "8");
     assert!(view.calendar.layout.bands.iter().any(|band| band.selected && band.date == d("2026-11-19")));

@@ -86,11 +86,34 @@ pub struct SidePanel {
     pub placeholder: String,
 }
 
+impl SidePanel {
+    pub fn set_month(&mut self, cursor: NaiveDate, today: NaiveDate, language: Language, own: Option<NaiveDate>, earliest: Option<NaiveDate>, picked: impl Fn(NaiveDate) -> bool) {
+        self.month = format!("{} {}", texts(language).months[cursor.month0() as usize], cursor.year());
+        self.weekdays = day_texts(language).weekdays.iter().map(|w| w.chars().take(2).collect()).collect();
+        let first = NaiveDate::from_ymd_opt(cursor.year(), cursor.month(), 1).unwrap();
+        self.cells = (0..42).map(|n| {
+            let offset = n - i64::from(first.weekday().num_days_from_monday());
+            let Some(date) = first.checked_add_signed(chrono::Duration::days(offset)) else {
+                return Cell { disabled: true, ..Cell::default() };
+            };
+            Cell {
+                label: date.day().to_string(), date, in_month: date.month() == cursor.month(),
+                today: date == today, cursor: date == cursor, picked: picked(date), own: own == Some(date),
+                disabled: earliest.is_some_and(|first| date < first),
+            }
+        }).collect();
+    }
+}
+
+/// One action of an entry as listed behind Strg+K.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ActionLine { pub action: Action, pub icon: String, pub label: String, pub value: String, pub on: bool, pub color: Option<Rgb>, pub danger: bool }
+
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct SideRow { pub icon: String, pub label: String, pub value: String, pub selected: bool, pub on: bool, pub color: Option<Rgb>, pub danger: bool }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Cell { pub label: String, pub date: NaiveDate, pub in_month: bool, pub today: bool, pub cursor: bool, pub picked: bool, pub own: bool }
+pub struct Cell { pub label: String, pub date: NaiveDate, pub in_month: bool, pub today: bool, pub cursor: bool, pub picked: bool, pub own: bool, pub disabled: bool }
 
 /// What the day view needs from the rest: the store and the warm data, the day shown and the clock.
 pub struct Ctx<'a> {
@@ -494,7 +517,10 @@ impl DayPane {
         self.typed.clear();
         match (item, part) {
             (Item::Title, _) => self.start_edit(cx, EditTarget::Title),
-            (Item::Entry(id), 1) => self.open_side(cx, &id, SideView::Actions),
+            // The symbol or a right click: its actions (Strg+K for this entry).
+            (Item::Entry(id), 1 | 4) => self.open_side(cx, &id, SideView::Actions),
+            // The flag at the right of the line.
+            (Item::Entry(id), 5) if Self::entry(cx, &id).is_some() => { let r = self.change(cx, |day, tags| ops::toggle_priority(day, tags, &id)); self.report(r) }
             (Item::Entry(id), _) if Self::entry(cx, &id).is_some() => { self.side = None; self.start_edit(cx, EditTarget::Entry(id)) }
             (Item::Activity(id), 1) => self.toggle_activity(cx, &id),
             (Item::Activity(id), 2) => { let date = cx.date.to_string(); self.toggle_timer(cx, &date, &id) }
@@ -507,8 +533,6 @@ impl DayPane {
         }
     }
 
-    /// A new entry of this kind from the mouse (the headings' small `+`).
-    pub fn create(&mut self, cx: &Ctx, kind: &'static str) -> Out { self.start_edit(cx, EditTarget::New { kind, after: None, tag: None }) }
 
     // ----- The panel at the left -----
 
@@ -524,7 +548,7 @@ impl DayPane {
         self.side = Some(Side { entry: id.to_string(), view: view.clone(), pick });
         match view {
             SideView::Description => { self.side_text = entry.description; Out { side_text: Some(self.side_text.clone()), ..Out::default() } }
-            SideView::Icons => { self.side_text.clear(); Out { side_text: Some(String::new()), ..Out::default() } }
+            SideView::Icons | SideView::Tags => { self.side_text.clear(); Out { side_text: Some(String::new()), ..Out::default() } }
             _ => Out { focus: true, ..Out::default() },
         }
     }
@@ -550,10 +574,60 @@ impl DayPane {
         list
     }
 
-    /// The panel's text changed (the icon search, the description).
+    /// What an entry's actions are as listed behind Strg+K: its title and a line per action (with the value it has).
+    pub fn entry_actions(&self, cx: &Ctx, id: &str) -> Option<(String, Vec<ActionLine>)> {
+        let entry = Self::entry(cx, id)?;
+        let (dt, ft) = (day_texts(cx.language), form_texts(cx.language));
+        let tags = Self::tags(cx);
+        let tag = entry.tag.as_ref().and_then(|id| tags.iter().find(|t| &t.id == id));
+        let kind_name = |kind: &str| match kind { "event" => dt.kind_event, "note" => dt.kind_note, _ => dt.kind_task };
+        let reminder = if entry.reminder { REMINDERS.iter().position(|r| *r == Some(entry.reminder_before)).map_or_else(|| format!("{} {}", entry.reminder_before, ft.minutes), |at| ft.reminder_presets[at].to_string()) } else { String::new() };
+        let lines = Self::actions(&entry).into_iter().map(|action| {
+            let (icon, label, value, on): (&str, &str, String, bool) = match action {
+                Action::Status => ("journal-done", dt.status, (if entry.done { dt.status_done } else if entry.cancelled { dt.status_cancelled } else { dt.status_open }).into(), entry.done),
+                Action::Kind => (day_view::kind_icon(&entry.kind), dt.kind, kind_name(&entry.kind).into(), false),
+                Action::Priority => ("journal-priority", dt.priority, String::new(), entry.priority),
+                Action::Tag => ("journal-tag", dt.tag, tag.map(|t| t.name.clone()).unwrap_or_default(), false),
+                Action::Time => ("journal-clock", dt.time, match (entry.time.as_deref(), entry.end.as_deref()) { (Some(a), Some(b)) => format!("{a}–{b}"), (Some(a), None) => a.into(), _ => String::new() }, false),
+                Action::Reminder => ("journal-bell", dt.reminder, reminder.clone(), entry.reminder),
+                Action::Icon => (entry.icon.as_deref().filter(|n| icons::exists(n)).unwrap_or("journal-icon"), dt.icon, entry.icon.clone().unwrap_or_default(), false),
+                Action::Description => ("journal-details", dt.description, entry.description.lines().next().unwrap_or_default().to_string(), false),
+                Action::Tomorrow => ("journal-tomorrow", dt.tomorrow_action, String::new(), false),
+                Action::Plan => ("journal-plan-tomorrow", dt.plan, String::new(), false),
+                Action::PlanDays => ("journal-plan-days", dt.plan_days, String::new(), false),
+                Action::Jump => ("journal-jump", dt.jump, String::new(), false),
+                Action::Delete => ("journal-trash", dt.delete, String::new(), false),
+            };
+            ActionLine { action, icon: icon.into(), label: label.into(), value, on, color: if action == Action::Tag { tag.and_then(|t| crate::calendar::parse_color(&t.color)) } else { None }, danger: action == Action::Delete }
+        }).collect();
+        Some((if entry.text.trim().is_empty() { dt.untitled.into() } else { entry.text.clone() }, lines))
+    }
+
+    /// An action on an entry of the day shown (chosen behind Strg+K).
+    pub fn act_on(&mut self, cx: &mut Ctx, id: &str, action: Action) -> Out {
+        let Some(entry) = Self::entry(cx, id) else { self.message = Some((day_texts(cx.language).foreign.into(), false)); return Out { focus: true, ..Out::default() } };
+        self.cursor = Some(Item::Entry(id.to_string()));
+        self.act(cx, &entry, action)
+    }
+
+    /// The tags to choose from: none first, then all; while something is typed only the tags with it in their name
+    /// (starting with it first).
+    fn tag_choices(&self, cx: &Ctx) -> Vec<Option<journal_core::storage::Tag>> {
+        let query = crate::engine::parse::fold(self.side_text.trim());
+        let tags = Self::tags(cx);
+        if query.is_empty() { return std::iter::once(None).chain(tags.into_iter().map(Some)).collect(); }
+        let mut found: Vec<(bool, journal_core::storage::Tag)> = tags.into_iter().filter_map(|tag| {
+            let name = crate::engine::parse::fold(&tag.name);
+            name.contains(&query).then(|| (!name.starts_with(&query), tag))
+        }).collect();
+        found.sort_by_key(|(later, _)| *later);
+        found.into_iter().map(|(_, tag)| Some(tag)).collect()
+    }
+
+    /// The panel's text changed (the tag filter, the icon search, the description).
     pub fn side_edited(&mut self, text: &str) {
         self.side_text = text.to_string();
-        if let Some(side) = &mut self.side { if side.view == SideView::Icons { side.pick = 0; } }
+        if let Some(side) = &mut self.side { if matches!(side.view, SideView::Icons | SideView::Tags) { side.pick = 0; } }
     }
 
     fn icons_found(&self) -> Vec<&'static str> {
@@ -571,6 +645,8 @@ impl DayPane {
         let Some(side) = self.side.clone() else { return Out::default() };
         let Some(entry) = Self::entry(cx, &side.entry) else { self.side = None; return Out { focus: true, ..Out::default() } };
         let id = side.entry.clone();
+        // Backspace is a step back too (the description is written, there it deletes).
+        let key = if key == K::Backspace && side.view != SideView::Description { K::Escape } else { key };
         if key == K::Escape {
             if side.view == SideView::Description { let text = self.side_text.clone(); let r = self.change(cx, |day, _| ops::set_description(day, &id, &text)); let out = self.report(r); self.back(); return out; }
             return self.back();
@@ -597,13 +673,12 @@ impl DayPane {
                 }
             }
             SideView::Tags => {
-                let tags = Self::tags(cx);
+                let count = self.tag_choices(cx).len();
                 match key {
-                    K::Up | K::BackTab => self.set_pick(pick(-1, tags.len() + 1)),
-                    K::Down | K::Tab => self.set_pick(pick(1, tags.len() + 1)),
-                    K::Char(digit @ '0'..='9') => { let n = digit as usize - '0' as usize; if n <= tags.len() { self.choose(cx, n) } else { Out::default() } }
-                    K::Enter | K::Space => self.choose(cx, side.pick),
-                    _ => Out { focus: true, ..Out::default() },
+                    K::Up | K::BackTab => self.set_pick(pick(-1, count)),
+                    K::Down | K::Tab => self.set_pick(pick(1, count)),
+                    K::Enter => self.choose(cx, side.pick),
+                    _ => Out::default(),
                 }
             }
             SideView::Reminders => match key {
@@ -620,7 +695,7 @@ impl DayPane {
                     K::Up => self.set_pick(pick(-(ICON_COLUMNS as i32), found)),
                     K::Down => self.set_pick(pick(ICON_COLUMNS as i32, found)),
                     K::Enter => self.choose(cx, side.pick),
-                    K::Delete if mods.ctrl => { let r = self.change(cx, |day, _| ops::set_icon(day, &id, None)); let out = self.report(r); self.back(); out }
+                    K::Delete if mods.ctrl => { let r = self.change(cx, |day, _| ops::set_icon(day, &id, None)); let out = self.report(r); self.side = None; out }
                     _ => Out::default(),
                 }
             }
@@ -641,8 +716,8 @@ impl DayPane {
                         let parsed = parse_clock(&typed);
                         if typed.len() >= 4 { set(self, parsed.or(Some(value)), true, String::new()) } else { set(self, parsed.or(Some(value)), typed.len() > 2, typed) }
                     }
-                    K::Delete | K::Backspace => { let r = self.change(cx, |day, _| ops::set_time(day, &id, None)); let out = self.report(r); self.back(); out }
-                    K::Enter => { let r = self.change(cx, |day, _| ops::set_time(day, &id, Some(value))); let out = self.report(r); self.back(); out }
+                    K::Delete => { let r = self.change(cx, |day, _| ops::set_time(day, &id, None)); let out = self.report(r); self.side = None; out }
+                    K::Enter => { let r = self.change(cx, |day, _| ops::set_time(day, &id, Some(value))); let out = self.report(r); self.side = None; out }
                     _ => Out { focus: true, ..Out::default() },
                 }
             }
@@ -690,14 +765,18 @@ impl DayPane {
         let Some(side) = self.side.clone() else { return Out::default() };
         let id = side.entry.clone();
         let r = match side.view {
-            SideView::Tags => { let tag = if index == 0 { None } else { Self::tags(cx).get(index - 1).map(|t| t.id.clone()) }; self.change(cx, |day, tags| ops::set_tag(day, tags, &id, tag)) }
+            SideView::Tags => {
+                let Some(choice) = self.tag_choices(cx).get(index).cloned() else { return Out::default() };
+                let tag = choice.map(|t| t.id);
+                self.change(cx, |day, tags| ops::set_tag(day, tags, &id, tag))
+            }
             SideView::Reminders => { let before = REMINDERS.get(index).copied().flatten(); self.change(cx, |day, _| ops::set_reminder(day, &id, before)) }
             SideView::Icons => { let icon = self.icons_found().get(index).map(|s| s.to_string()); self.change(cx, |day, _| ops::set_icon(day, &id, icon)) }
             SideView::Actions => { let Some(entry) = Self::entry(cx, &id) else { return Out::default() }; let actions = Self::actions(&entry); self.set_pick(index); return match actions.get(index) { Some(action) => self.act(cx, &entry, *action), None => Out::default() } }
             _ => return Out::default(),
         };
         let out = self.report(r);
-        self.back();
+        self.side = None;
         out
     }
 
@@ -757,38 +836,19 @@ impl DayPane {
         let side = self.side.as_ref()?;
         let entry = Self::entry(cx, &side.entry)?;
         let (dt, ft) = (day_texts(cx.language), form_texts(cx.language));
-        let tags = Self::tags(cx);
-        let tag = entry.tag.as_ref().and_then(|id| tags.iter().find(|t| &t.id == id));
         let mut panel = SidePanel { title: if entry.text.trim().is_empty() { dt.untitled.into() } else { entry.text.clone() }, ..SidePanel::default() };
-        let kind_name = |kind: &str| match kind { "event" => dt.kind_event, "note" => dt.kind_note, _ => dt.kind_task };
-        let reminder = if entry.reminder { REMINDERS.iter().position(|r| *r == Some(entry.reminder_before)).map_or_else(|| format!("{} {}", entry.reminder_before, ft.minutes), |at| ft.reminder_presets[at].to_string()) } else { String::new() };
         match &side.view {
             SideView::Actions => {
                 panel.kind = 0;
-
-                panel.rows = Self::actions(&entry).into_iter().enumerate().map(|(i, action)| {
-                    let (icon, label, value, on): (&str, &str, String, bool) = match action {
-                        Action::Status => ("journal-done", dt.status, (if entry.done { dt.status_done } else if entry.cancelled { dt.status_cancelled } else { dt.status_open }).into(), entry.done),
-                        Action::Kind => (day_view::kind_icon(&entry.kind), dt.kind, kind_name(&entry.kind).into(), false),
-                        Action::Priority => ("journal-priority", dt.priority, String::new(), entry.priority),
-                        Action::Tag => ("journal-tag", dt.tag, tag.map(|t| t.name.clone()).unwrap_or_default(), false),
-                        Action::Time => ("journal-clock", dt.time, match (entry.time.as_deref(), entry.end.as_deref()) { (Some(a), Some(b)) => format!("{a}–{b}"), (Some(a), None) => a.into(), _ => String::new() }, false),
-                        Action::Reminder => ("journal-bell", dt.reminder, reminder.clone(), entry.reminder),
-                        Action::Icon => (entry.icon.as_deref().filter(|n| icons::exists(n)).unwrap_or("journal-icon"), dt.icon, entry.icon.clone().unwrap_or_default(), false),
-                        Action::Description => ("journal-details", dt.description, entry.description.lines().next().unwrap_or_default().to_string(), false),
-                        Action::Tomorrow => ("journal-tomorrow", dt.tomorrow_action, String::new(), false),
-                        Action::Plan => ("journal-plan-tomorrow", dt.plan, String::new(), false),
-                        Action::PlanDays => ("journal-plan-days", dt.plan_days, String::new(), false),
-                        Action::Jump => ("journal-jump", dt.jump, String::new(), false),
-                        Action::Delete => ("journal-trash", dt.delete, String::new(), false),
-                    };
-                    SideRow { icon: icon.into(), label: label.into(), value, selected: i == side.pick, on, color: if action == Action::Tag { tag.and_then(|t| crate::calendar::parse_color(&t.color)) } else { None }, danger: action == Action::Delete }
-                }).collect();
+                panel.rows = self.entry_actions(cx, &side.entry).map(|(_, lines)| lines).unwrap_or_default().into_iter().enumerate()
+                    .map(|(i, line)| SideRow { icon: line.icon, label: line.label, value: line.value, selected: i == side.pick, on: line.on, color: line.color, danger: line.danger }).collect();
             }
             SideView::Tags => {
-                panel.kind = 1; panel.heading = dt.tag.into(); panel.heading_icon = "tag";
-                panel.rows = std::iter::once(SideRow { icon: String::new(), label: ft.no_tag.into(), selected: side.pick == 0, on: entry.tag.is_none(), ..SideRow::default() })
-                    .chain(tags.iter().enumerate().map(|(i, t)| SideRow { icon: t.icon.clone().filter(|n| icons::exists(n)).unwrap_or_default(), label: t.name.clone(), selected: side.pick == i + 1, on: entry.tag.as_ref() == Some(&t.id), color: crate::calendar::parse_color(&t.color), ..SideRow::default() })).collect();
+                panel.kind = 1; panel.heading = dt.tag.into(); panel.heading_icon = "tag"; panel.text = self.side_text.clone(); panel.placeholder = dt.tag_search.into();
+                panel.rows = self.tag_choices(cx).into_iter().enumerate().map(|(i, choice)| match choice {
+                    None => SideRow { icon: String::new(), label: ft.no_tag.into(), selected: side.pick == i, on: entry.tag.is_none(), ..SideRow::default() },
+                    Some(t) => SideRow { icon: t.icon.clone().filter(|n| icons::exists(n)).unwrap_or_default(), label: t.name.clone(), selected: side.pick == i, on: entry.tag.as_ref() == Some(&t.id), color: crate::calendar::parse_color(&t.color), ..SideRow::default() },
+                }).collect();
             }
             SideView::Reminders => {
                 panel.kind = 3; panel.heading = dt.reminder.into(); panel.heading_icon = "bell";
@@ -809,12 +869,7 @@ impl DayPane {
             SideView::Plan { multi, cursor, picked } => {
                 panel.kind = 5; panel.heading = if *multi { dt.plan_days } else { dt.plan }.into(); panel.heading_icon = if *multi { "calendar-range" } else { "calendar-arrow-up" };
 
-                let t = texts(cx.language);
-                panel.month = format!("{} {}", t.months[cursor.month0() as usize], cursor.year());
-                panel.weekdays = dt.weekdays.iter().map(|w| w.chars().take(2).collect()).collect();
-                let first = NaiveDate::from_ymd_opt(cursor.year(), cursor.month(), 1).unwrap();
-                let start = repeat::shift(first, -(first.weekday().num_days_from_monday() as i64));
-                panel.cells = (0..42).map(|n| { let date = repeat::shift(start, n); Cell { label: date.day().to_string(), date, in_month: date.month() == cursor.month(), today: date == cx.today, cursor: date == *cursor, picked: picked.contains(&date), own: date == cx.date } }).collect();
+                panel.set_month(*cursor, cx.today, cx.language, Some(cx.date), None, |date| picked.contains(&date));
                 let chosen: Vec<NaiveDate> = if *multi && !picked.is_empty() { picked.iter().copied().collect() } else { vec![*cursor] };
                 panel.confirm = if chosen.len() == 1 { dt.plan_on.replace("%s", &repeat::format_occurrence(chosen[0], cx.language)) } else { dt.plan_on_days.replace("%d", &chosen.len().to_string()) };
             }
@@ -835,7 +890,7 @@ fn parse_clock(typed: &str) -> Option<u32> {
     (hours < 24 && minutes < 60).then_some(hours * 60 + minutes)
 }
 
-fn add_months(date: NaiveDate, by: i32) -> NaiveDate {
+pub fn add_months(date: NaiveDate, by: i32) -> NaiveDate {
     let months = date.year() * 12 + date.month0() as i32 + by;
     let (year, month) = (months.div_euclid(12), months.rem_euclid(12) as u32 + 1);
     (1..=date.day()).rev().find_map(|day| NaiveDate::from_ymd_opt(year, month, day)).unwrap_or(date)

@@ -20,8 +20,10 @@ component NotepadButton inherits Rectangle {
     height: Theme.notepad-action-height;
     border-radius: Theme.block-radius;
     background: !self.enabled ? Theme.inset
-        : self.primary ? (hit.has-hover ? Theme.notepad-primary-hover : Theme.accent)
-        : hit.has-hover || self.active ? Theme.row-selection : transparent;
+        : self.primary ? (hit.has-hover ? Theme.row-selection-strong : Theme.row-selection)
+        : hit.has-hover || self.active ? Theme.hover : transparent;
+    border-width: self.primary ? Theme.border-width : 0px;
+    border-color: Theme.edge;
     accessible-role: button;
     accessible-label: self.label;
     accessible-enabled: self.enabled;
@@ -32,11 +34,11 @@ component NotepadButton inherits Rectangle {
         if root.show-icon: Image {
             width: Theme.label-icon-size; height: self.width;
             y: (parent.height - self.height) / 2;
-            source: root.icon; colorize: root.active ? Theme.accent : Theme.muted;
+            source: root.icon; colorize: root.active ? Theme.strong : Theme.muted;
         }
         Text {
             text: root.label; vertical-alignment: center;
-            color: !root.enabled ? Theme.placeholder : root.primary ? Theme.ground : root.active ? Theme.accent : Theme.text;
+            color: !root.enabled ? Theme.placeholder : root.primary || root.active ? Theme.strong : Theme.text;
             font-size: Theme.row-size; font-weight: root.primary ? Theme.weight-semibold : Theme.weight-normal;
         }
     }
@@ -192,44 +194,34 @@ export component NotepadEditor inherits VerticalLayout {
         return reject;
     }
 
+    // The top line, as everywhere: back (Esc), where one is; creating and saving are the footer's main action.
     Rectangle {
-        height: Theme.notepad-header-height;
+        height: Theme.line-height;
         HorizontalLayout {
             spacing: Theme.gap;
-            if root.panel != 1: NotepadButton {
-                y: (parent.height - self.height) / 2;
-                label: root.labels.back;
-                icon: root.back-icon; show-icon: true;
-                clicked => { if root.viewer-open { root.close-viewer(); } else { root.finish(false); } }
+            Rectangle {
+                width: Theme.back-size; height: Theme.back-size; y: (parent.height - self.height) / 2;
+                border-radius: Theme.block-radius;
+                background: back-touch.has-hover ? Theme.hover : Theme.raised;
+                accessible-role: button;
+                accessible-label: root.panel == 1 ? root.labels.exit : root.labels.back;
+                accessible-action-default => { if root.viewer-open { root.close-viewer(); } else { root.finish(false); } }
+                Image { width: Theme.label-icon-size; height: self.width; x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2; source: root.back-icon; colorize: Theme.text; }
+                back-touch := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { if root.viewer-open { root.close-viewer(); } else { root.finish(false); } } }
             }
             VerticalLayout {
                 alignment: center;
                 horizontal-stretch: 1;
                 Text {
                     text: root.viewer-open && root.viewed-title != "" ? root.viewed-title : root.heading;
-                    font-size: Theme.day-head-size; font-weight: Theme.weight-semibold; color: Theme.strong; overflow: elide;
+                    font-size: Theme.form-size; font-weight: Theme.weight-semibold; color: Theme.strong; overflow: elide;
                 }
                 if !root.viewer-open && (root.panel == 1 || (root.panel == 0 && root.editing)): Text {
                     text: root.date; font-size: Theme.small-size; color: Theme.muted; overflow: elide;
                 }
             }
-            if root.panel == 1: NotepadButton {
-                y: (parent.height - self.height) / 2;
-                label: root.labels.new-note; primary: true;
-                clicked => { root.new-note(); }
-            }
-            if root.panel == 0 && !root.viewer-open: NotepadButton {
-                y: (parent.height - self.height) / 2;
-                label: root.editing ? root.labels.save-note : root.labels.edit-note;
-                primary: true; enabled: !root.editing || root.can-save;
-                clicked => { if root.editing { root.finish(true); } else { root.tool(3); } }
-            }
-            if root.panel == 1: NotepadButton {
-                y: (parent.height - self.height) / 2;
-                label: root.labels.exit;
-                clicked => { root.finish(false); }
-            }
         }
+        Rectangle { x: -Theme.padding; y: parent.height - self.height; width: parent.width + Theme.padding * 2; height: Theme.border-width; background: Theme.divider; }
     }
     if root.panel == 0 && root.preview && !root.viewer-open: Text {
         height: self.preferred-height;

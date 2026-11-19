@@ -2,7 +2,7 @@
 //! the days, start, end, pause, months. Inside, the keyboard moves in all directions: `↑`/`↓` between the lines,
 //! `←`/`→` in a line. Lines that are one choice of several (rhythm, unit, pattern, end, pause) take the choice the
 //! cursor moves to; days and months are switched with Space or digits; numbers are typed, dates move with
-//! Shift+arrows. Every change is the rule at once, so the calendar shows it live.
+//! Shift+arrows or the date picker. Every confirmed change is visible in the calendar.
 use chrono::NaiveDate;
 use crate::repeat::{self, End, On, Pause, PauseUnit, Rule, Unit};
 use crate::texts::{form_texts, Language};
@@ -34,10 +34,10 @@ pub enum PartKind {
 pub enum Act { Left, Right, Up, Down, ShiftLeft, ShiftRight, ShiftUp, ShiftDown, Toggle, Digit(u8), Delete }
 
 const UNITS: [Unit; 4] = [Unit::Day, Unit::Week, Unit::Month, Unit::Year];
-pub const PRESETS: usize = 7;
+const PRESETS: usize = 6;
 
-/// The ready-made rhythms: once (no repetition), daily, on workdays, weekly, every two weeks, monthly, yearly.
-pub fn preset(index: usize, start: NaiveDate) -> Option<Rule> {
+/// Daily, on workdays, weekly, every two weeks, monthly, yearly.
+fn preset(index: usize, start: NaiveDate) -> Option<Rule> {
     let weekly = |every| Rule { weekdays: Some(vec![repeat::weekday_of(start)]), ..Rule::new(start, Unit::Week, every) };
     match index {
         1 => Some(Rule::new(start, Unit::Day, 1)),
@@ -51,10 +51,36 @@ pub fn preset(index: usize, start: NaiveDate) -> Option<Rule> {
 }
 
 /// Which ready-made rhythm a rule is (its start and end aside).
-pub fn preset_of(rule: Option<&Rule>) -> Option<usize> {
-    let Some(rule) = rule else { return Some(0) };
+fn preset_of(rule: &Rule) -> Option<usize> {
     let plain = |rule: &Rule| repeat::clean(&Rule { end: None, ..rule.clone() });
-    (1..PRESETS).find(|index| preset(*index, rule.start).is_some_and(|made| plain(&made) == plain(rule)))
+    (1..=PRESETS).find(|index| preset(*index, rule.start).is_some_and(|made| plain(&made) == plain(rule)))
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DateField { Start, Until }
+
+impl DateField {
+    fn from_part(part: &Part) -> Option<Self> {
+        match Slot::from_code(part.slot) {
+            Some(Slot::Start) => Some(Self::Start),
+            Some(Slot::Until) => Some(Self::Until),
+            _ => None,
+        }
+    }
+
+    pub fn date(self, rule: &Rule) -> NaiveDate {
+        match self {
+            Self::Start => rule.start,
+            Self::Until => rule.end.and_then(|end| end.until).unwrap_or_else(|| repeat::shift(rule.start, 30)),
+        }
+    }
+
+    pub fn apply(self, rule: &mut Rule, date: NaiveDate) {
+        match self {
+            Self::Start => *rule = repeat::with_start(rule, date),
+            Self::Until => rule.end = Some(End { count: None, until: Some(date.max(rule.start)) }),
+        }
+    }
 }
 
 /// The rule as text the field understands (`repeat::text`), with its absolute start and its end.
@@ -134,13 +160,11 @@ fn part(text: impl Into<String>, kind: PartKind, slot: Slot, value: usize, selec
 /// The lines for a rule, without the keyboard's place.
 fn lines(rule: Option<&Rule>, language: Language) -> Vec<Line> {
     let ft = form_texts(language);
-    let current = preset_of(rule);
-    // The rhythms in two rows, so they fit beside the form.
-    let rhythm = |range: std::ops::Range<usize>| range.map(|i| part(ft.repeat_presets[i], PartKind::Radio, Slot::Presets, i, current == Some(i))).collect();
-    let mut out = vec![
-        Line { label: ft.rp_rhythm.into(), icon: "repeat", parts: rhythm(0..4) },
-        Line { label: String::new(), icon: "", parts: rhythm(4..PRESETS) },
-    ];
+    let current = rule.and_then(preset_of);
+    let rhythm = ft.repeat_presets.iter().enumerate().map(|(i, name)| {
+        part(*name, PartKind::Radio, Slot::Presets, i + 1, current == Some(i + 1))
+    }).collect();
+    let mut out = vec![Line { label: ft.rp_rhythm.into(), icon: "repeat", parts: rhythm }];
     let Some(rule) = rule else { return out };
     // The unit and the number are lines of their own: on the way to the number no unit is chosen by passing it.
     out.push(Line { label: ft.rp_unit.into(), icon: "calendar-fold", parts: UNITS.iter().enumerate().map(|(i, unit)| part(repeat::unit_names(*unit, language)[0], PartKind::Radio, Slot::Unit, i, *unit == rule.unit)).collect() });
@@ -162,7 +186,7 @@ fn lines(rule: Option<&Rule>, language: Language) -> Vec<Line> {
     out.push(Line { label: ft.rp_from.into(), icon: "calendar-arrow-up", parts: vec![part(start, PartKind::Date, Slot::Start, 0, true)] });
     let mode = match rule.end { Some(End { count: Some(_), .. }) => 1, Some(End { until: Some(_), .. }) => 2, _ => 0 };
     let count = rule.end.and_then(|end| end.count).unwrap_or(10);
-    let until = rule.end.and_then(|end| end.until).unwrap_or_else(|| repeat::shift(rule.start, 30));
+    let until = DateField::Until.date(rule);
     let mut times = part(count.to_string(), PartKind::Number, Slot::Count, 1, mode == 1);
     times.after = ft.rp_times.into();
     out.push(Line { label: ft.rp_until.into(), icon: "flag", parts: vec![
@@ -194,8 +218,7 @@ fn lines(rule: Option<&Rule>, language: Language) -> Vec<Line> {
 impl Editor {
     /// Into the options: the rhythm in use has the keyboard.
     pub fn enter(&mut self, rule: Option<&Rule>) {
-        let at = preset_of(rule).unwrap_or(0);
-        *self = Editor { line: usize::from(at >= 4), col: at % 4, typed: None };
+        *self = Editor { col: rule.and_then(preset_of).unwrap_or(1) - 1, ..Editor::default() };
     }
 
     pub fn view(&self, rule: Option<&Rule>, language: Language) -> Vec<Line> {
@@ -212,6 +235,10 @@ impl Editor {
         lines[line].parts[self.col.min(lines[line].parts.len() - 1)].clone()
     }
 
+    pub fn date_field(&self, rule: Option<&Rule>) -> Option<DateField> {
+        DateField::from_part(&self.focused(rule))
+    }
+
     /// A key in the options; the rule changes at once.
     pub fn act(&mut self, rule: &mut Option<Rule>, base: NaiveDate, act: Act) {
         let count = lines(rule.as_ref(), Language::De).len();
@@ -224,11 +251,16 @@ impl Editor {
                     self.typed = None;
                     // In a line of one choice the keyboard lands on the chosen one.
                     let parts = &lines(rule.as_ref(), Language::De)[next].parts;
-                    if let Some(at) = parts.iter().position(|p| p.kind == PartKind::Radio && p.selected) { self.col = at; } else { self.col = self.col.min(parts.len() - 1); }
+                    self.col = parts.iter().position(|p| p.kind != PartKind::Toggle && p.selected)
+                        .unwrap_or(self.col.min(parts.len() - 1));
                 }
             }
             Act::Left | Act::Right => {
                 let parts = lines(rule.as_ref(), Language::De)[self.line].parts.clone();
+                if rule.is_none() && act == Act::Right {
+                    self.choose(rule, base, &parts[self.col]);
+                    return;
+                }
                 let next = (self.col as i32 + if act == Act::Right { 1 } else { -1 }).clamp(0, parts.len() as i32 - 1) as usize;
                 if next != self.col {
                     self.col = next;
@@ -244,10 +276,9 @@ impl Editor {
                 let focused = self.focused(rule.as_ref());
                 let Some(r) = rule.as_mut() else { return };
                 match Slot::from_code(focused.slot) {
-                    Some(Slot::Start) => *r = repeat::with_start(r, repeat::shift(r.start, step)),
-                    Some(Slot::Until) => {
-                        let until = r.end.and_then(|end| end.until).unwrap_or_else(|| repeat::shift(r.start, 30));
-                        r.end = Some(End { count: None, until: Some(repeat::shift(until, step).max(r.start)) });
+                    Some(Slot::Start | Slot::Until) => {
+                        let field = DateField::from_part(&focused).unwrap();
+                        field.apply(r, repeat::shift(field.date(r), step));
                     }
                     Some(slot @ (Slot::Every | Slot::Count | Slot::PauseOn | Slot::PauseOff)) => {
                         let step = step.signum() as i32;
@@ -258,10 +289,13 @@ impl Editor {
             }
             Act::Digit(digit) => {
                 let focused = self.focused(rule.as_ref());
-                let Some(r) = rule.as_mut() else {
-                    if (digit as usize) < PRESETS && self.line <= 1 { self.line = digit as usize / 4; self.col = digit as usize % 4; let p = lines(None, Language::De)[self.line].parts[self.col].clone(); self.choose(rule, base, &p); }
+                if self.line == 0 && (1..=PRESETS).contains(&(digit as usize)) {
+                    self.col = digit as usize - 1;
+                    let choice = self.focused(rule.as_ref());
+                    self.choose(rule, base, &choice);
                     return;
-                };
+                }
+                let Some(r) = rule.as_mut() else { return };
                 match Slot::from_code(focused.slot) {
                     Some(slot @ (Slot::Every | Slot::Count | Slot::PauseOn | Slot::PauseOff)) => {
                         let typed = match self.typed { Some((at, value)) if at == slot => value * 10 + digit as u32, _ => digit as u32 };
@@ -301,16 +335,18 @@ impl Editor {
     }
 
     /// A click: the keyboard goes there and the choice is taken.
-    pub fn click(&mut self, rule: &mut Option<Rule>, base: NaiveDate, slot: i32, value: i32) {
+    pub fn click(&mut self, rule: &mut Option<Rule>, base: NaiveDate, slot: i32, value: i32) -> Option<DateField> {
         let all = lines(rule.as_ref(), Language::De);
         for (l, line) in all.iter().enumerate() {
             if let Some(c) = line.parts.iter().position(|p| p.slot == slot && p.value == value) {
                 self.line = l; self.col = c; self.typed = None;
                 let p = line.parts[c].clone();
+                if let Some(date) = DateField::from_part(&p) { return Some(date); }
                 self.choose(rule, base, &p);
-                return;
+                return None;
             }
         }
+        None
     }
 
     /// Taking a choice: a rhythm, a unit, a pattern, an end; switching a day, a month, the pause.
@@ -362,12 +398,11 @@ mod tests {
 
     #[test]
     fn the_ready_made_rhythms_are_recognised_again() {
-        for index in 1..PRESETS {
+        for index in 1..=PRESETS {
             let rule = preset(index, base()).unwrap();
-            assert_eq!(preset_of(Some(&rule)), Some(index), "{index}");
+            assert_eq!(preset_of(&rule), Some(index), "{index}");
         }
-        assert_eq!(preset_of(None), Some(0), "No repetition is the first: once.");
-        assert_eq!(preset_of(Some(&Rule { every: 3, ..Rule::new(base(), Unit::Day, 1) })), None);
+        assert_eq!(preset_of(&Rule::new(base(), Unit::Day, 3)), None);
     }
 
     #[test]
@@ -376,12 +411,14 @@ mod tests {
         editor.enter(rule.as_ref());
         editor.act(&mut rule, base(), Act::Right);
         assert_eq!(rule.as_ref().map(|r| r.unit), Some(Unit::Day));
-        assert_eq!(editor.view(rule.as_ref(), Language::De)[0].parts.len(), 4, "The rhythms in two rows.");
+        assert_eq!(editor.view(rule.as_ref(), Language::De)[0].parts.iter().map(|p| p.text.as_str()).collect::<Vec<_>>(), ["D", "M-F", "W", "2W", "M", "Y"]);
         editor.act(&mut rule, base(), Act::Right);
         assert_eq!(rule.as_ref().unwrap().weekdays, Some(vec![0, 1, 2, 3, 4]));
         editor.act(&mut rule, base(), Act::Left);
         editor.act(&mut rule, base(), Act::Left);
-        assert!(rule.is_none(), "Back to once.");
+        assert_eq!(rule.as_ref().map(|r| r.unit), Some(Unit::Day));
+        editor.act(&mut rule, base(), Act::Delete);
+        assert!(rule.is_none(), "Reset the rhythm.");
     }
 
     #[test]
@@ -390,12 +427,9 @@ mod tests {
         let mut editor = Editor::default();
         editor.enter(rule.as_ref());
         let labels: Vec<String> = editor.view(rule.as_ref(), Language::De).into_iter().map(|line| line.label).collect();
-        assert_eq!(labels, ["Rhythmus", "", "Einheit", "Alle", "Am", "Ab", "Bis", "Pause", "Nur in", ""]);
+        assert_eq!(labels, ["Rhythmus", "Einheit", "Alle", "Am", "Ab", "Bis", "Pause", "Nur in", ""]);
         editor.act(&mut rule, base(), Act::Down);
-        editor.act(&mut rule, base(), Act::Down);
-        assert_eq!((editor.line, editor.col), (2, 1), "On Woche, the unit in use.");
-        editor.act(&mut rule, base(), Act::Down);
-        editor.act(&mut rule, base(), Act::Down);
+        assert_eq!((editor.line, editor.col), (1, 1), "On Woche, the unit in use.");
         editor.act(&mut rule, base(), Act::Down);
         editor.act(&mut rule, base(), Act::Down);
         editor.act(&mut rule, base(), Act::Down);
@@ -403,7 +437,9 @@ mod tests {
         editor.act(&mut rule, base(), Act::Down);
         editor.act(&mut rule, base(), Act::Down);
         editor.act(&mut rule, base(), Act::Down);
-        assert_eq!(editor.line, 9, "It stops at the last line.");
+        editor.act(&mut rule, base(), Act::Down);
+        editor.act(&mut rule, base(), Act::Down);
+        assert_eq!(editor.line, 8, "It stops at the last line.");
     }
 
     #[test]
@@ -411,7 +447,6 @@ mod tests {
         let mut rule = preset(3, base());
         let mut editor = Editor::default();
         editor.enter(rule.as_ref());
-        editor.act(&mut rule, base(), Act::Down); // the second row of rhythms
         editor.act(&mut rule, base(), Act::Down); // unit
         editor.act(&mut rule, base(), Act::Down); // every
         editor.act(&mut rule, base(), Act::Digit(2));
@@ -459,12 +494,12 @@ mod tests {
         let mut editor = Editor::default();
         editor.enter(rule.as_ref());
         let lines = editor.view(rule.as_ref(), Language::De);
-        assert!(lines[0].parts[3].selected && lines[0].parts[3].focused, "Weekly is in use and focused.");
-        assert_eq!(lines[2].parts.iter().map(|p| p.text.as_str()).collect::<Vec<_>>(), ["Tag", "Woche", "Monat", "Jahr"]);
-        assert_eq!((lines[3].parts[0].text.as_str(), lines[3].parts[0].after.as_str()), ("1", "Woche"));
-        assert!(lines[4].parts.iter().any(|p| p.text == "Mi" && p.selected));
-        assert!(lines[6].parts[0].selected, "Ends never.");
-        assert_eq!(editor.view(None, Language::De).len(), 2, "Once: only the rhythms."); 
+        assert!(lines[0].parts[2].selected && lines[0].parts[2].focused, "Weekly is in use and focused.");
+        assert_eq!(lines[1].parts.iter().map(|p| p.text.as_str()).collect::<Vec<_>>(), ["Tag", "Woche", "Monat", "Jahr"]);
+        assert_eq!((lines[2].parts[0].text.as_str(), lines[2].parts[0].after.as_str()), ("1", "Woche"));
+        assert!(lines[3].parts.iter().any(|p| p.text == "Mi" && p.selected));
+        assert!(lines[5].parts[0].selected, "Ends never.");
+        assert_eq!(editor.view(None, Language::De).len(), 1, "Only the rhythms when no rule is active.");
         assert!(lines.iter().all(|line| line.icon.is_empty() || crate::icons::exists(line.icon)));
         assert!(expression(rule.as_ref().unwrap(), Language::De).contains("ab 18.11.2026"));
     }

@@ -273,13 +273,11 @@ fn when(item: &CalItem, date: NaiveDate, language: Language) -> String {
     }
 }
 
-/// "Heute", "Morgen", "Gestern", else how many days away.
+/// "Heute" or the compact distance from today in the day switch.
 fn relative(date: NaiveDate, today: NaiveDate, language: Language) -> String {
     let dt = day_texts(language);
     match repeat::days_between(today, date) {
         0 => dt.today.into(),
-        1 => dt.tomorrow.into(),
-        -1 => dt.yesterday.into(),
         n if n > 0 => dt.in_days.replace("%d", &n.to_string()),
         n => dt.days_ago.replace("%d", &(-n).to_string()),
     }
@@ -464,11 +462,11 @@ mod tests {
         let wed = build(&src, d("2026-11-25"), d("2026-11-18"), Language::De);
         let holiday = wed.rows.iter().find(|row| row.label == "Urlaub").unwrap();
         assert_eq!((holiday.detail.as_str(), holiday.foreign), ("Mo 23.11. – Fr 27.11.", true), "Changed on its first day.");
-        assert_eq!(wed.relative, "in 7 Tagen");
+        assert_eq!(wed.relative, "in 7 d");
         assert_eq!(build(&src, d("2026-11-20"), d("2026-11-18"), Language::De).rows.iter().find(|row| row.label == "Messe").unwrap().detail, "14:00 – Sa 21.11.");
         let second = build(&src, d("2026-11-21"), d("2026-11-22"), Language::De);
         assert_eq!(second.rows.iter().find(|row| row.label == "Messe").unwrap().detail, "Fr 20.11. – 16:00");
-        assert_eq!(second.relative, "Gestern");
+        assert_eq!(second.relative, "vor 1 d");
     }
 
     #[test]

@@ -1,0 +1,126 @@
+import { Theme } from "theme.slint";
+
+// A hint of the footer: what it does and its keys; `action` is what a click does (0 the main action, 1 the actions).
+export struct FooterHint { label: string, caps: [string], action: int }
+
+// The keys drawn as symbols (the fonts have no arrows): Enter and Shift. Set from Rust (`icons.rs`).
+export global KeyIcons {
+    in-out property <image> enter;
+    in-out property <image> shift;
+}
+
+// Keys as caps, one per key, as Raycast shows them.
+export component KeyCaps inherits HorizontalLayout {
+    in property <[string]> caps;
+    in property <bool> lit;
+    spacing: Theme.keycap-gap;
+    alignment: end;
+    for cap in root.caps: Rectangle {
+        property <bool> symbol: cap == "↵" || cap == "⇧";
+        width: self.symbol ? Theme.keycap-min-width : max(Theme.keycap-min-width, cap-text.preferred-width + Theme.keycap-inset * 2);
+        height: Theme.keycap-height;
+        y: (parent.height - self.height) / 2;
+        border-radius: Theme.keycap-radius;
+        border-width: Theme.border-width;
+        border-color: root.lit ? Theme.field-focus : Theme.keycap-border;
+        if cap == "↵" || cap == "⇧": Image {
+            width: Theme.keycap-size; height: self.width; x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2;
+            source: cap == "↵" ? KeyIcons.enter : KeyIcons.shift; colorize: root.lit ? Theme.strong : Theme.keycap-text;
+        }
+        cap-text := Text {
+            text: cap == "↵" || cap == "⇧" ? "" : cap; color: root.lit ? Theme.strong : Theme.keycap-text;
+            font-size: Theme.keycap-size; font-weight: Theme.weight-medium;
+            horizontal-alignment: center; vertical-alignment: center;
+        }
+    }
+}
+
+// The slim line under the left half: where one is (or a short message) at the left, the main action and the actions
+// (Strg+K) at the right, each with its keys. A click does the same as the keys.
+export component Footer inherits Rectangle {
+    in property <bool> date;
+    in property <bool> menu-open;
+    in property <string> menu-label;
+    in property <string> label;
+    in property <string> toast;
+    in property <bool> toast-is-error;
+    in property <[FooterHint]> hints;
+    in property <image> success-icon;
+    in property <image> error-icon;
+    callback action(int);
+    callback menu();
+    // A message that went well fades after a while; an error stays until something else is shown.
+    private property <bool> toast-hidden;
+    changed toast => { root.toast-hidden = false; fade.running = root.toast != "" && !root.toast-is-error; }
+    fade := Timer { interval: Theme.toast-duration; running: false; triggered => { root.toast-hidden = true; self.running = false; } }
+    private property <bool> showing-toast: root.toast != "" && !root.toast-hidden;
+
+    height: Theme.footer-height;
+    Rectangle { y: 0px; height: Theme.border-width; background: Theme.divider; }
+    HorizontalLayout {
+        padding-left: Theme.padding - Theme.gap; padding-right: Theme.gap;
+        spacing: Theme.footer-gap;
+        HorizontalLayout {
+            horizontal-stretch: 1;
+            spacing: Theme.footer-gap;
+            alignment: start;
+            Rectangle {
+                width: Theme.footer-menu-size; height: self.width; y: (parent.height - self.height) / 2;
+                background: root.menu-open || menu-touch.has-hover ? Theme.hover : transparent;
+                border-radius: Theme.block-radius;
+                accessible-role: button; accessible-label: root.menu-label;
+                accessible-action-default => { root.menu(); }
+                Rectangle {
+                    x: (parent.width - Theme.footer-icon-size) / 2;
+                    y: (parent.height - Theme.footer-menu-line-gap) / 2 - Theme.footer-menu-stroke;
+                    width: Theme.footer-icon-size; height: Theme.footer-menu-stroke;
+                    border-radius: self.height / 2; background: root.menu-open || menu-touch.has-hover ? Theme.strong : Theme.muted;
+                }
+                Rectangle {
+                    x: (parent.width - Theme.footer-icon-size) / 2;
+                    y: (parent.height + Theme.footer-menu-line-gap) / 2;
+                    width: Theme.footer-icon-size * 0.65; height: Theme.footer-menu-stroke;
+                    border-radius: self.height / 2; background: root.menu-open || menu-touch.has-hover ? Theme.strong : Theme.muted;
+                }
+                menu-touch := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.menu(); } }
+            }
+            if root.showing-toast: Image {
+                width: Theme.footer-icon-size; height: Theme.footer-icon-size; y: (parent.height - self.height) / 2;
+                source: root.toast-is-error ? root.error-icon : root.success-icon;
+                colorize: root.toast-is-error ? Theme.error : Theme.success;
+            }
+            status := Text {
+                text: root.showing-toast ? root.toast : root.label;
+                color: root.showing-toast ? (root.toast-is-error ? Theme.error : Theme.text) : Theme.muted;
+                font-size: root.date && !root.showing-toast ? Theme.footer-date-size : Theme.footer-size;
+                vertical-alignment: center; overflow: elide; horizontal-stretch: 1;
+                // The whole message while the pointer is on it.
+                status-touch := TouchArea {}
+            }
+        }
+        for hint[i] in root.hints: HorizontalLayout {
+            spacing: Theme.footer-gap;
+            if i > 0: Rectangle { width: Theme.border-width; height: Theme.keycap-height - 4px; y: (parent.height - self.height) / 2; background: Theme.divider; }
+            Rectangle {
+                width: hint-row.preferred-width;
+                height: Theme.footer-height - Theme.gap;
+                y: (parent.height - self.height) / 2;
+                border-radius: Theme.block-radius;
+                background: hint-touch.has-hover ? Theme.hover : transparent;
+                hint-row := HorizontalLayout {
+                    padding-left: Theme.footer-gap / 2; padding-right: Theme.footer-gap / 2; spacing: Theme.footer-gap;
+                    Text { text: hint.label; color: i == 0 ? Theme.strong : Theme.muted; font-size: Theme.footer-size; font-weight: i == 0 ? Theme.weight-medium : Theme.weight-normal; vertical-alignment: center; }
+                    KeyCaps { caps: hint.caps; }
+                }
+                hint-touch := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.action(hint.action); } }
+            }
+        }
+    }
+    // The full footer text on hover when space is tight.
+    if status-touch.has-hover && status.preferred-width > status.width: Rectangle {
+        x: Theme.gap; y: -self.height - Theme.calendar-gap; width: min(root.width - Theme.gap * 2, whole.preferred-width + Theme.gap * 2);
+        height: whole.preferred-height + Theme.gap;
+        background: Theme.popover-background; border-radius: Theme.block-radius; border-width: Theme.border-width; border-color: Theme.popover-border;
+        whole := Text { x: Theme.gap; width: parent.width - Theme.gap * 2; text: status.text; color: status.color; font-size: Theme.footer-size; wrap: word-wrap; vertical-alignment: center; }
+    }
+}

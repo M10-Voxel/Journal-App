@@ -63,8 +63,7 @@ Große Stunden : Minuten. **←/→** wählt Stunden oder Minuten, **↑/↓** �
 ## Die Wiederholung (Enter auf Wiederholung)
 
 ```
- ⟳ Rhythmus   [Einmalig] [Täglich] [Werktags] [Wöchentlich]
-              [Zweiwöchentlich] [Monatlich] [Jährlich]
+ ⟳ Rhythmus   [D] [M-F] [W] [2W] [M] [Y]
  ▦ Einheit    [Tag] [Woche] [Monat] [Jahr]
  #  Alle      [1] Woche
  ▦ Am         (Mo) (Di) (Mi) (Do) (Fr) (Sa) (So)
@@ -79,8 +78,9 @@ Große Stunden : Minuten. **←/→** wählt Stunden oder Minuten, **↑/↓** �
 - In Zeilen mit **einer Wahl aus mehreren** (Rhythmus, Einheit, Muster, Bis) wird gewählt, worauf man sich bewegt.
 - Wochentage, Monate und die Pause schaltet die **Leertaste** (Wochentage auch **1–7**).
 - **Zahlen** (Abstand, Anzahl, Pause) werden getippt, **Shift+↑/↓** zählt.
-- **Daten** (Ab, Bis-Datum): **Shift+←/→** einen Tag, **Shift+↑/↓** eine Woche.
-- **Entf** setzt die Zeile zurück (im Rhythmus: einmalig).
+- **Ab** und **Bis-Datum** öffnen den Monatskalender per **Leertaste** oder Klick. Im Popup bewegen die Pfeile um einen Tag oder eine Woche, **Bild↑/↓** wechselt den Monat, **Pos1** springt zu heute. **Enter** oder ein Klick auf einen Tag übernimmt das Datum, **Esc** kehrt zur Wiederholung zurück.
+- Außerhalb des Popups ändern **Shift+←/→** das Datum um einen Tag und **Shift+↑/↓** um eine Woche.
+- **1–6** wählen einen Rhythmus. **Backspace** oder **Entf** auf „Rhythmus“ schaltet die Wiederholung aus.
 - Pause und „Nur in“ erscheinen nur, wo sie zur Einheit passen.
 - Jede Änderung erscheint sofort im Kalender.
 - **Enter** übernimmt und geht weiter, **Esc** stellt die Regel von vorher wieder her.
@@ -104,15 +104,15 @@ Ein Fehler steht rot direkt am betroffenen Feld, darunter in einer Zeile erklär
 | Strg+Q | J-TerminaL beenden |
 | Esc (ohne Optionen) | Feld zurücksetzen; dann Formular schließen (Entwurf verworfen); in der Suchleiste leeren, dann Fenster verstecken |
 
-**F1** (Standard) oder das Zahnrad neben der Suche öffnet die Tastenkürzel-Übersicht. Tippen durchsucht alle Bereiche. Ohne Suchbegriff wechseln **↑/↓** den Bereich, **Bild↑/Bild↓** blättert, **Esc** schließt die Einstellungen.
+**F1** (Standard) oder „Einstellungen“ im Menü unten links öffnet das Einstellungsfenster. Das Menü ist in Tagesansicht, Eintragsformular und Notizblock verfügbar. Tippen durchsucht die Optionen und Kürzel aller fünf Kategorien. **Strg+F** markiert den Suchtext. Die Pfeile in der Titelleiste und **Alt+←/→** blättern durch die besuchten Kategorien. Per Doppelklick auf die Titelleiste wechselst du zwischen normaler und maximierter Fenstergröße.
 
-Klicke zum Ändern auf ein bearbeitbares Kürzel. Per Tastatur wechselst du mit **Tab** zu den Kürzeln, wählst mit **↑/↓** eine Aktion und drückst **Enter**. Drücke die neue Kombination oder verwirf die Aufnahme mit **Esc**. Der Rücksetzpfeil oder **Entf** auf dem ausgewählten Kürzel stellt die Standardbelegung wieder her.
+**Tab** wechselt zwischen Suche, Kategorien und Optionen. Bei einer Suche wechselt Tab direkt zu den Treffern. **↑/↓** wählt eine Kategorie oder Zeile, **Bild↑/Bild↓** blättert. **Enter** oder ein Klick schaltet eine Option um, öffnet ihre Auswahl oder startet die Kürzelaufnahme. In einer Auswahlliste wählst du mit den Pfeilen und bestätigst mit Enter. **Esc** verwirft eine offene Auswahl oder Aufnahme. Sonst schließt Esc die Einstellungen und bringt die vorherige Eingabe zurück. Der Rücksetzpfeil oder **Entf** auf einem geänderten Kürzel stellt dessen Standardbelegung wieder her.
 
-Änderungen gelten sofort und werden lokal für J-TerminaL gespeichert. Das gilt auch für das globale Kürzel zum Ein- und Ausblenden. Eine Kombination kann in verschiedenen Bereichen unterschiedliche Aktionen auslösen. Grundtasten für Navigation und Texteingabe bleiben fest belegt.
+Unter **Allgemein** wählst du Fensterposition, Startansicht, Verhalten beim Öffnen und bei Fokusverlust, Sprache und Tastenhinweise. **Eintragsformular** steuert die Erkennung von Angaben im Titel und die Dauer der Speicherbestätigung. **Kalender** steuert Wochenangaben, Wochenenden und die aktuelle Zeitmarke. **Notizblock** legt den anfänglichen Tagesfilter und die Lese- oder Bearbeitungsansicht fest. J-TerminaL speichert die Auswahl lokal. Unter **Tastatur** kannst du auch das globale Kürzel zum Ein- und Ausblenden ändern. Eine Kombination kann in verschiedenen Bereichen unterschiedliche Aktionen auslösen. Grundtasten für Navigation und Texteingabe bleiben fest belegt.
 
 ## Die Suchleiste (links oben)
 
-Beim Öffnen hat die **Suchleiste** die Tastatur; darunter steht die **Tagesansicht** (siehe unten). Mit `/` beginnen Befehle, sie erscheinen beim Tippen darunter (↑/↓ wählen, Tab vervollständigt, Enter führt aus):
+Mit der voreingestellten Startansicht hat die **Suchleiste** beim Öffnen den Fokus. Darunter steht die **Tagesansicht**. Befehle beginnen mit `/` und erscheinen beim Tippen unter der Suchleiste. ↑/↓ wählt einen Befehl, Tab vervollständigt ihn und Enter führt ihn aus.
 
 | Befehl | Wirkung |
 |---|---|

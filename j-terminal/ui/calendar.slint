@@ -41,6 +41,12 @@ export component Calendar inherits Rectangle {
     background: Theme.cal-background;
     property <length> label-x: Theme.cal-pad + Theme.cal-lanes * Theme.cal-lane-width;
 
+    // Everything that scrolls is cut under the head, so the head needs no ground of its own.
+    Rectangle {
+    y: Theme.cal-head-height; width: root.width; height: max(0px, root.height - Theme.cal-head-height);
+    clip: true;
+    Rectangle {
+    y: -Theme.cal-head-height; width: root.width; height: root.height;
     for band in root.bands: Rectangle {
         y: band.y;
         height: band.h;
@@ -60,7 +66,7 @@ export component Calendar inherits Rectangle {
         if band.open: Rectangle { x: root.label-x - Theme.calendar-gap; width: Theme.border-width * 2; height: parent.height; background: Theme.accent; opacity: Theme.cal-open-opacity; }
         if band.cursor: Rectangle {
             x: Theme.cal-pad / 2; width: root.width - Theme.cal-pad; height: parent.height;
-            border-width: Theme.border-width; border-color: Theme.accent; border-radius: Theme.block-radius;
+            border-width: Theme.border-width; border-color: Theme.cal-cursor; border-radius: Theme.block-radius;
         }
     }
     // The hours: a line at each mark over all days, stronger every six hours.
@@ -79,12 +85,12 @@ export component Calendar inherits Rectangle {
         background: block.point ? transparent : block.color.with-alpha(Theme.cal-fill);
         border-radius: Theme.cal-stroke-radius;
         border-width: block.fresh && !block.point ? Theme.cal-fresh-border : 0px;
-        border-color: Theme.text;
+        border-color: Theme.strong;
         opacity: block.done ? Theme.cal-done-opacity : 1;
         if block.point: Rectangle {
             x: 0px; y: parent.caption-top; width: parent.width; height: parent.caption-height;
             background: block.color.with-alpha(Theme.cal-fill); border-radius: min(Theme.cal-point-bar-radius, self.height / 2);
-            border-width: block.fresh ? Theme.cal-fresh-border : 0px; border-color: Theme.text;
+            border-width: block.fresh ? Theme.cal-fresh-border : 0px; border-color: Theme.strong;
         }
         if !block.cut && !block.point: Rectangle { x: 0px; width: min(Theme.cal-block-edge, parent.width); background: block.color; border-radius: Theme.cal-stroke-radius; }
         if self.show-icon: Image {
@@ -110,7 +116,7 @@ export component Calendar inherits Rectangle {
         background: chip.dot ? (chip.has-icon ? transparent : chip.color) : chip.color.with-alpha(Theme.cal-fill);
         border-radius: chip.dot ? chip.w / 2 : Theme.cal-stroke-radius;
         border-width: chip.fresh ? Theme.cal-fresh-border : 0px;
-        border-color: Theme.text;
+        border-color: Theme.strong;
         opacity: chip.done ? Theme.cal-done-opacity : 1;
         if !chip.dot: Rectangle { x: 0px; width: Theme.cal-block-edge; background: chip.color; border-radius: Theme.cal-stroke-radius; }
         if chip.has-icon: Image {
@@ -127,7 +133,7 @@ export component Calendar inherits Rectangle {
         background: lane.color.with-alpha(Theme.cal-lane-fill);
         border-radius: Theme.cal-stroke-radius;
         border-width: lane.fresh ? Theme.cal-fresh-border : 0px;
-        border-color: Theme.text;
+        border-color: Theme.strong;
         opacity: lane.done ? Theme.cal-done-opacity : 1;
         clip: true;
         Rectangle { x: 0px; width: Theme.cal-lane-core; background: lane.color; }
@@ -147,7 +153,7 @@ export component Calendar inherits Rectangle {
         border-width: Theme.focus-ring; border-color: Theme.accent; border-radius: Theme.block-radius;
     }
     if root.has-now: Rectangle { x: root.now-x; y: root.now-y; width: Theme.cal-now-width; height: root.now-h; background: Theme.cal-now; }
-    // Month boundaries stay visible over the hour grid and long entries' lanes.
+    // Month boundaries stay visible over the hour grid and long entries' lanes: a lighter band, an accent line on top.
     for band in root.bands: Rectangle {
         visible: band.kind == 1;
         y: band.y; width: root.width; height: band.h;
@@ -157,19 +163,25 @@ export component Calendar inherits Rectangle {
             x: Theme.cal-month-label-inset; width: parent.width - self.x * 2; height: parent.height;
             text: band.label; color: Theme.strong; font-size: Theme.cal-month-size; font-weight: Theme.weight-semibold; vertical-alignment: center;
         }
-        Rectangle { x: 0px; y: parent.height - Theme.border-width; width: parent.width; height: Theme.border-width; background: Theme.divider; }
     }
-    // The header stays: the month and the hours shown.
+    }
+    }
+    // The header stays, as high as the top line at the left: the month large, the hours under it at the right.
     Rectangle {
         y: 0px; height: Theme.cal-head-height; width: root.width;
-        background: Theme.background;
-        Image { x: Theme.cal-pad; y: (parent.height - self.height) / 2; width: Theme.cal-icon-size; height: Theme.cal-icon-size; source: root.icon; colorize: Theme.muted; }
-        Text { x: Theme.cal-pad + Theme.cal-icon-size + Theme.gap; width: root.time-x - self.x; height: parent.height; text: root.title; color: Theme.strong; font-size: Theme.cal-date-size; font-weight: Theme.weight-semibold; vertical-alignment: center; overflow: elide; }
-        for tick in root.ticks: Text {
-            x: tick.x + Theme.cal-tick-inset; height: parent.height;
-            text: tick.label; font-family: Theme.write-font; color: Theme.placeholder; font-size: Theme.cal-time-size; vertical-alignment: center;
+        Text {
+            x: Theme.padding; width: max(0px, root.time-x - self.x - Theme.gap); height: parent.height - Theme.cal-head-ticks-height / 2;
+            text: root.title; color: Theme.strong; font-size: Theme.cal-head-title-size; font-weight: Theme.weight-semibold; vertical-alignment: center; overflow: elide;
         }
-        Rectangle { y: parent.height - Theme.border-width; height: Theme.border-width; background: Theme.divider; }
+        for tick in root.ticks: Text {
+            x: tick.x + Theme.cal-tick-inset; y: parent.height - Theme.cal-head-ticks-height; height: Theme.cal-head-ticks-height;
+            text: tick.label; font-family: Theme.write-font; color: tick.strong ? Theme.muted : Theme.placeholder; font-size: Theme.cal-time-size; vertical-alignment: center;
+        }
+        // The keyboard is in the calendar: the line under the head in the accent.
+        Rectangle {
+            y: parent.height - self.height; height: root.focused ? Theme.cal-focus-line : Theme.border-width;
+            background: root.focused ? Theme.accent : Theme.divider;
+        }
     }
     TouchArea {
         pointer-event(event) => {
@@ -186,5 +198,4 @@ export component Calendar inherits Rectangle {
             accept
         }
     }
-    if root.focused: Rectangle { border-width: Theme.border-width; border-color: Theme.accent; }
 }

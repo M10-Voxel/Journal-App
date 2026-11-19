@@ -2,14 +2,17 @@ import { KeyBindings, ShortcutContext, RoutedKey } from "key-bindings.slint";
 export { KeyBindings, ShortcutContext, RoutedKey }
 import { JournalIcons } from "journal-icons.slint";
 export { JournalIcons }
-import { NotepadEditor, NotepadAction, NotepadChoiceRow, NotepadMarkdownRow, NotepadTool, NotepadIndent, NotepadImage, NotepadLabels } from "notepad.slint";
+import { NotepadEditor, NotepadChoiceRow, NotepadMarkdownRow, NotepadTool, NotepadIndent, NotepadImage, NotepadLabels } from "notepad.slint";
 export { NotepadChoiceRow, NotepadMarkdownRow, NotepadTool, NotepadIndent, NotepadImage, NotepadLabels }
 import { Theme } from "theme.slint";
 export { Theme }
-import { ShortcutSettings, ShortcutRow, ShortcutLabels } from "shortcuts.slint";
-export { ShortcutRow, ShortcutLabels }
+export { SettingsWindow, SettingsRow, SettingsLabels, SettingsCategory, PreferenceKey, RowControl } from "shortcuts.slint";
 import { Calendar, CalBand, CalBlock, CalChip, CalLane, CalTick } from "calendar.slint";
 export { CalBand, CalBlock, CalChip, CalLane, CalTick }
+import { Footer, FooterHint, KeyCaps, KeyIcons } from "footer.slint";
+export { FooterHint, KeyIcons }
+import { ActionPopover, MenuRow, SideRow, MonthCell } from "actions.slint";
+export { MenuRow, SideRow, MonthCell }
 // A command offered under the search bar.
 export struct CommandRow { name: string, detail: string }
 // One field of the form: its line (as shown), its place in the line ("when" has three), the line's label and icon on
@@ -20,27 +23,38 @@ export struct ChoiceRow { index: int, label: string, has-color: bool, color: col
 // A choice of the repetition. kind: 0 one of several, 1 switched on/off, 2 a number, 3 a date; `after` follows it.
 export struct SentencePart { text: string, kind: int, selected: bool, focused: bool, slot: int, value: int, after: string }
 export struct SentenceLine { label: string, has-icon: bool, icon: image, parts: [SentencePart] }
-// A line of the day view. kind: 0 a section's heading, 1 an entry, 2 a value (bar), 3 an activity, 4 a quiet empty line.
-// `detail`: the entry's time, the heading's count, the value, the activity's minutes. `fill`: the value's bar (0–1).
 // A line of the day view. kind: 0 a section's heading, 1 an entry, 3 an activity, 4 a quiet empty line, 5 the day's title,
 // 6 a timer of another day, 7 the dials. `item` is what the keyboard and the mouse choose (-1 none).
+// `detail`: the entry's time, the heading's count, the activity's minutes.
 export struct DialCell { color: color, raw: int, low: int, high: int, item: int, label: string, value: string, image: image, selected: bool }
 export struct DayRow { top: length, tall: length, column: int, kind: int, item: int, label: string, detail: string, icon: image, has-tag-icon: bool, tag-icon: image, has-color: bool, color: color,
-    done: bool, priority: bool, trace: bool, foreign: bool, selected: bool, editing: bool, track: bool, has-timer: bool, timer-running: bool, timer-clock: string, dials: [DialCell] }
-// A line of the panel at the left (a setting, a tag, a reminder, an icon) and a day of its month.
-export struct SideRow { has-icon: bool, icon: image, label: string, value: string, selected: bool, on: bool, has-color: bool, color: color, danger: bool }
-export struct MonthCell { label: string, in-month: bool, today: bool, cursor: bool, picked: bool, own: bool }
+    done: bool, priority: bool, trace: bool, foreign: bool, selected: bool, editing: bool, track: bool, has-timer: bool, timer-running: bool, timer-clock: string,
+    // The dials' line: how many side by side, the width of each, the ring's size, the height of a line of them.
+    dial-columns: int, dial-cell: length, dial-size: length, dial-row: length, dials: [DialCell] }
 
+// A section's heading, as Raycast's: small, grey, its count beside it.
 component DayHeading inherits Rectangle {
     in property <DayRow> data;
     HorizontalLayout {
         y: Theme.day-section-top; height: parent.height - Theme.day-section-top;
         spacing: Theme.gap; alignment: start;
-        Image { width: Theme.day-heading-icon; height: Theme.day-heading-icon; y: (parent.height - self.height) / 2; source: root.data.icon; colorize: Theme.accent; }
-        Text { text: root.data.label; color: Theme.strong; font-size: Theme.day-heading-size; font-weight: Theme.weight-semibold; vertical-alignment: center; }
-        Text { text: root.data.detail; color: Theme.placeholder; font-family: Theme.write-font; font-size: Theme.day-count-size; vertical-alignment: center; }
+        Text { text: root.data.label; color: Theme.muted; font-size: Theme.day-heading-size; font-weight: Theme.weight-medium; vertical-alignment: center; }
+        Text { text: root.data.detail; color: Theme.placeholder; font-size: Theme.day-count-size; vertical-alignment: center; }
     }
-    Rectangle { y: parent.height - self.height; height: Theme.border-width; background: Theme.divider; }
+}
+
+// A small square that reacts to the pointer: an icon to click.
+component IconSpot inherits Rectangle {
+    in property <image> icon;
+    in property <color> tint: Theme.muted;
+    in property <length> icon-size: Theme.day-tag-icon-size;
+    callback clicked;
+    out property <bool> hovered: spot-touch.has-hover;
+    width: Theme.day-symbol-box; height: Theme.day-symbol-box;
+    border-radius: Theme.block-radius;
+    background: spot-touch.has-hover ? Theme.hover : transparent;
+    Image { width: root.icon-size; height: root.icon-size; x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2; source: root.icon; colorize: spot-touch.has-hover ? Theme.strong : root.tint; }
+    spot-touch := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.clicked(); } }
 }
 
 component DayActivity inherits Rectangle {
@@ -57,7 +71,7 @@ component DayActivity inherits Rectangle {
             background: tick-touch.has-hover ? Theme.hover : transparent;
             Image {
                 width: Theme.day-symbol-size; height: Theme.day-symbol-size; x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2;
-                source: root.data.icon; colorize: root.data.done || root.data.kind == 6 ? (root.data.has-color ? root.data.color : Theme.accent) : Theme.placeholder;
+                source: root.data.icon; colorize: root.data.done || root.data.kind == 6 ? (root.data.has-color ? root.data.color : Theme.strong) : Theme.placeholder;
             }
             tick-touch := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.clicked(root.data.item, 1); } }
         }
@@ -67,19 +81,15 @@ component DayActivity inherits Rectangle {
         }
         if root.data.detail != "": Text { text: root.data.detail; color: Theme.muted; font-family: Theme.write-font; font-size: Theme.write-size; vertical-alignment: center; }
         if root.data.has-timer: Text { text: root.data.timer-clock; color: root.data.timer-running ? Theme.accent : Theme.muted; font-family: Theme.write-font; font-size: Theme.write-size; vertical-alignment: center; }
-        if root.data.track: Rectangle {
-            width: Theme.day-symbol-box; height: Theme.day-symbol-box; y: (parent.height - self.height) / 2;
-            border-radius: Theme.block-radius; background: play-touch.has-hover ? Theme.hover : transparent;
-            Image { width: Theme.day-tag-icon-size; height: Theme.day-tag-icon-size; x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2;
-                source: root.data.timer-running ? root.icon-pause : root.icon-play; colorize: root.data.timer-running ? Theme.accent : Theme.placeholder; }
-            play-touch := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.clicked(root.data.item, 2); } }
+        if root.data.track: IconSpot {
+            y: (parent.height - self.height) / 2;
+            icon: root.data.timer-running ? root.icon-pause : root.icon-play; tint: root.data.timer-running ? Theme.accent : Theme.placeholder;
+            clicked => { root.clicked(root.data.item, 2); }
         }
-        if root.data.has-timer: Rectangle {
-            width: Theme.day-symbol-box; height: Theme.day-symbol-box; y: (parent.height - self.height) / 2;
-            border-radius: Theme.block-radius; background: stop-touch.has-hover ? Theme.hover : transparent;
-            Image { width: Theme.day-tag-icon-size; height: Theme.day-tag-icon-size; x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2;
-                source: root.icon-stop; colorize: Theme.placeholder; }
-            stop-touch := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.clicked(root.data.item, 3); } }
+        if root.data.has-timer: IconSpot {
+            y: (parent.height - self.height) / 2;
+            icon: root.icon-stop; tint: Theme.placeholder;
+            clicked => { root.clicked(root.data.item, 3); }
         }
     }
 }
@@ -110,7 +120,6 @@ export component Bar inherits Window {
     in property <int> active-line;
     in property <int> active-cell;
     in property <bool> active-multi;
-    in property <bool> more-open;
     // The input shows the active field's text; otherwise the keys go to the field's switch or its open options.
     in property <bool> editable;
     in property <bool> native-arrows;
@@ -119,10 +128,18 @@ export component Bar inherits Window {
     in property <[image]> type-icons;
     in property <int> type-selected;
     in property <string> placeholder;
+    // The title and the type in the top line; the flag beside them.
+    in property <string> title-text;
+    in property <string> title-hint;
+    in property <bool> in-header;
+    in property <bool> title-error;
+    in property <bool> entry-priority;
     in-out property <string> text <=> input.text;
     callback edited(string);
     // Every key the form has a use for: the key's number and the modifiers (1 Shift, 2 Strg, 4 Alt).
     callback form-key(int, int);
+    // A click on a field of the form (its index).
+    callback field-clicked(int);
     // The open options: 0 none, 1 tags, 2 icons, 3 reminders, 4 the repetition, 5 the clock, 6 the calendar.
     in property <int> panel-kind;
     in property <[ChoiceRow]> choices;
@@ -155,7 +172,6 @@ export component Bar inherits Window {
     in property <length> cal-caret-h;
     in property <bool> cal-focus;
     changed cal-focus => { if root.stacked { page-scroll.content-y = root.cal-focus ? min(0px, root.height - root.full-height) : 0px; } }
-    changed side-open => { if root.side-open && root.stacked { page-scroll.content-y = 0px; } }
     callback cal-mouse(int, int, length, length, bool);
     callback cal-wheel(length, length, bool, bool);
     callback calendar-resized(length, length);
@@ -224,9 +240,10 @@ export component Bar inherits Window {
     callback open-notepad;
     callback notepad-edited(bool, string);
     callback notepad-finish(bool);
+    // A short message in the footer (saved, an error); errors stay until the next.
     in property <string> notice;
     in property <bool> notice-is-error;
-    // The day view under the search bar while no form is open.
+    // The day view under the search bar while no form is open; its day beside the search.
     in property <string> day-heading;
     in property <string> day-relative;
     in property <bool> day-is-today;
@@ -234,11 +251,8 @@ export component Bar inherits Window {
     in property <[DayRow]> day-footer-rows;
     in property <length> day-footer-height;
     in property <bool> day-focus-footer;
-    in property <[image]> day-new-icons;
     in property <string> day-title-placeholder;
     in property <string> day-edit-text;
-    in property <string> day-message;
-    in property <bool> day-message-is-error;
     in property <length> day-focus-y;
     in property <length> day-focus-h;
     in property <image> icon-play;
@@ -247,14 +261,18 @@ export component Bar inherits Window {
     in property <image> icon-close;
     in property <image> icon-back;
     in property <image> icon-forward;
+    in property <image> icon-arrow-back;
+    in property <image> icon-flag;
+    in property <image> icon-chevron-down;
+    in property <image> icon-success;
+    in property <image> icon-error;
     callback day-today();
-    // Every key the day view (and its panel) has a use for: the key's text and the modifiers (1 Shift, 2 Strg, 4 Alt).
+    // Every key the day view (and its pickers) has a use for: the key's text and the modifiers (1 Shift, 2 Strg, 4 Alt).
     callback day-key(string, int);
     callback day-edited(string);
-    // A click on a line: its item and the part (0 text, 1 symbol, 2 timer start/pause, 3 timer stop).
+    // A click on a line: its item and the part (0 text, 1 symbol, 2 timer start/pause, 3 timer stop, 4 right click,
+    // 5 the flag).
     callback day-click(int, int);
-    // A new entry from the mouse: 0 event, 1 task, 2 note.
-    callback day-create(int);
     // A dial: where the pointer is from its centre; the wheel over it.
     out property <bool> dragging-dial;
     in property <length> day-list-height;
@@ -262,7 +280,7 @@ export component Bar inherits Window {
     callback dial-set(int, int, bool);
     callback dial-point(int, length, length);
     callback dial-wheel(int, length);
-    // The panel at the left.
+    // An entry's picker in the popover (tags, icons, reminders, clock, month, description).
     in property <bool> side-open;
     in property <int> side-focus-index: -1;
     in property <int> side-kind;
@@ -289,26 +307,27 @@ export component Bar inherits Window {
     callback side-back();
     // The clock: a part clicked (steps 0) or turned with the wheel.
     callback side-clock(bool, int);
-    in property <[string]> shortcut-groups;
-    in property <[ShortcutRow]> shortcut-rows;
-    in property <ShortcutLabels> shortcut-labels;
-    in property <image> settings-icon;
-    out property <bool> settings-open: settings-popup.is-open;
-    out property <bool> shortcut-recording;
-    callback shortcut-lookup(int, string);
-    callback shortcut-update(string, string, int) -> string;
-    callback shortcut-editable-row(int, int) -> int;
-    function open-settings() {
-        if !root.settings-open {
-            root.shortcut-recording = false;
-            root.shortcut-lookup(0, "");
-            settings-popup.show();
-        }
-    }
-    public function close-settings() {
-        if root.settings-open { settings-popup.close(); }
-        root.shortcut-recording = false;
-    }
+    // The actions behind Strg+K.
+    in property <bool> menu-open;
+    in property <bool> app-menu;
+    in property <string> menu-title;
+    in property <[MenuRow]> menu-rows;
+    in property <int> menu-pick;
+    in property <string> menu-placeholder;
+    in property <string> menu-empty;
+    callback toggle-menu();
+    callback menu-edited(string);
+    callback menu-key(string, int);
+    callback menu-choose(int);
+    private property <int> popover-focus;
+    // The footer: where one is, its main action and the actions.
+    in property <string> footer-label;
+    in property <[FooterHint]> footer-hints;
+    in property <bool> footer-date;
+    in property <string> footer-menu-label;
+    callback app-menu-clicked();
+    callback footer-action(int);
+    callback open-settings();
     private property <length> value-x: Theme.padding + Theme.label-width;
     public function focus-input() { input.focus(); }
     public function focus-line() { if root.entry-open { input.focus(); input.select-all(); } else if root.notepad-open { root.focus-notepad(); } else { search.focus(); } }
@@ -316,6 +335,7 @@ export component Bar inherits Window {
     public function focus-entry() { input.focus(); input.select-all(); }
     public function focus-search() { search.focus(); }
     public function focus-day() { day-scope.focus(); }
+    public function focus-menu() { root.popover-focus += 1; }
     public function select-text() { input.select-all(); }
     // Where a field of a line lies: "when" has the date, the start and the end side by side.
     pure function cell-x(cell: int) -> length {
@@ -326,28 +346,26 @@ export component Bar inherits Window {
     }
     pure function mods(shift: bool, control: bool, alt: bool) -> int { return (shift ? 1 : 0) + (control ? 2 : 0) + (alt ? 4 : 0); }
 
-    in property <length> screen-width: Theme.width + Theme.side-width + Theme.border-width;
+    in property <length> screen-width: Theme.width + Theme.border-width;
     in property <length> screen-height: Theme.calendar-height * 4;
     out property <bool> stacked: root.screen-width < Theme.width;
-    property <float> side-reveal: root.side-open ? 1 : 0;
-    animate side-reveal { duration: Theme.side-slide-duration; easing: ease-out; }
-    property <length> side-space: root.stacked ? 0px : (Theme.side-width + Theme.border-width) * root.side-reveal;
-    property <length> side-natural-height: min(Theme.side-stacked-max-height, side-layout.preferred-height);
-    property <length> side-height: root.stacked ? (root.side-natural-height + Theme.border-width) * root.side-reveal : 0px;
-    out property <length> content-width: root.stacked ? min(root.screen-width, Theme.calendar-width) : min(root.screen-width, Theme.width + root.side-space);
+    out property <length> content-width: root.stacked ? min(root.screen-width, Theme.calendar-width) : min(root.screen-width, Theme.width);
     out property <length> form-space: root.stacked ? root.content-width : Theme.form-width;
     property <length> stacked-height: min(root.screen-height, Theme.calendar-height * 2);
     property <length> preferred-pane-height: root.stacked
-        ? max(Theme.stacked-day-min-height, (root.stacked-height - root.side-height) * Theme.stacked-day-share)
+        ? max(Theme.stacked-day-min-height, root.stacked-height * Theme.stacked-day-share)
         : Theme.calendar-height;
     property <length> pane-height: max(layout.preferred-height, root.preferred-pane-height);
     property <length> calendar-height: root.stacked
-        ? max(Theme.stacked-calendar-min-height, root.stacked-height - root.side-height - root.pane-height - Theme.border-width)
+        ? max(Theme.stacked-calendar-min-height, root.stacked-height - root.pane-height - Theme.border-width)
         : root.pane-height;
-    property <length> full-height: root.stacked
-        ? root.side-height + root.pane-height + Theme.border-width + root.calendar-height
-        : root.pane-height;
+    property <length> full-height: root.stacked ? root.pane-height + Theme.border-width + root.calendar-height : root.pane-height;
     out property <length> content-height: min(root.full-height, root.screen-height);
+    // The top line of the form: where the title's input begins and how much room the type and the flag leave it.
+    property <length> title-x: Theme.padding + Theme.back-size + Theme.gap;
+    property <length> title-width: root.form-space - root.title-x - Theme.padding - type-chip.width - flag.width - Theme.accessory-gap * 2;
+    property <bool> type-list-open;
+    changed entry-open => { root.type-list-open = false; }
     title: "J-TerminaL";
     no-frame: true;
     always-on-top: true;
@@ -359,7 +377,7 @@ export component Bar inherits Window {
         x: 0px; y: 0px; width: root.width; height: root.height;
         capture-key-pressed(raw-event) => {
             let event = KeyBindings.translate(ShortcutContext.window, raw-event);
-            if event.text == Key.F1 && !root.settings-open {
+            if event.text == Key.F1 {
                 if !event.repeat { root.open-settings(); }
                 return accept;
             }
@@ -368,12 +386,15 @@ export component Bar inherits Window {
                 if !event.repeat { root.open-notepad(); }
                 return accept;
             }
+            // The actions, from anywhere (Strg+K).
+            if event.modifiers.control && !event.modifiers.shift && !event.modifiers.alt && (event.text == "k" || event.text == "K") {
+                if !event.repeat { root.toggle-menu(); }
+                return accept;
+            }
             reject
         }
     Rectangle {
         background: Theme.background;
-        border-color: Theme.background;
-        border-width: Theme.border-width;
         border-radius: Theme.radius;
         clip: true;
     page-scroll := Flickable {
@@ -381,365 +402,164 @@ export component Bar inherits Window {
     interactive: !root.dragging-dial;
     content-height: root.full-height;
     content-width: root.width;
-    // ----- The panel that comes out at the left: an entry's settings and its pickers -----
-    side-slot := Rectangle {
-        x: 0px; y: 0px;
-        width: root.stacked ? root.content-width : root.side-space;
-        height: root.stacked ? root.side-height : root.pane-height;
-        clip: true;
-        visible: root.side-reveal > 0;
-        side-scroll := Flickable {
-            x: root.stacked ? 0px : parent.width - self.width - Theme.border-width;
-            y: root.stacked ? parent.height - self.height - Theme.border-width : 0px;
-            width: root.stacked ? parent.width : Theme.side-width;
-            height: root.stacked ? root.side-natural-height : root.pane-height;
-            content-width: self.width;
-            content-height: max(self.height, side-layout.min-height);
-        side-layout := VerticalLayout {
-            x: 0px; y: 0px;
-            width: side-scroll.width; height: side-scroll.content-height;
-            padding: Theme.side-padding; spacing: Theme.panel-spacing;
-            // The entry, and a quiet way to close the panel.
-            HorizontalLayout {
-                spacing: Theme.gap;
-                Text { text: root.side-title; color: Theme.strong; font-family: Theme.write-font; font-size: Theme.form-size; font-weight: Theme.weight-medium; overflow: elide; vertical-alignment: center; horizontal-stretch: 1; }
-                Rectangle {
-                    width: Theme.day-symbol-box; height: Theme.day-symbol-box;
-                    border-radius: Theme.block-radius; background: close-touch.has-hover ? Theme.hover : transparent;
-                    Image { width: Theme.day-tag-icon-size; height: Theme.day-tag-icon-size; x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2; source: root.icon-close; colorize: Theme.placeholder; }
-                    close-touch := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.side-close(); } }
-                }
-            }
-            // A picker's heading (a click: back to the settings).
-            if root.side-kind > 0: HorizontalLayout {
-                spacing: Theme.gap; alignment: start;
-                Image { width: Theme.label-icon-size; height: Theme.label-icon-size; y: (parent.height - self.height) / 2; source: root.icon-back; colorize: Theme.placeholder;
-                    TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.side-back(); } } }
-                Image { width: Theme.label-icon-size; height: Theme.label-icon-size; y: (parent.height - self.height) / 2; source: root.side-heading-icon; colorize: Theme.accent; }
-                Text { text: root.side-heading; color: Theme.strong; font-size: Theme.row-size; font-weight: Theme.weight-semibold; vertical-alignment: center; }
-            }
-            // The settings and the lists (tags, reminders): a line each.
-            if root.side-kind == 0 || root.side-kind == 1 || root.side-kind == 3: Flickable {
-                vertical-stretch: 1;
-                min-height: Theme.side-row-height;
-                preferred-height: side-list.preferred-height;
-                property <int> focused-row: root.side-focus-index;
-                changed focused-row => {
-                    if self.focused-row >= 0 {
-                        let top = self.focused-row * (Theme.side-row-height + Theme.choice-spacing);
-                        self.content-y = min(0px, max(min(self.content-y, -top), self.height - top - Theme.side-row-height));
-                    }
-                }
-                content-height: side-list.preferred-height;
-                side-list := VerticalLayout {
-                    x: 0px; y: 0px;
-                    width: parent.width; height: self.preferred-height;
-                    spacing: Theme.choice-spacing;
-                    for line[i] in root.side-rows: Rectangle {
-                        height: Theme.side-row-height;
-                        border-radius: Theme.block-radius;
-                        background: line.selected ? Theme.row-selection : line-touch.has-hover ? Theme.hover : transparent;
-                        HorizontalLayout {
-                            padding-left: Theme.gap; padding-right: Theme.gap; spacing: Theme.gap;
-                            if line.has-icon: Image { width: Theme.label-icon-size; height: Theme.label-icon-size; y: (parent.height - self.height) / 2; source: line.icon;
-                                colorize: line.danger ? Theme.error : line.has-color ? line.color : line.on ? Theme.accent : Theme.muted; }
-                            if !line.has-icon && line.has-color: Rectangle { width: Theme.tag-dot; height: Theme.tag-dot; y: (parent.height - self.height) / 2; border-radius: self.width / 2; background: line.color; }
-                            Text { text: line.label; color: line.danger ? Theme.error : line.on ? Theme.chip-selected-text : line.selected ? Theme.strong : Theme.text; font-size: Theme.row-size; vertical-alignment: center; horizontal-stretch: 1; overflow: elide; }
-                            if line.value != "": Text { text: line.value; color: Theme.muted; font-size: Theme.small-size; vertical-alignment: center; overflow: elide; max-width: Theme.side-value-width; }
-                            if line.on && line.value == "": Rectangle { width: Theme.tag-dot; height: Theme.tag-dot; y: (parent.height - self.height) / 2; border-radius: self.width / 2; background: Theme.accent; }
-                        }
-                        line-touch := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.side-choose(i); } }
-                    }
-                }
-            }
-            // The icons: a search and a grid.
-            if root.side-kind == 2: Rectangle {
-                height: Theme.search-height;
-                background: Theme.field-background; border-radius: Theme.field-radius;
-                border-width: Theme.border-width; border-color: Theme.field-focus;
-                if root.side-text-shown == "": Text { x: Theme.field-inset; height: parent.height; vertical-alignment: center; text: root.side-placeholder; color: Theme.placeholder; font-size: Theme.row-size; }
-                TextInput {
-                    x: Theme.field-inset; width: parent.width - Theme.field-inset * 2; height: parent.height;
-                    text: root.side-text; single-line: true; vertical-alignment: center; color: Theme.strong; font-size: Theme.row-size;
-                    selection-background-color: Theme.selection; selection-foreground-color: Theme.strong;
-                    property <bool> open: root.side-open;
-                    init => { if self.open { self.focus(); } }
-                    changed open => { if self.open { self.focus(); } }
-                    edited => { root.side-edited(self.text); }
-                    key-pressed(raw-event) => {
-                        let event = KeyBindings.translate(ShortcutContext.side, raw-event);
-                        if event.text == Key.Control || event.text == Key.Shift || event.text == Key.Alt || event.text == Key.Meta { return reject; }
-                        if event.text == Key.Return || event.text == Key.Escape || event.text == Key.UpArrow || event.text == Key.DownArrow || (event.modifiers.control && event.text == Key.Delete)
-                            || ((event.text == Key.LeftArrow || event.text == Key.RightArrow) && self.text == "") {
-                            root.day-key(event.text, root.mods(event.modifiers.shift, event.modifiers.control, event.modifiers.alt));
-                            return accept;
-                        }
-                        reject
-                    }
-                }
-            }
-            if root.side-kind == 2: Rectangle {
-                height: Math.ceil(root.side-rows.length / Theme.side-icon-columns) * Theme.side-icon-cell;
-                for line[i] in root.side-rows: Rectangle {
-                    x: Math.mod(i, Theme.side-icon-columns) * Theme.side-icon-cell;
-                    y: Math.floor(i / Theme.side-icon-columns) * Theme.side-icon-cell;
-                    width: Theme.side-icon-cell - Theme.calendar-gap; height: Theme.side-icon-cell - Theme.calendar-gap;
-                    border-radius: Theme.block-radius;
-                    background: line.selected ? Theme.chip-selected : icon-touch.has-hover ? Theme.hover : transparent;
-                    border-width: line.selected ? Theme.border-width : 0px; border-color: Theme.accent;
-                    Image { width: Theme.icon-size; height: Theme.icon-size; x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2; source: line.icon; colorize: line.selected || line.on ? Theme.accent : Theme.muted; }
-                    icon-touch := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.side-choose(i); } }
-                }
-            }
-            // The clock: big hours and minutes; the wheel or ↑/↓ change the part with the arrows.
-            if root.side-kind == 4: HorizontalLayout {
-                alignment: center; spacing: Theme.gap;
-                Rectangle {
-                    width: side-hours.preferred-width + Theme.clock-inset * 2; height: Theme.clock-box-height;
-                    background: !root.side-clock-on-minutes ? Theme.selection : Theme.field-background; border-radius: Theme.block-radius;
-                    border-width: !root.side-clock-on-minutes ? Theme.focus-ring : 0px; border-color: Theme.accent;
-                    side-hours := Text { text: root.side-clock-hours; font-family: Theme.write-font; font-size: Theme.clock-size; color: Theme.text; horizontal-alignment: center; vertical-alignment: center; }
-                    TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.side-clock(false, 0); } scroll-event(event) => { root.side-clock(false, event.delta-y > 0 ? 1 : -1); accept } }
-                }
-                Text { text: ":"; font-family: Theme.write-font; font-size: Theme.clock-size; color: Theme.muted; vertical-alignment: center; }
-                Rectangle {
-                    width: side-minutes.preferred-width + Theme.clock-inset * 2; height: Theme.clock-box-height;
-                    background: root.side-clock-on-minutes ? Theme.selection : Theme.field-background; border-radius: Theme.block-radius;
-                    border-width: root.side-clock-on-minutes ? Theme.focus-ring : 0px; border-color: Theme.accent;
-                    side-minutes := Text { text: root.side-clock-minutes; font-family: Theme.write-font; font-size: Theme.clock-size; color: Theme.text; horizontal-alignment: center; vertical-alignment: center; }
-                    TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.side-clock(true, 0); } scroll-event(event) => { root.side-clock(true, event.delta-y > 0 ? 1 : -1); accept } }
-                }
-            }
-            if root.side-kind == 4: Rectangle {
-                height: Theme.side-row-height; border-radius: Theme.block-radius;
-                background: take-touch.has-hover ? Theme.hover : Theme.chip-selected;
-                Text { text: root.side-confirm-text; color: Theme.chip-selected-text; font-size: Theme.row-size; horizontal-alignment: center; vertical-alignment: center; }
-                take-touch := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.side-confirm(); } }
-            }
-            // The month to plan on: the entry's own day quiet, today marked, the chosen day(s) in the accent.
-            if root.side-kind == 5: HorizontalLayout {
-                spacing: Theme.gap;
-                Image { width: Theme.label-icon-size; height: Theme.label-icon-size; y: (parent.height - self.height) / 2; source: root.icon-back; colorize: Theme.muted;
-                    TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.side-month(-1); } } }
-                Text { text: root.side-month-title; color: Theme.strong; font-size: Theme.row-size; font-weight: Theme.weight-medium; horizontal-alignment: center; vertical-alignment: center; horizontal-stretch: 1; }
-                Image { width: Theme.label-icon-size; height: Theme.label-icon-size; y: (parent.height - self.height) / 2; source: root.icon-forward; colorize: Theme.muted;
-                    TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.side-month(1); } } }
-            }
-            if root.side-kind == 5: Rectangle {
-                height: Theme.side-cell * 7;
-                for name[w] in root.side-weekdays: Text {
-                    x: w * Theme.side-cell; y: 0px; width: Theme.side-cell; height: Theme.side-cell;
-                    text: name; color: w >= 5 ? (w == 5 ? Theme.saturday : Theme.sunday) : Theme.placeholder; font-size: Theme.small-size; horizontal-alignment: center; vertical-alignment: center;
-                }
-                for cell[i] in root.side-cells: Rectangle {
-                    x: Math.mod(i, 7) * Theme.side-cell + Theme.side-cell-inset; y: (Math.floor(i / 7) + 1) * Theme.side-cell + Theme.side-cell-inset;
-                    width: Theme.side-cell - Theme.side-cell-inset * 2; height: Theme.side-cell - Theme.side-cell-inset * 2;
-                    border-radius: self.height / 2;
-                    background: cell.picked ? Theme.accent : cell.cursor ? Theme.chip-selected : cell-touch.has-hover ? Theme.hover : transparent;
-                    border-width: cell.cursor || cell.today ? Theme.border-width : 0px; border-color: cell.cursor ? Theme.accent : Theme.field-focus;
-                    Text {
-                        text: cell.label; font-family: Theme.write-font; font-size: Theme.row-size; horizontal-alignment: center; vertical-alignment: center;
-                        color: cell.picked ? Theme.ground : cell.own ? Theme.placeholder : !cell.in-month ? Theme.placeholder : cell.cursor ? Theme.chip-selected-text : Theme.text;
-                    }
-                    cell-touch := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.side-day(i); } }
-                }
-            }
-            if root.side-kind == 5: Rectangle {
-                height: Theme.side-row-height; border-radius: Theme.block-radius;
-                background: plan-touch.has-hover ? Theme.hover : Theme.chip-selected;
-                HorizontalLayout {
-                    alignment: center; spacing: Theme.gap;
-                    Image { width: Theme.label-icon-size; height: Theme.label-icon-size; y: (parent.height - self.height) / 2; source: root.side-heading-icon; colorize: Theme.accent; }
-                    Text { text: root.side-confirm-text; color: Theme.chip-selected-text; font-size: Theme.row-size; vertical-alignment: center; }
-                }
-                plan-touch := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.side-confirm(); } }
-            }
-            // The description: written in place; Esc keeps it.
-            if root.side-kind == 6: Rectangle {
-                height: Theme.side-description-height;
-                background: Theme.field-background; border-radius: Theme.panel-radius;
-                border-width: Theme.border-width; border-color: Theme.field-focus;
-                if root.side-text-shown == "": Text { x: Theme.field-inset; y: Theme.field-inset; text: root.side-placeholder; color: Theme.placeholder; font-size: Theme.write-size; font-family: Theme.write-font; }
-                TextInput {
-                    x: Theme.field-inset; y: Theme.field-inset; width: parent.width - Theme.field-inset * 2; height: parent.height - Theme.field-inset * 2;
-                    text: root.side-text; single-line: false; wrap: word-wrap; color: Theme.strong; font-family: Theme.write-font; font-size: Theme.write-size;
-                    selection-background-color: Theme.selection; selection-foreground-color: Theme.strong;
-                    property <bool> open: root.side-open;
-                    init => { if self.open { self.focus(); } }
-                    changed open => { if self.open { self.focus(); } }
-                    edited => { root.side-edited(self.text); }
-                    key-pressed(event) => {
-                        if event.text == Key.Escape { root.day-key(event.text, 0); return accept; }
-                        reject
-                    }
-                }
-            }
-            if root.side-kind == 4 || root.side-kind == 5 || root.side-kind == 2 || root.side-kind == 6: Rectangle { vertical-stretch: 1; }
-        }
-        }
-        Rectangle {
-            x: root.stacked ? 0px : parent.width - Theme.border-width;
-            y: root.stacked ? parent.height - Theme.border-width : 0px;
-            width: root.stacked ? parent.width : Theme.border-width;
-            height: root.stacked ? Theme.border-width : parent.height;
-            background: Theme.divider;
-        }
-    }
     layout := VerticalLayout {
-        x: root.side-space;
-        y: root.side-height;
+        x: 0px; y: 0px;
         height: root.pane-height; width: root.form-space;
         spacing: 0px;
-        // The search bar and its shortcuts to settings and the notepad.
+        // ----- The top line: the search and the day it shows, or the entry's title, flag and type -----
         Rectangle {
             visible: !root.notepad-open;
             height: root.notepad-open ? 0px : Theme.line-height;
-            property <length> shortcut-space: (Theme.day-symbol-box + Theme.gap) * (root.entry-open ? 1 : 2);
+            // The search: an icon and a large borderless input; the day at the right.
             Rectangle {
-                x: Theme.padding; y: (parent.height - Theme.search-height) / 2;
-                width: parent.width - Theme.padding * 2 - parent.shortcut-space; height: Theme.search-height;
-                background: Theme.field-background; border-radius: Theme.field-radius;
-                border-width: Theme.border-width; border-color: search.has-focus ? Theme.field-focus : Theme.edge;
+                visible: !root.entry-open;
                 Image {
-                    x: Theme.field-inset; y: (parent.height - self.height) / 2;
+                    x: Theme.padding; y: (parent.height - self.height) / 2;
                     width: Theme.search-icon-size; height: Theme.search-icon-size;
-                    source: root.search-icon; colorize: search.has-focus ? Theme.accent : Theme.placeholder;
+                    source: root.search-icon; colorize: Theme.muted;
+                }
+                if search.text == "": Text {
+                    x: search.x; width: search.width; height: parent.height; vertical-alignment: center;
+                    text: root.search-placeholder; color: Theme.placeholder; font-size: Theme.search-size; overflow: elide;
+                }
+                search := TextInput {
+                    x: Theme.padding + Theme.search-icon-size + Theme.gap + Theme.calendar-gap;
+                    width: day-switch.x - self.x - Theme.gap; height: parent.height;
+                    vertical-alignment: center; single-line: true;
+                    color: Theme.strong; selection-background-color: Theme.selection; selection-foreground-color: Theme.strong; font-size: Theme.search-size;
+                    edited => { root.search-edited(self.text); }
+                    key-pressed(raw-event) => {
+                        let event = KeyBindings.translate(ShortcutContext.search, raw-event);
+                        // Modifier keys alone do nothing (their codes are control characters too).
+                        if event.text == Key.Control || event.text == Key.Shift || event.text == Key.Alt || event.text == Key.Meta { return reject; }
+                        if event.text == Key.F6 { root.form-key(15, 0); return accept; }
+                        if event.text == Key.Tab { root.form-key(0, 0); return accept; }
+                        if event.text == Key.UpArrow { root.form-key(1, 0); return accept; }
+                        if event.text == Key.DownArrow { root.form-key(2, 0); return accept; }
+                        if event.text == Key.Return { root.form-key(3, root.mods(event.modifiers.shift, event.modifiers.control, false)); return accept; }
+                        if event.text == Key.Escape { root.form-key(4, 0); return accept; }
+                        // The day view's day: Alt+←/→ a day back and on, Alt+H today.
+                        if event.modifiers.alt && !event.modifiers.control {
+                            if event.text == Key.LeftArrow { root.form-key(5, 4); return accept; }
+                            if event.text == Key.RightArrow { root.form-key(6, 4); return accept; }
+                            if event.text == "h" || event.text == "H" { root.form-key(9, 4); return accept; }
+                        }
+                        if event.modifiers.control {
+                            if event.text == "z" || event.text == "Z" { root.form-key(50, 0); return accept; }
+                            if event.text == "y" || event.text == "Y" { root.form-key(51, 0); return accept; }
+                            if event.text == "q" || event.text == "Q" { root.form-key(52, 0); return accept; }
+                        }
+                        reject
+                    }
+                }
+                // The distance from today and the day arrows at the right.
+                day-switch := HorizontalLayout {
+                    x: parent.width - Theme.padding + Theme.accessory-gap - self.preferred-width;
+                    width: self.preferred-width; height: parent.height;
+                    spacing: 0px;
+                    Rectangle {
+                        width: day-label.preferred-width + Theme.accessory-inset * 2; height: Theme.accessory-height;
+                        y: (parent.height - self.height) / 2;
+                        border-radius: Theme.block-radius;
+                        background: day-touch.has-hover && !root.day-is-today ? Theme.hover : transparent;
+                        day-label := HorizontalLayout {
+                            padding-left: Theme.accessory-inset; padding-right: Theme.accessory-inset; spacing: Theme.calendar-gap * 2;
+                            Text { text: root.day-relative; color: root.day-is-today ? Theme.accent : Theme.muted; font-size: Theme.row-size; font-weight: Theme.weight-medium; vertical-alignment: center; }
+                        }
+                        day-touch := TouchArea { mouse-cursor: root.day-is-today ? MouseCursor.default : MouseCursor.pointer; clicked => { if !root.day-is-today { root.day-today(); } } }
+                    }
+                    IconSpot { y: (parent.height - self.height) / 2; icon: root.icon-back; clicked => { root.form-key(5, 4); } }
+                    IconSpot { y: (parent.height - self.height) / 2; icon: root.icon-forward; clicked => { root.form-key(6, 4); } }
                 }
             }
-            if search.text == "": Text {
-                x: Theme.padding + Theme.field-inset + Theme.search-icon-size + Theme.gap; width: parent.width - self.x - Theme.padding - Theme.field-inset - parent.shortcut-space; height: parent.height; vertical-alignment: center;
-                text: root.search-placeholder; color: Theme.placeholder; font-size: Theme.form-size;
-            }
-            search := TextInput {
-                x: Theme.padding + Theme.field-inset + Theme.search-icon-size + Theme.gap; width: parent.width - self.x - Theme.padding - Theme.field-inset - parent.shortcut-space; height: parent.height;
-                vertical-alignment: center; single-line: true;
-                color: Theme.strong; selection-background-color: Theme.selection; selection-foreground-color: Theme.strong; font-size: Theme.form-size;
-                edited => { root.search-edited(self.text); }
-                key-pressed(raw-event) => {
-                    let event = KeyBindings.translate(ShortcutContext.search, raw-event);
-                    // Modifier keys alone do nothing (their codes are control characters too).
-                    if event.text == Key.Control || event.text == Key.Shift || event.text == Key.Alt || event.text == Key.Meta { return reject; }
-                    if event.text == Key.F6 { root.form-key(15, 0); return accept; }
-                    if event.text == Key.Tab { root.form-key(0, 0); return accept; }
-                    if event.text == Key.UpArrow { root.form-key(1, 0); return accept; }
-                    if event.text == Key.DownArrow { root.form-key(2, 0); return accept; }
-                    if event.text == Key.Return { root.form-key(3, root.mods(event.modifiers.shift, event.modifiers.control, false)); return accept; }
-                    if event.text == Key.Escape { root.form-key(4, 0); return accept; }
-                    // The day view's day: Alt+←/→ a day back and on, Alt+H today.
-                    if event.modifiers.alt && !event.modifiers.control {
-                        if event.text == Key.LeftArrow { root.form-key(5, 4); return accept; }
-                        if event.text == Key.RightArrow { root.form-key(6, 4); return accept; }
-                        if event.text == "h" || event.text == "H" { root.form-key(9, 4); return accept; }
-                    }
-                    if event.modifiers.control {
-                        if event.text == "z" || event.text == "Z" { root.form-key(50, 0); return accept; }
-                        if event.text == "y" || event.text == "Y" { root.form-key(51, 0); return accept; }
-                        if event.text == "q" || event.text == "Q" { root.form-key(52, 0); return accept; }
-                    }
-                    reject
+            // The entry: back, its title, the flag and the type.
+            Rectangle {
+                visible: root.entry-open;
+                IconSpot {
+                    x: Theme.padding - Theme.calendar-gap; y: (parent.height - self.height) / 2;
+                    width: Theme.back-size; height: Theme.back-size;
+                    background: Theme.raised;
+                    icon: root.icon-arrow-back; icon-size: Theme.label-icon-size; tint: Theme.text;
+                    clicked => { root.form-key(34, 0); }
                 }
-            }
-            NotepadAction {
-                x: parent.width - Theme.padding - self.width - (root.entry-open ? 0px : Theme.day-symbol-box + Theme.gap);
-                y: (parent.height - self.height) / 2;
-                icon: root.settings-icon;
-                label: root.shortcut-labels.settings;
-                clicked => { root.open-settings(); }
-            }
-            if !root.entry-open: NotepadAction {
-                x: parent.width - Theme.padding - self.width;
-                y: (parent.height - self.height) / 2;
-                icon: JournalIcons.journal-icon;
-                label: root.notepad-heading;
-                clicked => { root.open-notepad(); }
-            }
-        }
-        for command[index] in root.commands: Rectangle {
-            height: Theme.row-height;
-            background: index == root.command-selected ? Theme.row-selection : command-hit.has-hover ? Theme.hover : transparent;
-            HorizontalLayout {
-                padding-left: Theme.padding; padding-right: Theme.padding; spacing: Theme.gap;
-                Image { source: root.command-icon; width: Theme.label-icon-size; height: Theme.label-icon-size; colorize: Theme.accent; y: (parent.height - self.height) / 2; }
-                Text { text: command.name; color: Theme.accent; font-size: Theme.row-size; vertical-alignment: center; }
-                Text { text: command.detail; color: Theme.muted; font-size: Theme.small-size; vertical-alignment: center; horizontal-stretch: 1; overflow: elide; }
-            }
-            command-hit := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.command-chosen(index); } }
-        }
-        Rectangle { height: Theme.border-width; background: Theme.divider; }
-        // ----- The entry form, under the search bar while open -----
-        Rectangle {
-            height: root.entry-open ? root.line-count * Theme.form-row-height + Theme.gap : 0px;
-            clip: true;
-            // The type: four switches with their icons, Alt+1–4 from anywhere.
-            HorizontalLayout {
-                x: Theme.padding; y: 0px; height: Theme.form-row-height;
-                spacing: Theme.calendar-gap;
-                alignment: start;
-                for name[n] in root.type-names: Rectangle {
-                    width: type-row.preferred-width;
-                    height: Theme.choice-height;
-                    y: (Theme.form-row-height - Theme.choice-height) / 2;
-                    background: n == root.type-selected ? Theme.chip-selected : transparent;
-                    border-radius: Theme.field-radius;
-                    border-width: n == root.type-selected ? Theme.border-width : 0px;
-                    border-color: root.active == 0 ? Theme.accent : Theme.field-focus;
+                // The title while another field has the keyboard (a click: back into it).
+                if root.active != 1: Text {
+                    x: root.title-x; width: root.title-width; height: parent.height;
+                    text: root.title-text != "" ? root.title-text : root.title-hint;
+                    color: root.title-error ? Theme.error : root.title-text != "" ? Theme.strong : Theme.placeholder;
+                    font-family: Theme.write-font; font-size: Theme.search-size; vertical-alignment: center; overflow: elide;
+                    TouchArea { mouse-cursor: MouseCursor.text; clicked => { root.field-clicked(1); } }
+                }
+                flag := IconSpot {
+                    x: type-chip.x - self.width - Theme.accessory-gap; y: (parent.height - self.height) / 2;
+                    icon: root.icon-flag; icon-size: Theme.label-icon-size;
+                    tint: root.entry-priority ? Theme.priority : Theme.placeholder;
+                    background: root.entry-priority ? Theme.priority.with-alpha(0.14) : self.hovered ? Theme.hover : transparent;
+                    clicked => { root.form-key(30, 4); input.focus(); }
+                }
+                // The type, as a choice in the top line (Alt+1–4; a click lists them).
+                type-chip := Rectangle {
+                    x: parent.width - Theme.padding - self.width; y: (parent.height - self.height) / 2;
+                    width: type-row.preferred-width; height: Theme.accessory-height;
+                    border-radius: Theme.block-radius;
+                    background: root.active == 0 || root.type-list-open ? Theme.row-selection : type-touch.has-hover ? Theme.hover : Theme.raised;
+                    border-width: Theme.border-width; border-color: root.active == 0 ? Theme.field-focus : Theme.edge;
                     type-row := HorizontalLayout {
-                        padding-left: Theme.option-inset; padding-right: Theme.option-inset; spacing: Theme.calendar-gap * 2; alignment: center;
-                        Image {
-                            width: Theme.label-icon-size; height: Theme.label-icon-size; y: (parent.height - self.height) / 2;
-                            source: root.type-icons[n]; colorize: n == root.type-selected ? Theme.accent : Theme.muted;
+                        padding-left: Theme.accessory-inset; padding-right: Theme.accessory-inset - 2px; spacing: Theme.calendar-gap * 2;
+                        if root.type-icons.length > root.type-selected: Image {
+                            width: Theme.label-icon-size - 2px; height: self.width; y: (parent.height - self.height) / 2;
+                            source: root.type-icons[root.type-selected]; colorize: Theme.text;
                         }
-                        Text {
-                            text: name; font-size: Theme.type-size;
-                            color: n == root.type-selected ? Theme.chip-selected-text : Theme.muted;
-                            vertical-alignment: center;
-                        }
+                        Text { text: root.type-names[root.type-selected]; color: Theme.strong; font-size: Theme.type-size; vertical-alignment: center; }
+                        Image { width: Theme.footer-icon-size; height: self.width; y: (parent.height - self.height) / 2; source: root.icon-chevron-down; colorize: Theme.muted; }
                     }
-                    TouchArea { clicked => { root.form-key(21 + n, 4); input.focus(); } }
+                    type-touch := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.type-list-open = !root.type-list-open; input.focus(); } }
                 }
             }
-            for row in root.rows: Rectangle {
-                y: row.line * Theme.form-row-height;
-                height: Theme.form-row-height;
-                if row.field == 7: Rectangle {
-                    x: Theme.padding; y: Theme.field-vpad;
-                    width: root.form-space - Theme.padding * 2; height: parent.height - Theme.field-vpad * 2;
-                    background: root.active == row.field ? Theme.row-selection : root.more-open ? Theme.more-background : transparent;
-                    border-radius: Theme.more-radius;
-                    border-width: root.active == row.field ? Theme.border-width : 0px; border-color: Theme.field-focus;
-                    HorizontalLayout {
-                        padding-left: Theme.more-inset; padding-right: Theme.more-inset; spacing: Theme.gap;
-                        Image { width: Theme.label-icon-size; height: Theme.label-icon-size; source: row.label-icon; colorize: root.active == row.field ? Theme.accent : Theme.muted; y: (parent.height - self.height) / 2; }
-                        Text { text: row.label; color: root.active == row.field ? Theme.strong : Theme.text; font-size: Theme.row-size; font-weight: Theme.weight-medium; vertical-alignment: center; }
-                        Rectangle { height: Theme.border-width; background: Theme.divider; horizontal-stretch: 1; y: (parent.height - self.height) / 2; }
-                        Text { text: row.value; color: Theme.muted; font-size: Theme.small-size; vertical-alignment: center; overflow: elide; }
-                    }
+        }
+        if !root.notepad-open: Rectangle { height: Theme.border-width; background: Theme.divider; }
+        // The commands offered under the search (`/`).
+        if !root.entry-open && !root.notepad-open && root.commands.length > 0: VerticalLayout {
+            padding: Theme.popover-padding; spacing: Theme.choice-spacing;
+            for command[index] in root.commands: Rectangle {
+                height: Theme.row-height;
+                border-radius: Theme.list-radius;
+                background: index == root.command-selected ? Theme.row-selection : command-hit.has-hover ? Theme.hover : transparent;
+                HorizontalLayout {
+                    padding-left: Theme.list-inset + Theme.calendar-gap; padding-right: Theme.list-inset + Theme.calendar-gap; spacing: Theme.gap;
+                    Image { source: root.command-icon; width: Theme.label-icon-size; height: Theme.label-icon-size; colorize: Theme.text; y: (parent.height - self.height) / 2; }
+                    Text { text: command.name; color: Theme.strong; font-size: Theme.row-size; vertical-alignment: center; }
+                    Text { text: command.detail; color: Theme.muted; font-size: Theme.row-size; vertical-alignment: center; horizontal-stretch: 1; horizontal-alignment: right; overflow: elide; }
                 }
-                if row.label != "" && row.field != 7: HorizontalLayout {
-                    x: Theme.padding; width: Theme.label-width; height: parent.height;
-                    spacing: Theme.gap; alignment: start;
-                    if row.has-label-icon: Image {
-                        width: Theme.label-icon-size; height: Theme.label-icon-size; y: (parent.height - self.height) / 2;
-                        source: row.label-icon; colorize: row.line == root.active-line ? Theme.accent : Theme.placeholder;
-                    }
-                    Text {
-                        text: row.label; color: row.line == root.active-line ? Theme.accent : Theme.muted;
-                        font-size: Theme.label-size; vertical-alignment: center;
-                    }
+                command-hit := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.command-chosen(index); } }
+            }
+        }
+        // ----- The entry form under the top line, while open: a label at the left, the field at the right -----
+        if root.entry-open && !root.notepad-open: Rectangle {
+            height: root.line-count * Theme.form-row-height + Theme.gap;
+            for row in root.rows: Rectangle {
+                y: Theme.gap / 2 + row.line * Theme.form-row-height;
+                height: Theme.form-row-height;
+                if row.label != "": Text {
+                    x: Theme.padding; width: Theme.label-width - Theme.gap; height: parent.height;
+                    text: row.label; color: row.line == root.active-line && !root.in-header ? Theme.strong : Theme.muted;
+                    font-size: Theme.label-size; vertical-alignment: center; horizontal-alignment: right; overflow: elide;
                 }
                 if row.cell == 2: Text {
                     x: root.cell-x(2) - Theme.when-dash-width; width: Theme.when-dash-width; height: parent.height;
                     text: "–"; color: Theme.muted; font-size: Theme.form-size; horizontal-alignment: center; vertical-alignment: center;
                 }
-                // The composer's black fields, with its quiet blue focus contour.
-                if row.field != 7: Rectangle {
+                // A field: quiet grey with a fine edge; lighter while it has the keyboard.
+                Rectangle {
                     x: root.cell-x(row.cell); y: Theme.field-vpad;
                     width: root.cell-width(row.cell, row.multi); height: parent.height - Theme.field-vpad * 2;
-                    background: Theme.field-background; border-radius: Theme.field-radius;
+                    background: row.field == root.active ? Theme.field-focus-background : field-touch.has-hover ? Theme.hover : Theme.field-background;
+                    border-radius: Theme.field-radius;
                     border-width: Theme.border-width;
                     border-color: row.error ? Theme.error : row.field == root.active ? Theme.field-focus : Theme.edge;
+                    field-touch := TouchArea { mouse-cursor: MouseCursor.text; clicked => { root.field-clicked(row.field); } }
                 }
-                if row.field != 7 && !(row.field == root.active && root.editable): HorizontalLayout {
+                if !(row.field == root.active && root.editable): HorizontalLayout {
                     x: root.cell-x(row.cell) + Theme.field-inset; width: root.cell-width(row.cell, row.multi) - Theme.field-inset * 2; height: parent.height;
                     spacing: Theme.gap;
                     alignment: start;
@@ -748,85 +568,20 @@ export component Bar inherits Window {
                         border-radius: self.width / 2; background: row.color;
                     }
                     if row.has-icon && row.filled: Image {
-                        width: Theme.icon-size; height: Theme.icon-size; y: (parent.height - self.height) / 2;
+                        width: Theme.label-icon-size; height: Theme.label-icon-size; y: (parent.height - self.height) / 2;
                         source: row.icon; colorize: Theme.text;
                     }
                     Text {
                         text: row.filled ? row.value : row.hint;
                         color: row.error ? Theme.error : row.filled ? Theme.text : Theme.placeholder;
-                        font-family: row.field == 1 || row.field == 8 || row.multi ? Theme.write-font : Theme.ui-font;
+                        font-family: row.field == 8 || row.multi ? Theme.write-font : Theme.ui-font;
                         font-size: Theme.write-size; vertical-alignment: center; overflow: elide;
-                    }
-                }
-            }
-            // The one input, laid over the active field when that field has text.
-            input-area := Rectangle {
-                x: root.cell-x(root.active-cell) + Theme.field-inset;
-                y: root.active-line * Theme.form-row-height;
-                width: root.editable ? root.cell-width(root.active-cell, root.active-multi) - Theme.field-inset * 2 : Theme.idle-input-width;
-                height: Theme.form-row-height;
-                opacity: root.editable ? 1 : 0;
-                clip: true;
-                if input.text == "" && root.editable: Text {
-                    width: parent.width; height: parent.height; vertical-alignment: center;
-                    text: root.placeholder; color: Theme.placeholder;
-                    font-family: root.active == 1 || root.active == 8 || root.active-multi ? Theme.write-font : Theme.ui-font;
-                    font-size: Theme.write-size;
-                }
-                input := TextInput {
-                    height: parent.height;
-                    width: max(parent.width, self.preferred-width);
-                    vertical-alignment: center;
-                    color: Theme.strong;
-                    selection-background-color: Theme.selection;
-                    selection-foreground-color: Theme.strong;
-                    font-family: root.active == 1 || root.active == 8 || root.active-multi ? Theme.write-font : Theme.ui-font;
-                    font-size: Theme.write-size;
-                    single-line: true;
-                    edited => { root.edited(self.text); }
-                    cursor-position-changed(pos) => {
-                        if pos.x + self.x < 0px { self.x = -pos.x; }
-                        if pos.x + self.x > input-area.width - Theme.gap { self.x = input-area.width - Theme.gap - pos.x; }
-                    }
-                    key-pressed(raw-event) => {
-                        let event = KeyBindings.translate(ShortcutContext.form, raw-event);
-                        if event.text == Key.Control || event.text == Key.Shift || event.text == Key.Alt || event.text == Key.Meta { return reject; }
-                        if event.text == Key.F6 { root.form-key(15, 0); return accept; }
-                        if event.text == Key.Tab || event.text == Key.Backtab { root.form-key(0, root.mods(event.modifiers.shift || event.text == Key.Backtab, event.modifiers.control, event.modifiers.alt)); return accept; }
-                        if event.text == Key.UpArrow { root.form-key(1, root.mods(event.modifiers.shift, event.modifiers.control, event.modifiers.alt)); return accept; }
-                        if event.text == Key.DownArrow { root.form-key(2, root.mods(event.modifiers.shift, event.modifiers.control, event.modifiers.alt)); return accept; }
-                        if event.text == Key.Return { root.form-key(3, root.mods(event.modifiers.shift, event.modifiers.control, event.modifiers.alt)); return accept; }
-                        if event.text == Key.Escape { root.form-key(4, 0); return accept; }
-                        // The arrows belong to the field's switch or its options (with their modifiers).
-                        if !root.native-arrows && event.text == Key.LeftArrow { root.form-key(5, root.mods(event.modifiers.shift, event.modifiers.control, false)); return accept; }
-                        if !root.native-arrows && event.text == Key.RightArrow { root.form-key(6, root.mods(event.modifiers.shift, event.modifiers.control, false)); return accept; }
-                        if !root.editable {
-                            if event.text == Key.Insert { root.form-key(11, 0); return accept; }
-                            if event.text == Key.Delete || event.text == Key.Backspace { root.form-key(12, 0); return accept; }
-                            if event.text == Key.PageUp { root.form-key(7, root.mods(event.modifiers.shift, false, false)); return accept; }
-                            if event.text == Key.PageDown { root.form-key(8, root.mods(event.modifiers.shift, false, false)); return accept; }
-                            if event.text == Key.Home || (root.cal-focus && (event.text == "h" || event.text == "H")) { root.form-key(9, 0); return accept; }
-                            if event.text == " " { root.form-key(10, 0); return accept; }
-                            if !event.modifiers.alt && event.text >= "0" && event.text <= "9" { root.form-key(20 + event.text.to-float(), 0); return accept; }
-                        }
-                        if event.modifiers.control {
-                            if event.text == "z" || event.text == "Z" { root.form-key(50, 0); return accept; }
-                            if event.text == "y" || event.text == "Y" { root.form-key(51, 0); return accept; }
-                            if event.text == "q" || event.text == "Q" { root.form-key(52, 0); return accept; }
-                            return reject;
-                        }
-                        if event.modifiers.alt {
-                            if event.text >= "1" && event.text <= "4" { root.form-key(20 + event.text.to-float(), 4); }
-                            return accept;
-                        }
-                        if !root.editable { return accept; }
-                        reject
                     }
                 }
             }
         }
         // ----- The open options of the active field -----
-        if root.entry-open && root.panel-kind > 0: HorizontalLayout {
+        if root.entry-open && !root.notepad-open && root.panel-kind > 0: HorizontalLayout {
             padding-left: Theme.padding; padding-right: Theme.padding; padding-bottom: Theme.gap;
             Rectangle {
             height: panel.preferred-height;
@@ -841,15 +596,15 @@ export component Bar inherits Window {
             // A heading: what the options are about.
             if root.panel-label != "": HorizontalLayout {
                 spacing: Theme.gap; alignment: start;
-                Image { width: Theme.label-icon-size; height: Theme.label-icon-size; source: root.panel-icon; colorize: Theme.accent; y: (parent.height - self.height) / 2; }
-                Text { text: root.panel-label; color: Theme.strong; font-size: Theme.row-size; font-weight: Theme.weight-semibold; vertical-alignment: center; }
+                Image { width: Theme.label-icon-size; height: Theme.label-icon-size; source: root.panel-icon; colorize: Theme.muted; y: (parent.height - self.height) / 2; }
+                Text { text: root.panel-label; color: Theme.text; font-size: Theme.row-size; font-weight: Theme.weight-medium; vertical-alignment: center; }
             }
             // Tags: a list with their colours.
             if root.panel-kind == 1: VerticalLayout {
                 spacing: Theme.choice-spacing;
                 for choice in root.choices: Rectangle {
                     height: Theme.choice-height;
-                    background: choice.selected ? Theme.chip-selected : transparent;
+                    background: choice.selected ? Theme.row-selection : tag-touch.has-hover ? Theme.hover : transparent;
                     border-radius: Theme.block-radius;
                     HorizontalLayout {
                         padding-left: Theme.gap; spacing: Theme.gap; alignment: start;
@@ -859,9 +614,9 @@ export component Bar inherits Window {
                             border-width: choice.has-color ? 0px : Theme.border-width; border-color: Theme.placeholder;
                         }
                         if choice.has-icon: Image { source: choice.icon; width: Theme.label-icon-size; height: Theme.label-icon-size; colorize: choice.has-color ? choice.color : Theme.muted; y: (parent.height - self.height) / 2; }
-                        Text { text: choice.label; color: choice.selected ? Theme.chip-selected-text : Theme.muted; font-size: Theme.row-size; vertical-alignment: center; }
+                        Text { text: choice.label; color: choice.selected ? Theme.strong : Theme.text; font-size: Theme.row-size; vertical-alignment: center; }
                     }
-                    TouchArea { clicked => { root.choice-clicked(choice.index); input.focus(); } }
+                    tag-touch := TouchArea { clicked => { root.choice-clicked(choice.index); input.focus(); } }
                 }
             }
             // Icons: a grid, the chosen one's name under it.
@@ -871,15 +626,15 @@ export component Bar inherits Window {
                     x: Math.mod(i, Theme.icon-columns) * Theme.icon-cell;
                     y: Math.floor(i / Theme.icon-columns) * Theme.icon-cell;
                     width: Theme.icon-cell - Theme.calendar-gap; height: Theme.icon-cell - Theme.calendar-gap;
-                    background: choice.selected ? Theme.chip-selected : transparent;
+                    background: choice.selected ? Theme.row-selection : icon-touch.has-hover ? Theme.hover : transparent;
                     border-radius: Theme.block-radius;
-                    border-width: choice.selected ? Theme.border-width : 0px; border-color: Theme.accent;
+                    border-width: choice.selected ? Theme.border-width : 0px; border-color: Theme.field-focus;
                     Image {
                         width: Theme.icon-size; height: Theme.icon-size;
                         x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2;
-                        source: choice.icon; colorize: choice.selected ? Theme.accent : Theme.muted;
+                        source: choice.icon; colorize: choice.selected ? Theme.strong : Theme.muted;
                     }
-                    TouchArea { clicked => { root.choice-clicked(choice.index); input.focus(); } }
+                    icon-touch := TouchArea { clicked => { root.choice-clicked(choice.index); input.focus(); } }
                 }
             }
             // Reminders: ready-made lengths in a grid; anything else is typed.
@@ -889,11 +644,11 @@ export component Bar inherits Window {
                     x: Math.mod(i, Theme.reminder-columns) * (parent.width / Theme.reminder-columns);
                     y: Math.floor(i / Theme.reminder-columns) * Theme.choice-height;
                     width: parent.width / Theme.reminder-columns - Theme.calendar-gap; height: Theme.choice-height - Theme.calendar-gap;
-                    background: choice.selected ? Theme.chip-selected : Theme.recognised;
+                    background: choice.selected ? Theme.chip-selected : reminder-touch.has-hover ? Theme.hover : Theme.recognised;
                     border-radius: Theme.block-radius;
-                    border-width: choice.selected ? Theme.border-width : 0px; border-color: Theme.accent;
-                    Text { text: choice.label; color: choice.selected ? Theme.chip-selected-text : Theme.muted; font-size: Theme.row-size; horizontal-alignment: center; vertical-alignment: center; }
-                    TouchArea { clicked => { root.choice-clicked(choice.index); input.focus(); } }
+                    border-width: choice.selected ? Theme.border-width : 0px; border-color: Theme.field-focus;
+                    Text { text: choice.label; color: choice.selected ? Theme.strong : Theme.muted; font-size: Theme.row-size; horizontal-alignment: center; vertical-alignment: center; }
+                    reminder-touch := TouchArea { clicked => { root.choice-clicked(choice.index); input.focus(); } }
                 }
             }
             // The repetition: labelled lines; one choice of several looks like a segmented switch, days and months
@@ -902,14 +657,7 @@ export component Bar inherits Window {
                 spacing: Theme.sentence-spacing;
                 for line in root.sentence: HorizontalLayout {
                     spacing: 0px;
-                    HorizontalLayout {
-                        width: Theme.sentence-label-width; spacing: Theme.gap; alignment: start;
-                        if line.has-icon: Image {
-                            width: Theme.label-icon-size; height: Theme.label-icon-size; y: (parent.height - self.height) / 2;
-                            source: line.icon; colorize: Theme.placeholder;
-                        }
-                        Text { text: line.label; color: Theme.muted; font-size: Theme.label-size; vertical-alignment: center; }
-                    }
+                    Text { width: Theme.sentence-label-width; text: line.label; color: Theme.muted; font-size: Theme.label-size; vertical-alignment: center; overflow: elide; }
                     HorizontalLayout {
                         spacing: Theme.calendar-gap;
                         alignment: start;
@@ -920,12 +668,12 @@ export component Bar inherits Window {
                                 height: Theme.sentence-height;
                                 background: part.kind >= 2 ? Theme.field-background : part.selected ? Theme.chip-selected : Theme.recognised;
                                 border-radius: part.kind == 1 ? Theme.sentence-height / 2 : Theme.block-radius;
-                                border-width: part.focused ? Theme.focus-ring : (part.kind == 2 || part.kind == 3) ? Theme.border-width : 0px;
-                                border-color: part.focused ? Theme.accent : Theme.panel-border;
+                                border-width: part.focused || part.kind >= 2 ? Theme.border-width : 0px;
+                                border-color: part.focused ? Theme.field-focus : Theme.edge;
                                 part-text := Text {
                                     text: part.text; font-size: Theme.row-size;
                                     font-weight: part.selected && part.kind != 2 ? Theme.weight-semibold : Theme.weight-normal;
-                                    color: part.selected && part.kind < 2 ? Theme.chip-selected-text : part.focused || part.kind >= 2 ? Theme.text : Theme.muted;
+                                    color: part.selected && part.kind < 2 ? Theme.strong : part.focused || part.kind >= 2 ? Theme.text : Theme.muted;
                                     horizontal-alignment: center; vertical-alignment: center;
                                 }
                                 TouchArea { clicked => { root.sentence-clicked(part.slot, part.value); input.focus(); } }
@@ -940,18 +688,18 @@ export component Bar inherits Window {
                 alignment: center; spacing: Theme.gap;
                 Rectangle {
                     width: hours-text.preferred-width + Theme.clock-inset * 2; height: Theme.clock-box-height;
-                    background: !root.clock-on-minutes ? Theme.selection : Theme.field-background;
+                    background: !root.clock-on-minutes ? Theme.row-selection : Theme.field-background;
                     border-radius: Theme.block-radius;
-                    border-width: !root.clock-on-minutes ? Theme.focus-ring : 0px; border-color: Theme.accent;
-                    hours-text := Text { text: root.clock-hours; font-family: Theme.write-font; font-size: Theme.clock-size; color: Theme.text; horizontal-alignment: center; vertical-alignment: center; }
+                    border-width: Theme.border-width; border-color: !root.clock-on-minutes ? Theme.field-focus : Theme.edge;
+                    hours-text := Text { text: root.clock-hours; font-family: Theme.write-font; font-size: Theme.clock-size; color: Theme.strong; horizontal-alignment: center; vertical-alignment: center; }
                 }
                 Text { text: ":"; font-family: Theme.write-font; font-size: Theme.clock-size; color: Theme.muted; vertical-alignment: center; }
                 Rectangle {
                     width: minutes-text.preferred-width + Theme.clock-inset * 2; height: Theme.clock-box-height;
-                    background: root.clock-on-minutes ? Theme.selection : Theme.field-background;
+                    background: root.clock-on-minutes ? Theme.row-selection : Theme.field-background;
                     border-radius: Theme.block-radius;
-                    border-width: root.clock-on-minutes ? Theme.focus-ring : 0px; border-color: Theme.accent;
-                    minutes-text := Text { text: root.clock-minutes; font-family: Theme.write-font; font-size: Theme.clock-size; color: Theme.text; horizontal-alignment: center; vertical-alignment: center; }
+                    border-width: Theme.border-width; border-color: root.clock-on-minutes ? Theme.field-focus : Theme.edge;
+                    minutes-text := Text { text: root.clock-minutes; font-family: Theme.write-font; font-size: Theme.clock-size; color: Theme.strong; horizontal-alignment: center; vertical-alignment: center; }
                 }
             }
             if root.panel-note != "": Text { text: root.panel-note; color: Theme.muted; font-size: Theme.small-size; }
@@ -965,7 +713,7 @@ export component Bar inherits Window {
             body <=> root.notepad-body;
             title-label: root.notepad-title-label; body-label: root.notepad-body-label;
             labels: root.notepad-labels; editing: root.notepad-editing; can-save: root.notepad-can-save;
-            back-icon: root.icon-back; focus-request: root.notepad-focus-request;
+            back-icon: root.icon-arrow-back; focus-request: root.notepad-focus-request;
             panel: root.notepad-panel; preview: root.notepad-preview;
             choices: root.notepad-choices; markdown: root.notepad-markdown; tools: root.notepad-tools;
             panel-placeholder: root.notepad-panel-placeholder; panel-empty: root.notepad-panel-empty;
@@ -992,55 +740,17 @@ export component Bar inherits Window {
             edited(body, text) => { root.notepad-edited(body, text); }
             finish(save) => { root.notepad-finish(save); }
         }
-        // The journal entries and values have their own view.
-        if !root.entry-open && !root.notepad-open: VerticalLayout {
+        // ----- The day view: a list as in Raycast -----
+        if !root.entry-open && !root.notepad-open && root.commands.length == 0: VerticalLayout {
             vertical-stretch: 1;
             spacing: 0px;
-            // The date, how far it is from today (a click goes back to today), and new entries of the three kinds.
-            Rectangle {
-                height: Theme.day-head-height;
-                HorizontalLayout {
-                    padding-left: Theme.padding; padding-right: Theme.padding; spacing: Theme.gap;
-                    Text {
-                        text: root.day-heading; color: Theme.strong; font-size: Theme.day-head-size; font-weight: Theme.weight-semibold;
-                        vertical-alignment: center; overflow: elide; horizontal-stretch: 1;
-                        TouchArea { clicked => { if !root.day-is-today { root.day-today(); } } }
-                    }
-                    for icon[k] in root.day-new-icons: Rectangle {
-                        width: Theme.day-new-size; height: Theme.day-new-size; y: (parent.height - self.height) / 2;
-                        border-radius: Theme.block-radius;
-                        background: new-touch.has-hover ? Theme.hover : transparent;
-                        Image { width: Theme.day-heading-icon; height: Theme.day-heading-icon; x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2; source: icon; colorize: new-touch.has-hover ? Theme.accent : Theme.placeholder; }
-                        new-touch := TouchArea { clicked => { root.day-create(k); } }
-                    }
-                    Rectangle {
-                        width: relative-text.preferred-width + Theme.day-pill-inset * 2; height: Theme.day-pill-height;
-                        y: (parent.height - self.height) / 2;
-                        border-radius: self.height / 2; border-width: Theme.border-width;
-                        border-color: root.day-is-today ? Theme.day-pill-border : Theme.edge;
-                        background: root.day-is-today ? transparent : Theme.inset;
-                        relative-text := Text {
-                            text: root.day-relative; font-family: Theme.write-font; font-size: Theme.day-chip-size;
-                            color: root.day-is-today ? Theme.accent : Theme.muted; horizontal-alignment: center; vertical-alignment: center;
-                        }
-                        TouchArea { clicked => { if !root.day-is-today { root.day-today(); } } }
-                    }
-                }
-            }
-            if root.day-message != "": Rectangle {
-                height: day-message-text.preferred-height + Theme.gap;
-                day-message-text := Text {
-                    x: Theme.padding; width: parent.width - Theme.padding * 2;
-                    text: root.day-message; color: root.day-message-is-error ? Theme.error : Theme.muted; font-size: Theme.small-size; wrap: word-wrap;
-                }
-            }
             DayScroll {
                 vertical-stretch: 1;
-                content-height: root.day-list-height;
+                content-height: root.day-list-height + Theme.gap;
                 focus-y: root.day-focus-y;
                 focus-h: root.day-focus-footer ? 0px : root.day-focus-h;
                 Rectangle {
-                    x: 0px; y: 0px;
+                    x: 0px; y: Theme.calendar-gap;
                     width: layout.width;
                     height: root.day-list-height;
                     for row in root.day-rows: Rectangle {
@@ -1049,41 +759,51 @@ export component Bar inherits Window {
                         // The line the keyboard is on.
                         if row.selected && row.kind != 7: Rectangle {
                             x: -Theme.day-select-inset; width: parent.width + Theme.day-select-inset * 2;
-                            background: Theme.row-selection; border-radius: Theme.block-radius;
+                            background: Theme.row-selection; border-radius: Theme.list-radius;
                         }
                         // The day's title, written in place.
                         if row.kind == 5 && !row.editing: Text {
                             text: row.label != "" ? row.label : root.day-title-placeholder;
                             color: row.label != "" ? Theme.strong : Theme.placeholder; font-family: Theme.write-font; font-size: Theme.form-size;
+                            font-weight: row.label != "" ? Theme.weight-medium : Theme.weight-normal;
                             vertical-alignment: center; overflow: elide; width: parent.width;
-                            TouchArea { clicked => { root.day-click(row.item, 0); } }
+                            TouchArea { mouse-cursor: MouseCursor.text; clicked => { root.day-click(row.item, 0); } }
                         }
                         if row.kind == 0: DayHeading { data: row; }
-                        // An entry: the accent symbol (a click: its settings at the left), the text (a click: written in), its
-                        // time as a chip, its icon or tag colour.
+                        // An entry: its symbol (a click: its actions), the text (a click: written in), the time and the tag
+                        // quiet at the right, the flag (important) last. A right click anywhere: its actions.
                         if row.kind == 1: HorizontalLayout {
                             spacing: Theme.gap;
-                            opacity: row.done ? Theme.day-done-opacity : 1;
                             Rectangle {
                                 width: Theme.day-symbol-box; height: Theme.day-symbol-box; y: (parent.height - self.height) / 2;
+                                opacity: row.done ? Theme.day-done-opacity : 1;
                                 border-radius: Theme.block-radius;
                                 background: symbol-touch.has-hover ? Theme.hover : transparent;
                                 Image {
                                     width: Theme.day-symbol-size; height: Theme.day-symbol-size; x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2;
-                                    source: row.icon; colorize: row.trace || row.foreign ? Theme.placeholder : row.priority ? Theme.priority : Theme.accent;
+                                    source: row.icon; colorize: row.trace || row.foreign ? Theme.placeholder : row.has-color ? row.color : Theme.text;
                                 }
-                                symbol-touch := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.day-click(row.item, 1); } }
+                                symbol-touch := TouchArea {
+                                    mouse-cursor: MouseCursor.pointer;
+                                    clicked => { root.day-click(row.item, 1); }
+                                    pointer-event(event) => { if event.button == PointerEventButton.right && event.kind == PointerEventKind.down { root.day-click(row.item, 4); } }
+                                }
                             }
                             if !row.editing: Text {
-                                text: row.label; color: row.trace ? Theme.muted : Theme.text; font-family: Theme.write-font; font-size: Theme.write-size;
+                                text: row.label; color: row.trace ? Theme.muted : row.selected ? Theme.strong : Theme.text; font-family: Theme.write-font; font-size: Theme.write-size;
+                                opacity: row.done ? Theme.day-done-opacity : 1;
                                 vertical-alignment: center; overflow: elide; horizontal-stretch: 1;
-                                TouchArea { mouse-cursor: MouseCursor.text; clicked => { root.day-click(row.item, 0); } }
+                                TouchArea {
+                                    mouse-cursor: MouseCursor.text;
+                                    clicked => { root.day-click(row.item, 0); }
+                                    pointer-event(event) => { if event.button == PointerEventButton.right && event.kind == PointerEventKind.down { root.day-click(row.item, 4); } }
+                                }
                             }
                             if row.editing: Rectangle {
                                 horizontal-stretch: 1;
                                 height: Theme.day-row-height - Theme.field-vpad;
                                 y: (parent.height - self.height) / 2;
-                                background: Theme.field-background; border-radius: Theme.field-radius;
+                                background: Theme.field-focus-background; border-radius: Theme.field-radius;
                                 border-width: Theme.border-width; border-color: Theme.field-focus;
                                 clip: true;
                                 entry-input := TextInput {
@@ -1105,19 +825,31 @@ export component Bar inherits Window {
                                     }
                                 }
                             }
-                            if row.detail != "" && !row.editing: Rectangle {
-                                width: chip-text.preferred-width + Theme.day-chip-inset * 2; height: Theme.day-chip-height;
-                                y: (parent.height - self.height) / 2;
-                                border-radius: self.height / 2; border-width: Theme.border-width; border-color: row.trace ? Theme.edge : Theme.day-pill-border;
-                                chip-text := Text { text: row.detail; color: row.trace ? Theme.muted : Theme.accent; font-family: Theme.write-font; font-size: Theme.day-chip-size; horizontal-alignment: center; vertical-alignment: center; }
+                            if row.detail != "" && !row.editing: Text {
+                                text: row.detail; color: row.trace ? Theme.placeholder : Theme.muted; font-family: Theme.write-font; font-size: Theme.day-chip-size;
+                                vertical-alignment: center; opacity: row.done ? Theme.day-done-opacity : 1;
                             }
                             if row.has-tag-icon && !row.editing: Image { width: Theme.day-tag-icon-size; height: Theme.day-tag-icon-size; y: (parent.height - self.height) / 2; source: row.tag-icon; colorize: row.has-color ? row.color : Theme.muted; }
                             if !row.has-tag-icon && row.has-color && !row.editing: Rectangle { width: Theme.tag-dot; height: Theme.tag-dot; y: (parent.height - self.height) / 2; border-radius: self.width / 2; background: row.color; }
+                            // Important: an orange flag; otherwise a faint one while the line is chosen or the pointer is on it.
+                            if !row.editing: Rectangle {
+                                width: Theme.day-symbol-box - Theme.gap / 2; height: Theme.day-symbol-box; y: (parent.height - self.height) / 2;
+                                border-radius: Theme.block-radius;
+                                background: flag-touch.has-hover ? Theme.hover : transparent;
+                                Image {
+                                    width: Theme.day-tag-icon-size; height: self.width; x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2;
+                                    source: root.icon-flag;
+                                    colorize: row.priority ? Theme.priority : flag-touch.has-hover ? Theme.muted : Theme.placeholder;
+                                    visible: row.priority || row.selected || flag-touch.has-hover;
+                                    opacity: row.priority || flag-touch.has-hover ? 1 : 0.6;
+                                }
+                                flag-touch := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.day-click(row.item, 5); } }
+                            }
                         }
                         // The day's title being written.
                         if row.kind == 5 && row.editing: Rectangle {
                             height: Theme.day-title-height - Theme.field-vpad; y: (parent.height - self.height) / 2;
-                            background: Theme.field-background; border-radius: Theme.field-radius;
+                            background: Theme.field-focus-background; border-radius: Theme.field-radius;
                             border-width: Theme.border-width; border-color: Theme.field-focus;
                             clip: true;
                             TextInput {
@@ -1145,7 +877,7 @@ export component Bar inherits Window {
                         if row.kind == 4: HorizontalLayout {
                             spacing: Theme.gap; alignment: start;
                             Image { width: Theme.day-symbol-size; height: Theme.day-symbol-size; y: (parent.height - self.height) / 2; source: row.icon; colorize: Theme.placeholder; }
-                            Text { text: row.label; color: Theme.muted; font-size: Theme.row-size; vertical-alignment: center; }
+                            Text { text: row.label; color: Theme.placeholder; font-size: Theme.row-size; vertical-alignment: center; }
                         }
                     }
                 }
@@ -1165,32 +897,32 @@ export component Bar inherits Window {
                         y: row.top; height: row.tall;
                         if row.selected: Rectangle {
                             x: -Theme.day-select-inset; width: parent.width + Theme.day-select-inset * 2;
-                            background: Theme.row-selection; border-radius: Theme.block-radius;
+                            background: Theme.row-selection; border-radius: Theme.list-radius;
                         }
                         if row.kind == 0: DayHeading { data: row; }
                         // The rating and the day values: round dials side by side. A click or drag on the ring sets the value
                         // by its place, the wheel steps it.
                         if row.kind == 7: Rectangle {
-                            property <int> columns: max(1, floor((self.width + Theme.dial-spacing) / (Theme.dial-cell-width + Theme.dial-spacing)));
+                            property <int> columns: max(1, row.dial-columns);
                             for dial[i] in row.dials: Rectangle {
-                                x: mod(i, parent.columns) * (Theme.dial-cell-width + Theme.dial-spacing);
-                                y: floor(i / parent.columns) * Theme.dial-row-height;
-                                height: Theme.dial-row-height; width: Theme.dial-cell-width;
-                                border-radius: Theme.block-radius;
+                                x: mod(i, parent.columns) * (row.dial-cell + Theme.dial-spacing);
+                                y: floor(i / parent.columns) * row.dial-row;
+                                height: row.dial-row; width: row.dial-cell;
+                                border-radius: Theme.list-radius;
                                 background: dial.selected ? Theme.row-selection : transparent;
                                 Image {
                                     x: (parent.width - self.width) / 2; y: Theme.dial-top;
-                                    width: Theme.dial-size; height: Theme.dial-size;
+                                    width: row.dial-size; height: row.dial-size;
                                     source: dial-touch.pressed && dial-touch.adjusted
                                         ? root.dial-preview(dial-touch.preview, dial.low, dial.high, dial.color) : dial.image;
                                 }
                                 Text {
-                                    x: 0px; y: Theme.dial-top; width: parent.width; height: Theme.dial-size;
+                                    x: 0px; y: Theme.dial-top; width: parent.width; height: row.dial-size;
                                     text: dial-touch.pressed && dial-touch.adjusted ? "\{dial-touch.preview}" : dial.value; color: dial.value == "–" ? Theme.placeholder : Theme.strong;
                                     font-family: Theme.write-font; font-size: Theme.dial-value-size; horizontal-alignment: center; vertical-alignment: center;
                                 }
                                 Text {
-                                    x: Theme.calendar-gap; y: Theme.dial-top + Theme.dial-size + Theme.dial-label-gap; width: parent.width - Theme.calendar-gap * 2;
+                                    x: Theme.calendar-gap; y: Theme.dial-top + row.dial-size + Theme.dial-label-gap; width: parent.width - Theme.calendar-gap * 2;
                                     text: dial.label; color: dial.selected ? Theme.text : Theme.muted; font-size: Theme.small-size; horizontal-alignment: center; overflow: elide;
                                 }
                                 dial-touch := TouchArea {
@@ -1206,15 +938,15 @@ export component Bar inherits Window {
                                             if event.button == PointerEventButton.right { root.dial-set(dial.item, 0, true); }
                                             if event.button == PointerEventButton.left {
                                                 if self.adjusted || self.steps != 0 { root.dial-set(dial.item, self.preview, false); }
-                                                else { root.dial-point(dial.item, self.mouse-x - parent.width / 2, self.mouse-y - Theme.dial-top - Theme.dial-size / 2); }
+                                                else { root.dial-point(dial.item, self.mouse-x - parent.width / 2, self.mouse-y - Theme.dial-top - row.dial-size / 2); }
                                             }
                                         }
                                     }
                                     scroll-event(event) => { root.dial-wheel(dial.item, event.delta-y); accept }
                                 }
                                 if dial.value != "–": Image {
-                                    x: parent.width - self.width; width: Theme.day-tag-icon-size; height: self.width;
-                                    source: JournalIcons.undo-icon; colorize: Theme.muted;
+                                    x: parent.width - self.width - Theme.calendar-gap; y: Theme.calendar-gap; width: Theme.day-tag-icon-size - 2px; height: self.width;
+                                    source: JournalIcons.undo-icon; colorize: Theme.placeholder;
                                     TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.dial-set(dial.item, 0, true); } }
                                 }
                             }
@@ -1227,26 +959,162 @@ export component Bar inherits Window {
                 }
             }
         }
-        // A fixed height, so that the day view keeps the room that is left.
-        if root.notice != "": Rectangle {
-            height: notice-text.preferred-height + Theme.gap * 2 + Theme.border-width;
-            Rectangle { y: 0px; height: Theme.border-width; background: Theme.divider; }
-            notice-text := Text {
-                x: Theme.padding; y: Theme.border-width + Theme.gap; width: parent.width - Theme.padding * 2;
-                text: root.notice; color: root.notice-is-error ? Theme.error : Theme.muted; font-size: Theme.small-size; wrap: word-wrap;
+        // Whatever is left: the footer stays at the bottom.
+        Rectangle { vertical-stretch: 0.0001; min-height: 0px; }
+        Footer {
+            label: root.footer-label; date: root.footer-date;
+            menu-open: root.menu-open && root.app-menu; menu-label: root.footer-menu-label;
+            menu => { root.app-menu-clicked(); }
+            toast: root.notice; toast-is-error: root.notice-is-error;
+            hints: root.footer-hints;
+            success-icon: root.icon-success; error-icon: root.icon-error;
+            action(which) => { root.footer-action(which); }
+        }
+    }
+    // The one input of the form, laid over the active field: in the top line for the title, else on its line.
+    input-area := Rectangle {
+        x: root.in-header ? root.title-x : root.cell-x(root.active-cell) + Theme.field-inset;
+        y: root.in-header ? 0px : Theme.line-height + Theme.border-width + Theme.gap / 2 + root.active-line * Theme.form-row-height;
+        width: !root.editable ? Theme.idle-input-width : root.in-header ? root.title-width : root.cell-width(root.active-cell, root.active-multi) - Theme.field-inset * 2;
+        height: root.in-header ? Theme.line-height : Theme.form-row-height;
+        visible: root.entry-open && !root.notepad-open;
+        opacity: root.editable ? 1 : 0;
+        clip: true;
+        if input.text == "" && root.editable: Text {
+            width: parent.width; height: parent.height; vertical-alignment: center;
+            text: root.in-header ? root.title-hint : root.placeholder; color: root.in-header && root.title-error ? Theme.error.with-alpha(0.7) : Theme.placeholder;
+            font-family: root.in-header || root.active == 8 || root.active-multi ? Theme.write-font : Theme.ui-font;
+            font-size: root.in-header ? Theme.search-size : Theme.write-size;
+        }
+        input := TextInput {
+            height: parent.height;
+            width: max(parent.width, self.preferred-width);
+            vertical-alignment: center;
+            color: Theme.strong;
+            selection-background-color: Theme.selection;
+            selection-foreground-color: Theme.strong;
+            font-family: root.in-header || root.active == 8 || root.active-multi ? Theme.write-font : Theme.ui-font;
+            font-size: root.in-header ? Theme.search-size : Theme.write-size;
+            single-line: true;
+            edited => { root.edited(self.text); }
+            cursor-position-changed(pos) => {
+                if pos.x + self.x < 0px { self.x = -pos.x; }
+                if pos.x + self.x > input-area.width - Theme.gap { self.x = input-area.width - Theme.gap - pos.x; }
+            }
+            key-pressed(raw-event) => {
+                let event = KeyBindings.translate(ShortcutContext.form, raw-event);
+                if event.text == Key.Control || event.text == Key.Shift || event.text == Key.Alt || event.text == Key.Meta { return reject; }
+                // The list of the types, while open: ↑/↓ choose, Enter, Esc or Backspace close it.
+                if root.type-list-open {
+                    if event.text == Key.UpArrow { root.form-key(21 + Math.mod(root.type-selected + 3, 4), 4); return accept; }
+                    if event.text == Key.DownArrow { root.form-key(21 + Math.mod(root.type-selected + 1, 4), 4); return accept; }
+                    if event.text == Key.Return || event.text == Key.Escape || event.text == Key.Backspace { root.type-list-open = false; return accept; }
+                }
+                // On the type: Enter or Alt+↓ lists them.
+                if root.active == 0 && ((event.text == Key.Return && !event.modifiers.control && !event.modifiers.shift) || (event.text == Key.DownArrow && event.modifiers.alt)) {
+                    root.type-list-open = true; return accept;
+                }
+                if event.text == Key.F6 { root.form-key(15, 0); return accept; }
+                if event.text == Key.Tab || event.text == Key.Backtab { root.form-key(0, root.mods(event.modifiers.shift || event.text == Key.Backtab, event.modifiers.control, event.modifiers.alt)); return accept; }
+                if event.text == Key.UpArrow { root.form-key(1, root.mods(event.modifiers.shift, event.modifiers.control, event.modifiers.alt)); return accept; }
+                if event.text == Key.DownArrow { root.form-key(2, root.mods(event.modifiers.shift, event.modifiers.control, event.modifiers.alt)); return accept; }
+                if event.text == Key.Return { root.form-key(3, root.mods(event.modifiers.shift, event.modifiers.control, event.modifiers.alt)); return accept; }
+                if event.text == Key.Escape { root.type-list-open = false; root.form-key(4, 0); return accept; }
+                // The arrows belong to the field's switch or its options (with their modifiers).
+                if !root.native-arrows && event.text == Key.LeftArrow { root.form-key(5, root.mods(event.modifiers.shift, event.modifiers.control, false)); return accept; }
+                if !root.native-arrows && event.text == Key.RightArrow { root.form-key(6, root.mods(event.modifiers.shift, event.modifiers.control, false)); return accept; }
+                if !root.editable {
+                    if event.text == Key.Insert { root.form-key(11, 0); return accept; }
+                    if event.text == Key.Delete || event.text == Key.Backspace { root.form-key(12, 0); return accept; }
+                    if event.text == Key.PageUp { root.form-key(7, root.mods(event.modifiers.shift, false, false)); return accept; }
+                    if event.text == Key.PageDown { root.form-key(8, root.mods(event.modifiers.shift, false, false)); return accept; }
+                    if event.text == Key.Home || (root.cal-focus && (event.text == "h" || event.text == "H")) { root.form-key(9, 0); return accept; }
+                    if event.text == " " { root.form-key(10, 0); return accept; }
+                    if !event.modifiers.alt && event.text >= "0" && event.text <= "9" { root.form-key(20 + event.text.to-float(), 0); return accept; }
+                }
+                if event.modifiers.control {
+                    if event.text == "z" || event.text == "Z" { root.form-key(50, 0); return accept; }
+                    if event.text == "y" || event.text == "Y" { root.form-key(51, 0); return accept; }
+                    if event.text == "q" || event.text == "Q" { root.form-key(52, 0); return accept; }
+                    return reject;
+                }
+                if event.modifiers.alt {
+                    if event.text >= "1" && event.text <= "4" { root.type-list-open = false; root.form-key(20 + event.text.to-float(), 4); }
+                    // Important, and the description, the reminder and the icon.
+                    if event.text == "p" || event.text == "P" { root.form-key(30, 4); }
+                    if event.text == "b" || event.text == "B" { root.form-key(31, 4); }
+                    if event.text == "r" || event.text == "R" { root.form-key(32, 4); }
+                    if event.text == "i" || event.text == "I" { root.form-key(33, 4); }
+                    return accept;
+                }
+                if !root.editable { return accept; }
+                reject
             }
         }
     }
+    // The four types, listed under the type in the top line.
+    if root.entry-open && root.type-list-open: Rectangle {
+        x: type-chip.x + type-chip.width - self.width; y: Theme.line-height - Theme.calendar-gap;
+        width: Theme.popover-width * 0.6; height: type-list.preferred-height;
+        background: Theme.popover-background; border-radius: Theme.popover-radius;
+        border-width: Theme.border-width; border-color: Theme.popover-border;
+        drop-shadow-blur: Theme.popover-shadow-blur; drop-shadow-color: Theme.popover-shadow; drop-shadow-offset-y: 6px;
+        type-list := VerticalLayout {
+            padding: Theme.popover-padding; spacing: Theme.choice-spacing;
+            for name[n] in root.type-names: Rectangle {
+                height: Theme.side-row-height;
+                border-radius: Theme.list-radius;
+                background: n == root.type-selected ? Theme.row-selection : kind-touch.has-hover ? Theme.hover : transparent;
+                HorizontalLayout {
+                    padding-left: Theme.popover-inset; padding-right: Theme.popover-inset; spacing: Theme.gap;
+                    Image { width: Theme.label-icon-size; height: self.width; y: (parent.height - self.height) / 2; source: root.type-icons[n]; colorize: n == root.type-selected ? Theme.strong : Theme.muted; }
+                    Text { text: name; color: Theme.strong; font-size: Theme.row-size; vertical-alignment: center; horizontal-stretch: 1; }
+                    KeyCaps { caps: ["Alt", "\{n + 1}"]; }
+                }
+                kind-touch := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.form-key(21 + n, 4); root.type-list-open = false; input.focus(); } }
+            }
+        }
+    }
+    // The actions (Strg+K) and an entry's pickers: a card over the footer at the right; a click beside it closes it.
+    if root.menu-open || root.side-open: TouchArea {
+        x: 0px; y: 0px; width: root.form-space; height: root.pane-height;
+        clicked => { root.toggle-menu(); }
+    }
+    if root.menu-open || root.side-open: ActionPopover {
+        width: min(root.menu-open && root.app-menu ? Theme.app-menu-width : Theme.popover-width, root.form-space - Theme.gap * 2);
+        x: root.menu-open && root.app-menu ? Theme.gap : root.form-space - self.width - Theme.gap;
+        y: root.pane-height - Theme.footer-height - self.height - Theme.calendar-gap;
+        menu-open: root.menu-open; app-menu: root.menu-open && root.app-menu;
+        menu-title: root.menu-title; menu-rows: root.menu-rows; menu-pick: root.menu-pick;
+        menu-placeholder: root.menu-placeholder; menu-empty: root.menu-empty;
+        menu-edited(text) => { root.menu-edited(text); }
+        menu-key(text, mods) => { root.menu-key(text, mods); }
+        menu-choose(index) => { root.menu-choose(index); }
+        side-open: root.side-open; side-kind: root.side-kind; side-title: root.side-title; side-heading: root.side-heading;
+        side-heading-icon: root.side-heading-icon; side-rows: root.side-rows; side-focus-index: root.side-focus-index;
+        side-clock-hours: root.side-clock-hours; side-clock-minutes: root.side-clock-minutes; side-clock-on-minutes: root.side-clock-on-minutes;
+        side-month-title: root.side-month-title; side-weekdays: root.side-weekdays; side-cells: root.side-cells;
+        side-confirm-text: root.side-confirm-text; side-text: root.side-text; side-placeholder: root.side-placeholder;
+        icon-back: root.icon-back; icon-forward: root.icon-forward; focus-request: root.popover-focus;
+        side-choose(index) => { root.side-choose(index); }
+        side-edited(text) => { root.side-edited(text); }
+        side-day(index) => { root.side-day(index); }
+        side-month(by) => { root.side-month(by); }
+        side-confirm => { root.side-confirm(); }
+        side-back => { root.side-back(); }
+        side-clock(minutes, steps) => { root.side-clock(minutes, steps); }
+        day-key(text, mods) => { root.day-key(text, mods); }
+    }
     Rectangle {
-        x: root.stacked ? 0px : root.side-space + root.form-space;
-        y: root.stacked ? root.side-height + root.pane-height : 0px;
+        x: root.stacked ? 0px : root.form-space;
+        y: root.stacked ? root.pane-height : 0px;
         width: root.stacked ? root.content-width : Theme.border-width;
         height: root.stacked ? Theme.border-width : root.pane-height;
         background: Theme.divider;
     }
     calendar := Calendar {
-        x: root.stacked ? 0px : root.side-space + root.form-space + Theme.border-width;
-        y: root.stacked ? root.side-height + root.pane-height + Theme.border-width : 0px;
+        x: root.stacked ? 0px : root.form-space + Theme.border-width;
+        y: root.stacked ? root.pane-height + Theme.border-width : 0px;
         width: root.stacked ? root.content-width : root.content-width - self.x;
         height: root.calendar-height;
         bands: root.cal-bands;
@@ -1281,6 +1149,7 @@ export component Bar inherits Window {
             accept
         }
     }
+    // The outline where Windows draws none (its own corners and edge replace it where it can).
     Rectangle {
         border-radius: Theme.radius;
         border-color: Theme.background;
@@ -1294,24 +1163,6 @@ export component Bar inherits Window {
         border-radius: Theme.radius - Theme.frame-inset;
         border-color: Theme.border;
         border-width: Theme.frame-stroke;
-    }
-    settings-popup := PopupWindow {
-        x: 0px; y: 0px;
-        width: root.width; height: root.height;
-        close-policy: no-auto-close;
-        ShortcutSettings {
-            width: parent.width; height: parent.height;
-            groups: root.shortcut-groups;
-            rows: root.shortcut-rows;
-            labels: root.shortcut-labels;
-            search-icon: root.search-icon;
-            close-icon: root.icon-close;
-            lookup(group, query) => { root.shortcut-lookup(group, query); }
-            dismiss => { root.close-settings(); }
-            update-binding(id, text, mask) => { root.shortcut-update(id, text, mask) }
-            editable-row(index, direction) => { root.shortcut-editable-row(index, direction) }
-            capture-changed(recording) => { root.shortcut-recording = recording; }
-        }
     }
     }
 }

@@ -42,6 +42,7 @@ const GROUPS: &[Group] = &[
     Group { name: ["Allgemein", "General"], shortcuts: &[
         binding!("window-toggle", SYSTEM, "Ctrl+Alt+Space", "J-TerminaL ein- oder ausblenden", "Show or hide J-TerminaL"),
         binding!("settings", WINDOW, "F1", "Einstellungen öffnen oder schließen", "Open or close settings"),
+        binding!("day-actions", WINDOW, "Ctrl+K", "Aktionen öffnen oder schließen", "Open or close the actions"),
         fixed!("Esc", "Einstellungen schließen", "Close settings"),
         binding!("notebook", WINDOW, "Ctrl+Shift+N", "Notizblock öffnen", "Open the notebook"),
         binding!("undo", JOURNAL, "Ctrl+Z", "Rückgängig machen", "Undo"),
@@ -75,7 +76,7 @@ const GROUPS: &[Group] = &[
         binding!("day-to-event", ENTRY_ACTIONS, "Alt+Shift+E", "Typ auf Ereignis ändern", "Change type to event"),
         binding!("day-to-task", ENTRY_ACTIONS, "Alt+Shift+A", "Typ auf Aufgabe ändern", "Change type to task"),
         binding!("day-to-note", ENTRY_ACTIONS, "Alt+Shift+N", "Typ auf Notiz ändern", "Change type to note"),
-        binding!("day-actions", ENTRY_ACTIONS, "Alt+Enter", "Aktionen für den ausgewählten Eintrag öffnen", "Open actions for the selected entry"),
+        fixed!("Alt+Enter", "Aktionen für den ausgewählten Eintrag öffnen", "Open actions for the selected entry"),
         binding!("day-move-up", ENTRY_ACTIONS, "Alt+ArrowUp", "Eintrag nach oben verschieben", "Move the entry up"),
         binding!("day-move-down", ENTRY_ACTIONS, "Alt+ArrowDown", "Eintrag nach unten verschieben", "Move the entry down"),
         fixed!("Del / Backspace", "Auswahl löschen oder Wert zurücksetzen", "Delete the selection or reset a value"),
@@ -95,6 +96,10 @@ const GROUPS: &[Group] = &[
         binding!("form-task", FORM, "Alt+3", "Aufgabe wählen", "Choose task"),
         binding!("form-note", FORM, "Alt+4", "Notiz wählen", "Choose note"),
         binding!("form-options", FORM, "Alt+ArrowDown", "Optionen des Felds öffnen", "Open the field’s options"),
+        binding!("form-priority", FORM, "Alt+P", "Wichtigkeit umschalten", "Toggle priority"),
+        binding!("form-description", FORM, "Alt+B", "Beschreibung bearbeiten", "Edit description"),
+        binding!("form-reminder", FORM, "Alt+R", "Erinnerung bearbeiten", "Edit reminder"),
+        binding!("form-icon", FORM, "Alt+I", "Symbol auswählen", "Choose an icon"),
         binding!("form-save-stay", FORM, "Shift+Enter", "Eintrag erstellen und Formular geöffnet lassen", "Create the entry and keep the form open"),
         binding!("form-save", FORM, "Ctrl+Enter", "Eintrag erstellen und Fenster schließen", "Create the entry and close the window"),
         fixed!("Esc", "Geöffnete Auswahl schließen oder zum vorherigen Schritt zurück", "Close the picker or return to the previous step"),
@@ -126,6 +131,9 @@ const GROUPS: &[Group] = &[
         fixed!("↑ / ↓ / Tab", "Zeile wechseln oder zur nächsten Stelle im Satz", "Switch rows or move to the next part of the sentence"),
         fixed!("← / →", "Auswahl ändern", "Change the selection"),
         fixed!("Space / 1–7", "Wochentage umschalten", "Toggle weekdays"),
+        fixed!("Space", "Kalender für Start- oder Enddatum öffnen", "Open the calendar for the start or end date"),
+        fixed!("PgUp / PgDn / Home", "Im Datumspopup den Monat wechseln oder zu heute springen", "Change month in the date picker or go to today"),
+        fixed!("1–6 / Backspace", "Rhythmus wählen oder Wiederholung ausschalten", "Choose a rhythm or turn repetition off"),
         fixed!("0–9 / Shift+↑ / ↓", "Abstand, Anzahl oder Pause eingeben oder ändern", "Type or adjust an interval, count or pause"),
         fixed!("Shift+← / → / ↑ / ↓", "Datum um einen Tag oder eine Woche ändern", "Adjust a date by a day or a week"),
         fixed!("Del / Enter / Esc", "Zurücksetzen / übernehmen / abbrechen", "Reset / apply / cancel"),
@@ -151,10 +159,6 @@ const GROUPS: &[Group] = &[
 
 fn language_index(language: Language) -> usize {
     usize::from(matches!(language, Language::En))
-}
-
-pub fn group_names(language: Language) -> impl Iterator<Item = &'static str> {
-    GROUPS.iter().map(move |group| group.name[language_index(language)])
 }
 
 
@@ -299,29 +303,41 @@ impl Bindings {
     pub fn system_hotkey(&self) -> HotKey { self.effective("window-toggle").expect("default global hotkey") }
     pub fn default_system_hotkey(&self) -> HotKey { self.defaults["window-toggle"] }
 
-    pub fn load(&mut self) -> io::Result<()> {
-        let Some(path) = &self.path else { return Ok(()); };
+    /// Reads the own keys. One that no longer fits (unknown, reserved, or taken by another, e.g. by a shortcut that is
+    /// new in this version) is left out; the others stay. Returns the ids left out.
+    pub fn load(&mut self) -> io::Result<Vec<&'static str>> {
+        let Some(path) = &self.path else { return Ok(Vec::new()); };
         let contents = match fs::read(path) {
             Ok(contents) => contents,
-            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
             Err(error) => return Err(error),
         };
         let stored: BTreeMap<String, String> = serde_json::from_slice(&contents)?;
-        let invalid = || io::Error::new(io::ErrorKind::InvalidData, "Invalid or overlapping keyboard shortcuts");
         let mut next = self.clone();
+        let mut dropped = Vec::new();
         for (id, keys) in stored {
             let Some(shortcut) = definition(&id) else { continue; };
-            let key = HotKey::from_str(&keys).map_err(|_| invalid())?;
-            if key != next.defaults[shortcut.id] {
-                if !assignable(key) { return Err(invalid()); }
-                next.overrides.insert(shortcut.id, key);
+            match HotKey::from_str(&keys) {
+                Ok(key) if key == next.defaults[shortcut.id] => {}
+                Ok(key) if assignable(key) => { next.overrides.insert(shortcut.id, key); }
+                _ => dropped.push(shortcut.id),
             }
         }
-        for shortcut in definitions() {
-            next.validate_conflicts(shortcut, next.effective(shortcut.id).unwrap()).map_err(|_| invalid())?;
+        // An own key that collides is given up (the others keep theirs), until nothing collides.
+        loop {
+            let clash = definitions().find(|shortcut| next.overrides.contains_key(shortcut.id)
+                && next.validate_conflicts(shortcut, next.effective(shortcut.id).unwrap()).is_err());
+            let Some(shortcut) = clash else { break };
+            next.overrides.remove(shortcut.id);
+            dropped.push(shortcut.id);
         }
         *self = next;
-        Ok(())
+        Ok(dropped)
+    }
+
+    /// The name of a shortcut ("Zum Kalender wechseln").
+    pub fn action_label(id: &str, language: Language) -> &'static str {
+        definition(id).map_or("", |shortcut| shortcut.label[language_index(language)])
     }
 
     fn validate_conflicts(&self, shortcut: &Shortcut, key: HotKey) -> Result<(), EditError> {
@@ -345,15 +361,8 @@ impl Bindings {
 
     pub fn save(&self) -> io::Result<()> {
         let Some(path) = &self.path else { return Ok(()); };
-        if let Some(folder) = path.parent() { fs::create_dir_all(folder)?; }
         let stored = self.overrides.iter().map(|(id, key)| (*id, key.to_string())).collect::<BTreeMap<_, _>>();
-        let scratch = path.with_extension(format!("{}.tmp", uuid::Uuid::new_v4()));
-        fs::write(&scratch, serde_json::to_vec_pretty(&stored)?)?;
-        if let Err(error) = fs::rename(&scratch, path) {
-            let _ = fs::remove_file(scratch);
-            return Err(error);
-        }
-        Ok(())
+        crate::settings::write_json(path, &stored)
     }
 
     /// Adapt configured chords to the existing input handlers. A rejected event still edits text as before.
@@ -396,13 +405,13 @@ fn fixed_label(keys: &str, language: Language) -> String {
     }
 }
 
-pub fn rows(bindings: &Bindings, language: Language, selected: usize, query: &str) -> Vec<Row> {
+pub fn rows(bindings: &Bindings, language: Language, query: &str) -> Vec<Row> {
+    use crate::texts::settings::{tr, GLOBAL_DETAIL, GLOBAL_KEY, KEYBOARD};
     let query = fold(query);
     let terms: Vec<_> = query.split(|ch: char| ch.is_whitespace() || ch == '+')
         .filter(|term| !term.is_empty()).collect();
     let mut result = Vec::new();
-    for (index, group) in GROUPS.iter().enumerate() {
-        if terms.is_empty() && index != selected { continue; }
+    for group in GROUPS {
         let name = group.name[language_index(language)];
         let mut heading = name;
         for shortcut in group.shortcuts {
@@ -411,7 +420,12 @@ pub fn rows(bindings: &Bindings, language: Language, selected: usize, query: &st
             let keys = current.map_or_else(|| fixed_label(shortcut.keys, language), |key| label(key, language));
             if !terms.is_empty() {
                 let canonical = current.map_or_else(|| shortcut.keys.to_owned(), |key| label(key, Language::En));
-                let haystack = fold(&format!("{name} {action} {canonical} {keys}"));
+                let keyboard = tr(KEYBOARD, language);
+                let mut haystack = format!("{keyboard} {name} {action} {canonical} {keys}");
+                if shortcut.id == "window-toggle" {
+                    haystack.push_str(&format!(" {} {}", tr(GLOBAL_KEY, language), tr(GLOBAL_DETAIL, language)));
+                }
+                let haystack = fold(&haystack);
                 if !terms.iter().all(|term| haystack.contains(term)) { continue; }
             }
             result.push(Row { id: shortcut.id, heading, action, keys, changed: bindings.overrides.contains_key(shortcut.id) });
@@ -421,9 +435,50 @@ pub fn rows(bindings: &Bindings, language: Language, selected: usize, query: &st
     result
 }
 
+/// The keys of an action as they are set now ("Strg+Umschalt+N"); empty for an unknown id.
+pub fn keys(bindings: &Bindings, id: &str, language: Language) -> String {
+    bindings.effective(id).map(|key| label(key, language)).unwrap_or_default()
+}
+
+/// Keys as caps, one per key ("Strg+Umschalt+Enter" → Strg, ⇧, ↵), as Raycast shows them.
+pub fn caps(keys: &str) -> Vec<String> {
+    if keys.is_empty() { return Vec::new(); }
+    let mut parts: Vec<&str> = keys.split('+').collect();
+    // A key that is itself "+" leaves an empty part behind.
+    if keys.ends_with("++") { parts.retain(|part| !part.is_empty()); parts.push("+"); }
+    parts.into_iter().filter(|part| !part.is_empty()).map(|part| match part {
+        "Umschalt" | "Shift" => "⇧".to_owned(),
+        "Enter" => "↵".to_owned(),
+        other => other.to_owned(),
+    }).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_own_key_taken_by_a_new_shortcut_is_reset_and_the_others_stay() {
+        let path = std::env::temp_dir().join(format!("j-terminal-shortcuts-{}.json", uuid::Uuid::new_v4()));
+        fs::write(&path, r#"{ "calendar-focus": "control+KeyK", "notes-preview": "F8" }"#).unwrap();
+        let mut profile = Bindings::at(Some(path.clone()));
+        assert_eq!(profile.load().unwrap(), ["calendar-focus"], "Strg+K belongs to the actions now.");
+        assert_eq!(keys(&profile, "calendar-focus", Language::En), "F6");
+        assert_eq!(keys(&profile, "notes-preview", Language::En), "F8", "The others are kept.");
+        assert_eq!(keys(&profile, "day-actions", Language::En), "Ctrl+K");
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn keys_become_caps_and_follow_changes() {
+        let mut profile = Bindings::default();
+        assert_eq!(caps(&keys(&profile, "day-actions", Language::De)), ["Strg", "K"]);
+        assert_eq!(caps(&keys(&profile, "notebook", Language::De)), ["Strg", "⇧", "N"]);
+        assert_eq!(caps(&keys(&profile, "form-save", Language::En)), ["Ctrl", "↵"]);
+        profile.set("day-actions", Some("Ctrl+J".parse().unwrap())).unwrap();
+        assert_eq!(caps(&keys(&profile, "day-actions", Language::De)), ["Strg", "J"]);
+        assert!(caps("").is_empty());
+    }
 
     #[test]
     fn default_bindings_resolve_without_conflicts() {
@@ -458,7 +513,7 @@ mod tests {
         profile.save().unwrap();
         let mut reopened = Bindings::at(Some(path.clone()));
         reopened.load().unwrap();
-        let row = &rows(&reopened, Language::De, 0, "Markdown")[0];
+        let row = &rows(&reopened, Language::De, "Markdown")[0];
         assert_eq!(row.keys, "F8");
         assert!(row.changed);
         assert_eq!(reopened.system_hotkey(), "Ctrl+Shift+Space".parse().unwrap());
@@ -468,7 +523,7 @@ mod tests {
         reopened.save().unwrap();
         let mut restored = Bindings::at(Some(path.clone()));
         restored.load().unwrap();
-        assert_eq!(rows(&restored, Language::De, 0, "Markdown")[0].keys, "Strg+M");
+        assert_eq!(rows(&restored, Language::De, "Markdown")[0].keys, "Strg+M");
         fs::remove_file(path).unwrap();
     }
 }

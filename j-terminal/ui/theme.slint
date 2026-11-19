@@ -1,6 +1,8 @@
-// The one design of J-TerminaL: the Journal app's standard design (look `classic`, palette `original`; `src/colors.ts`,
-// `src/styles.css`, the calendar's composer in `src/calendar.css`, branch `Windows`). Every colour, spacing and font lives
-// here; components only read `Theme`. Further designs are new values, not new parts.
+// The one design of J-TerminaL, after Raycast: a calm neutral surface (slightly see-through over a strong blur when
+// Windows offers it), grey selections instead of coloured ones, borderless large inputs, a slim footer with key caps
+// and the actions behind Strg+K. Blue is kept for what must stay visible: today, the week and month lines of the
+// calendar, the keyboard's place in it and selected text. Every colour, spacing and font lives here; components only
+// read `Theme`.
 //
 // The fonts are the app's own (IBM Plex Sans for the interface, Lilex for what is written; SIL OFL, assets/fonts).
 import "../assets/fonts/IBMPlexSans-400.ttf";
@@ -10,42 +12,53 @@ import "../assets/fonts/Lilex-400.ttf";
 import "../assets/fonts/Lilex-500.ttf";
 
 export global Theme {
-    // ── The palette `original` ──
-    // The window is a popup like the app's composer: the surface, its edge, the black ground inside fields and the calendar.
-    out property <color> background: #292929;      // surface
-    out property <color> ground: #000000;          // background
-    out property <color> inset: #1f1f1f;
-    out property <color> hover: #393939;
-    out property <color> selected: #494949;
-    out property <color> border: #454545;          // opaque outline around form and calendar
-    out property <color> edge: #ffffff12;
-    out property <color> divider: #2e2e2e;
-    out property <color> text: #bcbcbc;
-    out property <color> strong: #e0e0e0;
-    out property <color> muted: #999999;
-    out property <color> placeholder: #7a7a7a;
+    // ── The palette ──
+    out property <color> background: #1c1c1e;      // the surface
+    // How much of the surface covers the blur behind the window (only where Windows draws one).
+    out property <float> surface-alpha: 0.86;
+    out property <color> ground: #000000;          // text on a light fill
+    out property <color> inset: #ffffff08;
+    out property <color> raised: #ffffff0d;        // a card on the surface
+    out property <color> hover: #ffffff0d;
+    out property <color> selected: #ffffff1a;
+    out property <color> border: #ffffff24;        // the window's outline (where Windows does not draw one)
+    out property <color> edge: #ffffff1a;
+    out property <color> divider: #ffffff14;
+    out property <color> text: #e4e4e4;
+    out property <color> strong: #ffffff;
+    out property <color> muted: #9a9a9a;
+    out property <color> placeholder: #6b6b6b;
     out property <color> accent: #569eff;
-    out property <color> priority: #e6a85c;
-    out property <color> success: #76d982;
-    out property <color> error: #ff5555;
-    out property <color> selection: #569eff33;
+    out property <color> priority: #f0a24a;
+    out property <color> success: #6fd08a;
+    out property <color> error: #ff6961;
+    out property <color> selection: #569eff59;
     out property <color> event: #569eff;
     out property <color> event-background: #1d2b40;
     out property <color> event-text: #d6e6ff;
-    out property <color> task-background: #2d2d2d;
+    out property <color> task-background: #2a2a2c;
     out property <color> now: #ff5f57;
-    out property <color> saturday: #7fb2ff;
-    out property <color> sunday: #e57b7b;
+    out property <color> saturday: #8fb8f0;
+    out property <color> sunday: #e58a8a;
     // What the parts are made of.
-    out property <color> recognised: #1f1f1f;      // a choice not chosen: inset
-    out property <color> row-selection: #393939;   // the active line: hover
-    out property <color> row-selection-strong: #494949;
-    out property <color> chip-selected: #1d2b40;   // a chosen choice: the event's ground, its text bright
-    out property <color> chip-selected-text: #d6e6ff;
-    out property <color> field-background: #000000;
-    out property <color> field-focus: #569eff80;   // the composer's field focus: the accent at half
-    out property <color> panel-background: #1f1f1f;
-    out property <color> panel-border: #ffffff12;
+    out property <color> recognised: #ffffff0a;    // a choice not chosen
+    out property <color> row-selection: #ffffff1a; // the active line
+    out property <color> row-selection-strong: #ffffff24;
+    out property <color> chip-selected: #ffffff1f; // a chosen choice: lighter, its text white
+    out property <color> chip-selected-text: #ffffff;
+    out property <color> field-background: #ffffff0a;
+    out property <color> field-focus: #ffffff47;   // a field with the keyboard: a lighter edge
+    out property <color> field-focus-background: #ffffff10;
+    out property <color> panel-background: #ffffff08;
+    out property <color> panel-border: #ffffff14;
+    // The popover of the actions (Strg+K) and the type list: a lighter card with a shadow.
+    out property <color> popover-background: #2b2b2e;
+    out property <color> popover-border: #ffffff1f;
+    out property <color> popover-shadow: #00000099;
+    out property <length> popover-shadow-blur: 24px;
+    // Key caps: an outline, the key's name small inside.
+    out property <color> keycap-border: #ffffff38;
+    out property <color> keycap-text: #c8c8c8;
 
     // ── Type ──
     out property <string> ui-font: "IBM Plex Sans";
@@ -59,90 +72,199 @@ export global Theme {
     out property <length> label-size: 13px;
     out property <length> form-size: 15px;
     out property <length> write-size: 13px;
-    out property <length> type-size: 14px;
-    out property <length> clock-size: 40px;
+    out property <length> type-size: 13px;
+    out property <length> clock-size: 36px;
+    out property <length> search-size: 17px;
+    out property <length> section-size: 12px;
 
     // ── The window ──
-    // The form at the left, the calendar at the right.
-    out property <length> width: 1501px;
-    out property <length> form-width: 600px;
-    out property <length> calendar-width: 900px;
-    out property <length> calendar-height: 600px;
-    out property <length> stacked-day-min-height: 330px;
-    out property <length> stacked-calendar-min-height: 240px;
-    out property <float> stacked-day-share: 0.46;
-    out property <length> radius: 16px;            // the composer's corners
+    // The left half (search, day view, form, notepad) and the calendar at the right.
+    out property <length> width: 1240px;
+    out property <length> form-width: 460px;
+    out property <length> calendar-width: 779px;
+    out property <length> calendar-height: 520px;
+    out property <length> stacked-day-min-height: 300px;
+    out property <length> stacked-calendar-min-height: 220px;
+    out property <float> stacked-day-share: 0.5;
+    out property <length> radius: 8px;             // the window's corners (Windows 11 draws the same)
     out property <length> border-width: 1px;
     out property <length> frame-inset: 1px;
-    out property <length> frame-stroke: 2px;
-    out property <length> padding: 18px;
+    out property <length> frame-stroke: 1px;
+    out property <length> padding: 16px;
     out property <length> gap: 8px;
     out property <length> calendar-gap: 3px;
     out property <length> block-radius: 6px;
+    // The top line: the search (or a title) as a large borderless input, things beside it at the right.
     out property <length> line-height: 52px;
-    out property <length> search-icon-size: 16px;
-    out property <length> search-height: 34px;
-    out property <length> row-height: 34px;
-    out property <color> settings-scrim: #000000a6;
-    out property <length> settings-width: 760px;
-    out property <length> settings-height: 560px;
-    out property <length> settings-navigation-width: 155px;
-    out property <float> settings-navigation-share: 0.32;
-    out property <float> settings-keys-share: 0.46;
+    out property <length> search-icon-size: 18px;
+    out property <length> search-height: 32px;
+    out property <length> row-height: 36px;
+    out property <length> back-size: 26px;
+    out property <length> accessory-gap: 6px;
+    out property <length> accessory-height: 26px;
+    out property <length> accessory-inset: 8px;
+    // Lists: the chosen line is a rounded grey field, inset from the edges.
+    out property <length> list-inset: 8px;
+    out property <length> list-radius: 8px;
+    out property <length> section-height: 28px;
+
+    // ── The footer under the left half ──
+    out property <length> footer-height: 30px;
+    out property <length> footer-size: 12px;
+    out property <length> footer-date-size: 11px;
+    out property <length> footer-icon-size: 14px;
+    out property <length> footer-gap: 4px;
+    out property <length> footer-menu-size: 24px;
+    out property <length> footer-menu-stroke: 1.5px;
+    out property <length> footer-menu-line-gap: 2px;
+    out property <duration> toast-duration: 3s;
+    out property <length> keycap-height: 18px;
+    out property <length> keycap-min-width: 18px;
+    out property <length> keycap-radius: 4px;
+    out property <length> keycap-inset: 5px;
+    out property <length> keycap-size: 11px;
+    out property <length> keycap-gap: 3px;
+
+    // ── The settings window ──
+    out property <string> settings-font: "Segoe UI";
+    out property <int> settings-label-weight: 600;
+    out property <color> settings-background: #202020;
+    out property <color> settings-caption: #292929;
+    out property <color> settings-frame: #454545;
+    out property <color> settings-divider: #323232;
+    out property <color> settings-text: #f3f3f3;
+    out property <color> settings-secondary-text: #a9a9a9;
+    out property <color> settings-placeholder: #949494;
+    out property <color> settings-disabled: #626262;
+    out property <color> settings-focus-outline: #a5a5a5;
+    out property <color> settings-selection: #575757;
+    out property <color> settings-category-background: #353535;
+    out property <color> settings-category-hover: #2c2c2c;
+    out property <color> settings-group-background: #242424;
+    out property <color> settings-row-hover: #2b2b2b;
+    out property <color> settings-row-selected: #323232;
+    out property <color> settings-key-background: #3b3b3b;
+    out property <color> settings-key-hover: #494949;
+    out property <brush> settings-emblem: @linear-gradient(155deg, #575757, #373737);
+    out property <color> settings-emblem-edge: #ffffff12;
+    out property <color> settings-symbol: #e2e2e2;
+    out property <brush> settings-thumbnail: @linear-gradient(145deg, #393939, #141414 62%, #0d0d0d);
+    out property <color> settings-switch-on: #827663;
+    out property <color> settings-switch-off: #505050;
+    out property <color> settings-switch-thumb: #f6f6f6;
+    out property <length> settings-width: 1000px;
+    out property <length> settings-height: 880px;
+    out property <length> settings-min-width: 620px;
+    out property <length> settings-min-height: 360px;
+    out property <length> settings-navigation-width: 220px;
+    out property <length> settings-navigation-compact: 164px;
+    out property <float> settings-navigation-share: 0.22;
+    out property <length> settings-navigation-inset: 9px;
+    out property <length> settings-caption-height: 38px;
+    out property <length> settings-chrome-width: 44px;
+    out property <length> settings-chrome-symbol: 15px;
+    out property <length> settings-history-width: 21px;
+    out property <length> settings-search-height: 31px;
+    out property <length> settings-category-height: 31px;
+    out property <length> settings-category-gap: 2px;
+    out property <length> settings-identity-height: 66px;
+    out property <length> settings-profile-size: 30px;
+    out property <length> settings-icon-box: 21px;
+    out property <length> settings-icon-size: 14px;
+    out property <length> settings-tile-radius: 5px;
+    out property <length> settings-hero-height: 192px;
+    out property <length> settings-hero-top: 16px;
+    out property <length> settings-hero-icon: 52px;
+    out property <length> settings-hero-symbol: 32px;
+    out property <length> settings-hero-radius: 13px;
+    out property <length> settings-hero-title: 25px;
+    out property <length> settings-hero-gap: 10px;
+    out property <length> settings-row-height: 46px;
+    out property <length> settings-detail-height: 57px;
+    out property <length> settings-row-size: 14px;
+    out property <length> settings-detail-size: 12px;
+    out property <length> settings-section-height: 34px;
+    out property <length> settings-padding: 16px;
+    out property <length> settings-row-inset: 12px;
+    out property <length> settings-row-pad-y: 10px;
+    out property <length> settings-text-gap: 2px;
+    out property <length> settings-card-radius: 6px;
+    out property <length> settings-key-height: 24px;
+    out property <length> settings-key-inset: 8px;
+    out property <length> settings-action-icon-size: 12px;
+    out property <float> settings-keys-share: 0.48;
+    out property <length> settings-switch-width: 28px;
+    out property <length> settings-switch-height: 16px;
+    out property <length> settings-switch-thumb-size: 10px;
+    out property <length> settings-switch-inset: 3px;
+    out property <length> settings-feature-height: 64px;
+    out property <length> settings-thumb-width: 84px;
+    out property <length> settings-thumb-height: 47px;
+    out property <length> settings-thumb-key: 30px;
+    out property <length> settings-preview-width: 138px;
+    out property <length> settings-preview-height: 84px;
+    out property <length> settings-preview-min-room: 560px;
+    out property <brush> settings-preview-ground: @linear-gradient(144deg, #191919, #484848 38%, #292929 70%, #181818);
+    out property <brush> settings-preview-active: @linear-gradient(144deg, #242424, #737373 38%, #404040 72%, #232323);
+    out property <color> settings-mini-window: #1d1d1d;
+    out property <color> settings-mini-field: #484848;
+    out property <color> settings-mini-label: #777777;
+    out property <length> settings-menu-width: 187px;
+    out property <length> settings-menu-row: 30px;
+    out property <length> settings-menu-padding: 4px;
+    out property <length> settings-resize-border: 4px;
+    out property <duration> settings-switch-time: 100ms;
 
     // ── The form: a line per piece ──
     out property <length> form-row-height: 38px;
-    out property <length> label-width: 130px;
+    out property <length> label-width: 92px;
     out property <length> option-inset: 10px;
     out property <length> marker-width: 3px;
-    // A field the keyboard is in: a pill on the black ground, as the composer's text field.
-    out property <length> field-radius: 15px;
+    // A field: a quiet grey area with a fine light edge.
+    out property <length> field-radius: 7px;
     out property <length> field-inset: 9px;
     out property <length> field-vpad: 5px;
     // A line that is no text keeps the input at this width: a narrower one loses the keyboard focus.
     out property <length> idle-input-width: 40px;
     // "When": the date, the start and the end side by side.
-    out property <length> when-date-width: 220px;
-    out property <length> when-time-width: 96px;
-    out property <length> when-dash-width: 22px;
+    out property <length> when-date-width: 206px;
+    out property <length> when-time-width: 58px;
+    out property <length> when-dash-width: 14px;
     out property <length> label-icon-size: 16px;
     out property <length> more-radius: 8px;
     out property <length> more-inset: 10px;
-    out property <color> more-background: #1f1f1f;
+    out property <color> more-background: #ffffff08;
 
     // ── The open options of a field: a quiet card under the form ──
     out property <length> panel-radius: 10px;
-    out property <length> panel-padding: 12px;
-    out property <length> panel-spacing: 10px;
+    out property <length> panel-padding: 10px;
+    out property <length> panel-spacing: 8px;
     out property <length> choice-spacing: 2px;
     out property <length> focus-ring: 1.5px;
     out property <length> choice-height: 28px;
-    out property <length> sentence-spacing: 8px;
-    out property <length> sentence-label-width: 92px;
-    out property <length> sentence-height: 28px;
-    out property <length> sentence-inset: 9px;
-    out property <length> toggle-width: 38px;
-    out property <length> clock-inset: 14px;
-    out property <length> clock-box-height: 62px;
-    out property <length> tag-dot: 10px;
-    out property <length> icon-size: 20px;
+    out property <length> sentence-spacing: 6px;
+    out property <length> sentence-label-width: 88px;
+    out property <length> sentence-height: 26px;
+    out property <length> sentence-inset: 8px;
+    out property <length> toggle-width: 34px;
+    out property <length> clock-inset: 12px;
+    out property <length> clock-box-height: 56px;
+    out property <length> tag-dot: 9px;
+    out property <length> icon-size: 18px;
     out property <length> icon-cell: 38px;
-    out property <int> icon-columns: 14;
+    out property <int> icon-columns: 10;
     out property <int> reminder-columns: 4;
 
-    // ── The day view: the left side while no entry form is open, as the app's day page (section headings with a
-    //    line under them, the accent symbol before each entry, its time as an outlined chip) ──
-    out property <length> day-head-height: 46px;
-    out property <length> day-head-size: 15px;
+    // ── The day view: a list as in Raycast (small grey section headings, the chosen line a rounded grey field,
+    //    times and tags quiet at the right) ──
     out property <length> day-pill-height: 22px;
-    out property <length> day-pill-inset: 9px;
-    out property <color> day-pill-border: #569eff40;   // the accent at a quarter, as the app's time chip
-    out property <length> day-section-top: 14px;
-    out property <length> day-heading-height: 40px;
+    out property <length> day-pill-inset: 8px;
+    out property <length> day-section-top: 8px;
+    out property <length> day-heading-height: 30px;
     out property <length> day-heading-icon: 14px;
     out property <length> day-heading-size: 12px;
-    out property <length> day-count-size: 10px;
-    out property <length> day-row-height: 30px;
+    out property <length> day-count-size: 11px;
+    out property <length> day-row-height: 32px;
     out property <length> day-symbol-size: 16px;
     out property <length> day-tag-icon-size: 14px;
     out property <length> day-chip-height: 20px;
@@ -152,67 +274,71 @@ export global Theme {
     out property <length> day-value-width: 70px;
     out property <length> day-bar-height: 6px;
     out property <length> day-bar-radius: 3px;
-    out property <color> day-bar-background: #1f1f1f;
-    out property <length> day-bottom: 12px;
+    out property <color> day-bar-background: #ffffff0d;
+    out property <length> day-bottom: 8px;
     out property <float> day-footer-share: 0.48;
-    out property <float> day-done-opacity: 0.5;
-    out property <length> day-title-height: 38px;
-    out property <length> day-new-size: 24px;
-    out property <length> day-select-inset: 6px;
+    out property <float> day-done-opacity: 0.45;
+    out property <length> day-title-height: 34px;
+    out property <length> day-select-inset: 8px;
     out property <length> day-symbol-box: 24px;
-    out property <length> notepad-body-min-height: 120px;
+    out property <length> notepad-body-min-height: 100px;
     out property <length> notepad-caret-room: 24px;
-    out property <length> notepad-text-size: 17px;
-    out property <length> notepad-action-height: 30px;
-    out property <length> notepad-header-height: 54px;
-    out property <length> notepad-title-height: 40px;
-    out property <length> notepad-title-size: 23px;
-    out property <color> notepad-primary-hover: #83b8ff;
-    out property <length> notepad-source-size: 15px;
-    out property <length> notepad-code-size: 15px;
-    out property <length> notepad-heading-one: 26px;
-    out property <length> notepad-heading-two: 22px;
-    out property <length> notepad-heading-three: 19px;
-    out property <length> notepad-line-gap: 7px;
+    out property <length> notepad-text-size: 16px;
+    out property <length> notepad-action-height: 26px;
+    out property <length> notepad-header-height: 44px;
+    out property <length> notepad-title-height: 36px;
+    out property <length> notepad-title-size: 21px;
+    out property <length> notepad-source-size: 14px;
+    out property <length> notepad-code-size: 14px;
+    out property <length> notepad-heading-one: 24px;
+    out property <length> notepad-heading-two: 20px;
+    out property <length> notepad-heading-three: 17px;
+    out property <length> notepad-line-gap: 6px;
     out property <length> notepad-indent: 18px;
-    out property <length> notepad-thumb-height: 108px;
-    out property <length> notepad-check-size: 17px;
+    out property <length> notepad-thumb-height: 96px;
+    out property <length> notepad-check-size: 16px;
 
     // The dials: rings drawn in Rust (dial.rs), side by side, the value inside, the name under them.
-    out property <length> dial-row-height: 92px;
+    out property <length> dial-row-height: 84px;
     out property <length> dial-drag-step: 6px;
     out property <length> dial-spacing: 6px;
-    out property <length> dial-cell-width: 74px;
-    out property <length> dial-top: 6px;
-    out property <length> dial-size: 54px;
+    out property <length> dial-cell-width: 70px;
+    out property <length> dial-top: 4px;
+    out property <length> dial-size: 50px;
     out property <length> dial-thickness: 5px;
-    out property <length> dial-value-size: 15px;
+    out property <length> dial-value-size: 14px;
     out property <length> dial-label-gap: 4px;
-    out property <color> dial-track: #1f1f1f;
+    out property <color> dial-track: #ffffff14;
 
-    // ── The panel that comes out at the left: an entry's settings and pickers ──
-    out property <length> side-width: 340px;
-    out property <length> side-stacked-max-height: 460px;
-    out property <duration> side-slide-duration: 180ms;
-    out property <length> side-padding: 14px;
+    // ── The popover of the actions (Strg+K) with its pickers: tags, icons, reminders, clock, month, description ──
+    out property <length> popover-width: 340px;
+    out property <length> app-menu-width: 180px;
+    out property <length> popover-max-height: 390px;
+    out property <length> popover-radius: 10px;
+    out property <length> popover-padding: 6px;
+    out property <length> popover-inset: 8px;
+    out property <length> popover-search-height: 38px;
+    out property <int> action-visible-rows: 6;
     out property <length> side-row-height: 30px;
-    out property <length> side-value-width: 130px;
+    out property <length> side-value-width: 110px;
     out property <int> side-icon-columns: 7;
     out property <length> side-icon-cell: 44px;
-    out property <length> side-cell: 44px;
+    out property <length> side-cell: 36px;
     out property <length> side-cell-inset: 4px;
-    out property <length> side-description-height: 160px;
+    out property <length> side-description-height: 130px;
 
-    // ── The calendar: days one under another, the 24 hours left to right, long entries in lanes at the side ──
-    out property <color> cal-background: #000000;
+    // ── The calendar: days one under another, the 24 hours left to right, long entries in lanes at the side.
+    //    The same surface as the rest; its head as high as the top line, so one line runs under both. ──
+    out property <color> cal-background: transparent;
     out property <length> cal-pad: 6px;
-    out property <length> cal-head-height: 22px;
+    out property <length> cal-head-height: 52px;
+    out property <length> cal-head-ticks-height: 18px;
     out property <int> cal-lanes: 3;
     out property <length> cal-lane-width: 20px;
     out property <length> cal-lane-core: 3px;
     out property <length> cal-lane-text-size: 11px;
     out property <length> cal-lane-text-top: 4px;
-    out property <length> cal-label-width: 150px;
+    out property <length> cal-label-width: 132px;
     out property <length> cal-date-width: 50px;
     out property <length> cal-week-width: 40px;
     out property <length> cal-date-height: 20px;
@@ -225,20 +351,21 @@ export global Theme {
     out property <length> cal-date-size: 12px;
     out property <length> cal-week-size: 10px;
     out property <length> cal-month-size: 13px;
+    out property <length> cal-head-title-size: 15px;
     out property <length> cal-text-inset: 6px;
     out property <length> cal-text-tail: 2px;
     out property <length> cal-title-top: 2px;
     out property <length> cal-title-height: 15px;
     out property <length> cal-time-top: 16px;
-    out property <length> cal-tick-inset: 2px;
+    out property <length> cal-tick-inset: 3px;
     out property <length> cal-label-top: 3px;
     out property <length> cal-day-height: 30px;
     out property <length> cal-thin-height: 5px;
     out property <length> cal-row-height: 36px;
-    out property <length> cal-month-height: 24px;
+    out property <length> cal-month-height: 26px;
     out property <length> cal-month-line-width: 2px;
     out property <length> cal-month-label-inset: 12px;
-    out property <length> cal-stroke-radius: 4px;  // the calendar's blocks
+    out property <length> cal-stroke-radius: 5px;  // the calendar's blocks
     out property <length> cal-block-edge: 3px;
     out property <length> cal-point-width: 140px;
     out property <length> cal-point-line-width: 4px;
@@ -247,21 +374,23 @@ export global Theme {
     out property <length> cal-fresh-border: 1.5px;
     out property <length> cal-now-width: 2px;
     out property <length> cal-week-line-width: 2px;
-    out property <float> cal-fill: 0.28;
-    out property <float> cal-lane-fill: 0.40;
+    out property <length> cal-focus-line: 2px;
+    out property <float> cal-fill: 0.24;
+    out property <float> cal-lane-fill: 0.36;
     out property <float> cal-done-opacity: 0.45;
-    out property <float> cal-open-opacity: 0.5;
-    out property <color> cal-month-tint: #ffffff05;
-    out property <color> cal-month-head: #292929;
-    out property <color> cal-month-line: #999999;
+    out property <float> cal-open-opacity: 0.6;
+    out property <color> cal-month-tint: #ffffff03;
+    out property <color> cal-month-head: #2a2a2d;
+    out property <color> cal-month-line: #569eff;
     out property <color> cal-weekend: #ffffff04;
     out property <color> cal-today: #569eff14;
-    out property <color> cal-selected: #569eff33;
-    out property <color> cal-day-line: #1c1c1c;
-    out property <color> cal-week-line: #569eff73;
-    out property <color> cal-hour-line: #ffffff09;
-    out property <color> cal-hour-line-strong: #ffffff14;
-    out property <color> cal-stroke: #7a7a7a;
+    out property <color> cal-selected: #ffffff14;
+    out property <color> cal-cursor: #ffffff47;
+    out property <color> cal-day-line: #ffffff0a;
+    out property <color> cal-week-line: #569eff8c;
+    out property <color> cal-hour-line: #ffffff06;
+    out property <color> cal-hour-line-strong: #ffffff10;
+    out property <color> cal-stroke: #8a8a8a;
     out property <color> cal-now: #ff5f57;
     out property <color> cal-caret: #569eff26;
 }

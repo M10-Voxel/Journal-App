@@ -1,0 +1,258 @@
+import { Theme } from "theme.slint";
+import { JournalIcons } from "journal-icons.slint";
+
+export enum PreferenceKey { none, start-view, window-position, hide-on-blur, return-today, language, keycaps, parse-titles, save-delay, week-numbers, weekends, now-line, notes-on-day, note-mode }
+export enum RowControl { fixed, toggle, choice, shortcut, featured }
+export struct SettingsRow {
+    preference: PreferenceKey, control: RowControl, id: string, starts-group: bool, heading: string,
+    action: string, detail: string, value: string, choices: [string], index: int, changed: bool,
+}
+export struct SettingsCategory { name: string, description: string, icon: image, hero-icon: image }
+export struct SettingsLabels {
+    settings: string, search: string, empty: string, record: string, reset: string, change: string,
+    back: string, forward: string, minimize: string, close: string,
+}
+
+export component Emblem inherits Rectangle {
+    in property <image> icon;
+    in property <length> symbol-size: Theme.settings-icon-size;
+    width: Theme.settings-icon-box; height: self.width;
+    border-radius: Theme.settings-tile-radius;
+    background: Theme.settings-emblem;
+    border-width: Theme.border-width; border-color: Theme.settings-emblem-edge;
+    Image {
+        width: root.symbol-size; height: self.width;
+        x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2;
+        source: root.icon; colorize: Theme.settings-symbol;
+    }
+}
+
+export enum CaptionAction { back, forward, minimize, close }
+export component CaptionButton inherits Rectangle {
+    in property <CaptionAction> action;
+    in property <bool> available: true;
+    in property <string> label;
+    callback activated;
+    private property <bool> arrow: root.action == CaptionAction.back || root.action == CaptionAction.forward;
+    width: root.arrow ? Theme.settings-history-width : Theme.settings-chrome-width;
+    height: Theme.settings-caption-height;
+    background: root.available && hit.has-hover ? Theme.settings-key-hover : transparent;
+    accessible-role: button; accessible-label: root.label; accessible-enabled: root.available;
+    accessible-action-default => { if root.available { root.activated(); } }
+    if root.arrow: Image {
+        width: Theme.settings-chrome-symbol; height: self.width;
+        x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2;
+        source: root.action == CaptionAction.back ? JournalIcons.left-icon : JournalIcons.right-icon;
+        colorize: root.available ? Theme.settings-text : Theme.settings-disabled;
+    }
+    if root.action == CaptionAction.minimize: Rectangle {
+        width: Theme.settings-action-icon-size; height: Theme.border-width;
+        x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2;
+        background: Theme.settings-text;
+    }
+    if root.action == CaptionAction.close: Path {
+        width: Theme.settings-action-icon-size; height: self.width;
+        x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2;
+        viewbox-width: 16; viewbox-height: 16;
+        commands: "M 2 2 L 14 14 M 14 2 L 2 14";
+        stroke: Theme.settings-text; stroke-width: Theme.border-width;
+    }
+    hit := TouchArea { enabled: root.available; clicked => { root.activated(); } }
+}
+
+component Switch inherits Rectangle {
+    in property <bool> checked;
+    width: Theme.settings-switch-width; height: Theme.settings-switch-height;
+    border-radius: self.height / 2;
+    background: checked ? Theme.settings-switch-on : Theme.settings-switch-off;
+    Rectangle {
+        width: Theme.settings-switch-thumb-size; height: self.width;
+        x: root.checked ? parent.width - self.width - Theme.settings-switch-inset : Theme.settings-switch-inset;
+        y: (parent.height - self.height) / 2;
+        border-radius: self.height / 2; background: Theme.settings-switch-thumb;
+        animate x { duration: Theme.settings-switch-time; }
+    }
+}
+
+// Two miniature terminal layouts for the opening-view preference.
+component ViewTile inherits Rectangle {
+    in property <bool> entry;
+    in property <bool> selected;
+    in property <string> label;
+    callback choose;
+    width: Theme.settings-preview-width;
+    height: Theme.settings-preview-height + Theme.footer-gap + Theme.settings-key-height;
+    accessible-role: radio-button; accessible-label: root.label; accessible-checked: root.selected;
+    accessible-action-default => { root.choose(); }
+    Rectangle {
+        y: 0px; height: Theme.settings-preview-height;
+        background: root.selected ? Theme.settings-preview-active : Theme.settings-preview-ground;
+        border-radius: Theme.settings-card-radius;
+        border-width: Theme.border-width; border-color: hit.has-hover ? Theme.settings-focus-outline : Theme.settings-emblem-edge;
+        Rectangle {
+            width: parent.width * 0.72; height: parent.height * 0.57;
+            background: Theme.settings-mini-window; border-radius: Theme.settings-menu-padding;
+            border-color: Theme.settings-mini-field; border-width: Theme.border-width;
+            Rectangle {
+                x: Theme.settings-menu-padding; y: Theme.settings-menu-padding;
+                width: parent.width - 2 * self.x; height: Theme.footer-gap;
+                background: Theme.settings-mini-field; border-radius: Theme.border-width;
+            }
+            Rectangle {
+                x: Theme.settings-menu-padding; y: Theme.settings-row-pad-y;
+                width: parent.width * 0.47; height: parent.height - self.y - Theme.footer-gap;
+                for i in 4: Rectangle {
+                    x: 0px; y: i * parent.height / 4; width: root.entry ? parent.width : parent.width * (i == 1 ? 0.65 : 0.85);
+                    height: root.entry ? Theme.footer-gap : Theme.settings-text-gap;
+                    background: root.entry ? Theme.settings-mini-field : Theme.settings-mini-label; border-radius: Theme.border-width;
+                }
+            }
+            Rectangle {
+                x: parent.width * 0.56; y: Theme.settings-row-pad-y;
+                width: parent.width - self.x - Theme.footer-gap; height: parent.height - self.y - Theme.footer-gap;
+                background: Theme.settings-category-hover;
+                for i in 3: Rectangle {
+                    x: 0px; y: (i + 1) * parent.height / 4; height: Theme.border-width; background: Theme.settings-mini-field;
+                }
+                for i in 3: Rectangle {
+                    x: (i + 1) * parent.width / 4; y: 0px; width: Theme.border-width; background: Theme.settings-mini-field;
+                }
+            }
+        }
+    }
+    Rectangle {
+        y: Theme.settings-preview-height + Theme.footer-gap;
+        width: tile-label.preferred-width + Theme.settings-key-inset * 2; height: Theme.settings-key-height;
+        border-radius: Theme.settings-tile-radius; background: root.selected ? Theme.settings-key-hover : transparent;
+        tile-label := Text {
+            text: root.label; horizontal-alignment: center; vertical-alignment: center;
+            font-size: Theme.settings-detail-size; color: root.selected ? Theme.settings-text : Theme.settings-secondary-text;
+        }
+    }
+    hit := TouchArea { mouse-cursor: pointer; clicked => { root.choose(); } }
+}
+
+export component SettingsOption inherits Rectangle {
+    in property <SettingsRow> data;
+    in property <SettingsLabels> labels;
+    in property <image> terminal-icon;
+    in property <bool> first;
+    in property <bool> last;
+    in property <bool> focused;
+    in property <bool> recording;
+    in property <bool> previews;
+    in property <string> error;
+    callback activate;
+    callback reset;
+    callback choose(int);
+    private property <bool> featured: data.control == RowControl.featured;
+    private property <bool> shortcut: root.featured || data.control == RowControl.shortcut;
+    private property <bool> toggle: data.control == RowControl.toggle;
+    private property <bool> choice: data.control == RowControl.choice;
+    private property <string> description: root.error != "" ? root.error : root.recording ? root.labels.record : data.detail;
+    private property <length> pad: Theme.settings-row-inset;
+    height: max(root.previews ? Theme.settings-preview-height + Theme.footer-gap + Theme.settings-key-height + 2 * root.pad
+        : root.featured ? Theme.settings-feature-height : root.description == "" ? Theme.settings-row-height : Theme.settings-detail-height,
+        copy.preferred-height + 2 * Theme.settings-row-pad-y, value-box.height + 2 * Theme.settings-row-pad-y);
+    background: root.recording || root.focused ? Theme.settings-row-selected
+        : hit.has-hover && data.control != RowControl.fixed ? Theme.settings-row-hover : Theme.settings-group-background;
+    border-top-left-radius: root.first ? Theme.settings-card-radius : 0px;
+    border-top-right-radius: self.border-top-left-radius;
+    border-bottom-left-radius: root.last ? Theme.settings-card-radius : 0px;
+    border-bottom-right-radius: self.border-bottom-left-radius;
+
+    // Pointer and accessibility actions cover the label as well as the value.
+    accessible-role: button;
+    accessible-label: data.action;
+    accessible-description: root.description;
+    accessible-value: data.value;
+    accessible-enabled: data.control != RowControl.fixed;
+    accessible-checkable: root.toggle;
+    accessible-checked: root.toggle && data.index == 1;
+    accessible-action-default => { if data.control != RowControl.fixed { root.activate(); } }
+    hit := TouchArea { enabled: data.control != RowControl.fixed; mouse-cursor: pointer; clicked => { root.activate(); } }
+
+    if root.featured: Rectangle {
+        x: Theme.gap; y: (parent.height - self.height) / 2;
+        width: Theme.settings-thumb-width; height: Theme.settings-thumb-height;
+        background: Theme.settings-thumbnail; border-radius: Theme.settings-card-radius;
+        Emblem {
+            x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2;
+            width: Theme.settings-thumb-key; height: self.width;
+            icon: root.terminal-icon; symbol-size: Theme.search-icon-size;
+        }
+    }
+    copy := VerticalLayout {
+        x: root.featured ? Theme.gap * 2 + Theme.settings-thumb-width : root.pad;
+        width: max(0px, (root.previews ? root.width - root.pad - Theme.settings-preview-width * 2 - Theme.settings-padding : value-box.x) - self.x - Theme.gap);
+        height: self.preferred-height; y: root.previews ? root.pad : (parent.height - self.height) / 2;
+        spacing: Theme.settings-text-gap;
+        Text {
+            text: root.data.action; color: Theme.settings-text; font-size: Theme.settings-row-size;
+            font-weight: Theme.settings-label-weight; wrap: word-wrap;
+        }
+        if root.description != "": Text {
+            text: root.description; color: root.error != "" ? Theme.settings-text : Theme.settings-secondary-text;
+            font-size: Theme.settings-detail-size; wrap: word-wrap;
+        }
+    }
+    value-box := Rectangle {
+        visible: !root.previews;
+        property <length> reset-width: root.data.changed ? Theme.settings-key-height + Theme.footer-gap : 0px;
+        property <length> indicator-width: root.choice ? Theme.settings-action-icon-size + Theme.gap
+            : root.shortcut && !root.featured ? Theme.settings-action-icon-size + Theme.footer-gap : 0px;
+        width: root.toggle ? Theme.settings-switch-width : min(root.width * Theme.settings-keys-share,
+            value.preferred-width + self.indicator-width + self.reset-width + Theme.settings-key-inset * 2);
+        height: root.toggle ? Theme.settings-switch-height : max(Theme.settings-key-height, value.preferred-height + Theme.footer-gap);
+        x: parent.width - self.width - root.pad;
+        y: root.featured || root.description == "" ? (parent.height - self.height) / 2
+            : max(Theme.settings-row-pad-y, copy.y + (Theme.settings-row-size * 1.4 - self.height) / 2);
+        if root.toggle: Switch { checked: root.data.index == 1; }
+        if root.data.changed: Rectangle {
+            width: Theme.settings-key-height; height: self.width; y: (parent.height - self.height) / 2;
+            border-radius: Theme.settings-tile-radius; background: reset-hit.has-hover ? Theme.settings-key-hover : transparent;
+            accessible-role: button; accessible-label: root.labels.reset;
+            accessible-action-default => { root.reset(); }
+            Image {
+                x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2;
+                width: Theme.settings-action-icon-size; height: self.width; source: JournalIcons.undo-icon; colorize: Theme.settings-text;
+            }
+            reset-hit := TouchArea { mouse-cursor: pointer; clicked => { root.reset(); } }
+        }
+        if root.featured: Rectangle {
+            x: value-box.reset-width; width: parent.width - self.x;
+            border-radius: Theme.settings-tile-radius; background: Theme.settings-key-background;
+        }
+        value := Text {
+            visible: !root.toggle;
+            x: value-box.reset-width + Theme.settings-key-inset;
+            width: max(0px, parent.width - self.x - value-box.indicator-width - Theme.settings-key-inset);
+            height: parent.height; vertical-alignment: center; horizontal-alignment: right; wrap: word-wrap;
+            text: root.recording ? "…" : root.data.value;
+            font-size: Theme.settings-row-size; font-weight: Theme.settings-label-weight;
+            color: root.data.control == RowControl.fixed ? Theme.settings-secondary-text : Theme.settings-text;
+        }
+        if root.choice || (root.shortcut && !root.featured): Image {
+            width: Theme.settings-action-icon-size; height: self.width;
+            x: parent.width - self.width - Theme.settings-key-inset; y: (parent.height - self.height) / 2;
+            source: root.choice ? JournalIcons.down-icon : JournalIcons.pencil-icon;
+            colorize: Theme.settings-secondary-text;
+        }
+    }
+    if root.previews: HorizontalLayout {
+        x: parent.width - self.width - root.pad; y: root.pad;
+        width: self.preferred-width; height: self.preferred-height; spacing: Theme.settings-padding;
+        for label[i] in root.data.choices: ViewTile {
+            label: label; entry: i == 1; selected: root.data.index == i; choose => { root.choose(i); }
+        }
+    }
+    if !root.last: Rectangle {
+        y: parent.height - self.height; height: Theme.border-width; background: Theme.settings-divider;
+    }
+    if root.focused: Rectangle {
+        border-radius: parent.border-radius;
+        border-top-left-radius: parent.border-top-left-radius; border-top-right-radius: parent.border-top-right-radius;
+        border-bottom-left-radius: parent.border-bottom-left-radius; border-bottom-right-radius: parent.border-bottom-right-radius;
+        border-color: Theme.settings-focus-outline; border-width: Theme.border-width;
+    }
+}
