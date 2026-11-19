@@ -364,6 +364,16 @@ Ein Bereich wird durch das erste Wort gewählt (z. B. `bew`, `start`, `kal`, `pi
   - Alles nur per Tastatur durchspielen.
   - RAM im Leerlauf und nach dem Öffnen messen (Task-Manager, privater Arbeitssatz).
 
+### Speicher des F1-Fensters beim Schließen freigeben (geplant)
+
+Beim Schließen blendet `App::close_settings` das Fenster aus. `App.settings` hält die Slint-Instanz weiter fest. Im Windows-Vergleich mit derselben Test-Datenbank lag der private Arbeitssatz der aktuellen Version vor dem ersten Öffnen bei 3,23 MiB und nach dem Schließen beider Fenster bei 19,12 MiB. Ein Teil des Anstiegs entsteht bereits durch das Öffnen des Hauptfensters.
+
+1. Das Einstellungsfenster beim Aufruf erzeugen und beim Schließen mitsamt den UI-Modellen und Fensterressourcen freigeben. Das gilt für F1 bzw. das konfigurierte Tastenkürzel, Esc außerhalb einer Aufnahme oder Auswahl, das Schließkreuz und die native Schließanforderung. Falls ein Slint- oder Windows-Callback noch auf das Fenster zugreift, die Freigabe in den nächsten Ereignisschleifendurchlauf verschieben. Verzögerte Callbacks dürfen ein inzwischen neu geöffnetes Fenster nicht schließen.
+2. Bilder der Einstellungsseite an die Lebensdauer des Fensters binden. Die vom Einstellungsfenster erzeugten Symbolbilder aus dem globalen Icon-Cache heraushalten, damit beim Schließen auch diese Puffer freigegeben werden und der Cache des Hauptfensters verfügbar bleibt.
+3. Beim erneuten Öffnen aus den gespeicherten Einstellungen und aktiven Tastenkürzeln neu aufbauen. Die Sitzung startet wie bisher unter „Allgemein“ mit leerer Suche. Nach dem Schließen müssen das zuvor sichtbare Hauptfenster, der Eingabefokus und ein laufender Entwurf wieder verfügbar sein. Wer F1 minimiert, kann dasselbe Fenster wiederherstellen.
+4. Mit `cargo test` und einem nativen Windows-Release mit Test-Datenbank prüfen. Auf mehreren Wegen schließen, eine Kürzelaufnahme abbrechen und direkt nach dem Schließen erneut öffnen.
+5. In beiden Builds den privaten und den gesamten Arbeitssatz bei gleicher Skalierung, Fenstergröße und Wartezeit messen. Messpunkte sind der frische Hintergrundstart, der Leerlauf nach Öffnen und Ausblenden des Hauptfensters ohne F1, das geöffnete F1-Fenster und der Leerlauf nach Schließen beider Fenster. Der private Arbeitssatz soll sich nach F1 dem Leerlaufwert ohne F1 annähern, unter dem bestehenden Ziel von 20 MB liegen und über mehrere Zyklen nicht dauerhaft steigen. Auch die Zeit bis zum sichtbaren F1-Fenster beim erneuten Öffnen erfassen.
+
 ### Vorschläge und Wiederholung vereinheitlicht (18.11.2026)
 - `engine/suggest.rs`: ein geordneter Ablauf für das aktive Feld, Befehle, Tags, Wiederholungswörter/-ende, Datum/Zeit, `from`-Mehrdeutigkeit und Titelvorlagen. Keine überlagerten Vorschlagsgeneratoren. `Mo` bietet die Wiederholung direkt als zweite Alternative; Navigation verändert keine Eingabe.
 - Alle Wiederholungseinstiege verwenden denselben Picker und dieselbe Slint-Komponente. Keine Buttons, klickbare Werte und Tastatursteuerung mit Übersicht auf F1. Vorlagen haben ein vollständiges Wiederholungsfeld, ohne zusätzliche Enddatum-Lücke.
