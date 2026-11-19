@@ -1,0 +1,629 @@
+import { Theme } from "theme.slint";
+
+export struct NotepadChoiceRow { key: string, title: string, detail: string, has-color: bool, color: color, group: string, has-image: bool, thumbnail: image }
+export struct NotepadMarkdownRow { text: styled-text, heading: int, indent: int, marker: string, offset: int, checked: bool, urls: [string], is-code: bool, code: string, language: string }
+export struct NotepadIndent { text: string, anchor: int, cursor: int }
+export struct NotepadImage { key: string, title: string, thumbnail: image }
+export struct NotepadTool { id: int, icon: image, label: string, active: bool }
+export struct NotepadLabels { new-note: string, edit-note: string, save-note: string, back: string, exit: string, add-link: string, untitled: string }
+
+component NotepadButton inherits Rectangle {
+    in property <string> label;
+    in property <image> icon;
+    in property <bool> show-icon;
+    in property <bool> primary;
+    in property <bool> active;
+    in property <bool> enabled: true;
+    callback clicked;
+    width: command.preferred-width;
+    height: Theme.notepad-action-height;
+    border-radius: Theme.block-radius;
+    background: !self.enabled ? Theme.inset
+        : self.primary ? (hit.has-hover ? Theme.notepad-primary-hover : Theme.accent)
+        : hit.has-hover || self.active ? Theme.row-selection : transparent;
+    accessible-role: button;
+    accessible-label: self.label;
+    accessible-enabled: self.enabled;
+    accessible-action-default => { if self.enabled { self.clicked(); } }
+    command := HorizontalLayout {
+        padding-left: Theme.field-inset; padding-right: Theme.field-inset; spacing: Theme.gap;
+        alignment: center;
+        if root.show-icon: Image {
+            width: Theme.label-icon-size; height: self.width;
+            y: (parent.height - self.height) / 2;
+            source: root.icon; colorize: root.active ? Theme.accent : Theme.muted;
+        }
+        Text {
+            text: root.label; vertical-alignment: center;
+            color: !root.enabled ? Theme.placeholder : root.primary ? Theme.ground : root.active ? Theme.accent : Theme.text;
+            font-size: Theme.row-size; font-weight: root.primary ? Theme.weight-semibold : Theme.weight-normal;
+        }
+    }
+    hit := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: MouseCursor.pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+export component NotepadAction inherits Rectangle {
+    in property <image> icon;
+    in property <string> label;
+    in property <bool> highlighted;
+    callback clicked;
+    width: Theme.day-symbol-box;
+    height: Theme.day-symbol-box;
+    border-radius: Theme.block-radius;
+    background: hit.has-hover ? Theme.hover : transparent;
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-action-default => { root.clicked(); }
+    Image {
+        x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2;
+        width: Theme.label-icon-size; height: Theme.label-icon-size;
+        source: root.icon;
+        colorize: root.highlighted || hit.has-hover ? Theme.accent : Theme.muted;
+    }
+    hit := TouchArea {
+        mouse-cursor: MouseCursor.pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+export component NotepadEditor inherits VerticalLayout {
+    in property <string> heading;
+    in property <string> date;
+    in property <string> title-label;
+    in property <string> body-label;
+    in property <string> hint;
+    in property <bool> show-hint;
+    in property <string> save-label;
+    in property <NotepadLabels> labels;
+    in property <bool> editing;
+    in property <bool> can-save;
+    in property <image> back-icon;
+    in property <int> focus-request;
+    in property <bool> card;
+    in property <int> panel;
+    in property <bool> preview;
+    in property <[NotepadChoiceRow]> choices;
+    in property <[NotepadMarkdownRow]> markdown;
+    in property <[NotepadTool]> tools;
+    in property <string> panel-placeholder;
+    in property <string> panel-empty;
+    in property <string> image-label;
+    in property <image> image-icon;
+    in property <image> link-icon;
+    in property <image> check-icon;
+    in property <image> copy-icon;
+    in property <string> copy-label;
+    in property <string> all-notes;
+    in property <string> day-notes;
+    in property <bool> on-day;
+    in property <[NotepadImage]> images;
+    in property <bool> viewer-open;
+    in property <image> viewed-image;
+    in property <string> viewed-title;
+    in property <string> viewer-message;
+    in-out property <string> query <=> menu-input.text;
+    in-out property <string> title <=> title-input.text;
+    in-out property <string> body <=> body-input.text;
+    callback edited(bool, string);
+    callback finish(bool);
+    callback hints(bool);
+    callback tool(int);
+    callback filter(string);
+    callback new-note;
+    pure callback continue-list(string, int, int) -> NotepadIndent;
+    callback choose(string);
+    callback add-link(string);
+    callback add-image;
+    callback check(int);
+    callback scope(bool);
+    callback view-attachment(string);
+    callback close-viewer;
+    pure callback indent-edit(string, int, int, bool) -> NotepadIndent;
+    callback follow(string);
+
+    padding-left: Theme.padding;
+    padding-right: Theme.padding;
+    padding-bottom: Theme.padding;
+    spacing: Theme.gap;
+    vertical-stretch: 1;
+    function focus-current() {
+        if root.viewer-open { viewer-keys.focus(); }
+        else if root.panel > 0 { menu-input.focus(); }
+        else if root.preview { preview-keys.focus(); }
+        else { body-input.focus(); }
+    }
+    init => { root.focus-current(); }
+    changed focus-request => { root.focus-current(); }
+    changed panel => {
+        menu-list.cursor = 0;
+        if root.panel > 0 { menu-input.focus(); }
+        else if root.preview { preview-keys.focus(); }
+        else { body-input.focus(); }
+    }
+    changed viewer-open => {
+        if root.viewer-open { viewer-keys.focus(); }
+        else if root.panel > 0 { menu-input.focus(); }
+        else if root.preview { preview-keys.focus(); }
+        else { body-input.focus(); }
+    }
+    changed on-day => { menu-list.cursor = 0; menu-list.content-y = 0px; }
+    changed preview => {
+        if root.panel == 0 {
+            if root.preview { preview-keys.focus(); } else { body-input.focus(); }
+        }
+    }
+
+    function copy-code(text: string) {
+        clipboard-input.text = text;
+        clipboard-input.select-all();
+        clipboard-input.copy();
+        clipboard-input.clear-selection();
+        clipboard-input.text = "";
+    }
+
+    function handle-key(event: KeyEvent, in-body: bool) -> EventResult {
+        root.hints(event.modifiers.control);
+        if event.text == Key.Escape {
+            if !event.repeat {
+                root.finish(false);
+            }
+            return accept;
+        }
+        if event.text == Key.Return && event.modifiers.control {
+            if !root.card || (root.editing && root.panel != 1 && root.can-save) { root.finish(true); }
+            return accept;
+        }
+        if !root.card && event.modifiers.control && event.modifiers.shift && (event.text == "c" || event.text == "C") {
+            root.tool(0);
+            return accept;
+        }
+        if root.card && root.panel == 0 && !root.editing && event.text == Key.F2 { root.tool(3); return accept; }
+        if root.card && event.modifiers.control && !event.modifiers.alt {
+            if root.panel == 1 && (event.text == "n" || event.text == "N") { root.new-note(); return accept; }
+            if event.text == "o" || event.text == "O" { root.tool(0); return accept; }
+            if root.panel != 1 && root.editing && (event.text == "t" || event.text == "T") { root.tool(1); return accept; }
+            if root.panel != 1 && (event.text == "l" || event.text == "L") { root.tool(2); return accept; }
+            if root.panel == 0 && (event.text == "m" || event.text == "M") { root.tool(3); return accept; }
+            if root.panel == 3 && root.editing && (event.text == "i" || event.text == "I") { root.add-image(); return accept; }
+        }
+        if event.text == Key.Tab || event.text == Key.Backtab || (!in-body && event.text == Key.Return) {
+            if in-body && root.panel == 0 && !root.preview { title-input.focus(); }
+            else if in-body { return reject; }
+            else if root.panel > 0 { menu-input.focus(); }
+            else if root.preview { preview-keys.focus(); }
+            else { body-input.focus(); }
+            return accept;
+        }
+        return reject;
+    }
+
+    Rectangle {
+        height: Theme.notepad-header-height;
+        HorizontalLayout {
+            spacing: Theme.gap;
+            if root.card && root.panel != 1: NotepadButton {
+                y: (parent.height - self.height) / 2;
+                label: root.labels.back;
+                icon: root.back-icon; show-icon: true;
+                clicked => { if root.viewer-open { root.close-viewer(); } else { root.finish(false); } }
+            }
+            VerticalLayout {
+                alignment: center;
+                horizontal-stretch: 1;
+                Text {
+                    text: root.viewer-open && root.viewed-title != "" ? root.viewed-title : root.heading;
+                    font-size: Theme.day-head-size; font-weight: Theme.weight-semibold; color: Theme.strong; overflow: elide;
+                }
+                if !root.viewer-open && (root.panel == 1 || !root.card || (root.panel == 0 && root.editing)): Text {
+                    text: root.date; font-size: Theme.small-size; color: Theme.muted; overflow: elide;
+                }
+            }
+            if root.card && root.panel == 1: NotepadButton {
+                y: (parent.height - self.height) / 2;
+                label: root.labels.new-note; primary: true;
+                clicked => { root.new-note(); }
+            }
+            if root.card && root.panel == 0 && !root.viewer-open: NotepadButton {
+                y: (parent.height - self.height) / 2;
+                label: root.editing ? root.labels.save-note : root.labels.edit-note;
+                primary: true; enabled: !root.editing || root.can-save;
+                clicked => { if root.editing { root.finish(true); } else { root.tool(3); } }
+            }
+            if !root.card: NotepadButton {
+                y: (parent.height - self.height) / 2;
+                label: root.save-label; primary: true;
+                clicked => { root.finish(true); }
+            }
+            if !root.card || root.panel == 1: NotepadButton {
+                y: (parent.height - self.height) / 2;
+                label: root.labels.exit;
+                clicked => { root.finish(false); }
+            }
+        }
+    }
+    if root.card && root.panel == 0 && root.preview && !root.viewer-open: Text {
+        height: self.preferred-height;
+        text: root.title == "" ? root.labels.untitled : root.title;
+        color: Theme.strong; font-size: Theme.notepad-title-size; font-weight: Theme.weight-semibold;
+        wrap: word-wrap;
+    }
+    Rectangle {
+        visible: root.panel == 0 && (!root.card || !root.preview);
+        height: self.visible ? Theme.notepad-title-height : 0px;
+        background: Theme.field-background;
+        border-radius: Theme.field-radius;
+        border-width: Theme.border-width;
+        border-color: title-input.has-focus ? Theme.field-focus : Theme.edge;
+        if title-input.text == "": Text {
+            x: Theme.field-inset; width: parent.width - self.x - Theme.field-inset;
+            text: root.title-label; color: Theme.placeholder; font-size: Theme.form-size;
+            vertical-alignment: center;
+        }
+        title-input := TextInput {
+            x: Theme.field-inset; width: parent.width - self.x - Theme.field-inset;
+            height: parent.height; single-line: true; vertical-alignment: center;
+            accessible-label: root.title-label;
+            font-family: Theme.write-font; font-size: Theme.form-size; color: Theme.strong;
+            selection-background-color: Theme.selection; selection-foreground-color: Theme.strong;
+            edited => { root.edited(false, self.text); }
+            key-pressed(event) => { root.handle-key(event, false) }
+            key-released(event) => { root.hints(event.modifiers.control); reject }
+        }
+    }
+    if root.panel == 0 && !root.viewer-open: HorizontalLayout {
+        spacing: Theme.gap;
+        alignment: root.card && !root.editing ? stretch : start;
+        if root.card && !root.editing: Text {
+            text: root.date; color: Theme.muted; font-size: Theme.small-size;
+            vertical-alignment: center; horizontal-stretch: 1; overflow: elide;
+        }
+        for item in root.tools: NotepadButton {
+            label: item.label; icon: item.icon; show-icon: true; active: item.active;
+            clicked => { root.tool(item.id); }
+        }
+    }
+    Rectangle {
+        vertical-stretch: 1;
+        min-height: Theme.notepad-body-min-height;
+        background: Theme.inset;
+        border-radius: Theme.panel-radius;
+        border-width: Theme.border-width;
+        border-color: body-input.has-focus ? Theme.field-focus : Theme.edge;
+        if root.panel == 0 && !root.preview && body-input.text == "": Text {
+            x: Theme.panel-padding; y: Theme.panel-padding;
+            width: parent.width - self.x - Theme.panel-padding;
+            text: root.body-label; color: Theme.placeholder; font-size: Theme.notepad-source-size;
+        }
+        scroll := Flickable {
+            visible: root.panel == 0 && !root.preview && !root.viewer-open;
+            x: Theme.panel-padding; y: Theme.panel-padding;
+            width: parent.width - 2 * Theme.panel-padding;
+            height: parent.height - 2 * Theme.panel-padding;
+            content-width: self.width;
+            content-height: body-input.height;
+            changed content-height => { self.content-y = clamp(self.content-y, min(0px, self.height - self.content-height), 0px); }
+            body-input := TextInput {
+                x: 0px; y: 0px;
+                width: scroll.width; height: max(scroll.height, self.preferred-height);
+                page-height: scroll.height;
+                single-line: false; wrap: word-wrap;
+                accessible-label: root.body-label;
+                font-family: Theme.write-font; font-size: Theme.notepad-source-size; color: Theme.strong;
+                selection-background-color: Theme.selection; selection-foreground-color: Theme.strong;
+                edited => { root.edited(true, self.text); }
+                key-pressed(event) => {
+                    if root.card && !event.modifiers.control && !event.modifiers.alt && (event.text == Key.Tab || event.text == Key.Backtab) {
+                        let edit = root.indent-edit(self.text, self.anchor-position-byte-offset, self.cursor-position-byte-offset,
+                            event.modifiers.shift || event.text == Key.Backtab);
+                        if edit.text != self.text {
+                            self.text = edit.text;
+                            self.set-selection-offsets(edit.anchor, edit.cursor);
+                            root.edited(true, self.text);
+                        }
+                        return accept;
+                    }
+                    if root.card && event.text == Key.Return && !event.modifiers.control && !event.modifiers.shift && !event.modifiers.alt {
+                        let edit = root.continue-list(self.text, self.anchor-position-byte-offset, self.cursor-position-byte-offset);
+                        if edit.cursor >= 0 {
+                            self.text = edit.text;
+                            self.set-selection-offsets(edit.anchor, edit.cursor);
+                            root.edited(true, self.text);
+                            return accept;
+                        }
+                    }
+                    root.handle-key(event, true)
+                }
+                key-released(event) => { root.hints(event.modifiers.control); reject }
+                cursor-position-changed(position) => {
+                    scroll.content-y = clamp(
+                        max(min(scroll.content-y, -position.y), scroll.height - position.y - Theme.notepad-caret-room),
+                        min(0px, scroll.height - scroll.content-height),
+                        0px
+                    );
+                }
+            }
+        }
+        if root.panel == 0 && root.preview && !root.viewer-open: preview-scroll := Flickable {
+            x: Theme.panel-padding; y: Theme.panel-padding;
+            width: parent.width - 2 * Theme.panel-padding;
+            height: parent.height - 2 * Theme.panel-padding;
+            content-width: self.width;
+            content-height: preview-list.preferred-height;
+            preview-list := VerticalLayout {
+                x: 0px; y: 0px; width: parent.width; height: self.preferred-height;
+                spacing: Theme.notepad-line-gap;
+                for block[i] in root.markdown: block-row := Rectangle {
+                    property <int> link-index: preview-keys.link-index;
+                    property <bool> show-link: self.selected && self.link-index >= 0 && self.link-index < block.urls.length;
+                    height: body-line.preferred-height + (self.show-link ? Theme.choice-height : 0px);
+                    border-radius: Theme.block-radius;
+                    property <bool> selected: preview-keys.cursor == i && (block.offset >= 0 || block.urls.length > 0 || block.is-code);
+                    background: block.is-code ? Theme.field-background : selected ? Theme.row-selection : transparent;
+                    changed selected => {
+                        if self.selected {
+                            let top = self.y;
+                            preview-scroll.content-y = clamp(
+                                max(min(preview-scroll.content-y, -top), preview-scroll.height - top - self.height),
+                                min(0px, preview-scroll.height - preview-scroll.content-height), 0px
+                            );
+                        }
+                    }
+                    body-line := VerticalLayout {
+                        x: 0px; y: 0px; width: parent.width; height: self.preferred-height;
+                        padding-left: block.indent * Theme.notepad-indent;
+                        if block.is-code: VerticalLayout {
+                            padding: Theme.gap;
+                            spacing: Theme.choice-spacing;
+                            HorizontalLayout {
+                                height: Theme.day-symbol-box;
+                                Text { text: block.language; font-size: Theme.small-size; color: Theme.muted; vertical-alignment: center; horizontal-stretch: 1; }
+                                NotepadButton { icon: root.copy-icon; label: root.copy-label; show-icon: true; active: block-row.selected; clicked => { root.copy-code(block.code); } }
+                            }
+                            TextInput {
+                                text: block.code; read-only: true; single-line: false; wrap: char-wrap;
+                                font-family: Theme.write-font; font-size: Theme.notepad-code-size; color: Theme.strong;
+                                accessible-label: block.language;
+                                selection-background-color: Theme.selection; selection-foreground-color: Theme.strong;
+                                key-pressed(event) => { root.handle-key(event, true) }
+                            }
+                        }
+                        if !block.is-code: HorizontalLayout {
+                            spacing: Theme.gap;
+                            if block.marker != "": Text {
+                                text: block.marker; font-size: Theme.notepad-text-size;
+                                color: Theme.muted;
+                            }
+                        if block.offset >= 0: Rectangle {
+                            width: Theme.day-symbol-box; height: Theme.day-symbol-box;
+                            Rectangle {
+                                x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2;
+                                width: Theme.notepad-check-size; height: self.width;
+                                border-radius: Theme.calendar-gap;
+                                border-width: Theme.border-width;
+                                border-color: block.checked ? Theme.accent : Theme.muted;
+                                background: block.checked ? Theme.accent : transparent;
+                                if block.checked: Image {
+                                    width: Theme.day-tag-icon-size; height: self.width;
+                                    x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2;
+                                    source: root.check-icon; colorize: Theme.ground;
+                                }
+                            }
+                            TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { preview-keys.cursor = i; root.check(block.offset); } }
+                        }
+                        StyledText {
+                            horizontal-stretch: 1;
+                            text: block.text;
+                            default-color: block.checked ? Theme.muted : Theme.strong;
+                            default-font-family: Theme.ui-font;
+                            default-font-size: block.heading == 1 ? Theme.notepad-heading-one
+                                : block.heading == 2 ? Theme.notepad-heading-two
+                                : block.heading > 2 ? Theme.notepad-heading-three : Theme.notepad-text-size;
+                            link-color: Theme.accent;
+                            link-clicked(link) => { root.follow(link); }
+                        }
+                    }
+                        }
+                    if block-row.show-link: Text {
+                        x: Theme.gap; y: body-line.height;
+                        width: parent.width - Theme.gap * 2; height: Theme.choice-height;
+                        text: block.urls[block-row.link-index]; color: Theme.accent; font-size: Theme.small-size;
+                        overflow: elide; vertical-alignment: center;
+                    }
+                }
+                for attachment in root.images: Rectangle {
+                    height: Theme.notepad-thumb-height;
+                    border-radius: Theme.block-radius;
+                    background: Theme.field-background;
+                    Image {
+                        width: parent.width; height: parent.height;
+                        source: attachment.thumbnail; image-fit: contain; image-rendering: smooth;
+                    }
+                    TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.view-attachment(attachment.key); } }
+                }
+            }
+        }
+        clipboard-input := TextInput { width: 0px; height: 0px; }
+        preview-keys := FocusScope {
+            width: 0px; height: 0px;
+            property <int> cursor: 0;
+            property <int> link-index: -1;
+            changed cursor => { self.link-index = -1; }
+            key-pressed(event) => {
+                if root.handle-key(event, true) == accept { return accept; }
+                if event.text == Key.UpArrow { self.cursor = max(0, self.cursor - 1); return accept; }
+                if event.text == Key.DownArrow { self.cursor = min(max(0, root.markdown.length - 1), self.cursor + 1); return accept; }
+                if self.cursor < root.markdown.length {
+                    let block = root.markdown[self.cursor];
+                    if event.text == Key.RightArrow && block.urls.length > 0 {
+                        self.link-index = min(self.link-index + 1, block.urls.length - 1);
+                        return accept;
+                    }
+                    if event.text == Key.LeftArrow && block.urls.length > 0 {
+                        self.link-index = max(-1, self.link-index - 1);
+                        return accept;
+                    }
+                    if event.text == Key.Return {
+                        if self.link-index >= 0 && self.link-index < block.urls.length { root.follow(block.urls[self.link-index]); }
+                        else if block.offset >= 0 { root.check(block.offset); }
+                        else if block.urls.length > 0 { root.follow(block.urls[0]); }
+                        else if block.is-code { root.copy-code(block.code); }
+                        return accept;
+                    }
+                }
+                reject
+            }
+            key-released(event) => { root.hints(event.modifiers.control); reject }
+        }
+        VerticalLayout {
+            visible: root.panel > 0 && !root.viewer-open;
+            padding: Theme.panel-padding;
+            spacing: Theme.gap;
+            HorizontalLayout {
+                spacing: Theme.gap;
+                Rectangle {
+                    height: Theme.search-height;
+                    horizontal-stretch: 1;
+                    background: Theme.field-background;
+                    border-radius: Theme.field-radius;
+                    border-width: Theme.border-width;
+                    border-color: Theme.field-focus;
+                    if menu-input.text == "": Text {
+                        x: Theme.field-inset; width: parent.width - self.x - Theme.field-inset;
+                        text: root.panel-placeholder; font-size: Theme.row-size; color: Theme.placeholder;
+                        vertical-alignment: center;
+                    }
+                    menu-input := TextInput {
+                        x: Theme.field-inset; width: parent.width - self.x - Theme.field-inset;
+                        height: parent.height; vertical-alignment: center; single-line: true;
+                        font-size: Theme.row-size; color: Theme.strong;
+                        selection-background-color: Theme.selection; selection-foreground-color: Theme.strong;
+                        accessible-label: root.panel-placeholder;
+                        edited => { menu-list.cursor = 0; root.filter(self.text); }
+                        key-pressed(event) => {
+                            if event.text == Key.Return && !event.modifiers.control {
+                                if root.panel == 3 && root.editing && self.text != "" { root.add-link(self.text); }
+                                else if menu-list.cursor < root.choices.length { root.choose(root.choices[menu-list.cursor].key); }
+                                return accept;
+                            }
+                            if root.panel == 1 && event.modifiers.alt && (event.text == Key.LeftArrow || event.text == Key.RightArrow) {
+                                root.scope(event.text == Key.RightArrow);
+                                return accept;
+                            }
+                            if root.handle-key(event, true) == accept { return accept; }
+                            if event.text == Key.UpArrow { menu-list.cursor = max(0, menu-list.cursor - 1); return accept; }
+                            if event.text == Key.DownArrow {
+                                menu-list.cursor = min(max(0, root.choices.length - 1), menu-list.cursor + 1);
+                                return accept;
+                            }
+                            reject
+                        }
+                        key-released(event) => { root.hints(event.modifiers.control); reject }
+                    }
+                }
+                if root.panel == 3 && root.editing: NotepadButton {
+                    icon: root.link-icon; label: root.labels.add-link; show-icon: true; enabled: root.query != "";
+                    y: (parent.height - self.height) / 2;
+                    clicked => { root.add-link(root.query); }
+                }
+                if root.panel == 3 && root.editing: NotepadButton {
+                    icon: root.image-icon; label: root.image-label; show-icon: true;
+                    y: (parent.height - self.height) / 2;
+                    clicked => { root.add-image(); }
+                }
+            }
+            if root.panel == 1: HorizontalLayout {
+                spacing: Theme.gap;
+                alignment: start;
+                for name[i] in [root.all-notes, root.day-notes]: Rectangle {
+                    height: Theme.choice-height;
+                    width: option-text.preferred-width + 2 * Theme.field-inset;
+                    border-radius: Theme.field-radius;
+                    background: (i == 1) == root.on-day ? Theme.row-selection : option-hit.has-hover ? Theme.hover : transparent;
+                    option-text := Text {
+                        text: name; color: (i == 1) == root.on-day ? Theme.accent : Theme.muted;
+                        font-size: Theme.row-size; horizontal-alignment: center; vertical-alignment: center;
+                    }
+                    option-hit := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.scope(i == 1); } }
+                }
+            }
+            if root.choices.length == 0: Text { text: root.panel-empty; font-size: Theme.row-size; color: Theme.muted; }
+            menu-list := Flickable {
+                vertical-stretch: 1;
+                content-width: self.width;
+                content-height: menu-rows.preferred-height;
+                property <int> cursor: 0;
+                menu-rows := VerticalLayout {
+                    x: 0px; y: 0px; width: parent.width; height: self.preferred-height;
+                    for item[i] in root.choices: Rectangle {
+                    height: (item.group == "" ? 0px : Theme.choice-height)
+                        + (item.has-image ? Theme.notepad-thumb-height : Theme.choice-height);
+                    property <bool> selected: i == menu-list.cursor;
+                    changed selected => {
+                        if self.selected {
+                            let top = self.y;
+                            menu-list.content-y = clamp(
+                                max(min(menu-list.content-y, -top), menu-list.height - top - self.height),
+                                min(0px, menu-list.height - menu-list.content-height), 0px
+                            );
+                        }
+                    }
+                    if item.group != "": Text {
+                        x: Theme.gap; y: 0px; width: parent.width - 2 * Theme.gap;
+                        height: Theme.choice-height;
+                        text: item.group; color: Theme.muted; font-size: Theme.row-size;
+                        font-weight: Theme.weight-semibold; vertical-alignment: center; overflow: elide;
+                    }
+                    Rectangle {
+                    y: item.group == "" ? 0px : Theme.choice-height;
+                    height: parent.height - self.y;
+                    border-radius: Theme.block-radius;
+                    background: i == menu-list.cursor ? Theme.row-selection : item-hit.has-hover ? Theme.hover : transparent;
+                    if item.has-image: Image {
+                        x: Theme.gap; y: Theme.choice-spacing;
+                        width: parent.height - Theme.gap; height: parent.height - 2 * Theme.choice-spacing;
+                        source: item.thumbnail; image-fit: contain; image-rendering: smooth;
+                    }
+                    HorizontalLayout {
+                        x: item.has-image ? parent.height + Theme.gap : 0px;
+                        width: parent.width - self.x;
+                        padding-left: Theme.gap; padding-right: Theme.gap; spacing: Theme.gap;
+                        if item.has-color: Rectangle {
+                            width: Theme.tag-dot; height: Theme.tag-dot;
+                            y: (parent.height - self.height) / 2;
+                            border-radius: self.width / 2; background: item.color;
+                        }
+                        Text { text: item.title; color: Theme.strong; font-size: Theme.row-size; vertical-alignment: center; horizontal-stretch: 1; overflow: elide; }
+                        if item.detail != "": Text { text: item.detail; color: Theme.muted; font-size: Theme.small-size; vertical-alignment: center; overflow: elide; max-width: Theme.side-value-width; }
+                    }
+                    item-hit := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.choose(item.key); } }
+                    }
+                    }
+                }
+            }
+        }
+        if root.viewer-open: VerticalLayout {
+            padding: Theme.panel-padding;
+            spacing: Theme.gap;
+            if root.viewer-message != "": Text { text: root.viewer-message; font-size: Theme.row-size; color: Theme.muted; }
+            if root.viewer-message == "": Image {
+                vertical-stretch: 1;
+                min-height: 0px;
+                source: root.viewed-image; image-fit: contain; image-rendering: smooth;
+            }
+        }
+        viewer-keys := FocusScope {
+            width: 0px; height: 0px;
+            key-pressed(event) => {
+                if event.text == Key.Escape || event.text == Key.Return { root.close-viewer(); return accept; }
+                reject
+            }
+        }
+    }
+    if root.show-hint: Text {
+        text: root.hint; color: Theme.placeholder; font-size: Theme.small-size; wrap: word-wrap;
+    }
+}

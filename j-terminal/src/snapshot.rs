@@ -1,10 +1,11 @@
 //! The warm data (docs/plan.md, 3): the entries of a stretch of days and the tags, ready when the window opens. The
 //! stretch grows as the calendar is scrolled (it is endless); it is read again only when the database changed
-//! (`PRAGMA data_version`, through `journal-core`'s watch).
+//! (`PRAGMA data_version`, through `journal-core`'s watch). The app's period data (rating, day values, activities) is
+//! read with them, for the day view.
 use std::collections::BTreeMap;
 use chrono::NaiveDate;
 use journal_core::{storage::{Entry, Store, Tag}, watch::Watch};
-use crate::repeat;
+use crate::{day_view::PeriodData, repeat};
 
 /// Kept before what is shown: an entry over several days (at most 366 in the app) may reach into the view from there.
 pub const LOOKBACK: i64 = 370;
@@ -17,6 +18,7 @@ pub struct Snapshot {
     pub today: NaiveDate,
     pub days: BTreeMap<NaiveDate, Vec<Entry>>,
     pub tags: Vec<Tag>,
+    pub period: PeriodData,
     /// The days read: `from..=to`.
     from: NaiveDate,
     to: NaiveDate,
@@ -41,7 +43,7 @@ fn read_days(store: &Store, from: NaiveDate, to: NaiveDate, into: &mut BTreeMap<
 impl Snapshot {
     pub fn load(store: &Store, today: NaiveDate) -> Result<Self, String> {
         let watch = store.watch().map_err(|e| e.to_string())?;
-        let mut snapshot = Snapshot { today, days: BTreeMap::new(), tags: Vec::new(), from: repeat::shift(today, -LOOKBACK), to: repeat::shift(today, AHEAD), watch };
+        let mut snapshot = Snapshot { today, days: BTreeMap::new(), tags: Vec::new(), period: PeriodData::default(), from: repeat::shift(today, -LOOKBACK), to: repeat::shift(today, AHEAD), watch };
         snapshot.read(store)?;
         Ok(snapshot)
     }
@@ -50,6 +52,7 @@ impl Snapshot {
         self.days.clear();
         read_days(store, self.from, self.to, &mut self.days)?;
         self.tags = store.tags().map_err(|e| e.to_string())?;
+        self.period = PeriodData::parse(&store.period_data().map_err(|e| e.to_string())?);
         Ok(())
     }
 
@@ -75,6 +78,25 @@ impl Snapshot {
         self.read(store)?;
         self.watch = store.watch().map_err(|e| e.to_string())?;
         Ok(true)
+    }
+
+    /// After our own change of a few days (the day view): only they and the tags are read again.
+    pub fn reload_days(&mut self, store: &Store, dates: &[NaiveDate]) -> Result<(), String> {
+        for date in dates.iter().filter(|date| **date >= self.from && **date <= self.to) {
+            let mut one = BTreeMap::new();
+            read_days(store, *date, *date, &mut one)?;
+            match one.remove(date) { Some(entries) => { self.days.insert(*date, entries); } None => { self.days.remove(date); } }
+        }
+        self.tags = store.tags().map_err(|e| e.to_string())?;
+        self.watch = store.watch().map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    /// After our own change of the period data.
+    pub fn set_period(&mut self, store: &Store, json: &str) -> Result<(), String> {
+        self.period = PeriodData::parse(json);
+        self.watch = store.watch().map_err(|e| e.to_string())?;
+        Ok(())
     }
 
     /// After our own save.

@@ -22,9 +22,29 @@ pub fn pick(screens: &[Screen], mouse: Option<(i32, i32)>) -> Option<Screen> {
 /// The window's top-left corner on `screen` for a window `width` logical pixels wide.
 pub fn top_center(screen: Screen, width: f32) -> (i32, i32) {
     let width = (width as f64 * screen.scale).round() as i32;
-    let x = screen.left + (screen.width - width).max(0) / 2;
+    let x = centered_left(screen, width);
     let y = screen.top + (screen.height as f64 * FROM_TOP).round() as i32;
     (x, y)
+}
+
+/// Horizontally centre a window whose outer width is already in physical pixels.
+pub fn centered_left(screen: Screen, width: i32) -> i32 {
+    screen.left + (screen.width - width).max(0) / 2
+}
+
+/// The usable monitor rectangle excludes the Windows taskbar and docked toolbars.
+pub fn work_area(screen: Screen) -> Screen {
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::{Foundation::POINT, Graphics::Gdi::{GetMonitorInfoW, MonitorFromPoint, MONITORINFO, MONITOR_DEFAULTTONEAREST}};
+        let center = POINT { x: screen.left + screen.width / 2, y: screen.top + screen.height / 2 };
+        let mut info = MONITORINFO { cbSize: std::mem::size_of::<MONITORINFO>() as u32, ..Default::default() };
+        if unsafe { GetMonitorInfoW(MonitorFromPoint(center, MONITOR_DEFAULTTONEAREST), &mut info) } != 0 {
+            let rect = info.rcWork;
+            return Screen { left: rect.left, top: rect.top, width: rect.right - rect.left, height: rect.bottom - rect.top, ..screen };
+        }
+    }
+    screen
 }
 
 /// Where the mouse is, in physical pixels.
@@ -59,6 +79,15 @@ mod tests {
     fn never_left_of_a_narrow_screen() {
         let narrow = Screen { left: 100, top: 0, width: 500, height: 800, scale: 1.0 };
         assert_eq!(top_center(narrow, 640.0).0, 100);
+    }
+
+    #[test]
+    fn centering_follows_the_actual_width_as_the_panel_opens_and_closes() {
+        for (width, x) in [(1501, 209), (1672, 124), (1842, 39), (1672, 124), (1501, 209)] {
+            assert_eq!(centered_left(MAIN, width), x);
+        }
+        assert_eq!(centered_left(LEFT, 2252), -3686);
+        assert_eq!(centered_left(LEFT, 2560), LEFT.left);
     }
 
     #[test]

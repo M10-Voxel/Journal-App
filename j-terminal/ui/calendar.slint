@@ -33,7 +33,7 @@ export component Calendar inherits Rectangle {
     in property <length> caret-h;
     // Where the side ends and the hours begin (from the layout in Rust).
     in property <length> time-x;
-    // button: 0 left, 1 right; kind: 0 pressed, 1 moved, 2 released; the position inside the calendar.
+    // button: 0 left, 1 right, 2 middle (pressed only); kind: 0 pressed, 1 moved, 2 released; the position inside the calendar.
     callback mouse(int, int, length, length, bool);
     // The wheel: x, how far, Strg, Shift.
     callback wheel(length, length, bool, bool);
@@ -173,6 +173,8 @@ export component Calendar inherits Rectangle {
     }
     TouchArea {
         pointer-event(event) => {
+            // The middle button chooses the day for the day view at the left.
+            if event.button == PointerEventButton.middle && event.kind == PointerEventKind.down { root.mouse(2, 0, self.mouse-x, self.mouse-y, event.modifiers.shift); }
             if event.button == PointerEventButton.left || event.button == PointerEventButton.right {
                 if event.kind == PointerEventKind.down { root.mouse(event.button == PointerEventButton.right ? 1 : 0, 0, self.mouse-x, self.mouse-y, event.modifiers.shift); }
                 if event.kind == PointerEventKind.up { root.mouse(event.button == PointerEventButton.right ? 1 : 0, 2, self.mouse-x, self.mouse-y, event.modifiers.shift); }

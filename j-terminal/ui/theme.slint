@@ -17,7 +17,7 @@ export global Theme {
     out property <color> inset: #1f1f1f;
     out property <color> hover: #393939;
     out property <color> selected: #494949;
-    out property <color> border: #ffffff21;        // line
+    out property <color> border: #454545;          // opaque outline around form and calendar
     out property <color> edge: #ffffff12;
     out property <color> divider: #2e2e2e;
     out property <color> text: #bcbcbc;
@@ -68,8 +68,13 @@ export global Theme {
     out property <length> form-width: 600px;
     out property <length> calendar-width: 900px;
     out property <length> calendar-height: 600px;
+    out property <length> stacked-day-min-height: 330px;
+    out property <length> stacked-calendar-min-height: 240px;
+    out property <float> stacked-day-share: 0.46;
     out property <length> radius: 16px;            // the composer's corners
     out property <length> border-width: 1px;
+    out property <length> frame-inset: 1px;
+    out property <length> frame-stroke: 2px;
     out property <length> padding: 18px;
     out property <length> gap: 8px;
     out property <length> calendar-gap: 3px;
@@ -118,6 +123,79 @@ export global Theme {
     out property <length> icon-cell: 38px;
     out property <int> icon-columns: 14;
     out property <int> reminder-columns: 4;
+
+    // ── The day view: the left side while no entry form is open, as the app's day page (section headings with a
+    //    line under them, the accent symbol before each entry, its time as an outlined chip) ──
+    out property <length> day-head-height: 46px;
+    out property <length> day-head-size: 15px;
+    out property <length> day-pill-height: 22px;
+    out property <length> day-pill-inset: 9px;
+    out property <color> day-pill-border: #569eff40;   // the accent at a quarter, as the app's time chip
+    out property <length> day-section-top: 14px;
+    out property <length> day-heading-height: 40px;
+    out property <length> day-heading-icon: 14px;
+    out property <length> day-heading-size: 12px;
+    out property <length> day-count-size: 10px;
+    out property <length> day-row-height: 30px;
+    out property <length> day-symbol-size: 16px;
+    out property <length> day-tag-icon-size: 14px;
+    out property <length> day-chip-height: 20px;
+    out property <length> day-chip-inset: 7px;
+    out property <length> day-chip-size: 11px;
+    out property <length> day-value-label-width: 130px;
+    out property <length> day-value-width: 70px;
+    out property <length> day-bar-height: 6px;
+    out property <length> day-bar-radius: 3px;
+    out property <color> day-bar-background: #1f1f1f;
+    out property <length> day-bottom: 12px;
+    out property <float> day-footer-share: 0.48;
+    out property <float> day-done-opacity: 0.5;
+    out property <length> day-title-height: 38px;
+    out property <length> day-new-size: 24px;
+    out property <length> day-select-inset: 6px;
+    out property <length> day-symbol-box: 24px;
+    out property <length> notepad-body-min-height: 120px;
+    out property <length> notepad-caret-room: 24px;
+    out property <length> notepad-text-size: 17px;
+    out property <length> notepad-action-height: 30px;
+    out property <length> notepad-header-height: 54px;
+    out property <length> notepad-title-height: 40px;
+    out property <length> notepad-title-size: 23px;
+    out property <color> notepad-primary-hover: #83b8ff;
+    out property <length> notepad-source-size: 15px;
+    out property <length> notepad-code-size: 15px;
+    out property <length> notepad-heading-one: 26px;
+    out property <length> notepad-heading-two: 22px;
+    out property <length> notepad-heading-three: 19px;
+    out property <length> notepad-line-gap: 7px;
+    out property <length> notepad-indent: 18px;
+    out property <length> notepad-thumb-height: 108px;
+    out property <length> notepad-check-size: 17px;
+
+    // The dials: rings drawn in Rust (dial.rs), side by side, the value inside, the name under them.
+    out property <length> dial-row-height: 92px;
+    out property <length> dial-drag-step: 6px;
+    out property <length> dial-spacing: 6px;
+    out property <length> dial-cell-width: 74px;
+    out property <length> dial-top: 6px;
+    out property <length> dial-size: 54px;
+    out property <length> dial-thickness: 5px;
+    out property <length> dial-value-size: 15px;
+    out property <length> dial-label-gap: 4px;
+    out property <color> dial-track: #1f1f1f;
+
+    // ── The panel that comes out at the left: an entry's settings and pickers ──
+    out property <length> side-width: 340px;
+    out property <length> side-stacked-max-height: 460px;
+    out property <duration> side-slide-duration: 180ms;
+    out property <length> side-padding: 14px;
+    out property <length> side-row-height: 30px;
+    out property <length> side-value-width: 130px;
+    out property <int> side-icon-columns: 7;
+    out property <length> side-icon-cell: 44px;
+    out property <length> side-cell: 44px;
+    out property <length> side-cell-inset: 4px;
+    out property <length> side-description-height: 160px;
 
     // ── The calendar: days one under another, the 24 hours left to right, long entries in lanes at the side ──
     out property <color> cal-background: #000000;

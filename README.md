@@ -10,6 +10,8 @@ J-TerminaL ist ein eigener Download und läuft auch ohne die Journal-App. Es nut
 
 Technik: **Rust**, **Slint** und **SQLite** über `journal-core` aus der Journal-App (Branch `Windows`).
 
+Für den AVIF-Decoder benötigt der Build auf x86 und x64 NASM ab 2.14 im `PATH`.
+
 ```
 cd j-terminal
 cargo test

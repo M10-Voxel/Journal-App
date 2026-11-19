@@ -60,7 +60,7 @@ Offene Aufgaben. Erledigtes mit `[x]` markieren. Vollständiger Plan: `docs/plan
   - Kalender, Uhr, Dauer und Wiederholungseditor bleiben und öffnen sich per Alt+↓ oder Enter auf einer leeren Zeile. Alt+1/2/3 setzt den Typ aus jeder Zeile.
   - Entfernt: `app.rs`, `spin.rs`, `draft_preview.rs`, `engine/suggest.rs`, `engine/fields.rs`, `engine/blocks.rs` und die ungenutzten Texte.
   - 80 Tests grün, davon 17 Modelltests (`form_tests.rs`) und ein Slint-Tastaturtest durch das echte Fenster. Bedienung: `docs/input.md`. Native Darstellung, Fokus und Zusammenspiel mit der Haupt-App bleiben manuell zu prüfen.
-- [ ] **Formular: bestehende Einträge** – Suche (Strg+F oder ähnlich) lädt einen Eintrag in dieselben Zeilen, Speichern aktualisiert ihn; Tag ansehen. Dazu fehlend: „Planen auf andere Tage“, Tagestitel/Journaltext.
+- [ ] **Formular: bestehende Einträge** – Suche (Strg+F oder ähnlich) lädt einen Eintrag in dieselben Zeilen, Speichern aktualisiert ihn; Tag ansehen. Dazu fehlend: „Planen auf andere Tage“ im Formular.
 - [x] **Stufe 4: Kalender** – 18.11.2026, noch nicht committet. Dauerhaft rechts neben dem Formular (Fenster 1501 px: Formular 600, Kalender 900), endlos scrollbar, zeigt den entstehenden Eintrag live und ersetzt das Datum-Popup.
   - Zeitgewebe nach Nutzervorlage: jeder Tag ein Band über 24 h, Zeitstücke in Tag-Farbe mit Titel/Uhrzeit, Überschneidungen in eigenen Reihen, Tage per Linksklick auf-/zuklappen (Shift: Bereich). Mehrtägiges als Spur links mit Titel. Wochenlinie farbig zwischen So und Mo, Monate mit Kopfzeile und Wechseltönung, Kopfzeile mit Monat und Stunden.
   - Anlegen wie in der App per Rechtsklick: links ganztägig, links ziehen mehrtägig, in den 24 h ziehen Tag und Zeit (Viertelstunden, über Mitternacht und Tage). Standardtyp „Termin, nur im Kalender“ wie in der App.
@@ -74,12 +74,17 @@ Offene Aufgaben. Erledigtes mit `[x]` markieren. Vollständiger Plan: `docs/plan
   - Kalender per Tastatur: Seitenspalte (ganze Tage, Shift-Bereich = mehrtägig) und 24-h-Spalte (Stunden, Strg Viertelstunden, Shift-Zeitraum auch über Tage), Tab wechselt, Enter übernimmt Tag/Zeitpunkt/Bereich, Esc erst Bereich weg, dann zurück. `picker.rs` entfällt.
   - Uhr: große Stunden:Minuten, ↑/↓ ±1, Strg ±4 Std./±15 Min., Ziffern, Entf leert.
   - Optik: Lucide-Symbole an allen Zeilen und Typen, Optionen als Karte; Wiederholung in beschrifteten Zeilen (Rhythmus, Einheit, Alle, Am, Ab, Bis, Pause, Nur in) mit Segmenten, runden Tages-/Monatsschaltern und Zahl-/Datumsfeldern.
-- [ ] **Links: Tagesansicht** unter der Suchleiste (Standard, solange kein Formular offen ist; Plan Abschnitt 0c).
-  - Heute kompakt zusammenfassen: Termine, offene Aufgaben, Notizen, Bewertungen und Aktivitäten.
-  - Die Ansicht folgt dem im Kalender gewählten Tag; z. B. Mittelklick für die Tageswahl, zusätzlich per Tastatur. Datum sichtbar und Rückkehr zu heute möglich. Nach dem Schließen des Formulars wieder zur Tagesansicht zurückkehren.
-  - Runde Bewertungs-Dials und Aktivitäten aus Stufe 5 in diese Ansicht integrieren. Tageswechsel darf Bewertungen nicht dem falschen Tag zuordnen.
-- [ ] **Eigenständiger Notizblock** als separat aufrufbarer Bereich, nicht in der Tagesansicht.
-  - Tagestitel/Journaltext ansehen und bearbeiten, mit denselben Daten wie in der Haupt-App und eindeutiger Zuordnung zum jeweiligen Tag.
+- [x] **Links: Tagesansicht** unter der Suchleiste (Standard, solange kein Formular offen ist; Plan Abschnitt 0c) – 19.11.2026, noch nicht committet.
+  - `day_view.rs` fasst einen Tag zusammen: Termine (ohne Einträge „nur im Kalender“, mehrtägige an jedem abgedeckten Tag, ganztägige zuerst, dann nach Beginn), offene Aufgaben (erledigte nur gezählt), Notizen, Tagesbewertung und aktive Skalen als Balken über ihrer Spanne, aktive Aktivitäten mit Haken bzw. Zeit. Werte und Aktivitäten liest `snapshot.rs` aus derselben `period-data`-Einstellung wie die App (Regeln wie `scaleRange`/`clampToScale`). Nur Lesen, nichts wird geschrieben.
+  - Gestaltung nach der Tagesseite der App: Abschnittsköpfe mit Akzentsymbol, Zahl und Linie, Akzentsymbol vor jedem Eintrag, Uhrzeit als umrandeter Chip in Lilex, Eintrags- oder Tag-Symbol in Tag-Farbe. Alle Werte im Theme (`day-*`).
+  - Tageswahl: Alt+←/→, Alt+H heute, Mittelklick auf einen Tag im Kalender (Linksklick klappt weiterhin nur auf/zu), Klick auf das Datum zurück zu heute. Der gewählte Tag ist im Kalender markiert, solange die Tagesansicht sichtbar ist. Ein offenes Formular nutzt denselben Platz; danach kehrt die Ansicht mit dem gewählten Tag zurück, ein neues Öffnen des Fensters zeigt wieder heute. Werte stehen immer am angezeigten Tag (Test mit Bewertung nur für morgen).
+  - Hinweis- und Statuszeilen haben eine feste Höhe, damit nur die Tagesansicht den freien Platz bekommt (behebt auch eine Lücke unter den Strg-Hinweisen).
+  - 116 Tests grün (u. a. 4 Modelltests in `day_view.rs`, 2 Formulartests, Slint-Test mit Alt+→/Alt+H, Mittelklick, Datumsklick und Pixelprüfung der Hinweiszeilen). Gerenderte Ansichten in `j-terminal/target/ui-check/` (`search`, `day-view-tomorrow`, `day-view-holiday`). Nur Test-Datenbanken.
+  - Bleibt für Stufe 5: runde Dials zum Ändern der Werte, Aktivitäten starten/stoppen/abhaken. Laufende Timer sind hier noch nicht sichtbar (siehe offene Frage).
+- [x] **Eigenständiger Notizblock** über /Notizblock oder das Journal-Symbol neben der Suchleiste. Neue Zettel erscheinen im Notizen-Tab der Haupt-App und automatisch auf der Pinnwand des gewählten Tags. Lesen und Bearbeiten verwenden dieselbe Karte. Tags, klickbare Markdown-Checklisten, Links und Bildanhänge verwenden die gemeinsamen Formate.
+  - [x] Zettelliste über Strg+Umschalt+N öffnen, vorhandene Notizen formatiert anzeigen und mit beschrifteten Aktionen erstellen, bearbeiten und speichern. Enter setzt Markdown-Aufzählungen, nummerierte Listen und Checklisten fort.
+  - Notizauswahl nach Ordnerpfad und Tag, besser lesbare Markdown-Vorschau, kopierbare Codeblöcke, Einrücken sowie eingebettete AVIF-Bildansicht umgesetzt.
+  - Der bisherige Tageseditor ist über /Journaltext erreichbar. Dort lässt sich der Text ausdrücklich als neuer Zettel kopieren. Inhalte werden bei der Umstellung unverändert übernommen, wenn der Nutzer die Kopie speichert.
 - [ ] **Suchleiste: Journal durchsuchen und Quick-Actions**, ausgehend von der vorhandenen `/Entry`-Aktion.
   - Treffer mit `@Typ`-/`\Tag`-Filtern finden, anzeigen und zum Bearbeiten in dasselbe Formular laden.
   - Tageswahl/Heute, Rückgängig/Wiederherstellen, Notizblock, Bewertung, Aktivitäten und später Pinnwand als kompakte Aktionen; Treffer und Aktionen auch mit der Maus benutzbar.
@@ -114,7 +119,20 @@ Offene Aufgaben. Erledigtes mit `[x]` markieren. Vollständiger Plan: `docs/plan
   - Release erfolgreich als `j-terminal/target/release/j-terminal-updated.exe` gebaut, da die bisherige EXE noch läuft.
 - [x] **Kalender bis zum unteren Fensterrand fortsetzen.** Der UI-Test öffnet und schließt den Wiederholungseditor bei ausgeklapptem „Mehr“ und prüft, dass die letzte sichtbare Tageszeile jeweils den unteren Rand erreicht.
 - [x] **Rechte Kalenderecken abrunden.** Der Fensterrahmen schneidet Kalenderkopf und Tageszeilen mit derselben Rundung wie links zu.
-- [ ] **Stufe 5: Bewertung und Aktivitäten in der Tagesansicht**
+- [x] Die Rundung auch am nativen Windows-Fenster anwenden und beide rechten Ecken bei zwei Skalierungen prüfen.
+- [x] Den grauen Rand über beiden Fensterhälften zeichnen und beim Aktualisieren der Kontur das Neuzeichnen der Windows-Titelleiste vermeiden.
+- [x] Deckenden Fensterkopf beim Wiederöffnen verwenden. Nativer Test mit kontrastierendem Hintergrund und drei Öffnungsvorgängen.
+- [x] Die Rahmenlinie nach innen versetzen und den Verlauf an allen vier Eckbögen im Rendertest prüfen.
+- [x] **Tagesansicht bedienbar, Seitenfenster links, gemeinsame Timer** – 19.11.2026, noch nicht committet (beide Branches).
+  - Einträge „nur im Kalender“ erscheinen nur im Kalender.
+  - Arbeiten wie auf der Tagesseite der App (`day.rs`, `day_ops.rs`): Titel des Tages, Einträge schreiben (Enter, Alt+A/E/N, Enter → nächster), erledigt/abgebrochen/wichtig, Typ, morgen, planen auf einen oder mehrere Tage (Spur bleibt), Uhrzeit mit gleicher Dauer, Erinnerung, Tag, Symbol, Beschreibung, verschieben, löschen. Gleiche Kürzel wie die App. Jede Änderung liest den Tag frisch und speichert über `journal-core` (Revision, Kopien, Historie).
+  - Maus: Text anklicken schreibt, Symbol öffnet das **Seitenfenster**, das links aus dem Fenster fährt (Fenster wird nach links breiter, Inhalt bleibt stehen). Darin die Einstellungen als Zeilen und die Auswahl im selben Bereich: Monat zum Planen, große Uhr, Tags, Erinnerungen, Symbolraster mit Suche, Beschreibung. Drei kleine Symbole neben dem Datum legen neue Einträge an.
+  - Werte als **runde Regler** (`dial.rs`, in Rust gerastert wie die Icons): Klick auf den Ring setzt den Wert nach der Stelle. Vertikales Ziehen aktualisiert Ring und Zahl, Loslassen speichert. Mausrad, ←/→, Ziffern und Entf sind ebenfalls verfügbar. Spannen nach `scaleRange`, gespeichert für den angezeigten Tag.
+  - Aktivitäten: abhaken, Minuten eintragen, Timer starten/pausieren/stoppen. Timer anderer Tage bleiben oben sichtbar, die Uhr läuft sekündlich.
+  - **Gemeinsame Timer** (Branch `Windows`): `journal-core/src/timers.rs` speichert sie in der Datenbank (`activity-timers`), atomar; Stoppen schreibt die Abschnitte wie bisher mit gleichen IDs in den Kalender. `watch.rs` meldet Änderungen (`timers:changed`). Die App nutzt neue Tauri-Befehle, übernimmt alte Timer aus dem Browser-Speicher einmalig. Beschreibung in `docs/journal-core.md` (Branch `Windows`).
+  - Tests: 129 J-TerminaL-Tests (u. a. 6 Modelltests `day_tests.rs`, 5 `day_ops.rs`, 2 Regler, Slint-Test mit Alt+A, Enter, Alt+D, Klick aufs Symbol, Alt+T/Enter, Klick auf den Regler), 71 Kern-Tests, 56 Backend- und 402 Frontend-Tests der App, `tsc` fehlerfrei. Gerenderte Ansichten in `j-terminal/target/ui-check/` (`day-entries`, `side-actions`, `side-plan`, `day-dials`). Nur Test-Datenbanken.
+  - Offen: Wiederholung im Seitenfenster; beim Löschen verknüpfter Einträge (Serie/Planung) wird nur dieser gelöscht, die App fragt nach dem Umfang; natives Ausfahren des Seitenfensters und Zusammenspiel der Timer mit laufender App von Hand prüfen. `verify-ui.mjs` der App bricht hier an Stellen ab, die auch ohne diese Änderung scheitern (Hover-Vorschau, Icon-Ebene); die Timer-Abschnitte laufen durch.
+- [x] **Stufe 5: Bewertung und Aktivitäten in der Tagesansicht** – mit dem Punkt darüber umgesetzt.
   - Tagesbewertung und eigene Skalen als platzsparende runde Dials mit Bezeichnung und Wert; Maus, Pfeiltasten und Zahleneingabe. Vorhandene Skalenregeln beachten und auf den angezeigten Tag speichern.
   - Aktivitäten starten/stoppen, abhaken und Zeiten nachtragen; laufende Timer auch beim Betrachten eines anderen Tages sichtbar halten. Vorhandene Aktivitätslogik übernehmen und zusammen mit dem Tageswechsel prüfen.
 - [ ] **Stufe 6: Pinnwand per Tastatur** – in J-TerminaL. Die Kürzel für die Pinnwand der Haupt-App kommen im Branch `Windows` dazu. Später kommen mehr Funktionen, z. B. Karten verbinden.
@@ -124,4 +142,6 @@ Offene Aufgaben. Erledigtes mit `[x]` markieren. Vollständiger Plan: `docs/plan
   - „Made with Slint“-Logo auch in den Release-Notizen (in der README steht es schon).
 
 ## Offene Fragen
-- keine
+- keine (Timer: entschieden am 19.11.2026, gemeinsam in der Datenbank)
+
+- [x] Tagesansicht mit Journal-Symbolen und gemeinsamer Eintragsliste. Werte und Aktivitäten bleiben unten. Die Einstellungsleiste fährt abhängig von der Monitorbreite links oder oberhalb der Tagesansicht aus. Der Regler zeigt die Änderung beim Ziehen direkt im Ring. Das Fenster bleibt beim Aus- und Einklappen der Leiste auf dem Monitor horizontal zentriert.

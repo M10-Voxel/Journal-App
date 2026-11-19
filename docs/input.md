@@ -108,13 +108,83 @@ Tasten-Hinweise erscheinen beim Halten von `Strg`; in offenen Optionen stehen ih
 
 ## Die Suchleiste (links oben)
 
-Beim Öffnen hat die **Suchleiste** die Tastatur; links steht sonst nichts. Mit `/` beginnen Befehle, sie erscheinen beim Tippen darunter (↑/↓ wählen, Tab vervollständigt, Enter führt aus):
+Beim Öffnen hat die **Suchleiste** die Tastatur; darunter steht die **Tagesansicht** (siehe unten). Mit `/` beginnen Befehle, sie erscheinen beim Tippen darunter (↑/↓ wählen, Tab vervollständigt, Enter führt aus):
 
 | Befehl | Wirkung |
 |---|---|
 | `/Entry` (auch `/Eintrag`) | öffnet das Eintragsformular unter der Leiste, Cursor im Titel |
 
-Esc leert die Leiste, ein weiteres Esc versteckt das Fenster. Im Formular nimmt Esc erst die Änderung der Zeile zurück, dann schließt es das Formular (der Entwurf wird verworfen) und die Suchleiste hat wieder die Tastatur. Wird im Kalender etwas markiert, öffnet sich das Formular von selbst. Die Suche im Journal und eine kompakte Ansicht von heute folgen (siehe `docs/roadmap.md`).
+Esc leert die Leiste, ein weiteres Esc versteckt das Fenster. Im Formular nimmt Esc erst die Änderung der Zeile zurück, dann schließt es das Formular (der Entwurf wird verworfen) und die Suchleiste hat wieder die Tastatur. Wird im Kalender etwas markiert, öffnet sich das Formular von selbst. Die Suche im Journal folgt (siehe `docs/roadmap.md`).
+
+## Die Tagesansicht (links, solange kein Formular offen ist)
+
+Unter der Suchleiste steht der gewählte Tag, standardmäßig **heute**. Man kann darin arbeiten wie auf der Tagesseite der App:
+
+```
+ Mittwoch, 18. November 2026                    ⊞ ⊞ ▤  ( Heute )
+ Gib deinem Tag einen Namen …
+ ▢ Termine 1
+ ▢ Sport                                      ( 18:00–19:00 )
+ ☑ Aufgaben 2 offen · 1 erledigt
+ ☐ Brot kaufen                                  ( → Do 19.11. )
+ ☑ Post
+ ☐ Recherche                                              ▣
+ ◔ Werte
+   (7)   (3)
+   Bewertung  Stress
+ ∿ Aktivitäten 1 / 2
+ ○ Laufen                                                  ▷
+ ✓ Lesen                                  45 Min.  00:12:04  ‖ ■
+```
+
+- **Titel des Tages**, **Termine**, **Aufgaben** und **Notizen** in der Reihenfolge des Tages (wie in der App: nach Typ, Tag und Wichtigkeit). Einträge „nur im Kalender“ stehen nur im Kalender. Mehrtägige Einträge stehen an jedem Tag, den sie abdecken; geändert werden sie an ihrem ersten Tag.
+- Geplante Einträge bleiben als Spur stehen, ihr Chip nennt das Ziel („→ Do 19.11.“, „→ 3 Tage“).
+- **Werte:** Tagesbewertung und aktive eigene Skalen als **runde Regler** mit Wert und Namen, jeweils mit ihrer Spanne.
+- **Aktivitäten:** abgehakt oder mit Minuten in ihrer Farbe, dazu ihr **Timer**. Die Timer sind dieselben wie in der App (gemeinsam in der Datenbank). Timer anderer Tage stehen oben, solange sie existieren.
+- Rechts neben dem Datum: drei kleine Symbole für neue Termine, Aufgaben und Notizen, und wie weit der Tag von heute entfernt ist.
+
+**Tastatur** (Hinweise beim Halten von `Strg`):
+
+| Taste | Wirkung |
+|---|---|
+| ↓ (oder Tab) in der Suchleiste | in den Tag; ↑ in der ersten Zeile zurück |
+| ↑ / ↓ | Zeile wählen (jeder Regler ist eine eigene Zeile) |
+| Enter | Titel oder Eintrag schreiben; beim Schreiben: übernehmen und nächster Eintrag gleicher Art (Strg+Enter ohne Tag) |
+| Esc | Schreiben beenden (der Text bleibt), dann zurück zur Suchleiste |
+| Backspace im leeren Eintrag | Eintrag löschen |
+| Alt+A / Alt+E / Alt+N | neue Aufgabe / neues Ereignis / neue Notiz (hinter dem gewählten Eintrag) |
+| Alt+D / Alt+X / Leertaste | erledigt / abgebrochen / erledigt umschalten |
+| Alt+P | wichtig |
+| Alt+M | auf morgen (Aufgaben) |
+| Alt+T / Alt+Shift+T | planen auf einen Tag / auf mehrere Tage (Monat im Seitenfenster); auf einer Spur: zum Ziel |
+| Alt+U / Alt+R / Alt+G / Alt+I / Alt+B | Uhrzeit / Erinnerung / Tag / Symbol / Beschreibung (im Seitenfenster) |
+| Alt+Shift+E / A / N | als Ereignis / Aufgabe / Notiz |
+| Alt+↑ / Alt+↓ | verschieben (innerhalb der Gruppe) |
+| Entf oder Alt+Entf | löschen |
+| Alt+Enter | Einstellungen des Eintrags im Seitenfenster |
+| Regler: ←/→, Ziffern, Entf | einen Schritt, Wert tippen, Wert entfernen |
+| Aktivität: Leertaste, Ziffern+Enter, Enter, Shift+Enter | abhaken, Minuten eintragen, Timer starten/pausieren, Timer stoppen (Zeit in den Kalender) |
+| Alt+← / Alt+→ / Alt+H | anderer Tag / heute |
+
+**Maus:** Ein Klick auf den Text schreibt darin, ein Klick auf das Symbol öffnet die Einstellungen. Regler stellt man per Klick oder Ziehen auf dem Ring (die Stelle bestimmt den Wert) oder mit dem Mausrad. Aktivitäten hakt man mit einem Klick auf den Kreis ab. ▷/‖ starten und pausieren den Timer, ■ stoppt ihn. Die drei Symbole neben dem Datum legen neue Einträge an, ein Klick auf das Datum führt zurück zu heute. Ein Mittelklick im Kalender zeigt den Tag.
+
+### Das Seitenfenster (fährt links aus dem Fenster)
+
+Ein Klick auf das Symbol eines Eintrags (oder Alt+Enter) öffnet links ein schmales Fenster. Das Hauptfenster bleibt dabei an seiner Stelle, es wird nach links breiter. Darin stehen die Einstellungen des Eintrags, je eine Zeile:
+- Status, Typ, Wichtig, Tag, Uhrzeit, Erinnerung, Symbol, Beschreibung
+- auf morgen, Planen, Mehrere Tage, Löschen
+- bei einer Spur: zum geplanten Tag
+
+↑/↓ wählt, ←/→ ändert Status/Typ/Wichtig, Enter oder ein Klick öffnet bzw. führt aus. Die Auswahl öffnet sich im selben Bereich:
+- **Planen:** ein Monat. Pfeile wählen den Tag, Bild↑/↓ den Monat, H springt zu heute. Enter oder ein zweiter Klick plant. Bei mehreren Tagen sammelt Leertaste oder Klick die Tage, Enter plant.
+- **Uhrzeit:** große Uhr. ↑/↓ und das Mausrad ändern den Wert, ←/→ wechselt zwischen Stunden und Minuten, Ziffern tippen die Zeit, Entf entfernt sie. Die Dauer bleibt erhalten.
+- **Tag, Erinnerung:** Listen (beim Tag direkt per Ziffer 0–9).
+- **Symbol:** Raster mit Suche beim Tippen.
+- **Beschreibung:** Textfeld, Esc speichert.
+
+Esc geht eine Ebene zurück, auf den Einstellungen schließt es das Fenster.
+
+Jede Änderung wird sofort über `journal-core` gespeichert und landet in der gemeinsamen Historie (Strg+Z). Ein geöffnetes Formular nutzt denselben Platz. Nach dem Schließen kommt die Tagesansicht mit dem zuletzt gewählten Tag zurück; ein neues Öffnen des Fensters zeigt wieder heute.
 
 ## Der Kalender (rechts, immer sichtbar)
 
@@ -132,6 +202,7 @@ Rechts steht der Kalender als **Zeitgewebe**. Er ist endlos: Man kann beliebig w
 | Aktion | Wirkung |
 |---|---|
 | Linksklick auf einen Tag oder einen Eintrag darin | Tag aufklappen, nochmal: zuklappen (Details eines Eintrags folgen) |
+| Mittelklick auf einen Tag | diesen Tag links in der Tagesansicht zeigen |
 | Shift+Linksklick | alle Tage bis zum zuletzt geklickten aufklappen |
 | Rechtsklick in der Seitenspalte eines Tags | ganztägiger Eintrag an diesem Tag |
 | Rechts ziehen in der Seitenspalte über mehrere Tage | mehrtägiger Eintrag (durchgehend) |
@@ -147,4 +218,16 @@ Nach dem Loslassen stehen Datum und Zeit im Formular, der Cursor springt in den 
 
 ## Noch nicht im Formular
 
-Bestehende Einträge suchen und bearbeiten (auch per Linksklick im Kalender), „Planen auf andere Tage“, Tagestitel/Journaltext, Bewertung und Aktivitäten folgen als eigene Stufen (siehe `docs/roadmap.md`).
+Bestehende Einträge suchen und bearbeiten (auch per Linksklick im Kalender), Wiederholung im Seitenfenster und der Journaltext folgen als eigene Stufen (siehe `docs/roadmap.md`).
+
+## Notizblock
+
+**Strg+Umschalt+N** in J-TerminaL, **/Notizblock** (englisch **/Notepad**) und das Journal-Symbol neben der Suchleiste öffnen die Zettelliste. **Alt+←/→** oder die Auswahl über der Liste wechselt zwischen allen Zetteln und dem gewählten Tag. **↑/↓** und **Enter** öffnen einen Zettel in der Leseansicht.
+
+- **Neue Notiz** oder **Strg+N** legt einen Entwurf für den gewählten Tag an. **Bearbeiten** oder **F2** öffnet bei einem bestehenden Zettel den Editor. **Speichern** oder **Strg+Enter** speichert und zeigt den formatierten Zettel an. Neue Zettel erscheinen im Notizen-Tab der Haupt-App und auf der Tagespinnwand.
+- **Enter** setzt Aufzählungen und nummerierte Listen fort. Ein neues Checklistenelement beginnt leer und unabgehakt. **Enter** auf einem leeren Listenpunkt beendet die Liste auf dieser Ebene. **Tab** und **Umschalt+Tab** rücken Zeilen ein und aus. **Strg+Tab** wechselt zwischen Titel und Text.
+- **Strg+T** öffnet beim Bearbeiten die Tag-Auswahl, **Strg+M** die Markdown-Vorschau. In Leseansicht und Vorschau wählen **↑/↓** eine Zeile und **←/→** einen Link aus. **Enter** oder ein Klick schaltet Checklisten um, folgt Links oder kopiert Code. In der Leseansicht werden geänderte Checklisten sofort gespeichert.
+- **Strg+L** zeigt die Anhänge. Beim Bearbeiten kannst du einen Link eingeben und mit **Enter** hinzufügen oder mit **Strg+I** ein Bild anhängen (PNG, JPEG oder WebP). Bilder erscheinen unter dem formatierten Text. Klick oder **Enter** auf ein ausgewähltes Bild öffnet es groß im Notizblock.
+- **Zurück** oder **Esc** kehrt zur vorherigen Ansicht zurück. Bei einem geänderten Entwurf bestätigt ein zweites Zurück oder Esc das Verwerfen. **Esc** in der Zettelliste schließt den Notizblock.
+
+Der frühere Tageseditor ist über **/Journaltext** erreichbar. **Als Zettel kopieren** oder **Strg+Umschalt+C** übernimmt seinen Inhalt in einen neuen Zettelentwurf.

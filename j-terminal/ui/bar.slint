@@ -1,3 +1,7 @@
+import { JournalIcons } from "journal-icons.slint";
+export { JournalIcons }
+import { NotepadEditor, NotepadAction, NotepadChoiceRow, NotepadMarkdownRow, NotepadTool, NotepadIndent, NotepadImage, NotepadLabels } from "notepad.slint";
+export { NotepadChoiceRow, NotepadMarkdownRow, NotepadTool, NotepadIndent, NotepadImage, NotepadLabels }
 import { Theme } from "theme.slint";
 export { Theme }
 import { Calendar, CalBand, CalBlock, CalChip, CalLane, CalTick } from "calendar.slint";
@@ -12,6 +16,87 @@ export struct ChoiceRow { index: int, label: string, has-color: bool, color: col
 // A choice of the repetition. kind: 0 one of several, 1 switched on/off, 2 a number, 3 a date; `after` follows it.
 export struct SentencePart { text: string, kind: int, selected: bool, focused: bool, slot: int, value: int, after: string }
 export struct SentenceLine { label: string, has-icon: bool, icon: image, parts: [SentencePart] }
+// A line of the day view. kind: 0 a section's heading, 1 an entry, 2 a value (bar), 3 an activity, 4 a quiet empty line.
+// `detail`: the entry's time, the heading's count, the value, the activity's minutes. `fill`: the value's bar (0–1).
+// A line of the day view. kind: 0 a section's heading, 1 an entry, 3 an activity, 4 a quiet empty line, 5 the day's title,
+// 6 a timer of another day, 7 the dials. `item` is what the keyboard and the mouse choose (-1 none).
+export struct DialCell { color: color, raw: int, low: int, high: int, item: int, label: string, value: string, image: image, selected: bool }
+export struct DayRow { top: length, tall: length, column: int, kind: int, item: int, label: string, detail: string, icon: image, has-tag-icon: bool, tag-icon: image, has-color: bool, color: color,
+    done: bool, priority: bool, trace: bool, foreign: bool, selected: bool, editing: bool, track: bool, has-timer: bool, timer-running: bool, timer-clock: string, dials: [DialCell] }
+// A line of the panel at the left (a setting, a tag, a reminder, an icon) and a day of its month.
+export struct SideRow { has-icon: bool, icon: image, label: string, value: string, selected: bool, on: bool, has-color: bool, color: color, danger: bool }
+export struct MonthCell { label: string, in-month: bool, today: bool, cursor: bool, picked: bool, own: bool }
+
+component DayHeading inherits Rectangle {
+    in property <DayRow> data;
+    HorizontalLayout {
+        y: Theme.day-section-top; height: parent.height - Theme.day-section-top;
+        spacing: Theme.gap; alignment: start;
+        Image { width: Theme.day-heading-icon; height: Theme.day-heading-icon; y: (parent.height - self.height) / 2; source: root.data.icon; colorize: Theme.accent; }
+        Text { text: root.data.label; color: Theme.strong; font-size: Theme.day-heading-size; font-weight: Theme.weight-semibold; vertical-alignment: center; }
+        Text { text: root.data.detail; color: Theme.placeholder; font-family: Theme.write-font; font-size: Theme.day-count-size; vertical-alignment: center; }
+    }
+    Rectangle { y: parent.height - self.height; height: Theme.border-width; background: Theme.divider; }
+}
+
+component DayActivity inherits Rectangle {
+    in property <DayRow> data;
+    in property <image> icon-play;
+    in property <image> icon-pause;
+    in property <image> icon-stop;
+    callback clicked(int, int);
+    HorizontalLayout {
+        spacing: Theme.gap;
+        Rectangle {
+            width: Theme.day-symbol-box; height: Theme.day-symbol-box; y: (parent.height - self.height) / 2;
+            border-radius: Theme.block-radius;
+            background: tick-touch.has-hover ? Theme.hover : transparent;
+            Image {
+                width: Theme.day-symbol-size; height: Theme.day-symbol-size; x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2;
+                source: root.data.icon; colorize: root.data.done || root.data.kind == 6 ? (root.data.has-color ? root.data.color : Theme.accent) : Theme.placeholder;
+            }
+            tick-touch := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.clicked(root.data.item, 1); } }
+        }
+        Text {
+            text: root.data.label; color: root.data.done || root.data.kind == 6 ? Theme.text : Theme.muted; font-size: Theme.row-size; vertical-alignment: center; overflow: elide; horizontal-stretch: 1;
+            TouchArea { clicked => { root.clicked(root.data.item, 0); } }
+        }
+        if root.data.detail != "": Text { text: root.data.detail; color: Theme.muted; font-family: Theme.write-font; font-size: Theme.write-size; vertical-alignment: center; }
+        if root.data.has-timer: Text { text: root.data.timer-clock; color: root.data.timer-running ? Theme.accent : Theme.muted; font-family: Theme.write-font; font-size: Theme.write-size; vertical-alignment: center; }
+        if root.data.track: Rectangle {
+            width: Theme.day-symbol-box; height: Theme.day-symbol-box; y: (parent.height - self.height) / 2;
+            border-radius: Theme.block-radius; background: play-touch.has-hover ? Theme.hover : transparent;
+            Image { width: Theme.day-tag-icon-size; height: Theme.day-tag-icon-size; x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2;
+                source: root.data.timer-running ? root.icon-pause : root.icon-play; colorize: root.data.timer-running ? Theme.accent : Theme.placeholder; }
+            play-touch := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.clicked(root.data.item, 2); } }
+        }
+        if root.data.has-timer: Rectangle {
+            width: Theme.day-symbol-box; height: Theme.day-symbol-box; y: (parent.height - self.height) / 2;
+            border-radius: Theme.block-radius; background: stop-touch.has-hover ? Theme.hover : transparent;
+            Image { width: Theme.day-tag-icon-size; height: Theme.day-tag-icon-size; x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2;
+                source: root.icon-stop; colorize: Theme.placeholder; }
+            stop-touch := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.clicked(root.data.item, 3); } }
+        }
+    }
+}
+
+component DayScroll inherits Flickable {
+    in property <length> focus-y;
+    in property <length> focus-h;
+    min-height: 0px;
+    preferred-height: 0px;
+    function reveal-focus() {
+        if self.focus-h > 0px {
+            self.content-y = min(self.content-y, -self.focus-y);
+            self.content-y = max(self.content-y, min(0px, self.height - self.focus-y - self.focus-h));
+        }
+        self.content-y = clamp(self.content-y, min(0px, self.height - self.content-height), 0px);
+    }
+    changed focus-y => { self.reveal-focus(); }
+    changed focus-h => { self.reveal-focus(); }
+    changed height => { self.reveal-focus(); }
+    changed content-height => { self.reveal-focus(); }
+}
 
 export component Bar inherits Window {
     // The form
@@ -67,11 +152,15 @@ export component Bar inherits Window {
     in property <length> cal-caret-w;
     in property <length> cal-caret-h;
     in property <bool> cal-focus;
+    changed cal-focus => { if root.stacked { page-scroll.content-y = root.cal-focus ? min(0px, root.height - root.full-height) : 0px; } }
+    changed side-open => { if root.side-open && root.stacked { page-scroll.content-y = 0px; } }
     callback cal-mouse(int, int, length, length, bool);
     callback cal-wheel(length, length, bool, bool);
-    callback calendar-resized(length);
+    callback calendar-resized(length, length);
+    private property <length> calendar-viewport-width: calendar.width;
+    changed calendar-viewport-width => { root.calendar-resized(calendar.width, calendar.height); }
     private property <length> calendar-viewport-height: calendar.height;
-    changed calendar-viewport-height => { root.calendar-resized(self.calendar-viewport-height); }
+    changed calendar-viewport-height => { root.calendar-resized(calendar.width, self.calendar-viewport-height); }
     // The search bar
     in property <bool> entry-open;
     in property <string> search-placeholder;
@@ -81,8 +170,132 @@ export component Bar inherits Window {
     in property <int> command-selected;
     in-out property <string> search-text <=> search.text;
     callback search-edited(string);
+    callback command-chosen(int);
+
+    in property <bool> notepad-open;
+    in property <bool> notepad-dirty;
+    in property <string> notepad-heading;
+    in property <string> notepad-date;
+    in-out property <string> notepad-title;
+    in-out property <string> notepad-body;
+    in property <string> notepad-title-label;
+    in property <string> notepad-body-label;
+    in property <string> notepad-hint;
+    in property <string> notepad-save-label;
+    in property <NotepadLabels> notepad-labels;
+    property <int> notepad-focus-request;
+    in property <bool> notepad-editing;
+    in property <bool> notepad-can-save;
+    in property <bool> notepad-card;
+    in property <int> notepad-panel;
+    in property <bool> notepad-preview;
+    in property <[NotepadChoiceRow]> notepad-choices;
+    in property <[NotepadMarkdownRow]> notepad-markdown;
+    in property <[NotepadTool]> notepad-tools;
+    in property <string> notepad-editor-heading;
+    in property <string> notepad-panel-placeholder;
+    in property <string> notepad-panel-empty;
+    in property <string> notepad-image-label;
+    in property <image> notepad-image-icon;
+    in property <image> notepad-link-icon;
+    in property <image> notepad-check-icon;
+    in property <image> notepad-copy-icon;
+    in property <string> notepad-copy-label;
+    in property <string> notepad-all-notes;
+    in property <string> notepad-day-notes;
+    in property <bool> notepad-on-day;
+    in property <[NotepadImage]> notepad-images;
+    in property <bool> notepad-viewer-open;
+    in property <image> notepad-viewed-image;
+    in property <string> notepad-viewed-title;
+    in property <string> notepad-viewer-message;
+    in-out property <string> notepad-query;
+    callback notepad-tool(int);
+    callback notepad-filter(string);
+    callback notepad-new-note;
+    pure callback notepad-continue-list(string, int, int) -> NotepadIndent;
+    callback notepad-choose(string);
+    callback notepad-link(string);
+    callback notepad-image;
+    callback notepad-check(int);
+    callback notepad-scope(bool);
+    callback notepad-view-attachment(string);
+    callback notepad-close-viewer;
+    pure callback notepad-indent-edit(string, int, int, bool) -> NotepadIndent;
+    callback notepad-follow(string);
+    callback open-notepad;
+    callback notepad-edited(bool, string);
+    callback notepad-finish(bool);
     in property <string> notice;
     in property <bool> notice-is-error;
+    // The day view under the search bar while no form is open.
+    in property <string> day-heading;
+    in property <string> day-relative;
+    in property <bool> day-is-today;
+    in property <string> day-back;
+    in property <string> hint-day;
+    in property <[DayRow]> day-rows;
+    in property <[DayRow]> day-footer-rows;
+    in property <length> day-footer-height;
+    in property <bool> day-focus-footer;
+    in property <[image]> day-new-icons;
+    in property <string> day-title-placeholder;
+    in property <string> day-edit-text;
+    in property <string> day-message;
+    in property <bool> day-message-is-error;
+    in property <length> day-focus-y;
+    in property <length> day-focus-h;
+    in property <string> hint-entries;
+    in property <string> hint-values;
+    in property <image> icon-play;
+    in property <image> icon-pause;
+    in property <image> icon-stop;
+    in property <image> icon-close;
+    in property <image> icon-back;
+    in property <image> icon-forward;
+    callback day-today();
+    // Every key the day view (and its panel) has a use for: the key's text and the modifiers (1 Shift, 2 Strg, 4 Alt).
+    callback day-key(string, int);
+    callback day-edited(string);
+    // A click on a line: its item and the part (0 text, 1 symbol, 2 timer start/pause, 3 timer stop).
+    callback day-click(int, int);
+    // A new entry from the mouse: 0 event, 1 task, 2 note.
+    callback day-create(int);
+    // A dial: where the pointer is from its centre; the wheel over it.
+    out property <bool> dragging-dial;
+    in property <length> day-list-height;
+    pure callback dial-preview(int, int, int, color) -> image;
+    callback dial-set(int, int, bool);
+    callback dial-point(int, length, length);
+    callback dial-wheel(int, length);
+    // The panel at the left.
+    in property <bool> side-open;
+    in property <int> side-focus-index: -1;
+    in property <int> side-kind;
+    in property <string> side-title;
+    in property <string> side-heading;
+    in property <image> side-heading-icon;
+    in property <[SideRow]> side-rows;
+    in property <string> side-clock-hours;
+    in property <string> side-clock-minutes;
+    in property <bool> side-clock-on-minutes;
+    in property <string> side-month-title;
+    in property <[string]> side-weekdays;
+    in property <[MonthCell]> side-cells;
+    in property <string> side-confirm-text;
+    in property <string> side-text;
+    in property <string> side-text-shown;
+    in property <string> side-placeholder;
+    in property <string> side-hint;
+    callback side-choose(int);
+    callback side-edited(string);
+    callback side-day(int);
+    callback side-month(int);
+    callback side-confirm();
+    callback side-close();
+    callback side-back();
+    // The clock: a part clicked (steps 0) or turned with the wheel.
+    callback side-clock(bool, int);
     in property <string> hint-rows;
     in property <string> hint-pick;
     in property <string> hint-save;
@@ -90,43 +303,292 @@ export component Bar inherits Window {
     private property <bool> hints;
     private property <length> value-x: Theme.padding + Theme.label-width;
     public function focus-input() { input.focus(); }
-    public function focus-line() { root.hints = false; if root.entry-open { input.focus(); input.select-all(); } else { search.focus(); } }
+    public function focus-line() { root.hints = false; if root.entry-open { input.focus(); input.select-all(); } else if root.notepad-open { root.focus-notepad(); } else { search.focus(); } }
+    public function focus-notepad() { root.notepad-focus-request += 1; }
     public function focus-entry() { input.focus(); input.select-all(); }
     public function focus-search() { search.focus(); }
+    public function focus-day() { day-scope.focus(); }
     public function select-text() { input.select-all(); }
     // Where a field of a line lies: "when" has the date, the start and the end side by side.
     pure function cell-x(cell: int) -> length {
         return root.value-x + (cell == 0 ? 0px : cell == 1 ? Theme.when-date-width : Theme.when-date-width + Theme.when-time-width + Theme.when-dash-width);
     }
     pure function cell-width(cell: int, multi: bool) -> length {
-        return !multi ? Theme.form-width - root.value-x - Theme.padding : cell == 0 ? Theme.when-date-width - Theme.gap : Theme.when-time-width;
+        return !multi ? root.form-space - root.value-x - Theme.padding : cell == 0 ? Theme.when-date-width - Theme.gap : Theme.when-time-width;
     }
     pure function mods(shift: bool, control: bool, alt: bool) -> int { return (shift ? 1 : 0) + (control ? 2 : 0) + (alt ? 4 : 0); }
 
-    out property <length> content-height: max(layout.preferred-height, Theme.calendar-height);
+    in property <length> screen-width: Theme.width + Theme.side-width + Theme.border-width;
+    in property <length> screen-height: Theme.calendar-height * 4;
+    out property <bool> stacked: root.screen-width < Theme.width;
+    property <float> side-reveal: root.side-open ? 1 : 0;
+    animate side-reveal { duration: Theme.side-slide-duration; easing: ease-out; }
+    property <length> side-space: root.stacked ? 0px : (Theme.side-width + Theme.border-width) * root.side-reveal;
+    property <length> side-natural-height: min(Theme.side-stacked-max-height, side-layout.preferred-height);
+    property <length> side-height: root.stacked ? (root.side-natural-height + Theme.border-width) * root.side-reveal : 0px;
+    out property <length> content-width: root.stacked ? min(root.screen-width, Theme.calendar-width) : min(root.screen-width, Theme.width + root.side-space);
+    out property <length> form-space: root.stacked ? root.content-width : Theme.form-width;
+    property <length> stacked-height: min(root.screen-height, Theme.calendar-height * 2);
+    property <length> preferred-pane-height: root.stacked
+        ? max(Theme.stacked-day-min-height, (root.stacked-height - root.side-height) * Theme.stacked-day-share)
+        : Theme.calendar-height;
+    property <length> pane-height: max(layout.preferred-height, root.preferred-pane-height);
+    property <length> calendar-height: root.stacked
+        ? max(Theme.stacked-calendar-min-height, root.stacked-height - root.side-height - root.pane-height - Theme.border-width)
+        : root.pane-height;
+    property <length> full-height: root.stacked
+        ? root.side-height + root.pane-height + Theme.border-width + root.calendar-height
+        : root.pane-height;
+    out property <length> content-height: min(root.full-height, root.screen-height);
     title: "J-TerminaL";
     no-frame: true;
     always-on-top: true;
     background: transparent;
-    width: Theme.width;
-    height: max(layout.preferred-height, Theme.calendar-height);
+    width: root.content-width;
+    height: root.content-height;
     default-font-family: Theme.ui-font;
+    FocusScope {
+        x: 0px; y: 0px; width: root.width; height: root.height;
+        capture-key-pressed(event) => {
+            if event.modifiers.control && event.modifiers.shift && !event.modifiers.alt &&
+                (event.text == "n" || event.text == "N") {
+                if !event.repeat { root.open-notepad(); }
+                return accept;
+            }
+            reject
+        }
     Rectangle {
         background: Theme.background;
-        border-color: Theme.border;
+        border-color: Theme.background;
         border-width: Theme.border-width;
         border-radius: Theme.radius;
         clip: true;
-    HorizontalLayout {
-    layout := VerticalLayout {
-        width: Theme.form-width;
-        spacing: 0px;
-        // ----- The search bar: always on top -----
+    page-scroll := Flickable {
+    x: 0px; y: 0px; width: root.width; height: root.height;
+    interactive: !root.dragging-dial;
+    content-height: root.full-height;
+    content-width: root.width;
+    // ----- The panel that comes out at the left: an entry's settings and its pickers -----
+    side-slot := Rectangle {
+        x: 0px; y: 0px;
+        width: root.stacked ? root.content-width : root.side-space;
+        height: root.stacked ? root.side-height : root.pane-height;
+        clip: true;
+        visible: root.side-reveal > 0;
+        side-scroll := Flickable {
+            x: root.stacked ? 0px : parent.width - self.width - Theme.border-width;
+            y: root.stacked ? parent.height - self.height - Theme.border-width : 0px;
+            width: root.stacked ? parent.width : Theme.side-width;
+            height: root.stacked ? root.side-natural-height : root.pane-height;
+            content-width: self.width;
+            content-height: max(self.height, side-layout.min-height);
+        side-layout := VerticalLayout {
+            x: 0px; y: 0px;
+            width: side-scroll.width; height: side-scroll.content-height;
+            padding: Theme.side-padding; spacing: Theme.panel-spacing;
+            // The entry, and a quiet way to close the panel.
+            HorizontalLayout {
+                spacing: Theme.gap;
+                Text { text: root.side-title; color: Theme.strong; font-family: Theme.write-font; font-size: Theme.form-size; font-weight: Theme.weight-medium; overflow: elide; vertical-alignment: center; horizontal-stretch: 1; }
+                Rectangle {
+                    width: Theme.day-symbol-box; height: Theme.day-symbol-box;
+                    border-radius: Theme.block-radius; background: close-touch.has-hover ? Theme.hover : transparent;
+                    Image { width: Theme.day-tag-icon-size; height: Theme.day-tag-icon-size; x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2; source: root.icon-close; colorize: Theme.placeholder; }
+                    close-touch := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.side-close(); } }
+                }
+            }
+            // A picker's heading (a click: back to the settings).
+            if root.side-kind > 0: HorizontalLayout {
+                spacing: Theme.gap; alignment: start;
+                Image { width: Theme.label-icon-size; height: Theme.label-icon-size; y: (parent.height - self.height) / 2; source: root.icon-back; colorize: Theme.placeholder;
+                    TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.side-back(); } } }
+                Image { width: Theme.label-icon-size; height: Theme.label-icon-size; y: (parent.height - self.height) / 2; source: root.side-heading-icon; colorize: Theme.accent; }
+                Text { text: root.side-heading; color: Theme.strong; font-size: Theme.row-size; font-weight: Theme.weight-semibold; vertical-alignment: center; }
+            }
+            // The settings and the lists (tags, reminders): a line each.
+            if root.side-kind == 0 || root.side-kind == 1 || root.side-kind == 3: Flickable {
+                vertical-stretch: 1;
+                min-height: Theme.side-row-height;
+                preferred-height: side-list.preferred-height;
+                property <int> focused-row: root.side-focus-index;
+                changed focused-row => {
+                    if self.focused-row >= 0 {
+                        let top = self.focused-row * (Theme.side-row-height + Theme.choice-spacing);
+                        self.content-y = min(0px, max(min(self.content-y, -top), self.height - top - Theme.side-row-height));
+                    }
+                }
+                content-height: side-list.preferred-height;
+                side-list := VerticalLayout {
+                    x: 0px; y: 0px;
+                    width: parent.width; height: self.preferred-height;
+                    spacing: Theme.choice-spacing;
+                    for line[i] in root.side-rows: Rectangle {
+                        height: Theme.side-row-height;
+                        border-radius: Theme.block-radius;
+                        background: line.selected ? Theme.row-selection : line-touch.has-hover ? Theme.hover : transparent;
+                        HorizontalLayout {
+                            padding-left: Theme.gap; padding-right: Theme.gap; spacing: Theme.gap;
+                            if line.has-icon: Image { width: Theme.label-icon-size; height: Theme.label-icon-size; y: (parent.height - self.height) / 2; source: line.icon;
+                                colorize: line.danger ? Theme.error : line.has-color ? line.color : line.on ? Theme.accent : Theme.muted; }
+                            if !line.has-icon && line.has-color: Rectangle { width: Theme.tag-dot; height: Theme.tag-dot; y: (parent.height - self.height) / 2; border-radius: self.width / 2; background: line.color; }
+                            Text { text: line.label; color: line.danger ? Theme.error : line.on ? Theme.chip-selected-text : line.selected ? Theme.strong : Theme.text; font-size: Theme.row-size; vertical-alignment: center; horizontal-stretch: 1; overflow: elide; }
+                            if line.value != "": Text { text: line.value; color: Theme.muted; font-size: Theme.small-size; vertical-alignment: center; overflow: elide; max-width: Theme.side-value-width; }
+                            if line.on && line.value == "": Rectangle { width: Theme.tag-dot; height: Theme.tag-dot; y: (parent.height - self.height) / 2; border-radius: self.width / 2; background: Theme.accent; }
+                        }
+                        line-touch := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.side-choose(i); } }
+                    }
+                }
+            }
+            // The icons: a search and a grid.
+            if root.side-kind == 2: Rectangle {
+                height: Theme.search-height;
+                background: Theme.field-background; border-radius: Theme.field-radius;
+                border-width: Theme.border-width; border-color: Theme.field-focus;
+                if root.side-text-shown == "": Text { x: Theme.field-inset; height: parent.height; vertical-alignment: center; text: root.side-placeholder; color: Theme.placeholder; font-size: Theme.row-size; }
+                TextInput {
+                    x: Theme.field-inset; width: parent.width - Theme.field-inset * 2; height: parent.height;
+                    text: root.side-text; single-line: true; vertical-alignment: center; color: Theme.strong; font-size: Theme.row-size;
+                    selection-background-color: Theme.selection; selection-foreground-color: Theme.strong;
+                    property <bool> open: root.side-open;
+                    init => { if self.open { self.focus(); } }
+                    changed open => { if self.open { self.focus(); } }
+                    edited => { root.side-edited(self.text); }
+                    key-pressed(event) => {
+                        root.hints = event.modifiers.control;
+                        if event.text == Key.Control || event.text == Key.Shift || event.text == Key.Alt || event.text == Key.Meta { return reject; }
+                        if event.text == Key.Return || event.text == Key.Escape || event.text == Key.UpArrow || event.text == Key.DownArrow || (event.modifiers.control && event.text == Key.Delete)
+                            || ((event.text == Key.LeftArrow || event.text == Key.RightArrow) && self.text == "") {
+                            root.day-key(event.text, root.mods(event.modifiers.shift, event.modifiers.control, event.modifiers.alt));
+                            return accept;
+                        }
+                        reject
+                    }
+                    key-released(event) => { root.hints = event.modifiers.control; reject }
+                }
+            }
+            if root.side-kind == 2: Rectangle {
+                height: Math.ceil(root.side-rows.length / Theme.side-icon-columns) * Theme.side-icon-cell;
+                for line[i] in root.side-rows: Rectangle {
+                    x: Math.mod(i, Theme.side-icon-columns) * Theme.side-icon-cell;
+                    y: Math.floor(i / Theme.side-icon-columns) * Theme.side-icon-cell;
+                    width: Theme.side-icon-cell - Theme.calendar-gap; height: Theme.side-icon-cell - Theme.calendar-gap;
+                    border-radius: Theme.block-radius;
+                    background: line.selected ? Theme.chip-selected : icon-touch.has-hover ? Theme.hover : transparent;
+                    border-width: line.selected ? Theme.border-width : 0px; border-color: Theme.accent;
+                    Image { width: Theme.icon-size; height: Theme.icon-size; x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2; source: line.icon; colorize: line.selected || line.on ? Theme.accent : Theme.muted; }
+                    icon-touch := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.side-choose(i); } }
+                }
+            }
+            // The clock: big hours and minutes; the wheel or ↑/↓ change the part with the arrows.
+            if root.side-kind == 4: HorizontalLayout {
+                alignment: center; spacing: Theme.gap;
+                Rectangle {
+                    width: side-hours.preferred-width + Theme.clock-inset * 2; height: Theme.clock-box-height;
+                    background: !root.side-clock-on-minutes ? Theme.selection : Theme.field-background; border-radius: Theme.block-radius;
+                    border-width: !root.side-clock-on-minutes ? Theme.focus-ring : 0px; border-color: Theme.accent;
+                    side-hours := Text { text: root.side-clock-hours; font-family: Theme.write-font; font-size: Theme.clock-size; color: Theme.text; horizontal-alignment: center; vertical-alignment: center; }
+                    TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.side-clock(false, 0); } scroll-event(event) => { root.side-clock(false, event.delta-y > 0 ? 1 : -1); accept } }
+                }
+                Text { text: ":"; font-family: Theme.write-font; font-size: Theme.clock-size; color: Theme.muted; vertical-alignment: center; }
+                Rectangle {
+                    width: side-minutes.preferred-width + Theme.clock-inset * 2; height: Theme.clock-box-height;
+                    background: root.side-clock-on-minutes ? Theme.selection : Theme.field-background; border-radius: Theme.block-radius;
+                    border-width: root.side-clock-on-minutes ? Theme.focus-ring : 0px; border-color: Theme.accent;
+                    side-minutes := Text { text: root.side-clock-minutes; font-family: Theme.write-font; font-size: Theme.clock-size; color: Theme.text; horizontal-alignment: center; vertical-alignment: center; }
+                    TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.side-clock(true, 0); } scroll-event(event) => { root.side-clock(true, event.delta-y > 0 ? 1 : -1); accept } }
+                }
+            }
+            if root.side-kind == 4: Rectangle {
+                height: Theme.side-row-height; border-radius: Theme.block-radius;
+                background: take-touch.has-hover ? Theme.hover : Theme.chip-selected;
+                Text { text: root.side-confirm-text; color: Theme.chip-selected-text; font-size: Theme.row-size; horizontal-alignment: center; vertical-alignment: center; }
+                take-touch := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.side-confirm(); } }
+            }
+            // The month to plan on: the entry's own day quiet, today marked, the chosen day(s) in the accent.
+            if root.side-kind == 5: HorizontalLayout {
+                spacing: Theme.gap;
+                Image { width: Theme.label-icon-size; height: Theme.label-icon-size; y: (parent.height - self.height) / 2; source: root.icon-back; colorize: Theme.muted;
+                    TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.side-month(-1); } } }
+                Text { text: root.side-month-title; color: Theme.strong; font-size: Theme.row-size; font-weight: Theme.weight-medium; horizontal-alignment: center; vertical-alignment: center; horizontal-stretch: 1; }
+                Image { width: Theme.label-icon-size; height: Theme.label-icon-size; y: (parent.height - self.height) / 2; source: root.icon-forward; colorize: Theme.muted;
+                    TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.side-month(1); } } }
+            }
+            if root.side-kind == 5: Rectangle {
+                height: Theme.side-cell * 7;
+                for name[w] in root.side-weekdays: Text {
+                    x: w * Theme.side-cell; y: 0px; width: Theme.side-cell; height: Theme.side-cell;
+                    text: name; color: w >= 5 ? (w == 5 ? Theme.saturday : Theme.sunday) : Theme.placeholder; font-size: Theme.small-size; horizontal-alignment: center; vertical-alignment: center;
+                }
+                for cell[i] in root.side-cells: Rectangle {
+                    x: Math.mod(i, 7) * Theme.side-cell + Theme.side-cell-inset; y: (Math.floor(i / 7) + 1) * Theme.side-cell + Theme.side-cell-inset;
+                    width: Theme.side-cell - Theme.side-cell-inset * 2; height: Theme.side-cell - Theme.side-cell-inset * 2;
+                    border-radius: self.height / 2;
+                    background: cell.picked ? Theme.accent : cell.cursor ? Theme.chip-selected : cell-touch.has-hover ? Theme.hover : transparent;
+                    border-width: cell.cursor || cell.today ? Theme.border-width : 0px; border-color: cell.cursor ? Theme.accent : Theme.field-focus;
+                    Text {
+                        text: cell.label; font-family: Theme.write-font; font-size: Theme.row-size; horizontal-alignment: center; vertical-alignment: center;
+                        color: cell.picked ? Theme.ground : cell.own ? Theme.placeholder : !cell.in-month ? Theme.placeholder : cell.cursor ? Theme.chip-selected-text : Theme.text;
+                    }
+                    cell-touch := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.side-day(i); } }
+                }
+            }
+            if root.side-kind == 5: Rectangle {
+                height: Theme.side-row-height; border-radius: Theme.block-radius;
+                background: plan-touch.has-hover ? Theme.hover : Theme.chip-selected;
+                HorizontalLayout {
+                    alignment: center; spacing: Theme.gap;
+                    Image { width: Theme.label-icon-size; height: Theme.label-icon-size; y: (parent.height - self.height) / 2; source: root.side-heading-icon; colorize: Theme.accent; }
+                    Text { text: root.side-confirm-text; color: Theme.chip-selected-text; font-size: Theme.row-size; vertical-alignment: center; }
+                }
+                plan-touch := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.side-confirm(); } }
+            }
+            // The description: written in place; Esc keeps it.
+            if root.side-kind == 6: Rectangle {
+                height: Theme.side-description-height;
+                background: Theme.field-background; border-radius: Theme.panel-radius;
+                border-width: Theme.border-width; border-color: Theme.field-focus;
+                if root.side-text-shown == "": Text { x: Theme.field-inset; y: Theme.field-inset; text: root.side-placeholder; color: Theme.placeholder; font-size: Theme.write-size; font-family: Theme.write-font; }
+                TextInput {
+                    x: Theme.field-inset; y: Theme.field-inset; width: parent.width - Theme.field-inset * 2; height: parent.height - Theme.field-inset * 2;
+                    text: root.side-text; single-line: false; wrap: word-wrap; color: Theme.strong; font-family: Theme.write-font; font-size: Theme.write-size;
+                    selection-background-color: Theme.selection; selection-foreground-color: Theme.strong;
+                    property <bool> open: root.side-open;
+                    init => { if self.open { self.focus(); } }
+                    changed open => { if self.open { self.focus(); } }
+                    edited => { root.side-edited(self.text); }
+                    key-pressed(event) => {
+                        root.hints = event.modifiers.control;
+                        if event.text == Key.Escape { root.day-key(event.text, 0); return accept; }
+                        reject
+                    }
+                    key-released(event) => { root.hints = event.modifiers.control; reject }
+                }
+            }
+            if root.side-kind == 4 || root.side-kind == 5 || root.side-kind == 2 || root.side-kind == 6: Rectangle { vertical-stretch: 1; }
+            if root.hints && root.side-hint != "": Text { text: root.side-hint; color: Theme.placeholder; font-size: Theme.small-size; wrap: word-wrap; }
+        }
+        }
         Rectangle {
-            height: Theme.line-height;
+            x: root.stacked ? 0px : parent.width - Theme.border-width;
+            y: root.stacked ? parent.height - Theme.border-width : 0px;
+            width: root.stacked ? parent.width : Theme.border-width;
+            height: root.stacked ? Theme.border-width : parent.height;
+            background: Theme.divider;
+        }
+    }
+    layout := VerticalLayout {
+        x: root.side-space;
+        y: root.side-height;
+        height: root.pane-height; width: root.form-space;
+        spacing: 0px;
+        // The search bar and the shortcut to the current day's notepad.
+        Rectangle {
+            visible: !root.notepad-open;
+            height: root.notepad-open ? 0px : Theme.line-height;
+            property <length> shortcut-space: root.entry-open ? 0px : Theme.day-symbol-box + Theme.gap;
             Rectangle {
                 x: Theme.padding; y: (parent.height - Theme.search-height) / 2;
-                width: parent.width - Theme.padding * 2; height: Theme.search-height;
+                width: parent.width - Theme.padding * 2 - parent.shortcut-space; height: Theme.search-height;
                 background: Theme.field-background; border-radius: Theme.field-radius;
                 border-width: Theme.border-width; border-color: search.has-focus ? Theme.field-focus : Theme.edge;
                 Image {
@@ -136,11 +598,11 @@ export component Bar inherits Window {
                 }
             }
             if search.text == "": Text {
-                x: Theme.padding + Theme.field-inset + Theme.search-icon-size + Theme.gap; width: parent.width - self.x - Theme.padding - Theme.field-inset; height: parent.height; vertical-alignment: center;
+                x: Theme.padding + Theme.field-inset + Theme.search-icon-size + Theme.gap; width: parent.width - self.x - Theme.padding - Theme.field-inset - parent.shortcut-space; height: parent.height; vertical-alignment: center;
                 text: root.search-placeholder; color: Theme.placeholder; font-size: Theme.form-size;
             }
             search := TextInput {
-                x: Theme.padding + Theme.field-inset + Theme.search-icon-size + Theme.gap; width: parent.width - self.x - Theme.padding - Theme.field-inset; height: parent.height;
+                x: Theme.padding + Theme.field-inset + Theme.search-icon-size + Theme.gap; width: parent.width - self.x - Theme.padding - Theme.field-inset - parent.shortcut-space; height: parent.height;
                 vertical-alignment: center; single-line: true;
                 color: Theme.strong; selection-background-color: Theme.selection; selection-foreground-color: Theme.strong; font-size: Theme.form-size;
                 edited => { root.search-edited(self.text); }
@@ -154,6 +616,12 @@ export component Bar inherits Window {
                     if event.text == Key.DownArrow { root.form-key(2, 0); return accept; }
                     if event.text == Key.Return { root.form-key(3, root.mods(event.modifiers.shift, event.modifiers.control, false)); return accept; }
                     if event.text == Key.Escape { root.form-key(4, 0); return accept; }
+                    // The day view's day: Alt+←/→ a day back and on, Alt+H today.
+                    if event.modifiers.alt && !event.modifiers.control {
+                        if event.text == Key.LeftArrow { root.form-key(5, 4); return accept; }
+                        if event.text == Key.RightArrow { root.form-key(6, 4); return accept; }
+                        if event.text == "h" || event.text == "H" { root.form-key(9, 4); return accept; }
+                    }
                     if event.modifiers.control {
                         if event.text == "z" || event.text == "Z" { root.form-key(50, 0); return accept; }
                         if event.text == "y" || event.text == "Y" { root.form-key(51, 0); return accept; }
@@ -163,20 +631,32 @@ export component Bar inherits Window {
                 }
                 key-released(event) => { root.hints = event.modifiers.control; reject }
             }
+            if !root.entry-open: NotepadAction {
+                x: parent.width - Theme.padding - self.width;
+                y: (parent.height - self.height) / 2;
+                icon: JournalIcons.journal-icon;
+                label: root.notepad-heading;
+                clicked => { root.open-notepad(); }
+            }
         }
         for command[index] in root.commands: Rectangle {
             height: Theme.row-height;
-            background: index == root.command-selected ? Theme.row-selection : transparent;
+            background: index == root.command-selected ? Theme.row-selection : command-hit.has-hover ? Theme.hover : transparent;
             HorizontalLayout {
                 padding-left: Theme.padding; padding-right: Theme.padding; spacing: Theme.gap;
                 Image { source: root.command-icon; width: Theme.label-icon-size; height: Theme.label-icon-size; colorize: Theme.accent; y: (parent.height - self.height) / 2; }
                 Text { text: command.name; color: Theme.accent; font-size: Theme.row-size; vertical-alignment: center; }
-                Text { text: command.detail; color: Theme.muted; font-size: Theme.small-size; vertical-alignment: center; horizontal-stretch: 1; }
+                Text { text: command.detail; color: Theme.muted; font-size: Theme.small-size; vertical-alignment: center; horizontal-stretch: 1; overflow: elide; }
             }
+            command-hit := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.command-chosen(index); } }
         }
-        if root.hints && !root.entry-open: HorizontalLayout {
-            padding-left: Theme.padding; padding-right: Theme.padding;
-            Text { text: root.hint-calendar + "\n" + root.hint-undo; color: Theme.placeholder; font-size: Theme.small-size; wrap: word-wrap; }
+        // A fixed height (the wrapped text's at its width): only the day view takes the room that is left.
+        if root.hints && !root.entry-open && !root.notepad-open: Rectangle {
+            height: search-hint.preferred-height + Theme.gap;
+            search-hint := Text {
+                x: Theme.padding; width: parent.width - Theme.padding * 2;
+                text: root.hint-day + "\n" + root.hint-calendar + "\n" + root.hint-undo; color: Theme.placeholder; font-size: Theme.small-size; wrap: word-wrap;
+            }
         }
         Rectangle { height: Theme.border-width; background: Theme.divider; }
         // ----- The entry form, under the search bar while open -----
@@ -216,7 +696,7 @@ export component Bar inherits Window {
                 height: Theme.form-row-height;
                 if row.field == 7: Rectangle {
                     x: Theme.padding; y: Theme.field-vpad;
-                    width: Theme.form-width - Theme.padding * 2; height: parent.height - Theme.field-vpad * 2;
+                    width: root.form-space - Theme.padding * 2; height: parent.height - Theme.field-vpad * 2;
                     background: root.active == row.field ? Theme.row-selection : root.more-open ? Theme.more-background : transparent;
                     border-radius: Theme.more-radius;
                     border-width: root.active == row.field ? Theme.border-width : 0px; border-color: Theme.field-focus;
@@ -480,19 +960,311 @@ export component Bar inherits Window {
                 color: Theme.placeholder; font-size: Theme.small-size; wrap: word-wrap;
             }
         }
-        if root.notice != "": VerticalLayout {
-            Rectangle { height: Theme.border-width; background: Theme.divider; }
-            HorizontalLayout {
-                padding: Theme.padding;
-                padding-top: Theme.gap;
-                padding-bottom: Theme.gap;
-                Text { text: root.notice; color: root.notice-is-error ? Theme.error : Theme.muted; font-size: Theme.small-size; wrap: word-wrap; }
+        if root.notepad-open: NotepadEditor {
+            heading: root.notepad-editor-heading;
+            date: root.notepad-date;
+            title <=> root.notepad-title;
+            body <=> root.notepad-body;
+            title-label: root.notepad-title-label; body-label: root.notepad-body-label;
+            hint: root.notepad-hint; show-hint: root.hints;
+            save-label: root.notepad-save-label;
+            labels: root.notepad-labels; editing: root.notepad-editing; can-save: root.notepad-can-save;
+            back-icon: root.icon-back; focus-request: root.notepad-focus-request;
+            card: root.notepad-card;
+            panel: root.notepad-panel; preview: root.notepad-preview;
+            choices: root.notepad-choices; markdown: root.notepad-markdown; tools: root.notepad-tools;
+            panel-placeholder: root.notepad-panel-placeholder; panel-empty: root.notepad-panel-empty;
+            image-label: root.notepad-image-label; image-icon: root.notepad-image-icon; link-icon: root.notepad-link-icon; check-icon: root.notepad-check-icon;
+            copy-icon: root.notepad-copy-icon; copy-label: root.notepad-copy-label;
+            all-notes: root.notepad-all-notes; day-notes: root.notepad-day-notes; on-day: root.notepad-on-day;
+            images: root.notepad-images;
+            viewer-open: root.notepad-viewer-open; viewed-image: root.notepad-viewed-image;
+            viewed-title: root.notepad-viewed-title; viewer-message: root.notepad-viewer-message;
+            query <=> root.notepad-query;
+            scope(day) => { root.notepad-scope(day); }
+            view-attachment(key) => { root.notepad-view-attachment(key); }
+            close-viewer => { root.notepad-close-viewer(); }
+            indent-edit(text, anchor, cursor, reverse) => { root.notepad-indent-edit(text, anchor, cursor, reverse) }
+            tool(index) => { root.notepad-tool(index); }
+            new-note => { root.notepad-new-note(); }
+            continue-list(text, anchor, cursor) => { root.notepad-continue-list(text, anchor, cursor) }
+            filter(text) => { root.notepad-filter(text); }
+            choose(key) => { root.notepad-choose(key); }
+            add-link(url) => { root.notepad-link(url); }
+            add-image => { root.notepad-image(); }
+            check(offset) => { root.notepad-check(offset); }
+            follow(url) => { root.notepad-follow(url); }
+            edited(body, text) => { root.notepad-edited(body, text); }
+            finish(save) => { root.notepad-finish(save); }
+            hints(control) => { root.hints = control; }
+        }
+        // The journal entries and values have their own view.
+        if !root.entry-open && !root.notepad-open: VerticalLayout {
+            vertical-stretch: 1;
+            spacing: 0px;
+            // The date, how far it is from today (a click goes back to today), and new entries of the three kinds.
+            Rectangle {
+                height: Theme.day-head-height;
+                HorizontalLayout {
+                    padding-left: Theme.padding; padding-right: Theme.padding; spacing: Theme.gap;
+                    Text {
+                        text: root.day-heading; color: Theme.strong; font-size: Theme.day-head-size; font-weight: Theme.weight-semibold;
+                        vertical-alignment: center; overflow: elide; horizontal-stretch: 1;
+                        TouchArea { clicked => { if !root.day-is-today { root.day-today(); } } }
+                    }
+                    for icon[k] in root.day-new-icons: Rectangle {
+                        width: Theme.day-new-size; height: Theme.day-new-size; y: (parent.height - self.height) / 2;
+                        border-radius: Theme.block-radius;
+                        background: new-touch.has-hover ? Theme.hover : transparent;
+                        Image { width: Theme.day-heading-icon; height: Theme.day-heading-icon; x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2; source: icon; colorize: new-touch.has-hover ? Theme.accent : Theme.placeholder; }
+                        new-touch := TouchArea { clicked => { root.day-create(k); } }
+                    }
+                    Rectangle {
+                        width: relative-text.preferred-width + Theme.day-pill-inset * 2; height: Theme.day-pill-height;
+                        y: (parent.height - self.height) / 2;
+                        border-radius: self.height / 2; border-width: Theme.border-width;
+                        border-color: root.day-is-today ? Theme.day-pill-border : Theme.edge;
+                        background: root.day-is-today ? transparent : Theme.inset;
+                        relative-text := Text {
+                            text: root.day-relative; font-family: Theme.write-font; font-size: Theme.day-chip-size;
+                            color: root.day-is-today ? Theme.accent : Theme.muted; horizontal-alignment: center; vertical-alignment: center;
+                        }
+                        TouchArea { clicked => { if !root.day-is-today { root.day-today(); } } }
+                    }
+                }
+            }
+            if root.hints: Rectangle {
+                height: day-hint.preferred-height + Theme.gap;
+                day-hint := Text {
+                    x: Theme.padding; width: parent.width - Theme.padding * 2;
+                    text: (root.day-is-today ? "" : root.day-back + "\n") + root.hint-entries + "\n" + root.hint-values;
+                    color: Theme.placeholder; font-size: Theme.small-size; wrap: word-wrap;
+                }
+            }
+            if root.day-message != "": Rectangle {
+                height: day-message-text.preferred-height + Theme.gap;
+                day-message-text := Text {
+                    x: Theme.padding; width: parent.width - Theme.padding * 2;
+                    text: root.day-message; color: root.day-message-is-error ? Theme.error : Theme.muted; font-size: Theme.small-size; wrap: word-wrap;
+                }
+            }
+            DayScroll {
+                vertical-stretch: 1;
+                content-height: root.day-list-height;
+                focus-y: root.day-focus-y;
+                focus-h: root.day-focus-footer ? 0px : root.day-focus-h;
+                Rectangle {
+                    x: 0px; y: 0px;
+                    width: layout.width;
+                    height: root.day-list-height;
+                    for row in root.day-rows: Rectangle {
+                        x: Theme.padding; width: parent.width - Theme.padding * 2;
+                        y: row.top; height: row.tall;
+                        // The line the keyboard is on.
+                        if row.selected && row.kind != 7: Rectangle {
+                            x: -Theme.day-select-inset; width: parent.width + Theme.day-select-inset * 2;
+                            background: Theme.row-selection; border-radius: Theme.block-radius;
+                        }
+                        // The day's title, written in place.
+                        if row.kind == 5 && !row.editing: Text {
+                            text: row.label != "" ? row.label : root.day-title-placeholder;
+                            color: row.label != "" ? Theme.strong : Theme.placeholder; font-family: Theme.write-font; font-size: Theme.form-size;
+                            vertical-alignment: center; overflow: elide; width: parent.width;
+                            TouchArea { clicked => { root.day-click(row.item, 0); } }
+                        }
+                        if row.kind == 0: DayHeading { data: row; }
+                        // An entry: the accent symbol (a click: its settings at the left), the text (a click: written in), its
+                        // time as a chip, its icon or tag colour.
+                        if row.kind == 1: HorizontalLayout {
+                            spacing: Theme.gap;
+                            opacity: row.done ? Theme.day-done-opacity : 1;
+                            Rectangle {
+                                width: Theme.day-symbol-box; height: Theme.day-symbol-box; y: (parent.height - self.height) / 2;
+                                border-radius: Theme.block-radius;
+                                background: symbol-touch.has-hover ? Theme.hover : transparent;
+                                Image {
+                                    width: Theme.day-symbol-size; height: Theme.day-symbol-size; x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2;
+                                    source: row.icon; colorize: row.trace || row.foreign ? Theme.placeholder : row.priority ? Theme.priority : Theme.accent;
+                                }
+                                symbol-touch := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.day-click(row.item, 1); } }
+                            }
+                            if !row.editing: Text {
+                                text: row.label; color: row.trace ? Theme.muted : Theme.text; font-family: Theme.write-font; font-size: Theme.write-size;
+                                vertical-alignment: center; overflow: elide; horizontal-stretch: 1;
+                                TouchArea { mouse-cursor: MouseCursor.text; clicked => { root.day-click(row.item, 0); } }
+                            }
+                            if row.editing: Rectangle {
+                                horizontal-stretch: 1;
+                                height: Theme.day-row-height - Theme.field-vpad;
+                                y: (parent.height - self.height) / 2;
+                                background: Theme.field-background; border-radius: Theme.field-radius;
+                                border-width: Theme.border-width; border-color: Theme.field-focus;
+                                clip: true;
+                                entry-input := TextInput {
+                                    x: Theme.field-inset; width: parent.width - Theme.field-inset * 2; height: parent.height;
+                                    text: root.day-edit-text; single-line: true; vertical-alignment: center;
+                                    color: Theme.strong; selection-background-color: Theme.selection; selection-foreground-color: Theme.strong;
+                                    font-family: Theme.write-font; font-size: Theme.write-size;
+                                    init => { self.focus(); self.select-all(); }
+                                    edited => { root.day-edited(self.text); }
+                                    key-pressed(event) => {
+                                        root.hints = event.modifiers.control;
+                                        if event.text == Key.Control || event.text == Key.Shift || event.text == Key.Alt || event.text == Key.Meta { return reject; }
+                                        if event.text == Key.Return || event.text == Key.Escape || event.text == Key.UpArrow || event.text == Key.DownArrow || event.text == Key.Tab || event.text == Key.Backtab
+                                            || (event.text == Key.Backspace && self.text == "") || event.modifiers.alt {
+                                            root.day-key(event.text, root.mods(event.modifiers.shift, event.modifiers.control, event.modifiers.alt));
+                                            return accept;
+                                        }
+                                        reject
+                                    }
+                                    key-released(event) => { root.hints = event.modifiers.control; reject }
+                                }
+                            }
+                            if row.detail != "" && !row.editing: Rectangle {
+                                width: chip-text.preferred-width + Theme.day-chip-inset * 2; height: Theme.day-chip-height;
+                                y: (parent.height - self.height) / 2;
+                                border-radius: self.height / 2; border-width: Theme.border-width; border-color: row.trace ? Theme.edge : Theme.day-pill-border;
+                                chip-text := Text { text: row.detail; color: row.trace ? Theme.muted : Theme.accent; font-family: Theme.write-font; font-size: Theme.day-chip-size; horizontal-alignment: center; vertical-alignment: center; }
+                            }
+                            if row.has-tag-icon && !row.editing: Image { width: Theme.day-tag-icon-size; height: Theme.day-tag-icon-size; y: (parent.height - self.height) / 2; source: row.tag-icon; colorize: row.has-color ? row.color : Theme.muted; }
+                            if !row.has-tag-icon && row.has-color && !row.editing: Rectangle { width: Theme.tag-dot; height: Theme.tag-dot; y: (parent.height - self.height) / 2; border-radius: self.width / 2; background: row.color; }
+                        }
+                        // The day's title being written.
+                        if row.kind == 5 && row.editing: Rectangle {
+                            height: Theme.day-title-height - Theme.field-vpad; y: (parent.height - self.height) / 2;
+                            background: Theme.field-background; border-radius: Theme.field-radius;
+                            border-width: Theme.border-width; border-color: Theme.field-focus;
+                            clip: true;
+                            TextInput {
+                                x: Theme.field-inset; width: parent.width - Theme.field-inset * 2; height: parent.height;
+                                text: root.day-edit-text; single-line: true; vertical-alignment: center;
+                                color: Theme.strong; selection-background-color: Theme.selection; selection-foreground-color: Theme.strong;
+                                font-family: Theme.write-font; font-size: Theme.form-size;
+                                init => { self.focus(); self.select-all(); }
+                                edited => { root.day-edited(self.text); }
+                                key-pressed(event) => {
+                                    root.hints = event.modifiers.control;
+                                    if event.text == Key.Control || event.text == Key.Shift || event.text == Key.Alt || event.text == Key.Meta { return reject; }
+                                    if event.text == Key.Return || event.text == Key.Escape || event.text == Key.UpArrow || event.text == Key.DownArrow || event.text == Key.Tab || event.text == Key.Backtab || event.modifiers.alt {
+                                        root.day-key(event.text, root.mods(event.modifiers.shift, event.modifiers.control, event.modifiers.alt));
+                                        return accept;
+                                    }
+                                    reject
+                                }
+                                key-released(event) => { root.hints = event.modifiers.control; reject }
+                            }
+                        }
+                        if row.kind == 3 || row.kind == 6: DayActivity {
+                            data: row; icon-play: root.icon-play; icon-pause: root.icon-pause; icon-stop: root.icon-stop;
+                            clicked(item, part) => { root.day-click(item, part); }
+                        }
+                        if row.kind == 4: HorizontalLayout {
+                            spacing: Theme.gap; alignment: start;
+                            Image { width: Theme.day-symbol-size; height: Theme.day-symbol-size; y: (parent.height - self.height) / 2; source: row.icon; colorize: Theme.placeholder; }
+                            Text { text: row.label; color: Theme.muted; font-size: Theme.row-size; vertical-alignment: center; }
+                        }
+                    }
+                }
+            }
+            day-footer := DayScroll {
+                interactive: !root.dragging-dial;
+                height: min(self.content-height, root.preferred-pane-height * Theme.day-footer-share);
+                content-height: root.day-footer-height + Theme.day-bottom;
+                focus-y: root.day-focus-y;
+                focus-h: root.day-focus-footer ? root.day-focus-h : 0px;
+                Rectangle {
+                    x: 0px; y: 0px; width: parent.width; height: root.day-footer-height;
+                    for row in root.day-footer-rows: Rectangle {
+                        property <length> inner: parent.width - Theme.padding * 2;
+                        width: row.column == 0 ? self.inner : (self.inner - Theme.gap) / 2;
+                        x: Theme.padding + (row.column == 2 ? self.width + Theme.gap : 0px);
+                        y: row.top; height: row.tall;
+                        if row.selected: Rectangle {
+                            x: -Theme.day-select-inset; width: parent.width + Theme.day-select-inset * 2;
+                            background: Theme.row-selection; border-radius: Theme.block-radius;
+                        }
+                        if row.kind == 0: DayHeading { data: row; }
+                        // The rating and the day values: round dials side by side. A click or drag on the ring sets the value
+                        // by its place, the wheel steps it.
+                        if row.kind == 7: Rectangle {
+                            property <int> columns: max(1, floor((self.width + Theme.dial-spacing) / (Theme.dial-cell-width + Theme.dial-spacing)));
+                            for dial[i] in row.dials: Rectangle {
+                                x: mod(i, parent.columns) * (Theme.dial-cell-width + Theme.dial-spacing);
+                                y: floor(i / parent.columns) * Theme.dial-row-height;
+                                height: Theme.dial-row-height; width: Theme.dial-cell-width;
+                                border-radius: Theme.block-radius;
+                                background: dial.selected ? Theme.row-selection : transparent;
+                                Image {
+                                    x: (parent.width - self.width) / 2; y: Theme.dial-top;
+                                    width: Theme.dial-size; height: Theme.dial-size;
+                                    source: dial-touch.pressed && dial-touch.adjusted
+                                        ? root.dial-preview(dial-touch.preview, dial.low, dial.high, dial.color) : dial.image;
+                                }
+                                Text {
+                                    x: 0px; y: Theme.dial-top; width: parent.width; height: Theme.dial-size;
+                                    text: dial-touch.pressed && dial-touch.adjusted ? "\{dial-touch.preview}" : dial.value; color: dial.value == "–" ? Theme.placeholder : Theme.strong;
+                                    font-family: Theme.write-font; font-size: Theme.dial-value-size; horizontal-alignment: center; vertical-alignment: center;
+                                }
+                                Text {
+                                    x: Theme.calendar-gap; y: Theme.dial-top + Theme.dial-size + Theme.dial-label-gap; width: parent.width - Theme.calendar-gap * 2;
+                                    text: dial.label; color: dial.selected ? Theme.text : Theme.muted; font-size: Theme.small-size; horizontal-alignment: center; overflow: elide;
+                                }
+                                dial-touch := TouchArea {
+                                    mouse-cursor: MouseCursor.pointer;
+                                    changed pressed => { root.dragging-dial = self.pressed; }
+                                    property <bool> adjusted;
+                                    moved => { if self.pressed && self.steps != 0 { self.adjusted = true; } }
+                                    property <int> steps: round((self.pressed-y - self.mouse-y) / Theme.dial-drag-step);
+                                    property <int> preview: clamp(dial.raw + self.steps, dial.low, dial.high);
+                                    pointer-event(event) => {
+                                        if event.kind == PointerEventKind.down && event.button == PointerEventButton.left { self.adjusted = false; }
+                                        if event.kind == PointerEventKind.up {
+                                            if event.button == PointerEventButton.right { root.dial-set(dial.item, 0, true); }
+                                            if event.button == PointerEventButton.left {
+                                                if self.adjusted || self.steps != 0 { root.dial-set(dial.item, self.preview, false); }
+                                                else { root.dial-point(dial.item, self.mouse-x - parent.width / 2, self.mouse-y - Theme.dial-top - Theme.dial-size / 2); }
+                                            }
+                                        }
+                                    }
+                                    scroll-event(event) => { root.dial-wheel(dial.item, event.delta-y); accept }
+                                }
+                                if dial.value != "–": Image {
+                                    x: parent.width - self.width; width: Theme.day-tag-icon-size; height: self.width;
+                                    source: JournalIcons.undo-icon; colorize: Theme.muted;
+                                    TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.dial-set(dial.item, 0, true); } }
+                                }
+                            }
+                        }
+                        if row.kind == 3 || row.kind == 6: DayActivity {
+                            data: row; icon-play: root.icon-play; icon-pause: root.icon-pause; icon-stop: root.icon-stop;
+                            clicked(item, part) => { root.day-click(item, part); }
+                        }
+                    }
+                }
+            }
+        }
+        // A fixed height, so that the day view keeps the room that is left.
+        if root.notice != "": Rectangle {
+            height: notice-text.preferred-height + Theme.gap * 2 + Theme.border-width;
+            Rectangle { y: 0px; height: Theme.border-width; background: Theme.divider; }
+            notice-text := Text {
+                x: Theme.padding; y: Theme.border-width + Theme.gap; width: parent.width - Theme.padding * 2;
+                text: root.notice; color: root.notice-is-error ? Theme.error : Theme.muted; font-size: Theme.small-size; wrap: word-wrap;
             }
         }
     }
-    Rectangle { width: Theme.border-width; background: Theme.divider; }
+    Rectangle {
+        x: root.stacked ? 0px : root.side-space + root.form-space;
+        y: root.stacked ? root.side-height + root.pane-height : 0px;
+        width: root.stacked ? root.content-width : Theme.border-width;
+        height: root.stacked ? Theme.border-width : root.pane-height;
+        background: Theme.divider;
+    }
     calendar := Calendar {
-        width: Theme.calendar-width;
+        x: root.stacked ? 0px : root.side-space + root.form-space + Theme.border-width;
+        y: root.stacked ? root.side-height + root.pane-height + Theme.border-width : 0px;
+        width: root.stacked ? root.content-width : root.content-width - self.x;
+        height: root.calendar-height;
         bands: root.cal-bands;
         blocks: root.cal-blocks;
         chips: root.cal-chips;
@@ -514,6 +1286,31 @@ export component Bar inherits Window {
         mouse(button, kind, x, y, shift) => { root.cal-mouse(button, kind, x, y, shift); }
         wheel(x, delta, ctrl, shift) => { root.cal-wheel(x, delta, ctrl, shift); }
     }
+    }
+    }
+    day-scope := FocusScope {
+        width: 0px; height: 0px;
+        key-pressed(event) => {
+            root.hints = event.modifiers.control;
+            if event.text == Key.Control || event.text == Key.Shift || event.text == Key.Alt || event.text == Key.Meta { return reject; }
+            root.day-key(event.text, root.mods(event.modifiers.shift, event.modifiers.control, event.modifiers.alt));
+            accept
+        }
+        key-released(event) => { root.hints = event.modifiers.control; reject }
+    }
+    Rectangle {
+        border-radius: Theme.radius;
+        border-color: Theme.background;
+        border-width: Theme.frame-inset + Theme.frame-stroke;
+    }
+    Rectangle {
+        x: Theme.frame-inset;
+        y: Theme.frame-inset;
+        width: parent.width - 2 * Theme.frame-inset;
+        height: parent.height - 2 * Theme.frame-inset;
+        border-radius: Theme.radius - Theme.frame-inset;
+        border-color: Theme.border;
+        border-width: Theme.frame-stroke;
     }
     }
 }

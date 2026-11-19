@@ -1,6 +1,7 @@
 use super::*;
 use journal_core::storage::{Entry, Store, Tag};
 use crate::repeat::d;
+use crate::day_view;
 
 const HEALTH: &str = "3f2a6c1e-0000-4000-8000-000000000001";
 const WORK: &str = "3f2a6c1e-0000-4000-8000-000000000002";
@@ -45,6 +46,227 @@ fn type_in(form: &mut Form, text: &str) { form.edited(text); }
 fn day(test: &Test, date: &str) -> Vec<Entry> { test.form.journal.as_ref().unwrap().store.load(date).unwrap().entries }
 fn row(form: &mut Form, field: Field) -> RowView { form.view().rows.into_iter().find(|row| row.field == field.index()).unwrap() }
 fn value(form: &mut Form, field: Field) -> String { form.view().rows.into_iter().find(|row| row.field == field.index()).map(|row| row.value).unwrap_or_default() }
+
+#[test]
+fn notepad_writes_a_pinned_card_and_reopens_the_same_note_with_its_tag_and_attachments() {
+    use serde_json::Value;
+    let mut t = test();
+    t.form.close_entry();
+    let date = d("2026-11-19");
+    t.form.show_day(date);
+    let observer = Store::open(&t.path).unwrap();
+    let mut watch = observer.watch().unwrap();
+    t.form.search_edited("/Notizblock");
+    t.form.key(Key::Enter, NONE);
+    assert_eq!(t.form.notepad().unwrap().panel, 1);
+    t.form.new_notepad_note();
+    t.form.edit_notepad(false, "Planung");
+    t.form.edit_notepad(true, "# Privat\n\n- [ ] Erledigen");
+    t.form.notepad_panel(2);
+    assert!(t.form.notepad_choices("Gesund").iter().any(|row| row.key == HEALTH));
+    t.form.pick_notepad(HEALTH);
+    t.form.attach_notepad(notebook::Attachment::link("https://example.org/journal"));
+    let id = t.form.notepad().unwrap().card.as_ref().unwrap().id;
+    t.form.finish_notepad(true);
+    let saved = t.form.notepad().unwrap();
+    assert!(saved.preview && !saved.editing && !saved.dirty());
+
+    assert!(observer.external_changes(&mut watch).unwrap().unwrap().board);
+    let read = |key: String| -> Value {
+        let value: String = observer.conn.query_row("SELECT value FROM settings WHERE key=?1", [key], |r| r.get(0)).unwrap();
+        serde_json::from_str(&value).unwrap()
+    };
+    let key = format!("board:card:{id}");
+    let card = read(key.clone());
+    assert_eq!(card["kind"], "note");
+    assert_eq!(card["notebook"], true);
+    assert_eq!(card["onDay"], true);
+    assert_eq!(card["dates"], serde_json::json!([date]));
+    assert_eq!(card["tag"], HEALTH);
+    assert_eq!(card["text"], "# Privat\n\n- [ ] Erledigen");
+    assert!(observer.load("2026-11-19").unwrap().body.is_empty());
+    let attachment = read(format!("board:card:{}", card["links"][0].as_str().unwrap()));
+    assert_eq!(attachment["kind"], "link");
+    assert_eq!(attachment["url"], "https://example.org/journal");
+    assert_eq!(attachment["links"], serde_json::json!([id.to_string()]));
+
+    t.form.open_notepad(false);
+    assert_eq!(t.form.notepad_choices("Planung")[0].key, id.to_string());
+    t.form.pick_notepad(&id.to_string());
+    assert!(t.form.notepad().unwrap().preview && !t.form.notepad().unwrap().editing);
+    t.form.notepad_panel(3);
+    assert_eq!(t.form.notepad_choices("journal").len(), 1);
+    assert!(t.form.notepad_choices("unmatched").is_empty());
+    t.form.finish_notepad(false);
+    let changed_in_app = serde_json::json!("pink").to_string();
+    observer.conn.execute("UPDATE settings SET value=json_set(value, '$.paper', json(?1)) WHERE key=?2",
+        rusqlite::params![changed_in_app, &key]).unwrap();
+    let check = note_markdown::blocks(t.form.notepad().unwrap().body()).iter().find_map(|row| row.check).unwrap();
+    t.form.notepad_toggle_check(check.0);
+    let card = read(key);
+    assert_eq!(card["text"], "# Privat\n\n- [x] Erledigen");
+    assert_eq!(card["links"][0], attachment["id"]);
+    assert_eq!(card["paper"], "pink", "Keep a concurrent pinboard edit.");
+}
+
+#[test]
+fn notepad_image_uses_the_apps_vault_asset_format() {
+    let mut t = test();
+    t.form.close_entry();
+    let vault = t.path.with_extension("assets-test");
+    std::fs::create_dir(&vault).unwrap();
+    let source = vault.join("fixture.png");
+    image::RgbImage::from_pixel(4, 4, image::Rgb([255, 99, 28])).save(&source).unwrap();
+    t.form.journal.as_mut().unwrap().vault = vault.clone();
+    t.form.open_notepad(false);
+    t.form.new_notepad_note();
+    t.form.attach_notepad(notebook::Attachment::image(&source));
+    let note = t.form.notepad().unwrap().card.as_ref().unwrap().id;
+    t.form.finish_notepad(true);
+    let journal = t.form.journal.as_ref().unwrap();
+    let asset: String = journal.store.conn.query_row(
+        "SELECT json_extract(value, '$.asset') FROM settings WHERE json_extract(value, '$.kind') = 'image' AND json_extract(value, '$.links[0]') = ?1",
+        [note.to_string()], |row| row.get(0),
+    ).unwrap();
+    let folder = vault.join("board-images");
+    let file = folder.join(format!("{asset}.avif"));
+    let avif = std::fs::read(&file).unwrap();
+    assert_eq!(&avif[4..12], b"ftypavif");
+    let preview = crate::note_images::decode(&notebook::ImageSource::File(file.clone()), 256).unwrap();
+    assert_eq!((preview.width(), preview.height()), (4, 4));
+    std::fs::remove_file(file).unwrap();
+    std::fs::remove_file(source).unwrap();
+    std::fs::remove_dir(folder).unwrap();
+    std::fs::remove_dir(vault).unwrap();
+}
+
+#[test]
+fn notebook_browses_today_by_nested_folder_and_keeps_the_other_days_in_all() {
+    use serde_json::json;
+    let mut t = test();
+    t.form.close_entry();
+    let store = &t.form.journal.as_ref().unwrap().store;
+    let parent = uuid::Uuid::new_v4().to_string();
+    let child = uuid::Uuid::new_v4().to_string();
+    for folder in [
+        json!({"id": parent, "name":"Projekt", "parent":null, "order":1}),
+        json!({"id": child, "name":"Notizen", "parent":parent, "order":1}),
+    ] {
+        store.conn.execute("INSERT INTO settings(key,value) VALUES(?1,?2)",
+            rusqlite::params![format!("board:folder:{}", folder["id"].as_str().unwrap()), folder.to_string()]).unwrap();
+    }
+    for (title, date, created, folder) in [
+        ("Angepinnt", "2026-11-18", "2026-11-17", Some(&child)),
+        ("Lose", "", "2026-11-18", None),
+        ("Gestern", "2026-11-17", "2026-11-17", Some(&parent)),
+    ] {
+        let id = uuid::Uuid::new_v4().to_string();
+        let dates = if date.is_empty() { vec![] } else { vec![date] };
+        let card = json!({"id":id, "kind":"note", "title":title, "dates":dates, "created":created, "notebook":true, "folder":folder});
+        store.conn.execute("INSERT INTO settings(key,value) VALUES(?1,?2)",
+            rusqlite::params![format!("board:card:{id}"), card.to_string()]).unwrap();
+    }
+    t.form.open_notepad(false);
+    t.form.notepad_panel(1);
+    assert_eq!(t.form.notepad_choices("").len(), 3);
+    t.form.set_notepad_day_filter(true);
+    let rows = t.form.notepad_choices("");
+    assert_eq!(rows.iter().map(|row| (row.title.as_str(), row.group.as_str())).collect::<Vec<_>>(),
+        [("Lose", "Ohne Ordner"), ("Angepinnt", "Projekt / Notizen")]);
+}
+
+#[test]
+fn notepad_edits_the_selected_day_and_keeps_the_draft_on_reopen() {
+    let mut t = test();
+    t.form.close_entry();
+    let date = d("2026-11-19");
+    let store = &mut t.form.journal.as_mut().unwrap().store;
+    let mut day = store.load("2026-11-19").unwrap();
+    day.title = "Morgen".into();
+    day.body = "**Vorhandener Text**\n".into();
+    store.save(day).unwrap();
+
+    t.form.show_day(date);
+    t.form.search_edited("/Journaltext");
+    t.form.key(Key::Enter, NONE);
+    let draft = t.form.notepad().unwrap();
+    assert_eq!((draft.date, draft.title(), draft.body()), (date, "Morgen", "**Vorhandener Text**\n"));
+    t.form.edit_notepad(false, "Besuch");
+    t.form.edit_notepad(true, "Zeile eins\n\n- Zeile zwei");
+    t.form.shown();
+    assert_eq!(t.form.notepad().unwrap().body(), "Zeile eins\n\n- Zeile zwei");
+    assert_eq!(t.form.key(Key::Enter, CTRL).focus, Some(Pane::Search));
+    assert!(t.form.notepad().is_none());
+    assert_eq!(t.form.view().day.title, "Besuch");
+    let store = &t.form.journal.as_ref().unwrap().store;
+    assert_eq!(store.load("2026-11-19").unwrap().body, "Zeile eins\n\n- Zeile zwei");
+    assert!(store.load("2026-11-18").unwrap().body.is_empty());
+}
+
+#[test]
+fn notepad_keeps_other_writes_and_reports_a_conflict_in_an_edited_field() {
+    let mut t = test();
+    t.form.edited("Erster Eintrag");
+    t.form.key(Key::Enter, SHIFT);
+    t.form.close_entry();
+    t.form.open_notepad(true);
+    t.form.edit_notepad(true, "Journaltext");
+    let mut other = Store::open(&t.path).unwrap();
+    let mut day = other.load("2026-11-18").unwrap();
+    day.entries[0].text = "Geänderter Eintrag".into();
+    day.title = "Anderer Titel".into();
+    other.save(day).unwrap();
+
+    t.form.finish_notepad(true);
+    assert!(t.form.notepad().is_none());
+    let updated = other.load("2026-11-18").unwrap();
+    assert_eq!((updated.title.as_str(), updated.body.as_str(), updated.entries[0].text.as_str()),
+        ("Anderer Titel", "Journaltext", "Geänderter Eintrag"));
+
+    t.form.open_notepad(true);
+    t.form.edit_notepad(true, "Mein Entwurf");
+    let mut updated = updated;
+    updated.body = "In der Haupt-App".into();
+    other.save(updated).unwrap();
+    t.form.finish_notepad(true);
+    assert_eq!(t.form.view().status, Some((notepad_texts(Language::De).conflict.into(), true)));
+    assert_eq!(t.form.notepad().unwrap().body(), "Mein Entwurf");
+    t.form.key(Key::Escape, NONE);
+    assert!(t.form.notepad().is_some(), "The first Esc warns about the unsaved draft.");
+    t.form.key(Key::Escape, NONE);
+    assert!(t.form.notepad().is_none());
+    assert_eq!(other.load("2026-11-18").unwrap().body, "In der Haupt-App");
+}
+
+#[test]
+fn closing_an_unchanged_notepad_does_not_create_an_empty_day() {
+    let mut t = test();
+    t.form.close_entry();
+    t.form.show_day(d("2026-11-20"));
+    t.form.open_notepad(true);
+    t.form.finish_notepad(true);
+    assert_eq!(t.form.journal.as_ref().unwrap().store.load("2026-11-20").unwrap().revision, 0);
+}
+
+#[test]
+fn copying_legacy_journal_text_pins_a_new_card_without_removing_the_source() {
+    let mut t = test();
+    t.form.close_entry();
+    t.form.open_notepad(true);
+    t.form.edit_notepad(true, "**Alter Text**");
+    t.form.finish_notepad(true);
+    t.form.open_notepad(true);
+    t.form.copy_journal_text_to_card();
+    assert!(t.form.notepad().unwrap().card.is_some());
+    t.form.finish_notepad(true);
+    let store = &t.form.journal.as_ref().unwrap().store;
+    assert_eq!(store.load("2026-11-18").unwrap().body, "**Alter Text**");
+    let body: String = store.conn.query_row(
+        "SELECT json_extract(value, '$.text') FROM settings WHERE key LIKE 'board:card:%' AND json_extract(value, '$.dates[0]') = ?1",
+        ["2026-11-18"], |row| row.get(0),
+    ).unwrap();
+    assert_eq!(body, "**Alter Text**");
+}
 
 #[test]
 fn enter_moves_on_from_a_field_without_options_and_strg_enter_creates() {
@@ -104,7 +326,7 @@ fn the_four_types_of_the_app() {
     t.form.key(Key::Right, NONE);
     t.form.key(Key::Right, NONE);
     assert_eq!(t.form.view().type_selected, 0, "It wraps: Kalender after Notiz.");
-    assert!(t.form.view().type_icons.iter().all(|name| icons::exists(name)));
+    assert_eq!(t.form.view().type_icons, ["journal-calendar", "journal-event", "journal-task", "journal-note"]);
 }
 
 #[test]
@@ -558,4 +780,80 @@ fn lengths_and_clock_times_are_read_as_written() {
     assert_eq!(parse_length("bald"), None);
     let ft = form_texts(Language::De);
     assert_eq!((length_text(45, ft), length_text(90, ft), length_text(2880, ft)), ("45 Min.".into(), "1 Std. 30 Min.".into(), "2 Tage".into()));
+}
+
+#[test]
+fn the_day_view_shows_today_follows_the_calendar_and_comes_back_after_the_form() {
+    let mut t = test();
+    // Something today, something tomorrow, and the app's rating for tomorrow.
+    type_in(&mut t.form, "Einkaufen");
+    t.form.key(Key::Enter, SHIFT);
+    type_in(&mut t.form, "Zahnarzt morgen 14-15");
+    t.form.key(Key::Digit(2), ALT);
+    t.form.key(Key::Enter, SHIFT);
+    // Only in the calendar: not in the day view.
+    type_in(&mut t.form, "Nur Kalender morgen 16-17");
+    t.form.key(Key::Enter, SHIFT);
+    t.form.journal.as_ref().unwrap().store.save_period_data(&serde_json::json!({ "definitions": [], "days": { "2026-11-19": { "rating": 8, "items": {} } }, "notes": {} }).to_string()).unwrap();
+    let journal = t.form.journal.as_ref().unwrap();
+    t.form.snapshot.as_mut().unwrap().reload(&journal.store).unwrap();
+    // Esc on the empty form: the day view is back, with today.
+    t.form.key(Key::Escape, NONE);
+    let view = t.form.view();
+    assert!(!view.entry_open);
+    assert_eq!((view.day.date, view.day.relative.as_str()), (d("2026-11-18"), "Heute"));
+    let entries = |view: &View| view.day.rows.iter().filter(|row| row.kind == day_view::RowKind::Entry).map(|row| row.label.clone()).collect::<Vec<_>>();
+    assert_eq!(entries(&view), ["Einkaufen"]);
+    assert!(view.calendar.layout.bands.iter().all(|band| !band.selected), "Today is not marked twice.");
+    // Alt+→: tomorrow, marked in the calendar, with its own rating; Alt+← back, Alt+H today.
+    t.form.key(Key::Right, ALT);
+    let view = t.form.view();
+    assert_eq!((view.day.date, view.day.relative.as_str()), (d("2026-11-19"), "Morgen"));
+    assert_eq!(entries(&view), ["Zahnarzt"]);
+    assert_eq!(view.day.rows.iter().find(|row| row.kind == day_view::RowKind::Dials).unwrap().dials[0].value, "8");
+    assert!(view.calendar.layout.bands.iter().any(|band| band.selected && band.date == d("2026-11-19")));
+    t.form.key(Key::Right, ALT);
+    t.form.key(Key::Left, ALT);
+    assert_eq!(t.form.day_shown(), d("2026-11-19"));
+    t.form.key(Key::Home, ALT);
+    assert_eq!(t.form.day_shown(), d("2026-11-18"));
+    assert_eq!(t.form.key(Key::Home, ALT), Effect::default(), "Alt+H leaves the search bar and the window as they are.");
+    // The middle button on a day in the calendar shows that day; opening days stays with the left button.
+    let layout = t.form.view().calendar.layout;
+    let y = |day| layout.rows.iter().find(|row| row.date == d(day)).unwrap().y + 2.0;
+    let opened = t.form.opened().clone();
+    t.form.cal_mouse(2, 0, 30.0, y("2026-11-20"), false);
+    assert_eq!(t.form.day_shown(), d("2026-11-20"));
+    assert_eq!(t.form.opened(), &opened, "The middle button does not open or close days.");
+    assert!(!t.form.view().entry_open, "Nor does it open the form.");
+    // The form uses the same space; the chosen day stays for when it closes, but is not marked meanwhile.
+    open(&mut t.form);
+    assert!(t.form.view().calendar.layout.bands.iter().all(|band| !band.selected));
+    t.form.key(Key::Escape, NONE);
+    assert_eq!(t.form.view().day.date, d("2026-11-20"));
+    // Shown anew, the window is about today again; nothing was written meanwhile.
+    t.form.shown();
+    assert_eq!(t.form.view().day.date, d("2026-11-18"));
+    assert_eq!((day(&t, "2026-11-18").len(), day(&t, "2026-11-19").len(), day(&t, "2026-11-20").len()), (1, 2, 0));
+}
+
+#[test]
+fn the_day_view_reads_days_beyond_the_warm_stretch_and_works_without_a_journal() {
+    let mut t = test();
+    t.form.key(Key::Escape, NONE);
+    {
+        let store = &mut t.form.journal.as_mut().unwrap().store;
+        let mut far = store.load("2028-03-01").unwrap();
+        far.entries.push(serde_json::from_value(serde_json::json!({ "id": uuid::Uuid::new_v4().to_string(), "kind": "note", "text": "Weit weg", "done": false, "cancelled": false })).unwrap());
+        store.save(far).unwrap();
+    }
+    t.form.show_day(d("2028-03-01"));
+    let view = t.form.view();
+    assert!(view.day.rows.iter().any(|row| row.label == "Weit weg"), "The days are read when the view goes there.");
+    assert_eq!(view.day.heading, "Mittwoch, 1. März 2028");
+    let mut alone = Form::at(None, Language::En, d("2026-11-18"), 600);
+    alone.shown();
+    let view = alone.view();
+    assert_eq!((view.day.heading.as_str(), view.day.relative.as_str()), ("Wednesday, November 18, 2026", "Today"));
+    assert_eq!(view.day.rows[2].kind, day_view::RowKind::Empty);
 }

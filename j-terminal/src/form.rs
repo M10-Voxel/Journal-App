@@ -11,17 +11,20 @@
 use std::collections::BTreeSet;
 use chrono::{Local, NaiveDate, Timelike};
 use crate::calendar::{self, Item, Layout, Metrics};
+use crate::day::{self as day_pane, DayPane};
+use crate::day_view::DayView;
 use crate::engine::{
     parse::{self, format_time, Draft, Kind, Mode, TagName},
     resolve::{resolve, Outcome, Problem},
 };
 use crate::icons;
 use crate::journal::Journal;
+use crate::{note_markdown, notebook, notepad};
 use crate::repeat::{self, Rule};
 use crate::repeat_sentence::{self, Act, Editor, Line};
 use crate::save::{self, Extras, Saved};
 use crate::snapshot::Snapshot;
-use crate::texts::{form_texts, texts, FormTexts, Language, Texts};
+use crate::texts::{form_texts, notepad_texts, texts, FormTexts, Language, Texts};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Key { Tab, Up, Down, Left, Right, Enter, Escape, Space, PageUp, PageDown, Home, Insert, Delete, Digit(u8), Undo, Redo, Quit,
@@ -63,9 +66,9 @@ impl Field {
 }
 
 /// Reminders ready to choose: minutes before the entry's time (0 at the time itself).
-const REMINDERS: [Option<i64>; 11] = [None, Some(0), Some(5), Some(10), Some(15), Some(30), Some(60), Some(120), Some(1440), Some(2880), Some(10080)];
+pub const REMINDERS: [Option<i64>; 11] = [None, Some(0), Some(5), Some(10), Some(15), Some(30), Some(60), Some(120), Some(1440), Some(2880), Some(10080)];
 /// The icons shown before anything is typed.
-const COMMON_ICONS: [&str; 48] = ["calendar", "clock", "bell", "star", "heart", "house", "briefcase", "book-open", "graduation-cap", "stethoscope", "dumbbell", "utensils",
+pub const COMMON_ICONS: [&str; 48] = ["calendar", "clock", "bell", "star", "heart", "house", "briefcase", "book-open", "graduation-cap", "stethoscope", "dumbbell", "utensils",
     "shopping-cart", "car", "plane", "train-front", "bike", "music", "phone", "mail", "users", "user", "gift", "cake", "coffee", "party-popper", "pill", "hospital",
     "building-2", "map-pin", "flag", "sun", "moon", "cloud", "umbrella", "tree-pine", "dog", "cat", "baby", "wrench", "laptop", "code", "pen", "camera", "film",
     "gamepad-2", "trophy", "wallet"];
@@ -164,8 +167,13 @@ pub struct View {
     pub panel_hint: String,
     pub summary: String,
     pub calendar: CalendarView,
-    /// The entry form is open (otherwise only the search bar is).
+    /// The entry form is open (otherwise the search bar and the day view under it).
     pub entry_open: bool,
+    pub day: DayView,
+    /// The panel at the left of the window (an entry's settings and pickers), when open.
+    pub side: Option<day_pane::SidePanel>,
+    /// The day view's own message (an error of a change, a hint).
+    pub day_message: Option<(String, bool)>,
     pub commands: Vec<Command>,
     pub command_selected: usize,
     pub search_placeholder: String,
@@ -186,14 +194,34 @@ pub struct Effect {
     pub search: Option<String>,
     /// Where the keyboard goes.
     pub focus: Option<Pane>,
+    /// The text of the line written in the day view (`Pane::DayEdit`) or of the panel's input (`Pane::SideText`).
+    pub day_text: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Pane { Search, Entry }
+pub enum Pane { Search, Entry,
+    /// The day view's keys (its focus scope; the panel at the left too).
+    Day,
+    /// The text input of a line of the day view.
+    DayEdit,
+    /// The text input of the panel at the left (an icon search, a description).
+    SideText,
+}
 
 /// A command offered under the search bar.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Command { pub name: String, pub detail: String }
+pub struct Command { pub name: String, pub detail: String, action: CommandAction }
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum CommandAction { Entry, Notepad, JournalText }
+
+pub struct NotepadChoice {
+    pub key: String,
+    pub group: String,
+    pub title: String,
+    pub detail: String,
+    pub color: Option<calendar::Rgb>,
+}
 
 pub struct Form {
     journal: Option<Journal>,
@@ -242,17 +270,26 @@ pub struct Form {
     shown_metrics: Metrics,
     /// The moment given to `at` stays (tests); otherwise each showing reads the clock.
     fixed_clock: bool,
+    /// Milliseconds since 1970 when the clock is fixed (tests: timers).
+    pub clock_ms: i64,
     /// The type was chosen on purpose (then the calendar leaves it alone).
     kind_chosen: bool,
     /// What is shown at the left: the search bar alone, or the entry form under it.
     entry_open: bool,
     search: String,
     command_selected: usize,
+    notepad: Option<notepad::Draft>,
     /// How much taller the days are (Strg+wheel), how much wider the hours (Strg+Shift+wheel), and the minute at the
     /// left edge of the hours (Shift+wheel).
     zoom_days: f32,
     zoom_hours: f32,
     pan: f32,
+    /// The day the day view shows when it is not today (chosen in the calendar or with Alt+←/→); none follows today.
+    view_day: Option<NaiveDate>,
+    /// What the calendar marks as the day view's day.
+    cal_selected: BTreeSet<NaiveDate>,
+    /// The day view as something to work in: its cursor, the line being written, the panel at the left.
+    pub pane: DayPane,
 }
 
 /// The options of a field, open after Enter.
@@ -377,7 +414,7 @@ impl Form {
             pick: 0, editor: Editor::default(), more_open: false, tried: false, last_saved: None, status: None, flash: None,
             metrics: Metrics::default(), options: None, options_backup: Values::default(), cal_top: repeat::shift(today, -1), cal_offset: 0.0, cal_target: None,
             cal_open: BTreeSet::from([today]), cal_clicked: None, mark: None, mark_layout: None, shown_layout: Layout::default(), shown_metrics: Metrics::default(),
-            fixed_clock: true, kind_chosen: false, entry_open: false, search: String::new(), command_selected: 0, zoom_days: 1.0, zoom_hours: 1.0, pan: 0.0 }
+            fixed_clock: true, clock_ms: 0, kind_chosen: false, entry_open: false, search: String::new(), command_selected: 0, notepad: None, zoom_days: 1.0, zoom_hours: 1.0, pan: 0.0, view_day: None, cal_selected: BTreeSet::new(), pane: DayPane::default() }
     }
 
     fn t(&self) -> &'static Texts { texts(self.language) }
@@ -395,9 +432,19 @@ impl Form {
     pub fn shown(&mut self) -> Effect {
         let (today, minutes) = if self.fixed_clock { (self.today, self.now) } else { now() };
         self.set_clock(today, minutes);
+        if let Some(draft) = &mut self.notepad {
+            if draft.confirm_discard {
+                draft.confirm_discard = false;
+                self.status = None;
+            }
+            return Effect::default();
+        }
         self.options = None;
         self.cal_close();
         self.cal_top = repeat::shift(today, -1); self.cal_offset = 0.0; self.cal_target = None;
+        // Opened anew, the window is about now: the day view is back on today, nothing chosen in it.
+        self.view_day = None;
+        self.pane.reset();
         if !self.dirty() { self.entry_open = false; }
         let effect = self.enter_row(TITLE);
         Effect { focus: Some(if self.entry_open { Pane::Entry } else { Pane::Search }), ..effect }
@@ -423,34 +470,53 @@ impl Form {
         let query = self.search.trim();
         if !query.starts_with('/') { return Vec::new(); }
         let query = parse::fold(&query[1..]);
-        let all = [("/Entry", ["entry", "eintrag"], self.ft().cmd_entry)];
-        all.iter().filter(|(_, names, _)| names.iter().any(|name| name.starts_with(&query) || query.starts_with(name)))
-            .map(|(name, _, detail)| Command { name: name.to_string(), detail: detail.to_string() }).collect()
+        let notepad = notepad_texts(self.language);
+        let all = [
+            ("/Entry", ["entry", "eintrag"], self.ft().cmd_entry, CommandAction::Entry),
+            (notepad.command, ["notepad", "notizblock"], notepad.command_detail, CommandAction::Notepad),
+            (notepad.journal_command, ["journaltext", "journaltext"], notepad.journal_detail, CommandAction::JournalText),
+        ];
+        all.into_iter().filter(|(_, names, _, _)| names.iter().any(|name| name.starts_with(&query) || query.starts_with(name)))
+            .map(|(name, _, detail, action)| Command { name: name.into(), detail: detail.into(), action }).collect()
     }
 
-    fn search_key(&mut self, key: Key) -> Effect {
+    pub fn choose_command(&mut self, index: usize) -> Effect {
+        if self.entry_open || self.notepad.is_some() { return Effect::default(); }
+        match self.commands().get(index).map(|command| command.action) {
+            Some(CommandAction::Entry) => self.open_entry(),
+            Some(CommandAction::Notepad) => self.open_notepad(false),
+            Some(CommandAction::JournalText) => self.open_notepad(true),
+            None => {
+                if self.search.trim().starts_with('/') {
+                    self.status = Some((format!("{} {}", self.ft().cmd_unknown, self.search.trim()), true));
+                }
+                Effect::default()
+            }
+        }
+    }
+
+    fn search_key(&mut self, key: Key, mods: Mods) -> Effect {
         let commands = self.commands();
         match key {
+            Key::Left | Key::Right if mods.alt => { self.show_day(repeat::shift(self.day_shown(), if key == Key::Left { -1 } else { 1 })); Effect::default() }
+            Key::Home if mods.alt => { self.show_today(); Effect::default() }
             Key::Undo => self.undo_last(false),
             Key::Redo => self.undo_last(true),
             Key::Quit => Effect { quit: true, ..Effect::default() },
             Key::Focus => { self.open_entry(); let effect = self.open_options(Field::Day); Effect { focus: Some(Pane::Entry), ..effect } }
+            // ↓ (or Tab) without commands: into the day view.
+            Key::Down | Key::Tab if commands.is_empty() => { let out = self.with_pane(|pane, cx| pane.enter(cx)); self.pane_effect(out) }
             Key::Up | Key::Down if !commands.is_empty() => {
                 let n = commands.len();
                 self.command_selected = (self.command_selected + if key == Key::Down { 1 } else { n - 1 }) % n;
                 Effect::default()
             }
-            Key::Tab if !commands.is_empty() => Effect { search: Some(commands[self.command_selected.min(commands.len() - 1)].name.clone()), ..Effect::default() },
-            Key::Enter => {
-                let Some(command) = commands.get(self.command_selected.min(commands.len().saturating_sub(1))) else {
-                    if self.search.trim().starts_with('/') { self.status = Some((format!("{} {}", self.ft().cmd_unknown, self.search.trim()), true)); }
-                    return Effect::default();
-                };
-                match command.name.as_str() {
-                    "/Entry" => self.open_entry(),
-                    _ => Effect::default(),
-                }
+            Key::Tab if !commands.is_empty() => {
+                let name = commands[self.command_selected.min(commands.len() - 1)].name.clone();
+                self.search_edited(&name);
+                Effect { search: Some(name), ..Effect::default() }
             }
+            Key::Enter => self.choose_command(self.command_selected),
             Key::Escape if !self.search.is_empty() => { self.search_edited(""); Effect { search: Some(String::new()), ..Effect::default() } }
             Key::Escape => Effect { hide: true, ..Effect::default() },
             _ => Effect::default(),
@@ -739,10 +805,372 @@ impl Form {
         icons::search(&self.query, ICON_ROOM)
     }
 
+    // ----- The notepad -----
+
+    pub fn notepad(&self) -> Option<&notepad::Draft> { self.notepad.as_ref() }
+
+    pub fn open_notepad(&mut self, journal_text: bool) -> Effect {
+        if let Some(draft) = &self.notepad {
+            if journal_text { return Effect::default(); }
+            if draft.card.is_some() {
+                self.notepad_panel(1);
+                return Effect::default();
+            }
+            if draft.dirty() {
+                self.status = Some((notepad_texts(self.language).dirty_switch.into(), true));
+                return Effect::default();
+            }
+        }
+        let result = self.journal.as_ref().ok_or_else(|| self.t().read_only.to_owned())
+            .and_then(|journal| if journal_text {
+                notepad::Draft::open(&journal.store, self.day_shown())
+            } else {
+                let mut draft = notepad::Draft::new_card(self.day_shown());
+                draft.panel = 1;
+                Ok(draft)
+            });
+        match result {
+            Ok(draft) => {
+                self.notepad = Some(draft);
+                self.cal_close();
+                self.search_edited("");
+                Effect { search: Some(String::new()), ..Effect::default() }
+            }
+            Err(error) => {
+                self.status = Some((error, true));
+                Effect::default()
+            }
+        }
+    }
+
+    pub fn notepad_error(&mut self, error: notepad::SaveError) {
+        let labels = notepad_texts(self.language);
+        let message = match error {
+            notepad::SaveError::Conflict => labels.conflict.to_owned(),
+            notepad::SaveError::InvalidLink => labels.invalid_link.to_owned(),
+            notepad::SaveError::TooLarge => labels.too_large.to_owned(),
+            notepad::SaveError::Store(message) => message,
+        };
+        self.status = Some((message, true));
+    }
+
+    pub fn notepad_panel(&mut self, panel: i32) {
+        if let Some(draft) = self.notepad.as_mut().filter(|draft| draft.card.is_some()) {
+            if panel == 2 && !draft.editing { return; }
+            if panel == 1 {
+                if draft.dirty() {
+                    self.status = Some((notepad_texts(self.language).dirty_switch.into(), true));
+                } else {
+                    self.show_notepad_list();
+                }
+                return;
+            }
+            draft.panel = if draft.panel == panel { 0 } else { panel };
+            draft.confirm_discard = false;
+            self.status = None;
+        }
+    }
+
+    pub fn new_notepad_note(&mut self) {
+        let Some(current) = self.notepad.as_ref().filter(|draft| draft.card.is_some() && !draft.dirty()) else { return; };
+        let mut draft = notepad::Draft::new_card(current.date);
+        draft.notes_on_day = current.notes_on_day;
+        self.notepad = Some(draft);
+        self.status = None;
+    }
+
+    pub fn notepad_preview(&mut self) {
+        if let Some(draft) = self.notepad.as_mut().filter(|draft| draft.card.is_some()) {
+            draft.panel = 0;
+            draft.preview = !draft.preview;
+            draft.editing = true;
+            self.status = None;
+        }
+    }
+
+    pub fn set_notepad_day_filter(&mut self, selected: bool) {
+        if let Some(draft) = &mut self.notepad { draft.notes_on_day = selected; }
+    }
+
+    pub fn notepad_images(&self) -> Vec<notebook::Item> {
+        let Some((draft, journal)) = self.notepad.as_ref().zip(self.journal.as_ref()) else { return Vec::new(); };
+        let Some(card) = &draft.card else { return Vec::new(); };
+        if !draft.preview && draft.panel != 3 { return Vec::new(); }
+        card.attachments(&journal.store, &journal.vault).unwrap_or_default().into_iter().filter(|item| item.image.is_some()).collect()
+    }
+
+    pub fn notepad_target(&mut self, key: &str) -> Option<notebook::Target> {
+        let (draft, journal) = self.notepad.as_ref().zip(self.journal.as_ref())?;
+        let card = draft.card.as_ref()?;
+        match card.target(&journal.store, &journal.vault, key.parse().ok()?) {
+            Ok(target) => target,
+            Err(error) => { self.notepad_error(error); None }
+        }
+    }
+
+    pub fn notepad_toggle_check(&mut self, offset: usize) {
+        let Some(draft) = self.notepad.as_mut() else { return; };
+        let Some(text) = note_markdown::toggle(draft.body(), offset) else { return; };
+        draft.edit(true, &text);
+        if !draft.editing { self.save_notepad_card(); }
+    }
+
+    pub fn notepad_choices(&mut self, query: &str) -> Vec<NotepadChoice> {
+        let Some((draft, journal)) = self.notepad.as_ref().zip(self.journal.as_ref()) else { return Vec::new(); };
+        let Some(card) = &draft.card else { return Vec::new(); };
+        let labels = notepad_texts(self.language);
+        if draft.panel == 2 {
+            let tags = match journal.store.tags() {
+                Ok(tags) => tags,
+                Err(error) => { self.notepad_error(notepad::SaveError::Store(error.to_string())); return Vec::new(); }
+            };
+            let query = query.to_lowercase();
+            return std::iter::once(NotepadChoice { key: String::new(), group: String::new(), title: labels.no_tag.to_owned(), detail: String::new(), color: None })
+                .chain(tags.into_iter().filter(|tag| tag.name.to_lowercase().contains(&query)).map(|tag| NotepadChoice {
+                    key: tag.id, group: String::new(), title: tag.name, detail: String::new(), color: calendar::parse_color(&tag.color),
+                })).collect();
+        }
+        let items = match draft.panel {
+            1 => notebook::notes(&journal.store, query, draft.notes_on_day.then_some(draft.date)),
+            3 => card.attachments(&journal.store, &journal.vault),
+            _ => return Vec::new(),
+        };
+        match items {
+            Ok(items) => {
+                let mut last_group = None;
+                let attachment_filter = (draft.panel == 3 && !draft.editing).then(|| query.to_lowercase());
+                items.into_iter().filter(|item| attachment_filter.as_ref().is_none_or(|query| {
+                    item.title.to_lowercase().contains(query) || item.detail.to_lowercase().contains(query)
+                })).map(|item| {
+                    let mut group = String::new();
+                    if draft.panel == 1 && last_group.as_ref() != Some(&item.folder) {
+                        group = item.folder.as_ref().map_or_else(|| labels.unfiled.to_owned(), |path| {
+                            path.iter().map(|(_, name)| name.as_str()).collect::<Vec<_>>().join(" / ")
+                        });
+                        last_group = Some(item.folder);
+                    }
+                    NotepadChoice {
+                        key: item.id.to_string(), group, title: if item.title.is_empty() { labels.untitled.to_owned() } else { item.title },
+                        detail: item.detail, color: None,
+                    }
+                }).collect()
+            }
+            Err(error) => { self.notepad_error(error); Vec::new() }
+        }
+    }
+
+    /// Selecting a card reads its latest state. Selecting an attachment can open it outside the editor.
+    pub fn pick_notepad(&mut self, key: &str) -> Option<notebook::Target> {
+        let (draft, journal) = self.notepad.as_mut().zip(self.journal.as_ref())?;
+        let card = draft.card.as_mut()?;
+        if draft.panel == 2 {
+            card.tag = (!key.is_empty()).then(|| key.to_owned());
+            draft.panel = 0;
+            draft.confirm_discard = false;
+            self.status = None;
+            return None;
+        }
+        let id = key.parse().ok()?;
+        if draft.panel == 3 {
+            return self.notepad_target(key);
+        }
+        if draft.panel != 1 { return None; }
+        if draft.dirty() {
+            self.status = Some((notepad_texts(self.language).dirty_switch.to_owned(), true));
+        } else {
+            match notepad::Draft::open_card(&journal.store, draft.date, id) {
+                Ok(mut chosen) => {
+                    chosen.notes_on_day = draft.notes_on_day;
+                    chosen.preview = true;
+                    chosen.editing = false;
+                    self.notepad = Some(chosen);
+                    self.status = None;
+                }
+                Err(error) => self.notepad_error(error),
+            }
+        }
+        None
+    }
+
+    pub fn attach_notepad(&mut self, attachment: Result<notebook::Attachment, notepad::SaveError>) -> bool {
+        let Some(draft) = &mut self.notepad else { return false; };
+        let Some(card) = &mut draft.card else { return false; };
+        if !draft.editing { return false; }
+        match attachment {
+            Ok(attachment) => {
+                card.pending.push(attachment);
+                draft.confirm_discard = false;
+                self.status = None;
+                true
+            }
+            Err(error) => { self.notepad_error(error); false }
+        }
+    }
+
+    pub fn notepad_image_loading(&mut self, loading: bool) {
+        if let Some(draft) = &mut self.notepad {
+            draft.loading_image = loading;
+            self.status = loading.then(|| (notepad_texts(self.language).image_loading.to_owned(), false));
+        }
+    }
+
+    pub fn notepad_tag_name(&self) -> Option<String> {
+        self.notepad.as_ref()?.card.as_ref()?.tag.as_deref().and_then(|id| self.tag_name(id))
+    }
+
+    pub fn copy_journal_text_to_card(&mut self) {
+        let Some(draft) = self.notepad.as_ref().filter(|draft| draft.card.is_none()) else { return; };
+        let mut card = notepad::Draft::new_card(draft.date);
+        card.edit(false, draft.title());
+        card.edit(true, draft.body());
+        self.notepad = Some(card);
+        self.status = None;
+    }
+
+    pub fn edit_notepad(&mut self, body: bool, text: &str) {
+        if let Some(draft) = &mut self.notepad {
+            draft.edit(body, text);
+            self.status = None;
+        }
+    }
+
+    fn save_notepad_card(&mut self) {
+        let Some((draft, journal)) = self.notepad.as_mut().zip(self.journal.as_mut()) else { return; };
+        let Some(card) = draft.card.as_ref() else { return; };
+        if draft.loading_image || draft.panel == 1 { return; }
+        if card.original.is_none() && !draft.dirty() {
+            draft.panel = 1;
+            return;
+        }
+        let labels = notepad_texts(self.language);
+        draft.confirm_discard = false;
+        match draft.save(&mut journal.store, &journal.vault, labels.untitled) {
+            Ok(written) => {
+                if written { self.last_saved = None; }
+                match notepad::Draft::open_card(&journal.store, draft.date, card.id) {
+                    Ok(mut saved) => {
+                        saved.notes_on_day = draft.notes_on_day;
+                        saved.editing = false;
+                        saved.preview = true;
+                        self.notepad = Some(saved);
+                        self.status = written.then(|| (labels.saved.to_owned(), false));
+                    }
+                    Err(error) => self.notepad_error(error),
+                }
+            }
+            Err(error) => {
+                draft.editing = true;
+                self.notepad_error(error);
+            }
+        }
+    }
+
+    fn back_from_notepad_card(&mut self) -> Effect {
+        let Some(draft) = self.notepad.as_mut() else { return Effect::default(); };
+        if draft.panel == 1 { return self.close_notepad(); }
+        if draft.panel > 1 {
+            draft.panel = 0;
+            self.status = None;
+            return Effect::default();
+        }
+        if draft.editing && draft.preview {
+            draft.preview = false;
+            self.status = None;
+            return Effect::default();
+        }
+        if draft.dirty() && !draft.confirm_discard {
+            draft.confirm_discard = true;
+            self.status = Some((notepad_texts(self.language).discard.into(), false));
+            return Effect::default();
+        }
+        let original = draft.card.as_ref().filter(|card| card.original.is_some()).map(|card| card.id);
+        if draft.editing {
+            if let Some((id, journal)) = original.zip(self.journal.as_ref()) {
+                if let Ok(mut old) = notepad::Draft::open_card(&journal.store, draft.date, id) {
+                    old.notes_on_day = draft.notes_on_day;
+                    old.preview = true;
+                    old.editing = false;
+                    self.notepad = Some(old);
+                    self.status = None;
+                    return Effect::default();
+                }
+            }
+        }
+        self.show_notepad_list();
+        Effect::default()
+    }
+
+    fn show_notepad_list(&mut self) {
+        let Some(draft) = &self.notepad else { return; };
+        if draft.panel != 1 {
+            let mut browser = notepad::Draft::new_card(draft.date);
+            browser.notes_on_day = draft.notes_on_day;
+            browser.panel = 1;
+            self.notepad = Some(browser);
+        }
+        self.status = None;
+    }
+
+    fn close_notepad(&mut self) -> Effect {
+        let Some(draft) = self.notepad.take() else { return Effect::default(); };
+        self.show_day(draft.date);
+        Effect { focus: Some(if self.entry_open { Pane::Entry } else if self.pane.edit.is_some() { Pane::DayEdit } else { Pane::Search }), ..Effect::default() }
+    }
+
+    pub fn finish_notepad(&mut self, save: bool) -> Effect {
+        if self.notepad.as_ref().is_some_and(|draft| draft.card.is_some()) {
+            if !save { return self.back_from_notepad_card(); }
+            self.save_notepad_card();
+            return Effect::default();
+        }
+        let Some(draft) = &mut self.notepad else { return Effect::default(); };
+        if !save && draft.panel != 0 {
+            draft.panel = 0;
+            self.status = None;
+            return Effect::default();
+        }
+        let labels = notepad_texts(self.language);
+        let mut written = false;
+        if save {
+            if draft.loading_image { return Effect::default(); }
+            draft.confirm_discard = false;
+            let Some(journal) = &mut self.journal else { return Effect::default(); };
+            match draft.save(&mut journal.store, &journal.vault, labels.untitled) {
+                Ok(changed) => {
+                    written = changed;
+                    if changed {
+                        self.last_saved = None;
+                        if let Some(snapshot) = self.snapshot.as_mut().filter(|_| draft.card.is_none()) {
+                            let _ = snapshot.reload_days(&journal.store, &[draft.date]);
+                        }
+                    }
+                }
+                Err(error) => {
+                    self.notepad_error(error);
+                    return Effect::default();
+                }
+            }
+        } else if draft.dirty() && !draft.confirm_discard {
+            draft.confirm_discard = true;
+            self.status = Some((labels.discard.into(), false));
+            return Effect::default();
+        }
+        let effect = self.close_notepad();
+        if written { self.flash = Some(labels.saved.into()); }
+        effect
+    }
+
     // ----- Keys -----
 
     pub fn key(&mut self, key: Key, mods: Mods) -> Effect {
-        if !self.entry_open && self.options.is_none() { return self.search_key(key); }
+        if self.notepad.is_some() {
+            return match key {
+                Key::Enter if mods.ctrl => self.finish_notepad(true),
+                Key::Escape => self.finish_notepad(false),
+                _ => Effect::default(),
+            };
+        }
+        if !self.entry_open && self.options.is_none() { return self.search_key(key, mods); }
         self.status = None;
         match key {
             Key::Undo => return self.undo_last(false),
@@ -1054,7 +1482,17 @@ impl Form {
     /// one clicked; an entry's details will open here too); the right button marks a new entry, whole days on the side,
     /// times in the 24 hours, and writes it into the form. `button` 0 left, 1 right; `kind` 0 pressed, 1 moved, 2 released.
     pub fn cal_mouse(&mut self, button: i32, kind: i32, x: f32, y: f32, shift: bool) -> Effect {
+        if self.notepad.is_some() && button != 0 { return Effect::default(); }
         let m = self.shown_metrics;
+        // The middle button chooses the day the day view shows (opening a day stays with the left one).
+        if button == 2 {
+            if kind != 0 { return Effect::default(); }
+            match calendar::spot(&self.shown_layout, &m, x, y) {
+                calendar::Spot::Nothing => {}
+                calendar::Spot::Item(_, day) | calendar::Spot::Side(day) | calendar::Spot::Time(day, _) => self.show_day(day),
+            }
+            return Effect::default();
+        }
         if button == 0 {
             if kind != 0 { return Effect::default(); }
             let day = match calendar::spot(&self.shown_layout, &m, x, y) {
@@ -1120,6 +1558,80 @@ impl Form {
         Effect { text: Some(if self.field().text() { self.buffer.clone() } else { String::new() }), ..Effect::default() }
     }
 
+    // ----- The day view -----
+
+    /// The day the day view shows.
+    pub fn day_shown(&self) -> NaiveDate { self.notepad.as_ref().map_or(self.view_day.unwrap_or(self.today), |draft| draft.date) }
+
+    /// The day view moves to `day` (today again follows the clock, also over midnight).
+    pub fn show_day(&mut self, day: NaiveDate) {
+        if day != self.day_shown() { self.pane.reset(); }
+        self.view_day = (day != self.today).then_some(day);
+        self.status = None;
+        self.flash = None;
+    }
+
+    /// Back to today (a click on the day view's date, Alt+H).
+    pub fn show_today(&mut self) { self.show_day(self.today) }
+
+    /// Runs `f` with the day view and what it needs (the store, the warm data, the day shown, the clock).
+    pub fn with_pane<T>(&mut self, f: impl FnOnce(&mut DayPane, &mut day_pane::Ctx) -> T) -> T {
+        let date = self.day_shown();
+        let now = if self.fixed_clock { self.clock_ms } else { day_pane::Ctx::clock() };
+        let mut cx = day_pane::Ctx { store: self.journal.as_mut().map(|journal| &mut journal.store), snapshot: self.snapshot.as_mut(), date, today: self.today, language: self.language, now };
+        f(&mut self.pane, &mut cx)
+    }
+
+    /// What the day view asks of the window.
+    pub fn pane_effect(&mut self, out: day_pane::Out) -> Effect {
+        if let Some(day) = out.go_to { self.show_day(day); let out = self.with_pane(|pane, cx| pane.enter(cx)); return self.pane_effect(out); }
+        let focus = if out.to_search { Some(Pane::Search) } else if out.edit.is_some() { Some(Pane::DayEdit) } else if out.side_text.is_some() { Some(Pane::SideText) } else if out.focus { Some(Pane::Day) } else { None };
+        Effect { focus, day_text: out.edit.or(out.side_text), ..Effect::default() }
+    }
+
+    /// A key while the day view (or its panel, or one of their inputs) has the keyboard.
+    pub fn day_key(&mut self, key: day_pane::K, mods: day_pane::Mods) -> Effect {
+        self.status = None;
+        self.flash = None;
+        let busy = self.pane.edit.is_some() || self.pane.side.is_some();
+        // The day: Alt+←/→ and Alt+H as in the search bar (not while writing or in the panel).
+        if mods.alt && !busy {
+            match key {
+                day_pane::K::Left | day_pane::K::Right => { self.show_day(repeat::shift(self.day_shown(), if key == day_pane::K::Left { -1 } else { 1 })); let out = self.with_pane(|pane, cx| pane.enter(cx)); return self.pane_effect(out); }
+                day_pane::K::Char('h' | 'H') => { self.show_today(); let out = self.with_pane(|pane, cx| pane.enter(cx)); return self.pane_effect(out); }
+                _ => {}
+            }
+        }
+        if mods.ctrl && !mods.alt {
+            match key {
+                day_pane::K::Char('z' | 'Z') if self.pane.edit.is_none() => return Effect { focus: Some(Pane::Day), ..self.undo_last(false) },
+                day_pane::K::Char('y' | 'Y') if self.pane.edit.is_none() => return Effect { focus: Some(Pane::Day), ..self.undo_last(true) },
+                day_pane::K::Char('q' | 'Q') => return Effect { quit: true, ..Effect::default() },
+                _ => {}
+            }
+        }
+        let out = self.with_pane(|pane, cx| pane.key(cx, key, mods));
+        self.pane_effect(out)
+    }
+
+    /// The day view as drawn; the days it needs are read first.
+    fn day_view(&mut self) -> DayView {
+        let date = self.day_shown();
+        if let (Some(journal), Some(snapshot)) = (&self.journal, &mut self.snapshot) {
+            let _ = snapshot.ensure(&journal.store, repeat::shift(date, -crate::snapshot::LOOKBACK), repeat::shift(date, 1));
+        }
+        self.with_pane(|pane, cx| pane.view(cx))
+    }
+
+    /// The entry form is open (the day view is hidden).
+    pub fn entry_shown(&self) -> bool { self.entry_open }
+
+    /// A timer is running (its clock is drawn anew every second).
+    pub fn timers_running(&self) -> bool {
+        self.journal.as_ref().and_then(|journal| journal.store.activity_timers().ok()).is_some_and(|timers| timers.values().any(|timer| timer.running()))
+    }
+
+
     /// The right button is marking a new entry.
     pub fn marking(&self) -> bool { self.mark.is_some() }
 
@@ -1144,9 +1656,8 @@ impl Form {
     pub fn cal_scroll(&mut self, delta: f32) {
         let (outcome, _) = self.outcome();
         let items = self.calendar_items(&outcome);
-        let none = BTreeSet::new();
         let open = self.open_days();
-        let (top, offset) = calendar::scroll(&self.cal_input(&items, &open, &none), &self.metrics_now(), delta);
+        let (top, offset) = calendar::scroll(&self.cal_input(&items, &open), &self.metrics_now(), delta);
         self.cal_top = top; self.cal_offset = offset;
     }
 
@@ -1167,13 +1678,13 @@ impl Form {
         open
     }
 
-    fn cal_input<'a>(&'a self, items: &'a [Item], open: &'a BTreeSet<NaiveDate>, none: &'a BTreeSet<NaiveDate>) -> calendar::Input<'a> {
+    fn cal_input<'a>(&'a self, items: &'a [Item], open: &'a BTreeSet<NaiveDate>) -> calendar::Input<'a> {
         let cursor = match self.options { Some(Options::Calendar(c)) => Some(c), _ => None };
         calendar::Input {
             today: self.today, now: self.now, top: self.cal_top, offset: self.cal_offset, items, open,
             cursor: cursor.map(|c| c.day),
             caret: cursor.filter(|c| c.hours).map(|c| c.minute),
-            selected: none, language: self.language,
+            selected: &self.cal_selected, language: self.language,
         }
     }
 
@@ -1235,24 +1746,25 @@ impl Form {
     /// The calendar for what the form holds now: the days around it are read, and it moves to the cursor or the draft
     /// when that left what is shown (but never while the mouse marks something).
     pub fn calendar_view(&mut self) -> CalendarView {
+        // The day view's day, marked while the day view is what the left shows.
+        self.cal_selected = self.notepad.as_ref().map(|draft| draft.date).or(self.view_day.filter(|_| !self.entry_open)).into_iter().collect();
         if let (Some(journal), Some(snapshot)) = (&self.journal, &mut self.snapshot) {
             let _ = snapshot.ensure(&journal.store, repeat::shift(self.cal_top, -crate::snapshot::LOOKBACK), repeat::shift(self.cal_top, crate::snapshot::AHEAD));
         }
         let (outcome, _) = self.outcome();
         let items = self.calendar_items(&outcome);
-        let none = BTreeSet::new();
         let open = self.open_days();
         let m = self.metrics_now();
         let wanted = if self.mark.is_some() { self.cal_target } else { self.cal_wanted() };
         if wanted != self.cal_target {
             if let Some(day) = wanted {
-                let layout = calendar::layout(&self.cal_input(&items, &open, &none), &m);
+                let layout = calendar::layout(&self.cal_input(&items, &open), &m);
                 let seen = layout.rows.iter().any(|row| row.date == day && row.y >= m.head_h && row.y + row.h <= m.height);
                 if !seen { self.cal_top = repeat::shift(day, -2); self.cal_offset = 0.0; }
             }
             self.cal_target = wanted;
         }
-        let layout = calendar::layout(&self.cal_input(&items, &open, &none), &m);
+        let layout = calendar::layout(&self.cal_input(&items, &open), &m);
         self.shown_layout = layout.clone();
         self.shown_metrics = m;
         CalendarView { layout, focus: matches!(self.options, Some(Options::Calendar(_))), metrics: m }
@@ -1358,6 +1870,12 @@ impl Form {
 
     pub fn view(&mut self) -> View {
         let calendar = self.calendar_view();
+        let (day, side) = if self.notepad.is_some() {
+            (DayView::default(), None)
+        } else {
+            (self.day_view(), self.with_pane(|pane, cx| pane.side_view(cx)))
+        };
+        let day_message = self.pane.message.clone();
         let ft = self.ft();
         let field = self.field();
         let problem = self.live_problem();
@@ -1395,14 +1913,17 @@ impl Form {
             editable: field.text() && !keys_to_options,
             native_arrows: field.native_arrows() && self.options.is_none(),
             type_names: ft.types.map(str::to_string),
-            type_icons: ["calendar", "calendar-check", "square-check", "sticky-note"],
+            type_icons: ["journal-calendar", "journal-event", "journal-task", "journal-note"],
             options: self.options.is_some(),
             type_selected: self.v.typ.index(),
             panel, panel_note, panel_hint,
             summary: String::new(),
             calendar,
-            entry_open: self.entry_open,
-            commands: self.commands(),
+            entry_open: self.entry_open && self.notepad.is_none(),
+            day,
+            side: if self.entry_open { None } else { side },
+            day_message,
+            commands: if self.notepad.is_some() { Vec::new() } else { self.commands() },
             command_selected: self.command_selected,
             search_placeholder: ft.search.to_string(),
             status,

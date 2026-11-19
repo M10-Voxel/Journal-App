@@ -23,10 +23,16 @@ interprocess = "2.4"
 ab_glyph = "0.2"
 # Entry icons (Lucide paths) are drawn into masks with it; already part of the font stack.
 zeno = "0.3"
+pulldown-cmark = { version = "0.13", default-features = false }
+url = "2.5"
+image = { version = "0.25", default-features = false, features = ["avif", "jpeg", "png", "webp"] }
+avif-decode = { version = "3.0", default-features = false }
+avif-parse = "2.1"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.56"
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }
+rfd = { version = "0.17", default-features = false }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
 
 [build-dependencies]
 slint-build = "1.19"
