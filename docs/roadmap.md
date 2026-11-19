@@ -16,7 +16,7 @@ Offene Aufgaben. Erledigtes mit `[x]` markieren. Vollständiger Plan: `docs/plan
   - Engine in Rust: Lückentext und Tab, Aufzählungen (`Mo` → Tab → `Di`), ▬/┆.
   - Anlegen über `journal-core`, Heute-Übersicht, Suche, Befehle (`>`).
   - `repeat.ts` und `repeatText.ts` der App nach Rust übertragen. Unit-Tests für Regeln, Erkennung, Vorschläge und Speicherung.
-  - `app.rs`, `save.rs` und `snapshot.rs` sind in `main.rs` eingebunden. Slint zeigt Vorschläge, erkannte Werte und Felder, eine Tagesvorschau rechts und Tastenhinweise nur beim Halten von Strg.
+  - `app.rs`, `save.rs` und `snapshot.rs` sind in `main.rs` eingebunden. Slint zeigt Vorschläge, erkannte Werte und Felder, und eine Tagesvorschau rechts.
   - Enter übernimmt Vorschläge; Shift+Enter erstellt mit kurzem Hinweis und bleibt offen. Tab übernimmt den Rückgängig-Vorschlag. Suche wird nach 180 ms ergänzt; `> Tag`, `> Rückgängig`, `> Wiederherstellen`, `> Beenden` funktionieren auch auf Englisch.
   - 76 Tests grün, einschließlich Slint-Tastaturtest mit Umlaut, Tab-Feldern, Tageswahl, Shift+Enter, Undo und Esc. Alle Schreibtests nutzen eigene temporäre Datenbanken.
   - Noch manuell zu prüfen: natives Fenster mit globalem Kürzel und Fokusverlust, Zusammenarbeit mit der Haupt-App und aktuelle RAM-/Latenzmessung. Laufende Aktivitäten und fehlende Bewertung in „Heute“ folgen mit Stufe 5.
@@ -25,7 +25,7 @@ Offene Aufgaben. Erledigtes mit `[x]` markieren. Vollständiger Plan: `docs/plan
   - Kalender: 6 Wochen, Montag zuerst, Monat/Jahr und heutiger Tag markiert. Pfeile bewegen, Shift+Pfeile fügen einen Bereich hinzu, Einfg schaltet einen Tag um und Entf schneidet Tage/Bereiche aus; PgUp/PgDn wechseln den Monat, H springt zu heute. Leertaste wechselt zwischen durchgehendem Band `▬` und Wiederholungspunkten `┆`.
   - Uhr: Stunden/Minuten mit Links/Rechts oder Tab wählen, Hoch/Runter ändern den Wert; Zifferneingabe wie `ClockTyping` der Haupt-App.
   - Dauer-Skala ab der Startzeit: Pfeile ändern um 5 Minuten, PgUp/PgDn um 1 Stunde; Zahlen setzen Minuten direkt (1–1440). Übernommen wird die Endzeit, auch nach Mitternacht. Bewertungsskalen bleiben Stufe 5.
-  - Enter schreibt die Auswahl zurück, ohne zu speichern. Esc schließt nur das Element und erhält die Eingabe. Tastenhinweise nur beim Halten von Strg, Texte deutsch/englisch, Gestaltung im Theme.
+  - Enter schreibt die Auswahl zurück, ohne zu speichern. Esc schließt nur das Element und erhält die Eingabe. Texte deutsch/englisch, Gestaltung im Theme.
   - 85 Tests grün: reine Bedienelement-Logik, Einbindung in Vorlagen, bestehende Zeiträume, Speichern und Slint-Tastaturtest durch alle drei Elemente. Native Darstellung/Fokus und die bisherigen manuellen Integrationsprüfungen bleiben offen.
 - [x] **Überarbeitung der Eingabe nach Praxistest** – 18.11.2026, noch nicht committet.
   - Mehr kontextbezogene Vorschläge ohne bisherige Sechsergrenze, mit begrenzter Fensterhöhe und scrollender Auswahl. Startvorlagen und „Als Aufgabe/Termin/Notiz“ machen den Typ ausdrücklich wählbar; `calendar`/`kalender` ist ein Alias für Termin.
@@ -78,13 +78,14 @@ Offene Aufgaben. Erledigtes mit `[x]` markieren. Vollständiger Plan: `docs/plan
   - `day_view.rs` fasst einen Tag zusammen: Termine (ohne Einträge „nur im Kalender“, mehrtägige an jedem abgedeckten Tag, ganztägige zuerst, dann nach Beginn), offene Aufgaben (erledigte nur gezählt), Notizen, Tagesbewertung und aktive Skalen als Balken über ihrer Spanne, aktive Aktivitäten mit Haken bzw. Zeit. Werte und Aktivitäten liest `snapshot.rs` aus derselben `period-data`-Einstellung wie die App (Regeln wie `scaleRange`/`clampToScale`). Nur Lesen, nichts wird geschrieben.
   - Gestaltung nach der Tagesseite der App: Abschnittsköpfe mit Akzentsymbol, Zahl und Linie, Akzentsymbol vor jedem Eintrag, Uhrzeit als umrandeter Chip in Lilex, Eintrags- oder Tag-Symbol in Tag-Farbe. Alle Werte im Theme (`day-*`).
   - Tageswahl: Alt+←/→, Alt+H heute, Mittelklick auf einen Tag im Kalender (Linksklick klappt weiterhin nur auf/zu), Klick auf das Datum zurück zu heute. Der gewählte Tag ist im Kalender markiert, solange die Tagesansicht sichtbar ist. Ein offenes Formular nutzt denselben Platz; danach kehrt die Ansicht mit dem gewählten Tag zurück, ein neues Öffnen des Fensters zeigt wieder heute. Werte stehen immer am angezeigten Tag (Test mit Bewertung nur für morgen).
-  - Hinweis- und Statuszeilen haben eine feste Höhe, damit nur die Tagesansicht den freien Platz bekommt (behebt auch eine Lücke unter den Strg-Hinweisen).
+  - Hinweis- und Statuszeilen haben eine feste Höhe, damit nur die Tagesansicht den freien Platz bekommt.
   - 116 Tests grün (u. a. 4 Modelltests in `day_view.rs`, 2 Formulartests, Slint-Test mit Alt+→/Alt+H, Mittelklick, Datumsklick und Pixelprüfung der Hinweiszeilen). Gerenderte Ansichten in `j-terminal/target/ui-check/` (`search`, `day-view-tomorrow`, `day-view-holiday`). Nur Test-Datenbanken.
   - Bleibt für Stufe 5: runde Dials zum Ändern der Werte, Aktivitäten starten/stoppen/abhaken. Laufende Timer sind hier noch nicht sichtbar (siehe offene Frage).
+- [x] **Einstellungen auf F1** mit durchsuchbaren Tastenkürzeln nach Bereichen. Beim Öffnen übernimmt J-TerminaL keine hängen gebliebenen Modifikatoren der globalen Tastenkombination.
+  - [x] Aktionskürzel in den Einstellungen ändern und einzeln zurücksetzen. Konflikte im gleichen Kontext erkennen, Änderungen sofort anwenden und gerätelokal speichern. Das globale Kürzel bei Windows neu registrieren.
 - [x] **Eigenständiger Notizblock** über /Notizblock oder das Journal-Symbol neben der Suchleiste. Neue Zettel erscheinen im Notizen-Tab der Haupt-App und automatisch auf der Pinnwand des gewählten Tags. Lesen und Bearbeiten verwenden dieselbe Karte. Tags, klickbare Markdown-Checklisten, Links und Bildanhänge verwenden die gemeinsamen Formate.
   - [x] Zettelliste über Strg+Umschalt+N öffnen, vorhandene Notizen formatiert anzeigen und mit beschrifteten Aktionen erstellen, bearbeiten und speichern. Enter setzt Markdown-Aufzählungen, nummerierte Listen und Checklisten fort.
   - Notizauswahl nach Ordnerpfad und Tag, besser lesbare Markdown-Vorschau, kopierbare Codeblöcke, Einrücken sowie eingebettete AVIF-Bildansicht umgesetzt.
-  - Der bisherige Tageseditor ist über /Journaltext erreichbar. Dort lässt sich der Text ausdrücklich als neuer Zettel kopieren. Inhalte werden bei der Umstellung unverändert übernommen, wenn der Nutzer die Kopie speichert.
 - [ ] **Suchleiste: Journal durchsuchen und Quick-Actions**, ausgehend von der vorhandenen `/Entry`-Aktion.
   - Treffer mit `@Typ`-/`\Tag`-Filtern finden, anzeigen und zum Bearbeiten in dasselbe Formular laden.
   - Tageswahl/Heute, Rückgängig/Wiederherstellen, Notizblock, Bewertung, Aktivitäten und später Pinnwand als kompakte Aktionen; Treffer und Aktionen auch mit der Maus benutzbar.
@@ -99,7 +100,7 @@ Offene Aufgaben. Erledigtes mit `[x]` markieren. Vollständiger Plan: `docs/plan
 - [x] **Standarddesign der Journal-App übernehmen** – 18.11.2026, noch nicht committet; Fortsetzung ab Claudes `ui/theme.slint`.
   - Palette `original` und Look `classic`: graue Panels, schwarze Felder und Kalenderfläche, abgerundete Eingaben mit blauer Fokuskontur, passende Typauswahl und Auswahlkarten. Alle Gestaltungswerte in `ui/theme.slint`; IBM Plex Sans und Lilex aus den bereits vorhandenen Font-Dateien.
   - Vorhandene Lucide-Rasterung auch für Suche, Befehle, Tags und Kalender: eigenes Eintragssymbol vor Tag-Symbol, Farbpunkt als Rückfall; mehrtägige Spuren ebenfalls mit Symbol und IBM-Plex-Titel. Keine neuen Rust-Abhängigkeiten; Software-Renderer bleibt bestehen.
-  - Hinweise auch in Auswahlkarten nur beim Halten von Strg. Tests für Symbolvererbung, gespeicherte Symbole, Kalenderdarstellung und unveränderte Trefferflächen; Slint-Tastaturablauf mit gerenderten Ansichten gegen eine Test-Datenbank.
+  - Tests für Symbolvererbung, gespeicherte Symbole, Kalenderdarstellung und unveränderte Trefferflächen; Slint-Tastaturablauf mit gerenderten Ansichten gegen eine Test-Datenbank.
   - 102 Tests grün, Release-Build erfolgreich. Nativ mit Test-Datenbank gemessen: privater Arbeitssatz rund 3 MiB im Hintergrund und 12 MiB nach dem Öffnen (gesamter Arbeitssatz rund 18/32 MiB). Ansichten und Messung in `j-terminal/target/ui-check/`.
 - [x] **Darstellungsfehler nach Standarddesign-Anpassung** – 18.11.2026, noch nicht committet.
   - Unvollständige Icons behoben: 219 Lucide-Pfade für den vorhandenen `zeno`-Parser normalisiert; keine neuen Rust-Abhängigkeiten, keine zusätzliche Arbeit zur Laufzeit. Wiederholbarer Vorbereitungsschritt in `scripts/normalize_icon_arcs.py`.

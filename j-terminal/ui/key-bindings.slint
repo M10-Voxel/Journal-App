@@ -1,0 +1,26 @@
+export enum ShortcutContext { window, search, form, day, day-edit, side, notes }
+export struct RoutedKey { text: string, mask: int }
+
+export global KeyBindings {
+    callback resolve(ShortcutContext, string, int) -> RoutedKey;
+
+    public pure function modifier-mask(event: KeyEvent) -> int {
+        return (event.modifiers.shift ? 1 : 0)
+            + (event.modifiers.control ? 2 : 0)
+            + (event.modifiers.alt ? 4 : 0)
+            + (event.modifiers.meta ? 8 : 0);
+    }
+
+    public function translate(context: ShortcutContext, event: KeyEvent) -> KeyEvent {
+        let key = self.resolve(context, event.text, self.modifier-mask(event));
+        return {
+            text: key.text, repeat: event.repeat,
+            modifiers: {
+                shift: Math.mod(key.mask, 2) == 1,
+                control: Math.mod(Math.floor(key.mask / 2), 2) == 1,
+                alt: Math.mod(Math.floor(key.mask / 4), 2) == 1,
+                meta: Math.mod(Math.floor(key.mask / 8), 2) == 1,
+            },
+        };
+    }
+}

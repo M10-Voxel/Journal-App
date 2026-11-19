@@ -162,9 +162,8 @@ pub struct View {
     pub options: bool,
     pub type_selected: usize,
     pub panel: Panel,
-    /// A line under the choices (the chosen icon's name, a hint).
+    /// A line under the choices with the chosen icon’s name.
     pub panel_note: String,
-    pub panel_hint: String,
     pub summary: String,
     pub calendar: CalendarView,
     /// The entry form is open (otherwise the search bar and the day view under it).
@@ -213,7 +212,7 @@ pub enum Pane { Search, Entry,
 pub struct Command { pub name: String, pub detail: String, action: CommandAction }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum CommandAction { Entry, Notepad, JournalText }
+enum CommandAction { Entry, Notepad }
 
 pub struct NotepadChoice {
     pub key: String,
@@ -474,7 +473,6 @@ impl Form {
         let all = [
             ("/Entry", ["entry", "eintrag"], self.ft().cmd_entry, CommandAction::Entry),
             (notepad.command, ["notepad", "notizblock"], notepad.command_detail, CommandAction::Notepad),
-            (notepad.journal_command, ["journaltext", "journaltext"], notepad.journal_detail, CommandAction::JournalText),
         ];
         all.into_iter().filter(|(_, names, _, _)| names.iter().any(|name| name.starts_with(&query) || query.starts_with(name)))
             .map(|(name, _, detail, action)| Command { name: name.into(), detail: detail.into(), action }).collect()
@@ -484,8 +482,7 @@ impl Form {
         if self.entry_open || self.notepad.is_some() { return Effect::default(); }
         match self.commands().get(index).map(|command| command.action) {
             Some(CommandAction::Entry) => self.open_entry(),
-            Some(CommandAction::Notepad) => self.open_notepad(false),
-            Some(CommandAction::JournalText) => self.open_notepad(true),
+            Some(CommandAction::Notepad) => self.open_notepad(),
             None => {
                 if self.search.trim().starts_with('/') {
                     self.status = Some((format!("{} {}", self.ft().cmd_unknown, self.search.trim()), true));
@@ -809,38 +806,21 @@ impl Form {
 
     pub fn notepad(&self) -> Option<&notepad::Draft> { self.notepad.as_ref() }
 
-    pub fn open_notepad(&mut self, journal_text: bool) -> Effect {
-        if let Some(draft) = &self.notepad {
-            if journal_text { return Effect::default(); }
-            if draft.card.is_some() {
-                self.notepad_panel(1);
-                return Effect::default();
-            }
-            if draft.dirty() {
-                self.status = Some((notepad_texts(self.language).dirty_switch.into(), true));
-                return Effect::default();
-            }
+    pub fn open_notepad(&mut self) -> Effect {
+        if self.notepad.is_some() {
+            self.notepad_panel(1);
+            return Effect::default();
         }
-        let result = self.journal.as_ref().ok_or_else(|| self.t().read_only.to_owned())
-            .and_then(|journal| if journal_text {
-                notepad::Draft::open(&journal.store, self.day_shown())
-            } else {
-                let mut draft = notepad::Draft::new_card(self.day_shown());
-                draft.panel = 1;
-                Ok(draft)
-            });
-        match result {
-            Ok(draft) => {
-                self.notepad = Some(draft);
-                self.cal_close();
-                self.search_edited("");
-                Effect { search: Some(String::new()), ..Effect::default() }
-            }
-            Err(error) => {
-                self.status = Some((error, true));
-                Effect::default()
-            }
+        if self.journal.is_none() {
+            self.status = Some((self.t().read_only.into(), true));
+            return Effect::default();
         }
+        let mut draft = notepad::Draft::new_card(self.day_shown());
+        draft.panel = 1;
+        self.notepad = Some(draft);
+        self.cal_close();
+        self.search_edited("");
+        Effect { search: Some(String::new()), ..Effect::default() }
     }
 
     pub fn notepad_error(&mut self, error: notepad::SaveError) {
@@ -855,7 +835,7 @@ impl Form {
     }
 
     pub fn notepad_panel(&mut self, panel: i32) {
-        if let Some(draft) = self.notepad.as_mut().filter(|draft| draft.card.is_some()) {
+        if let Some(draft) = self.notepad.as_mut() {
             if panel == 2 && !draft.editing { return; }
             if panel == 1 {
                 if draft.dirty() {
@@ -872,7 +852,7 @@ impl Form {
     }
 
     pub fn new_notepad_note(&mut self) {
-        let Some(current) = self.notepad.as_ref().filter(|draft| draft.card.is_some() && !draft.dirty()) else { return; };
+        let Some(current) = self.notepad.as_ref().filter(|draft| !draft.dirty()) else { return; };
         let mut draft = notepad::Draft::new_card(current.date);
         draft.notes_on_day = current.notes_on_day;
         self.notepad = Some(draft);
@@ -880,7 +860,7 @@ impl Form {
     }
 
     pub fn notepad_preview(&mut self) {
-        if let Some(draft) = self.notepad.as_mut().filter(|draft| draft.card.is_some()) {
+        if let Some(draft) = self.notepad.as_mut() {
             draft.panel = 0;
             draft.preview = !draft.preview;
             draft.editing = true;
@@ -894,15 +874,13 @@ impl Form {
 
     pub fn notepad_images(&self) -> Vec<notebook::Item> {
         let Some((draft, journal)) = self.notepad.as_ref().zip(self.journal.as_ref()) else { return Vec::new(); };
-        let Some(card) = &draft.card else { return Vec::new(); };
         if !draft.preview && draft.panel != 3 { return Vec::new(); }
-        card.attachments(&journal.store, &journal.vault).unwrap_or_default().into_iter().filter(|item| item.image.is_some()).collect()
+        draft.card.attachments(&journal.store, &journal.vault).unwrap_or_default().into_iter().filter(|item| item.image.is_some()).collect()
     }
 
     pub fn notepad_target(&mut self, key: &str) -> Option<notebook::Target> {
         let (draft, journal) = self.notepad.as_ref().zip(self.journal.as_ref())?;
-        let card = draft.card.as_ref()?;
-        match card.target(&journal.store, &journal.vault, key.parse().ok()?) {
+        match draft.card.target(&journal.store, &journal.vault, key.parse().ok()?) {
             Ok(target) => target,
             Err(error) => { self.notepad_error(error); None }
         }
@@ -917,7 +895,6 @@ impl Form {
 
     pub fn notepad_choices(&mut self, query: &str) -> Vec<NotepadChoice> {
         let Some((draft, journal)) = self.notepad.as_ref().zip(self.journal.as_ref()) else { return Vec::new(); };
-        let Some(card) = &draft.card else { return Vec::new(); };
         let labels = notepad_texts(self.language);
         if draft.panel == 2 {
             let tags = match journal.store.tags() {
@@ -932,7 +909,7 @@ impl Form {
         }
         let items = match draft.panel {
             1 => notebook::notes(&journal.store, query, draft.notes_on_day.then_some(draft.date)),
-            3 => card.attachments(&journal.store, &journal.vault),
+            3 => draft.card.attachments(&journal.store, &journal.vault),
             _ => return Vec::new(),
         };
         match items {
@@ -962,9 +939,8 @@ impl Form {
     /// Selecting a card reads its latest state. Selecting an attachment can open it outside the editor.
     pub fn pick_notepad(&mut self, key: &str) -> Option<notebook::Target> {
         let (draft, journal) = self.notepad.as_mut().zip(self.journal.as_ref())?;
-        let card = draft.card.as_mut()?;
         if draft.panel == 2 {
-            card.tag = (!key.is_empty()).then(|| key.to_owned());
+            draft.card.tag = (!key.is_empty()).then(|| key.to_owned());
             draft.panel = 0;
             draft.confirm_discard = false;
             self.status = None;
@@ -994,7 +970,7 @@ impl Form {
 
     pub fn attach_notepad(&mut self, attachment: Result<notebook::Attachment, notepad::SaveError>) -> bool {
         let Some(draft) = &mut self.notepad else { return false; };
-        let Some(card) = &mut draft.card else { return false; };
+        let card = &mut draft.card;
         if !draft.editing { return false; }
         match attachment {
             Ok(attachment) => {
@@ -1015,16 +991,7 @@ impl Form {
     }
 
     pub fn notepad_tag_name(&self) -> Option<String> {
-        self.notepad.as_ref()?.card.as_ref()?.tag.as_deref().and_then(|id| self.tag_name(id))
-    }
-
-    pub fn copy_journal_text_to_card(&mut self) {
-        let Some(draft) = self.notepad.as_ref().filter(|draft| draft.card.is_none()) else { return; };
-        let mut card = notepad::Draft::new_card(draft.date);
-        card.edit(false, draft.title());
-        card.edit(true, draft.body());
-        self.notepad = Some(card);
-        self.status = None;
+        self.notepad.as_ref()?.card.tag.as_deref().and_then(|id| self.tag_name(id))
     }
 
     pub fn edit_notepad(&mut self, body: bool, text: &str) {
@@ -1036,7 +1003,7 @@ impl Form {
 
     fn save_notepad_card(&mut self) {
         let Some((draft, journal)) = self.notepad.as_mut().zip(self.journal.as_mut()) else { return; };
-        let Some(card) = draft.card.as_ref() else { return; };
+        let card = &draft.card;
         if draft.loading_image || draft.panel == 1 { return; }
         if card.original.is_none() && !draft.dirty() {
             draft.panel = 1;
@@ -1083,7 +1050,7 @@ impl Form {
             self.status = Some((notepad_texts(self.language).discard.into(), false));
             return Effect::default();
         }
-        let original = draft.card.as_ref().filter(|card| card.original.is_some()).map(|card| card.id);
+        let original = draft.card.original.as_ref().map(|_| draft.card.id);
         if draft.editing {
             if let Some((id, journal)) = original.zip(self.journal.as_ref()) {
                 if let Ok(mut old) = notepad::Draft::open_card(&journal.store, draft.date, id) {
@@ -1118,46 +1085,9 @@ impl Form {
     }
 
     pub fn finish_notepad(&mut self, save: bool) -> Effect {
-        if self.notepad.as_ref().is_some_and(|draft| draft.card.is_some()) {
-            if !save { return self.back_from_notepad_card(); }
-            self.save_notepad_card();
-            return Effect::default();
-        }
-        let Some(draft) = &mut self.notepad else { return Effect::default(); };
-        if !save && draft.panel != 0 {
-            draft.panel = 0;
-            self.status = None;
-            return Effect::default();
-        }
-        let labels = notepad_texts(self.language);
-        let mut written = false;
-        if save {
-            if draft.loading_image { return Effect::default(); }
-            draft.confirm_discard = false;
-            let Some(journal) = &mut self.journal else { return Effect::default(); };
-            match draft.save(&mut journal.store, &journal.vault, labels.untitled) {
-                Ok(changed) => {
-                    written = changed;
-                    if changed {
-                        self.last_saved = None;
-                        if let Some(snapshot) = self.snapshot.as_mut().filter(|_| draft.card.is_none()) {
-                            let _ = snapshot.reload_days(&journal.store, &[draft.date]);
-                        }
-                    }
-                }
-                Err(error) => {
-                    self.notepad_error(error);
-                    return Effect::default();
-                }
-            }
-        } else if draft.dirty() && !draft.confirm_discard {
-            draft.confirm_discard = true;
-            self.status = Some((labels.discard.into(), false));
-            return Effect::default();
-        }
-        let effect = self.close_notepad();
-        if written { self.flash = Some(labels.saved.into()); }
-        effect
+        if !save { return self.back_from_notepad_card(); }
+        self.save_notepad_card();
+        Effect::default()
     }
 
     // ----- Keys -----
@@ -1897,7 +1827,7 @@ impl Form {
                 icon: if *f == Field::Icon { self.v.icon.clone().unwrap_or_default() } else if *f == Field::Tag { self.icon_of(None, self.v.tag.as_deref()).to_string() } else { String::new() },
             }
         }).collect();
-        let (panel, panel_note, panel_hint) = self.panel();
+        let (panel, panel_note) = self.panel();
         let status = self.status.clone()
             .or_else(|| self.row_error.clone().map(|error| (error, true)))
             .or_else(|| problem.as_ref().map(|problem| (self.problem_text(problem), true)))
@@ -1916,7 +1846,7 @@ impl Form {
             type_icons: ["journal-calendar", "journal-event", "journal-task", "journal-note"],
             options: self.options.is_some(),
             type_selected: self.v.typ.index(),
-            panel, panel_note, panel_hint,
+            panel, panel_note,
             summary: String::new(),
             calendar,
             entry_open: self.entry_open && self.notepad.is_none(),
@@ -1931,30 +1861,30 @@ impl Form {
         }
     }
 
-    /// The open options under the active line, a note under them and the keys for them.
-    fn panel(&self) -> (Panel, String, String) {
+    /// The open options under the active line and a note under them.
+    fn panel(&self) -> (Panel, String) {
         let ft = self.ft();
         match &self.options {
-            None => (Panel::None, String::new(), String::new()),
+            None => (Panel::None, String::new()),
             Some(Options::Calendar(c)) => {
                 let label = if c.anchor.is_some() { ft.cal_range } else if c.hours { ft.cal_moment } else { ft.cal_day };
-                (Panel::Calendar { label: format!("{label}: {}", self.when_text()), hours: c.hours }, String::new(), (if c.hours { ft.hint_calendar_hours } else { ft.hint_calendar_days }).into())
+                (Panel::Calendar { label: format!("{label}: {}", self.when_text()), hours: c.hours }, String::new())
             }
             Some(Options::Clock(clock)) => {
                 let value = if clock.end { self.v.end } else { self.v.start }.unwrap_or(0);
                 let label = if clock.end { match self.v.start { Some(start) => format!("{} · {}", ft.clock_end, length_text(((value as i64 - start as i64).rem_euclid(1440)).max(0), ft)), None => ft.clock_end.into() } } else { ft.clock_start.into() };
-                (Panel::Clock { label, hours: format!("{:02}", value / 60 % 24 + if value == 1440 { 24 } else { 0 }), minutes: format!("{:02}", value % 60), on_minutes: clock.minutes }, String::new(), ft.hint_clock.into())
+                (Panel::Clock { label, hours: format!("{:02}", value / 60 % 24 + if value == 1440 { 24 } else { 0 }), minutes: format!("{:02}", value % 60), on_minutes: clock.minutes }, String::new())
             }
-            Some(Options::Repeat) => (Panel::Repeat(self.editor.view(self.v.rule.as_ref(), self.language)), String::new(), ft.hint_repeat.into()),
+            Some(Options::Repeat) => (Panel::Repeat(self.editor.view(self.v.rule.as_ref(), self.language)), String::new()),
             Some(Options::Choices) => match self.field() {
-                Field::Tag => (Panel::Tags(self.tag_options().into_iter().enumerate().map(|(i, (id, name, color))| Choice { label: name, color, icon: self.icon_of(None, id.as_deref()).to_string(), selected: i == self.pick }).collect()), String::new(), ft.hint_choice.into()),
+                Field::Tag => (Panel::Tags(self.tag_options().into_iter().enumerate().map(|(i, (id, name, color))| Choice { label: name, color, icon: self.icon_of(None, id.as_deref()).to_string(), selected: i == self.pick }).collect()), String::new()),
                 Field::Icon => {
                     let results = self.icon_results();
                     let note = if results.is_empty() { ft.no_icons.to_string() } else { results.get(self.pick).map(|name| name.to_string()).unwrap_or_default() };
-                    (Panel::Icons(results.iter().enumerate().map(|(i, name)| Choice { label: name.to_string(), color: None, icon: name.to_string(), selected: i == self.pick }).collect()), note, ft.hint_choice.into())
+                    (Panel::Icons(results.iter().enumerate().map(|(i, name)| Choice { label: name.to_string(), color: None, icon: name.to_string(), selected: i == self.pick }).collect()), note)
                 }
-                Field::Reminder => (Panel::Reminders(ft.reminder_presets.iter().enumerate().map(|(i, label)| Choice { label: label.to_string(), color: None, icon: String::new(), selected: i == self.pick }).collect()), String::new(), ft.hint_choice.into()),
-                _ => (Panel::None, String::new(), String::new()),
+                Field::Reminder => (Panel::Reminders(ft.reminder_presets.iter().enumerate().map(|(i, label)| Choice { label: label.to_string(), color: None, icon: String::new(), selected: i == self.pick }).collect()), String::new()),
+                _ => (Panel::None, String::new()),
             },
         }
     }

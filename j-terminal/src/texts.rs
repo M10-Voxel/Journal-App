@@ -99,13 +99,50 @@ pub fn texts(language: Language) -> &'static Texts {
     match language { Language::De => &DE, Language::En => &EN }
 }
 
+pub struct ShortcutTexts {
+    pub settings: &'static str,
+    pub title: &'static str,
+    pub search: &'static str,
+    pub empty: &'static str,
+    pub close: &'static str,
+    pub record: &'static str,
+    pub reset: &'static str,
+    pub change: &'static str,
+    pub reserved: &'static str,
+    pub conflict: &'static str,
+    pub persist_error: &'static str,
+    pub system_error: &'static str,
+}
+
+pub fn shortcut_labels(language: Language) -> ShortcutTexts {
+    match language {
+        Language::De => ShortcutTexts {
+            settings: "Einstellungen", title: "Tastenkürzel", search: "Tastenkürzel suchen …",
+            empty: "Keine passenden Tastenkürzel", close: "Einstellungen schließen",
+            record: "Neues Kürzel drücken. Esc bricht ab.",
+            reset: "Auf Standard zurücksetzen", change: "Tastenkürzel ändern",
+            reserved: "Wähle eine Funktionstaste oder eine Kombination mit Strg oder Alt.",
+            conflict: "Dieses Kürzel ist bereits belegt für",
+            persist_error: "Tastenkürzel konnten nicht gespeichert werden.",
+            system_error: "Das globale Kürzel ist im System nicht verfügbar.",
+        },
+        Language::En => ShortcutTexts {
+            settings: "Settings", title: "Keyboard shortcuts", search: "Find shortcuts …",
+            empty: "No matching shortcuts", close: "Close settings",
+            record: "Press the new shortcut. Esc cancels.",
+            reset: "Restore default", change: "Change shortcut",
+            reserved: "Choose a function key or a combination with Ctrl or Alt.",
+            conflict: "This shortcut is already assigned to",
+            persist_error: "The shortcuts could not be saved.",
+            system_error: "The system shortcut is unavailable.",
+        },
+    }
+}
+
 pub struct NotepadTexts {
     pub command: &'static str,
     pub heading: &'static str,
     pub command_detail: &'static str,
-    pub journal_command: &'static str,
-    pub journal_heading: &'static str,
-    pub journal_detail: &'static str,
     pub untitled: &'static str,
     pub browse_empty: &'static str,
     pub filter_notes: &'static str,
@@ -120,7 +157,6 @@ pub struct NotepadTexts {
     pub dirty_switch: &'static str,
     pub invalid_link: &'static str,
     pub too_large: &'static str,
-    pub hint_card: &'static str,
     pub note_title: &'static str,
     pub note_body: &'static str,
     pub pinned: &'static str,
@@ -130,7 +166,6 @@ pub struct NotepadTexts {
     pub copy_code: &'static str,
     pub image_loading_preview: &'static str,
     pub image_unavailable: &'static str,
-    pub copy_to_card: &'static str,
     pub new_note: &'static str,
     pub edit_note: &'static str,
     pub edit_heading: &'static str,
@@ -140,10 +175,6 @@ pub struct NotepadTexts {
     pub source: &'static str,
     pub add_link: &'static str,
     pub image_loading: &'static str,
-    pub title: &'static str,
-    pub body: &'static str,
-    pub hint: &'static str,
-    pub save: &'static str,
     pub discard: &'static str,
     pub conflict: &'static str,
     pub saved: &'static str,
@@ -155,9 +186,6 @@ pub fn notepad_texts(language: Language) -> &'static NotepadTexts {
             command: "/Notizblock",
             heading: "Notizblock",
             command_detail: "Zettel erstellen und bearbeiten",
-            journal_command: "/Journaltext",
-            journal_heading: "Journaltext",
-            journal_detail: "Gespeicherten Tagestitel und Journaltext öffnen",
             untitled: "Neue Notiz",
             browse_empty: "Keine Zettel gefunden",
             filter_notes: "Zettel suchen …",
@@ -172,7 +200,6 @@ pub fn notepad_texts(language: Language) -> &'static NotepadTexts {
             dirty_switch: "Speichere oder verwerfe zuerst den aktuellen Entwurf.",
             invalid_link: "Bitte eine gültige Webadresse eingeben.",
             too_large: "Die Notiz oder das Bild ist zu groß.",
-            hint_card: "Strg+Umschalt+N Zettel · Strg+N neue Notiz · F2 bearbeiten · Strg+Enter speichern · Esc zurück\nStrg+T Tag · Strg+L Anhänge · Strg+I Bild · Strg+M Vorschau · Strg+Tab Feld wechseln",
             note_title: "Titel der Notiz",
             note_body: "Notiztext (Markdown)",
             pinned: "Tagespinnwand",
@@ -182,7 +209,6 @@ pub fn notepad_texts(language: Language) -> &'static NotepadTexts {
             copy_code: "Code kopieren",
             image_loading_preview: "Bild wird geladen …",
             image_unavailable: "Bildvorschau nicht verfügbar",
-            copy_to_card: "Als Zettel kopieren",
             new_note: "Neue Notiz",
             edit_note: "Bearbeiten",
             edit_heading: "Notiz bearbeiten",
@@ -192,10 +218,6 @@ pub fn notepad_texts(language: Language) -> &'static NotepadTexts {
             source: "Zum Text",
             add_link: "Link hinzufügen",
             image_loading: "Bild wird vorbereitet …",
-            title: "Tagestitel",
-            body: "Journaltext",
-            hint: "Tab zwischen den Feldern · Strg+Enter speichern · Strg+Umschalt+C als Zettel kopieren · Esc schließen",
-            save: "Speichern und schließen",
             discard: "Ungespeicherte Änderungen. Drücke Esc oder die gleiche Schaltfläche erneut, um sie zu verwerfen.",
             conflict: "Dasselbe Feld wurde inzwischen geändert. Dein Entwurf bleibt geöffnet. Kopiere deinen Text, bevor du den Notizblock neu öffnest.",
             saved: "Gespeichert",
@@ -204,9 +226,6 @@ pub fn notepad_texts(language: Language) -> &'static NotepadTexts {
             command: "/Notepad",
             heading: "Notepad",
             command_detail: "Create and edit notebook cards",
-            journal_command: "/JournalText",
-            journal_heading: "Journal text",
-            journal_detail: "Open the stored day title and journal text",
             untitled: "New note",
             browse_empty: "No notes found",
             filter_notes: "Search notes …",
@@ -221,7 +240,6 @@ pub fn notepad_texts(language: Language) -> &'static NotepadTexts {
             dirty_switch: "Save or discard the current draft first.",
             invalid_link: "Enter a valid web address.",
             too_large: "The note or image is too large.",
-            hint_card: "Ctrl+Shift+N notes · Ctrl+N new note · F2 edit · Ctrl+Enter save · Esc back\nCtrl+T tag · Ctrl+L attachments · Ctrl+I image · Ctrl+M preview · Ctrl+Tab switch fields",
             note_title: "Note title",
             note_body: "Note text (Markdown)",
             pinned: "Day pinboard",
@@ -231,7 +249,6 @@ pub fn notepad_texts(language: Language) -> &'static NotepadTexts {
             copy_code: "Copy code",
             image_loading_preview: "Loading image …",
             image_unavailable: "Image preview unavailable",
-            copy_to_card: "Copy to a note card",
             new_note: "New note",
             edit_note: "Edit",
             edit_heading: "Edit note",
@@ -241,10 +258,6 @@ pub fn notepad_texts(language: Language) -> &'static NotepadTexts {
             source: "Back to text",
             add_link: "Add link",
             image_loading: "Preparing the image …",
-            title: "Day title",
-            body: "Journal text",
-            hint: "Tab between fields · Ctrl+Enter save · Ctrl+Shift+C copy to a note · Esc close",
-            save: "Save and close",
             discard: "Unsaved changes. Press Esc or click the same button again to discard them.",
             conflict: "The same field changed elsewhere. Your draft is still open. Copy your text before reopening the notepad.",
             saved: "Saved",
@@ -291,16 +304,6 @@ pub struct FormTexts {
     pub bad_tag: &'static str,
     pub bad_reminder: &'static str,
     pub title_needed: &'static str,
-    pub hint_rows: &'static str,
-    pub hint_pick: &'static str,
-    pub hint_save: &'static str,
-    pub hint_undo: &'static str,
-    pub hint_calendar: &'static str,
-    pub hint_repeat: &'static str,
-    pub hint_choice: &'static str,
-    pub hint_clock: &'static str,
-    pub hint_calendar_days: &'static str,
-    pub hint_calendar_hours: &'static str,
     pub clock_start: &'static str,
     pub clock_end: &'static str,
     pub cal_day: &'static str,
@@ -358,13 +361,6 @@ const FORM_DE: FormTexts = FormTexts {
     bad_tag: "Diesen Tag gibt es nicht",
     bad_reminder: "Erinnerung nicht verstanden (z. B. 45, 2 h, 1 Tag; höchstens 30 Tage)",
     title_needed: "Der Titel fehlt",
-    hint_rows: "↑↓ Zeile · Tab nächstes Feld · Enter Optionen des Felds · Alt+1–4 Typ",
-    hint_pick: "In den Optionen: Pfeile bewegen · Enter übernehmen und weiter · Esc abbrechen",
-    hint_save: "⇧Enter erstellen, Fenster bleibt · Strg+Enter erstellen und schließen · Esc zurück",
-    hint_undo: "Strg+Z letzten Eintrag zurücknehmen · Strg+Q beenden",
-    hint_calendar: "Kalender: Linksklick Tag auf/zu · ⇧Linksklick Bereich · Rechtsklick links ganztägig · rechts ziehen in den Stunden: Zeit · rechts ziehen links: mehrere Tage · Rad blättert · Strg+Rad Tage größer/kleiner · Strg+⇧+Rad Stunden zoomen · ⇧+Rad Stunden verschieben · F6 Tastatur",
-    hint_repeat: "↑↓ Zeile · ←→ wählen · Leertaste/1–7 umschalten · Ziffern tippen Zahlen · ⇧+Pfeile Datum/Zahl · Entf zurücksetzen · Enter übernehmen · Esc abbrechen",
-    hint_choice: "Tippen filtert · Pfeile wählen · Klick wählt · Enter übernehmen · Esc abbrechen",
     search: "Journal durchsuchen · / für Befehle",
     cmd_entry: "Neuen Eintrag anlegen",
     cmd_unknown: "Unbekannter Befehl:",
@@ -378,9 +374,6 @@ const FORM_DE: FormTexts = FormTexts {
     rp_on_word: "an",
     rp_off_word: "aus",
     rp_only_in: "Nur in",
-    hint_clock: "↑↓ ±1 (Strg: Stunden ±4, Minuten ±15) · ←→ Stunden/Minuten · Ziffern tippen · Entf leeren · Enter übernehmen · Esc abbrechen",
-    hint_calendar_days: "Ganze Tage: ↑↓ Tag · ←→ Woche · ⇧ Bereich (mehrtägig) · PgUp/PgDn Monat · Tab zu den Stunden · Enter übernehmen · Esc Bereich weg / abbrechen",
-    hint_calendar_hours: "Stunden: ←→ Stunde (Strg: Viertelstunde) · ↑↓ Tag · ⇧ Zeitraum, auch über Tage · Tab zu den ganzen Tagen · Enter übernehmen · Esc Bereich weg / abbrechen",
     clock_start: "Beginn",
     clock_end: "Ende",
     cal_day: "Ganzer Tag",
@@ -424,13 +417,6 @@ const FORM_EN: FormTexts = FormTexts {
     bad_tag: "There is no such tag",
     bad_reminder: "Reminder not understood (e.g. 45, 2 h, 1 day; 30 days at most)",
     title_needed: "The title is missing",
-    hint_rows: "↑↓ line · Tab next field · Enter the field's options · Alt+1–4 type",
-    hint_pick: "In the options: arrows move · Enter take and go on · Esc cancel",
-    hint_save: "⇧Enter create, window stays · Ctrl+Enter create and close · Esc back",
-    hint_undo: "Ctrl+Z take the last entry back · Ctrl+Q quit",
-    hint_calendar: "Calendar: left click opens/closes a day · ⇧left click a range · right click at the left: all day · right drag in the hours: time · right drag at the left: several days · wheel scrolls · Ctrl+wheel days taller/flatter · Ctrl+⇧+wheel zoom the hours · ⇧+wheel move the hours · F6 keyboard",
-    hint_repeat: "↑↓ line · ←→ choose · Space/1–7 switch · digits type numbers · ⇧+arrows date/number · Del reset · Enter take · Esc cancel",
-    hint_choice: "Typing filters · arrows choose · click chooses · Enter take · Esc cancel",
     search: "Search the journal · / for commands",
     cmd_entry: "Make a new entry",
     cmd_unknown: "Unknown command:",
@@ -444,9 +430,6 @@ const FORM_EN: FormTexts = FormTexts {
     rp_on_word: "on",
     rp_off_word: "off",
     rp_only_in: "Only in",
-    hint_clock: "↑↓ ±1 (Ctrl: hours ±4, minutes ±15) · ←→ hours/minutes · type digits · Del clear · Enter take · Esc cancel",
-    hint_calendar_days: "Whole days: ↑↓ day · ←→ week · ⇧ range (several days) · PgUp/PgDn month · Tab to the hours · Enter take · Esc drop range / cancel",
-    hint_calendar_hours: "Hours: ←→ hour (Ctrl: quarter) · ↑↓ day · ⇧ span, also over days · Tab to whole days · Enter take · Esc drop range / cancel",
     clock_start: "Start",
     clock_end: "End",
     cal_day: "Whole day",
@@ -487,9 +470,7 @@ pub struct DayTexts {
     pub rating: &'static str,
     pub activities: &'static str,
     /// Under the date of another day than today (click or Alt+H).
-    pub back_today: &'static str,
     /// Shown while Strg is held.
-    pub hint_day: &'static str,
     pub title_placeholder: &'static str,
     pub take: &'static str,
     pub foreign: &'static str,
@@ -519,15 +500,6 @@ pub struct DayTexts {
     pub plan_on_days: &'static str,
     pub jump: &'static str,
     pub delete: &'static str,
-    pub hint_entries: &'static str,
-    pub hint_values: &'static str,
-    pub hint_side: &'static str,
-    pub hint_list: &'static str,
-    pub hint_icons: &'static str,
-    pub hint_description: &'static str,
-    pub hint_clock: &'static str,
-    pub hint_plan: &'static str,
-    pub hint_plan_days: &'static str,
 }
 
 const DAY_DE: DayTexts = DayTexts {
@@ -550,8 +522,6 @@ const DAY_DE: DayTexts = DayTexts {
     values: "Werte",
     rating: "Bewertung",
     activities: "Aktivitäten",
-    back_today: "Alt+H: zurück zu heute",
-    hint_day: "Alt+←/→ anderer Tag · Alt+H heute · Mittelklick im Kalender: diesen Tag ansehen",
     title_placeholder: "Gib deinem Tag einen Namen …",
     take: "Übernehmen",
     foreign: "Dieser Eintrag beginnt an einem früheren Tag und wird dort geändert.",
@@ -581,15 +551,6 @@ const DAY_DE: DayTexts = DayTexts {
     plan_on_days: "Auf %d Tage planen",
     jump: "Zum geplanten Tag",
     delete: "Löschen",
-    hint_entries: "↓ in den Tag · ↑/↓ wählen · Enter schreiben · Alt+A/E/N neu · Alt+D erledigt · Alt+X abbrechen · Alt+P wichtig · Alt+M morgen · Alt+T planen · Alt+Shift+T mehrere Tage · Alt+U Uhrzeit · Alt+G Tag · Alt+I Symbol · Alt+B Beschreibung · Alt+R Erinnerung · Alt+Shift+E/A/N Typ · Alt+↑/↓ verschieben · Entf löschen · Alt+Enter oder Klick aufs Symbol: Einstellungen links",
-    hint_values: "Regler: ←/→ Schritt, Ziffern Wert, Entf leeren, Rad oder vertikal ziehen, Rechtsklick leeren · Aktivität: Leertaste abhaken, Ziffern+Enter Minuten, Enter Timer starten/pausieren, Shift+Enter stoppen",
-    hint_side: "↑/↓ wählen · Enter öffnen · ←/→ ändern · Esc schließen",
-    hint_list: "↑/↓ wählen · Enter übernehmen · Esc zurück",
-    hint_icons: "Tippen sucht · Pfeile wählen · Enter übernehmen · Strg+Entf kein Symbol · Esc zurück",
-    hint_description: "Esc speichert und geht zurück",
-    hint_clock: "↑/↓ ändern (Strg mehr) · ←/→ Stunden/Minuten · Ziffern · Entf keine Uhrzeit · Enter übernehmen",
-    hint_plan: "Pfeile Tag · Bild↑/↓ Monat · H heute · Enter oder zweiter Klick planen · Esc zurück",
-    hint_plan_days: "Pfeile Tag · Leertaste oder Klick sammelt Tage · Enter planen · Esc zurück",
 };
 
 const DAY_EN: DayTexts = DayTexts {
@@ -612,8 +573,6 @@ const DAY_EN: DayTexts = DayTexts {
     values: "Values",
     rating: "Rating",
     activities: "Activities",
-    back_today: "Alt+H: back to today",
-    hint_day: "Alt+←/→ another day · Alt+H today · middle click in the calendar: view that day",
     title_placeholder: "Give your day a name …",
     take: "Take",
     foreign: "This entry begins on an earlier day and is changed there.",
@@ -643,15 +602,6 @@ const DAY_EN: DayTexts = DayTexts {
     plan_on_days: "Plan for %d days",
     jump: "Go to the planned day",
     delete: "Delete",
-    hint_entries: "↓ into the day · ↑/↓ choose · Enter write · Alt+A/E/N new · Alt+D done · Alt+X cancel · Alt+P important · Alt+M tomorrow · Alt+T plan · Alt+Shift+T several days · Alt+U time · Alt+G tag · Alt+I icon · Alt+B description · Alt+R reminder · Alt+Shift+E/A/N type · Alt+↑/↓ move · Del delete · Alt+Enter or click on the symbol: settings at the left",
-    hint_values: "Dials: ←/→ step, digits value, Del clear, wheel or drag vertically, right-click to clear · Activity: Space tick, digits+Enter minutes, Enter start/pause timer, Shift+Enter stop",
-    hint_side: "↑/↓ choose · Enter open · ←/→ change · Esc close",
-    hint_list: "↑/↓ choose · Enter take · Esc back",
-    hint_icons: "Typing searches · arrows choose · Enter take · Ctrl+Del no icon · Esc back",
-    hint_description: "Esc saves and goes back",
-    hint_clock: "↑/↓ change (Ctrl more) · ←/→ hours/minutes · digits · Del no time · Enter take",
-    hint_plan: "Arrows day · PgUp/PgDn month · H today · Enter or second click plans · Esc back",
-    hint_plan_days: "Arrows day · Space or click collects days · Enter plans · Esc back",
 };
 
 pub fn day_texts(language: Language) -> &'static DayTexts {
@@ -676,7 +626,7 @@ mod tests {
         for language in [Language::De, Language::En] {
             let t = texts(language);
             let f = form_texts(language);
-            for text in [t.no_vault, t.unreachable, t.too_new, t.open_failed, t.hotkey_failed, f.title_needed, f.hint_rows, f.hint_save, f.hint_repeat, f.empty_end] {
+            for text in [t.no_vault, t.unreachable, t.too_new, t.open_failed, t.hotkey_failed, f.title_needed, f.empty_end] {
                 assert!(!text.trim().is_empty(), "{language:?}");
             }
             assert!(f.labels.iter().all(|label| !label.is_empty()));
@@ -685,7 +635,7 @@ mod tests {
         assert_ne!(texts(Language::De).no_vault, texts(Language::En).no_vault);
         let (de, en) = (day_texts(Language::De), day_texts(Language::En));
         for d in [de, en] {
-            assert!(d.weekdays.iter().chain([&d.nothing, &d.hint_day, &d.back_today, &d.events, &d.tasks, &d.notes, &d.values, &d.activities]).all(|text| !text.trim().is_empty()));
+            assert!(d.weekdays.iter().chain([&d.nothing, &d.events, &d.tasks, &d.notes, &d.values, &d.activities]).all(|text| !text.trim().is_empty()));
             assert!(d.in_days.contains("%d") && d.days_ago.contains("%d") && d.tasks_count.contains("%o"));
         }
         assert_ne!(de.weekdays, en.weekdays);

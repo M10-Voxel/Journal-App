@@ -54,7 +54,11 @@ fn notepad_writes_a_pinned_card_and_reopens_the_same_note_with_its_tag_and_attac
     t.form.close_entry();
     let date = d("2026-11-19");
     t.form.show_day(date);
-    let observer = Store::open(&t.path).unwrap();
+    let mut observer = Store::open(&t.path).unwrap();
+    let mut journal_day = observer.load("2026-11-19").unwrap();
+    journal_day.title = "Tagestitel".into();
+    journal_day.body = "Vorhandener Freitext".into();
+    observer.save(journal_day).unwrap();
     let mut watch = observer.watch().unwrap();
     t.form.search_edited("/Notizblock");
     t.form.key(Key::Enter, NONE);
@@ -66,7 +70,7 @@ fn notepad_writes_a_pinned_card_and_reopens_the_same_note_with_its_tag_and_attac
     assert!(t.form.notepad_choices("Gesund").iter().any(|row| row.key == HEALTH));
     t.form.pick_notepad(HEALTH);
     t.form.attach_notepad(notebook::Attachment::link("https://example.org/journal"));
-    let id = t.form.notepad().unwrap().card.as_ref().unwrap().id;
+    let id = t.form.notepad().unwrap().card.id;
     t.form.finish_notepad(true);
     let saved = t.form.notepad().unwrap();
     assert!(saved.preview && !saved.editing && !saved.dirty());
@@ -84,13 +88,14 @@ fn notepad_writes_a_pinned_card_and_reopens_the_same_note_with_its_tag_and_attac
     assert_eq!(card["dates"], serde_json::json!([date]));
     assert_eq!(card["tag"], HEALTH);
     assert_eq!(card["text"], "# Privat\n\n- [ ] Erledigen");
-    assert!(observer.load("2026-11-19").unwrap().body.is_empty());
+    let journal_day = observer.load("2026-11-19").unwrap();
+    assert_eq!((journal_day.title.as_str(), journal_day.body.as_str()), ("Tagestitel", "Vorhandener Freitext"));
     let attachment = read(format!("board:card:{}", card["links"][0].as_str().unwrap()));
     assert_eq!(attachment["kind"], "link");
     assert_eq!(attachment["url"], "https://example.org/journal");
     assert_eq!(attachment["links"], serde_json::json!([id.to_string()]));
 
-    t.form.open_notepad(false);
+    t.form.open_notepad();
     assert_eq!(t.form.notepad_choices("Planung")[0].key, id.to_string());
     t.form.pick_notepad(&id.to_string());
     assert!(t.form.notepad().unwrap().preview && !t.form.notepad().unwrap().editing);
@@ -118,10 +123,10 @@ fn notepad_image_uses_the_apps_vault_asset_format() {
     let source = vault.join("fixture.png");
     image::RgbImage::from_pixel(4, 4, image::Rgb([255, 99, 28])).save(&source).unwrap();
     t.form.journal.as_mut().unwrap().vault = vault.clone();
-    t.form.open_notepad(false);
+    t.form.open_notepad();
     t.form.new_notepad_note();
     t.form.attach_notepad(notebook::Attachment::image(&source));
-    let note = t.form.notepad().unwrap().card.as_ref().unwrap().id;
+    let note = t.form.notepad().unwrap().card.id;
     t.form.finish_notepad(true);
     let journal = t.form.journal.as_ref().unwrap();
     let asset: String = journal.store.conn.query_row(
@@ -166,7 +171,7 @@ fn notebook_browses_today_by_nested_folder_and_keeps_the_other_days_in_all() {
         store.conn.execute("INSERT INTO settings(key,value) VALUES(?1,?2)",
             rusqlite::params![format!("board:card:{id}"), card.to_string()]).unwrap();
     }
-    t.form.open_notepad(false);
+    t.form.open_notepad();
     t.form.notepad_panel(1);
     assert_eq!(t.form.notepad_choices("").len(), 3);
     t.form.set_notepad_day_filter(true);
@@ -176,66 +181,45 @@ fn notebook_browses_today_by_nested_folder_and_keeps_the_other_days_in_all() {
 }
 
 #[test]
-fn notepad_edits_the_selected_day_and_keeps_the_draft_on_reopen() {
+fn journal_text_command_is_unavailable_in_both_languages() {
     let mut t = test();
     t.form.close_entry();
-    let date = d("2026-11-19");
-    let store = &mut t.form.journal.as_mut().unwrap().store;
-    let mut day = store.load("2026-11-19").unwrap();
-    day.title = "Morgen".into();
-    day.body = "**Vorhandener Text**\n".into();
-    store.save(day).unwrap();
-
-    t.form.show_day(date);
-    t.form.search_edited("/Journaltext");
-    t.form.key(Key::Enter, NONE);
-    let draft = t.form.notepad().unwrap();
-    assert_eq!((draft.date, draft.title(), draft.body()), (date, "Morgen", "**Vorhandener Text**\n"));
-    t.form.edit_notepad(false, "Besuch");
-    t.form.edit_notepad(true, "Zeile eins\n\n- Zeile zwei");
-    t.form.shown();
-    assert_eq!(t.form.notepad().unwrap().body(), "Zeile eins\n\n- Zeile zwei");
-    assert_eq!(t.form.key(Key::Enter, CTRL).focus, Some(Pane::Search));
-    assert!(t.form.notepad().is_none());
-    assert_eq!(t.form.view().day.title, "Besuch");
-    let store = &t.form.journal.as_ref().unwrap().store;
-    assert_eq!(store.load("2026-11-19").unwrap().body, "Zeile eins\n\n- Zeile zwei");
-    assert!(store.load("2026-11-18").unwrap().body.is_empty());
+    for (language, command) in [(Language::De, "/Journaltext"), (Language::En, "/JournalText")] {
+        t.form.language = language;
+        t.form.search_edited("/");
+        assert_eq!(t.form.view().commands.len(), 2);
+        t.form.search_edited(command);
+        assert!(t.form.view().commands.is_empty());
+        t.form.key(Key::Enter, NONE);
+        assert!(t.form.notepad().is_none());
+    }
 }
 
 #[test]
-fn notepad_keeps_other_writes_and_reports_a_conflict_in_an_edited_field() {
+fn notepad_reports_conflicting_card_edits_and_keeps_the_draft() {
     let mut t = test();
-    t.form.edited("Erster Eintrag");
-    t.form.key(Key::Enter, SHIFT);
     t.form.close_entry();
-    t.form.open_notepad(true);
-    t.form.edit_notepad(true, "Journaltext");
-    let mut other = Store::open(&t.path).unwrap();
-    let mut day = other.load("2026-11-18").unwrap();
-    day.entries[0].text = "Geänderter Eintrag".into();
-    day.title = "Anderer Titel".into();
-    other.save(day).unwrap();
-
+    t.form.open_notepad();
+    t.form.new_notepad_note();
+    t.form.edit_notepad(true, "Original");
+    let id = t.form.notepad().unwrap().card.id;
     t.form.finish_notepad(true);
-    assert!(t.form.notepad().is_none());
-    let updated = other.load("2026-11-18").unwrap();
-    assert_eq!((updated.title.as_str(), updated.body.as_str(), updated.entries[0].text.as_str()),
-        ("Anderer Titel", "Journaltext", "Geänderter Eintrag"));
-
-    t.form.open_notepad(true);
+    t.form.notepad_preview();
     t.form.edit_notepad(true, "Mein Entwurf");
-    let mut updated = updated;
-    updated.body = "In der Haupt-App".into();
-    other.save(updated).unwrap();
+
+    let other = Store::open(&t.path).unwrap();
+    let key = format!("board:card:{id}");
+    other.conn.execute("UPDATE settings SET value=json_set(value, '$.text', ?1) WHERE key=?2",
+        ["In der Haupt-App", &key]).unwrap();
     t.form.finish_notepad(true);
     assert_eq!(t.form.view().status, Some((notepad_texts(Language::De).conflict.into(), true)));
     assert_eq!(t.form.notepad().unwrap().body(), "Mein Entwurf");
     t.form.key(Key::Escape, NONE);
-    assert!(t.form.notepad().is_some(), "The first Esc warns about the unsaved draft.");
+    assert_eq!(t.form.notepad().unwrap().body(), "Mein Entwurf");
     t.form.key(Key::Escape, NONE);
-    assert!(t.form.notepad().is_none());
-    assert_eq!(other.load("2026-11-18").unwrap().body, "In der Haupt-App");
+    let reader = t.form.notepad().unwrap();
+    assert!(!reader.editing && reader.preview);
+    assert_eq!(reader.body(), "In der Haupt-App");
 }
 
 #[test]
@@ -243,29 +227,15 @@ fn closing_an_unchanged_notepad_does_not_create_an_empty_day() {
     let mut t = test();
     t.form.close_entry();
     t.form.show_day(d("2026-11-20"));
-    t.form.open_notepad(true);
-    t.form.finish_notepad(true);
-    assert_eq!(t.form.journal.as_ref().unwrap().store.load("2026-11-20").unwrap().revision, 0);
-}
-
-#[test]
-fn copying_legacy_journal_text_pins_a_new_card_without_removing_the_source() {
-    let mut t = test();
-    t.form.close_entry();
-    t.form.open_notepad(true);
-    t.form.edit_notepad(true, "**Alter Text**");
-    t.form.finish_notepad(true);
-    t.form.open_notepad(true);
-    t.form.copy_journal_text_to_card();
-    assert!(t.form.notepad().unwrap().card.is_some());
-    t.form.finish_notepad(true);
+    t.form.open_notepad();
+    t.form.new_notepad_note();
+    assert!(!t.form.notepad().unwrap().can_save());
+    t.form.finish_notepad(false);
+    t.form.finish_notepad(false);
+    assert!(t.form.notepad().is_none());
     let store = &t.form.journal.as_ref().unwrap().store;
-    assert_eq!(store.load("2026-11-18").unwrap().body, "**Alter Text**");
-    let body: String = store.conn.query_row(
-        "SELECT json_extract(value, '$.text') FROM settings WHERE key LIKE 'board:card:%' AND json_extract(value, '$.dates[0]') = ?1",
-        ["2026-11-18"], |row| row.get(0),
-    ).unwrap();
-    assert_eq!(body, "**Alter Text**");
+    assert_eq!(store.load("2026-11-20").unwrap().revision, 0);
+    assert!(notebook::notes(store, "", None).is_ok_and(|notes| notes.is_empty()));
 }
 
 #[test]

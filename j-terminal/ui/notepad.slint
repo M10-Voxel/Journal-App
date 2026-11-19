@@ -1,3 +1,4 @@
+import { KeyBindings, ShortcutContext } from "key-bindings.slint";
 import { Theme } from "theme.slint";
 
 export struct NotepadChoiceRow { key: string, title: string, detail: string, has-color: bool, color: color, group: string, has-image: bool, thumbnail: image }
@@ -75,15 +76,11 @@ export component NotepadEditor inherits VerticalLayout {
     in property <string> date;
     in property <string> title-label;
     in property <string> body-label;
-    in property <string> hint;
-    in property <bool> show-hint;
-    in property <string> save-label;
     in property <NotepadLabels> labels;
     in property <bool> editing;
     in property <bool> can-save;
     in property <image> back-icon;
     in property <int> focus-request;
-    in property <bool> card;
     in property <int> panel;
     in property <bool> preview;
     in property <[NotepadChoiceRow]> choices;
@@ -110,7 +107,6 @@ export component NotepadEditor inherits VerticalLayout {
     in-out property <string> body <=> body-input.text;
     callback edited(bool, string);
     callback finish(bool);
-    callback hints(bool);
     callback tool(int);
     callback filter(string);
     callback new-note;
@@ -166,7 +162,6 @@ export component NotepadEditor inherits VerticalLayout {
     }
 
     function handle-key(event: KeyEvent, in-body: bool) -> EventResult {
-        root.hints(event.modifiers.control);
         if event.text == Key.Escape {
             if !event.repeat {
                 root.finish(false);
@@ -174,15 +169,11 @@ export component NotepadEditor inherits VerticalLayout {
             return accept;
         }
         if event.text == Key.Return && event.modifiers.control {
-            if !root.card || (root.editing && root.panel != 1 && root.can-save) { root.finish(true); }
+            if root.editing && root.panel != 1 && root.can-save { root.finish(true); }
             return accept;
         }
-        if !root.card && event.modifiers.control && event.modifiers.shift && (event.text == "c" || event.text == "C") {
-            root.tool(0);
-            return accept;
-        }
-        if root.card && root.panel == 0 && !root.editing && event.text == Key.F2 { root.tool(3); return accept; }
-        if root.card && event.modifiers.control && !event.modifiers.alt {
+        if root.panel == 0 && !root.editing && event.text == Key.F2 { root.tool(3); return accept; }
+        if event.modifiers.control && !event.modifiers.alt {
             if root.panel == 1 && (event.text == "n" || event.text == "N") { root.new-note(); return accept; }
             if event.text == "o" || event.text == "O" { root.tool(0); return accept; }
             if root.panel != 1 && root.editing && (event.text == "t" || event.text == "T") { root.tool(1); return accept; }
@@ -205,7 +196,7 @@ export component NotepadEditor inherits VerticalLayout {
         height: Theme.notepad-header-height;
         HorizontalLayout {
             spacing: Theme.gap;
-            if root.card && root.panel != 1: NotepadButton {
+            if root.panel != 1: NotepadButton {
                 y: (parent.height - self.height) / 2;
                 label: root.labels.back;
                 icon: root.back-icon; show-icon: true;
@@ -218,41 +209,36 @@ export component NotepadEditor inherits VerticalLayout {
                     text: root.viewer-open && root.viewed-title != "" ? root.viewed-title : root.heading;
                     font-size: Theme.day-head-size; font-weight: Theme.weight-semibold; color: Theme.strong; overflow: elide;
                 }
-                if !root.viewer-open && (root.panel == 1 || !root.card || (root.panel == 0 && root.editing)): Text {
+                if !root.viewer-open && (root.panel == 1 || (root.panel == 0 && root.editing)): Text {
                     text: root.date; font-size: Theme.small-size; color: Theme.muted; overflow: elide;
                 }
             }
-            if root.card && root.panel == 1: NotepadButton {
+            if root.panel == 1: NotepadButton {
                 y: (parent.height - self.height) / 2;
                 label: root.labels.new-note; primary: true;
                 clicked => { root.new-note(); }
             }
-            if root.card && root.panel == 0 && !root.viewer-open: NotepadButton {
+            if root.panel == 0 && !root.viewer-open: NotepadButton {
                 y: (parent.height - self.height) / 2;
                 label: root.editing ? root.labels.save-note : root.labels.edit-note;
                 primary: true; enabled: !root.editing || root.can-save;
                 clicked => { if root.editing { root.finish(true); } else { root.tool(3); } }
             }
-            if !root.card: NotepadButton {
-                y: (parent.height - self.height) / 2;
-                label: root.save-label; primary: true;
-                clicked => { root.finish(true); }
-            }
-            if !root.card || root.panel == 1: NotepadButton {
+            if root.panel == 1: NotepadButton {
                 y: (parent.height - self.height) / 2;
                 label: root.labels.exit;
                 clicked => { root.finish(false); }
             }
         }
     }
-    if root.card && root.panel == 0 && root.preview && !root.viewer-open: Text {
+    if root.panel == 0 && root.preview && !root.viewer-open: Text {
         height: self.preferred-height;
         text: root.title == "" ? root.labels.untitled : root.title;
         color: Theme.strong; font-size: Theme.notepad-title-size; font-weight: Theme.weight-semibold;
         wrap: word-wrap;
     }
     Rectangle {
-        visible: root.panel == 0 && (!root.card || !root.preview);
+        visible: root.panel == 0 && !root.preview;
         height: self.visible ? Theme.notepad-title-height : 0px;
         background: Theme.field-background;
         border-radius: Theme.field-radius;
@@ -270,14 +256,16 @@ export component NotepadEditor inherits VerticalLayout {
             font-family: Theme.write-font; font-size: Theme.form-size; color: Theme.strong;
             selection-background-color: Theme.selection; selection-foreground-color: Theme.strong;
             edited => { root.edited(false, self.text); }
-            key-pressed(event) => { root.handle-key(event, false) }
-            key-released(event) => { root.hints(event.modifiers.control); reject }
+            key-pressed(raw-event) => {
+                let event = KeyBindings.translate(ShortcutContext.notes, raw-event);
+                root.handle-key(event, false)
+            }
         }
     }
     if root.panel == 0 && !root.viewer-open: HorizontalLayout {
         spacing: Theme.gap;
-        alignment: root.card && !root.editing ? stretch : start;
-        if root.card && !root.editing: Text {
+        alignment: root.editing ? start : stretch;
+        if !root.editing: Text {
             text: root.date; color: Theme.muted; font-size: Theme.small-size;
             vertical-alignment: center; horizontal-stretch: 1; overflow: elide;
         }
@@ -315,8 +303,9 @@ export component NotepadEditor inherits VerticalLayout {
                 font-family: Theme.write-font; font-size: Theme.notepad-source-size; color: Theme.strong;
                 selection-background-color: Theme.selection; selection-foreground-color: Theme.strong;
                 edited => { root.edited(true, self.text); }
-                key-pressed(event) => {
-                    if root.card && !event.modifiers.control && !event.modifiers.alt && (event.text == Key.Tab || event.text == Key.Backtab) {
+                key-pressed(raw-event) => {
+                    let event = KeyBindings.translate(ShortcutContext.notes, raw-event);
+                    if !event.modifiers.control && !event.modifiers.alt && (event.text == Key.Tab || event.text == Key.Backtab) {
                         let edit = root.indent-edit(self.text, self.anchor-position-byte-offset, self.cursor-position-byte-offset,
                             event.modifiers.shift || event.text == Key.Backtab);
                         if edit.text != self.text {
@@ -326,7 +315,7 @@ export component NotepadEditor inherits VerticalLayout {
                         }
                         return accept;
                     }
-                    if root.card && event.text == Key.Return && !event.modifiers.control && !event.modifiers.shift && !event.modifiers.alt {
+                    if event.text == Key.Return && !event.modifiers.control && !event.modifiers.shift && !event.modifiers.alt {
                         let edit = root.continue-list(self.text, self.anchor-position-byte-offset, self.cursor-position-byte-offset);
                         if edit.cursor >= 0 {
                             self.text = edit.text;
@@ -337,7 +326,6 @@ export component NotepadEditor inherits VerticalLayout {
                     }
                     root.handle-key(event, true)
                 }
-                key-released(event) => { root.hints(event.modifiers.control); reject }
                 cursor-position-changed(position) => {
                     scroll.content-y = clamp(
                         max(min(scroll.content-y, -position.y), scroll.height - position.y - Theme.notepad-caret-room),
@@ -388,7 +376,10 @@ export component NotepadEditor inherits VerticalLayout {
                                 font-family: Theme.write-font; font-size: Theme.notepad-code-size; color: Theme.strong;
                                 accessible-label: block.language;
                                 selection-background-color: Theme.selection; selection-foreground-color: Theme.strong;
-                                key-pressed(event) => { root.handle-key(event, true) }
+                                key-pressed(raw-event) => {
+                                    let event = KeyBindings.translate(ShortcutContext.notes, raw-event);
+                                    root.handle-key(event, true)
+                                }
                             }
                         }
                         if !block.is-code: HorizontalLayout {
@@ -452,7 +443,8 @@ export component NotepadEditor inherits VerticalLayout {
             property <int> cursor: 0;
             property <int> link-index: -1;
             changed cursor => { self.link-index = -1; }
-            key-pressed(event) => {
+            key-pressed(raw-event) => {
+                let event = KeyBindings.translate(ShortcutContext.notes, raw-event);
                 if root.handle-key(event, true) == accept { return accept; }
                 if event.text == Key.UpArrow { self.cursor = max(0, self.cursor - 1); return accept; }
                 if event.text == Key.DownArrow { self.cursor = min(max(0, root.markdown.length - 1), self.cursor + 1); return accept; }
@@ -476,7 +468,6 @@ export component NotepadEditor inherits VerticalLayout {
                 }
                 reject
             }
-            key-released(event) => { root.hints(event.modifiers.control); reject }
         }
         VerticalLayout {
             visible: root.panel > 0 && !root.viewer-open;
@@ -503,7 +494,8 @@ export component NotepadEditor inherits VerticalLayout {
                         selection-background-color: Theme.selection; selection-foreground-color: Theme.strong;
                         accessible-label: root.panel-placeholder;
                         edited => { menu-list.cursor = 0; root.filter(self.text); }
-                        key-pressed(event) => {
+                        key-pressed(raw-event) => {
+                            let event = KeyBindings.translate(ShortcutContext.notes, raw-event);
                             if event.text == Key.Return && !event.modifiers.control {
                                 if root.panel == 3 && root.editing && self.text != "" { root.add-link(self.text); }
                                 else if menu-list.cursor < root.choices.length { root.choose(root.choices[menu-list.cursor].key); }
@@ -521,7 +513,6 @@ export component NotepadEditor inherits VerticalLayout {
                             }
                             reject
                         }
-                        key-released(event) => { root.hints(event.modifiers.control); reject }
                     }
                 }
                 if root.panel == 3 && root.editing: NotepadButton {
@@ -622,8 +613,5 @@ export component NotepadEditor inherits VerticalLayout {
                 reject
             }
         }
-    }
-    if root.show-hint: Text {
-        text: root.hint; color: Theme.placeholder; font-size: Theme.small-size; wrap: word-wrap;
     }
 }

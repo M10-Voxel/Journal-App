@@ -104,7 +104,11 @@ Ein Fehler steht rot direkt am betroffenen Feld, darunter in einer Zeile erklär
 | Strg+Q | J-TerminaL beenden |
 | Esc (ohne Optionen) | Feld zurücksetzen; dann Formular schließen (Entwurf verworfen); in der Suchleiste leeren, dann Fenster verstecken |
 
-Tasten-Hinweise erscheinen beim Halten von `Strg`; in offenen Optionen stehen ihre Tasten darunter. Es gibt keine Knöpfe; die Maus darf überall wählen.
+**F1** (Standard) oder das Zahnrad neben der Suche öffnet die Tastenkürzel-Übersicht. Tippen durchsucht alle Bereiche. Ohne Suchbegriff wechseln **↑/↓** den Bereich, **Bild↑/Bild↓** blättert, **Esc** schließt die Einstellungen.
+
+Klicke zum Ändern auf ein bearbeitbares Kürzel. Per Tastatur wechselst du mit **Tab** zu den Kürzeln, wählst mit **↑/↓** eine Aktion und drückst **Enter**. Drücke die neue Kombination oder verwirf die Aufnahme mit **Esc**. Der Rücksetzpfeil oder **Entf** auf dem ausgewählten Kürzel stellt die Standardbelegung wieder her.
+
+Änderungen gelten sofort und werden lokal für J-TerminaL gespeichert. Das gilt auch für das globale Kürzel zum Ein- und Ausblenden. Eine Kombination kann in verschiedenen Bereichen unterschiedliche Aktionen auslösen. Grundtasten für Navigation und Texteingabe bleiben fest belegt.
 
 ## Die Suchleiste (links oben)
 
@@ -143,7 +147,7 @@ Unter der Suchleiste steht der gewählte Tag, standardmäßig **heute**. Man kan
 - **Aktivitäten:** abgehakt oder mit Minuten in ihrer Farbe, dazu ihr **Timer**. Die Timer sind dieselben wie in der App (gemeinsam in der Datenbank). Timer anderer Tage stehen oben, solange sie existieren.
 - Rechts neben dem Datum: drei kleine Symbole für neue Termine, Aufgaben und Notizen, und wie weit der Tag von heute entfernt ist.
 
-**Tastatur** (Hinweise beim Halten von `Strg`):
+**Tastatur**
 
 | Taste | Wirkung |
 |---|---|
@@ -218,7 +222,7 @@ Nach dem Loslassen stehen Datum und Zeit im Formular, der Cursor springt in den 
 
 ## Noch nicht im Formular
 
-Bestehende Einträge suchen und bearbeiten (auch per Linksklick im Kalender), Wiederholung im Seitenfenster und der Journaltext folgen als eigene Stufen (siehe `docs/roadmap.md`).
+Bestehende Einträge suchen und bearbeiten (auch per Linksklick im Kalender) sowie Wiederholung im Seitenfenster folgen als eigene Stufen (siehe `docs/roadmap.md`).
 
 ## Notizblock
 
@@ -229,5 +233,3 @@ Bestehende Einträge suchen und bearbeiten (auch per Linksklick im Kalender), Wi
 - **Strg+T** öffnet beim Bearbeiten die Tag-Auswahl, **Strg+M** die Markdown-Vorschau. In Leseansicht und Vorschau wählen **↑/↓** eine Zeile und **←/→** einen Link aus. **Enter** oder ein Klick schaltet Checklisten um, folgt Links oder kopiert Code. In der Leseansicht werden geänderte Checklisten sofort gespeichert.
 - **Strg+L** zeigt die Anhänge. Beim Bearbeiten kannst du einen Link eingeben und mit **Enter** hinzufügen oder mit **Strg+I** ein Bild anhängen (PNG, JPEG oder WebP). Bilder erscheinen unter dem formatierten Text. Klick oder **Enter** auf ein ausgewähltes Bild öffnet es groß im Notizblock.
 - **Zurück** oder **Esc** kehrt zur vorherigen Ansicht zurück. Bei einem geänderten Entwurf bestätigt ein zweites Zurück oder Esc das Verwerfen. **Esc** in der Zettelliste schließt den Notizblock.
-
-Der frühere Tageseditor ist über **/Journaltext** erreichbar. **Als Zettel kopieren** oder **Strg+Umschalt+C** übernimmt seinen Inhalt in einen neuen Zettelentwurf.

@@ -14,7 +14,7 @@ Eigenes Rust-Programm (Slint-Oberfläche) zum schnellen Eintragen und Nachsehen 
 
 ## Konventionen
 - UI-Texte deutsch, englische Übersetzung in der eigenen Texttabelle.
-- **Bedienung:** alles vollständig per Tastatur, zusätzlich per Maus. Felder, Optionen und kompakte Aktionsflächen dürfen direkt anklickbar sein; keine zusätzlichen Buttonleisten. Die vollständige Mausbedienung ist in `docs/plan.md`, Abschnitt 0c, vorgemerkt. Hinweise nur beim Halten von `Strg`.
+- **Bedienung:** alles vollständig per Tastatur, zusätzlich per Maus. Felder, Optionen und kompakte Aktionsflächen dürfen direkt anklickbar sein; keine zusätzlichen Buttonleisten. Die vollständige Mausbedienung ist in `docs/plan.md`, Abschnitt 0c, vorgemerkt. Tastenkürzel stehen in den Einstellungen (`F1`).
 - Sofort da und sparsam: Ziel unter 20 MB RAM im Leerlauf, unter 50 ms bis zur Eingabe.
 - Farben, Abstände und Schriften nur im Theme (`ui/theme.slint`), nie direkt in Bauteilen.
 - Nie gegen echte Journal-Daten testen, nur gegen eine Test-Datenbank.

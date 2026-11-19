@@ -1,9 +1,13 @@
+import { KeyBindings, ShortcutContext, RoutedKey } from "key-bindings.slint";
+export { KeyBindings, ShortcutContext, RoutedKey }
 import { JournalIcons } from "journal-icons.slint";
 export { JournalIcons }
 import { NotepadEditor, NotepadAction, NotepadChoiceRow, NotepadMarkdownRow, NotepadTool, NotepadIndent, NotepadImage, NotepadLabels } from "notepad.slint";
 export { NotepadChoiceRow, NotepadMarkdownRow, NotepadTool, NotepadIndent, NotepadImage, NotepadLabels }
 import { Theme } from "theme.slint";
 export { Theme }
+import { ShortcutSettings, ShortcutRow, ShortcutLabels } from "shortcuts.slint";
+export { ShortcutRow, ShortcutLabels }
 import { Calendar, CalBand, CalBlock, CalChip, CalLane, CalTick } from "calendar.slint";
 export { CalBand, CalBlock, CalChip, CalLane, CalTick }
 // A command offered under the search bar.
@@ -125,7 +129,6 @@ export component Bar inherits Window {
     in property <[SentenceLine]> sentence;
     in property <string> panel-label;
     in property <string> panel-note;
-    in property <string> panel-hint;
     in property <string> clock-hours;
     in property <string> clock-minutes;
     in property <bool> clock-on-minutes;
@@ -133,7 +136,6 @@ export component Bar inherits Window {
     callback choice-clicked(int);
     callback sentence-clicked(int, int);
     // The calendar beside the form
-    in property <string> hint-calendar;
     in property <[CalBand]> cal-bands;
     in property <[CalBlock]> cal-blocks;
     in property <[CalChip]> cal-chips;
@@ -173,20 +175,16 @@ export component Bar inherits Window {
     callback command-chosen(int);
 
     in property <bool> notepad-open;
-    in property <bool> notepad-dirty;
     in property <string> notepad-heading;
     in property <string> notepad-date;
     in-out property <string> notepad-title;
     in-out property <string> notepad-body;
     in property <string> notepad-title-label;
     in property <string> notepad-body-label;
-    in property <string> notepad-hint;
-    in property <string> notepad-save-label;
     in property <NotepadLabels> notepad-labels;
     property <int> notepad-focus-request;
     in property <bool> notepad-editing;
     in property <bool> notepad-can-save;
-    in property <bool> notepad-card;
     in property <int> notepad-panel;
     in property <bool> notepad-preview;
     in property <[NotepadChoiceRow]> notepad-choices;
@@ -232,8 +230,6 @@ export component Bar inherits Window {
     in property <string> day-heading;
     in property <string> day-relative;
     in property <bool> day-is-today;
-    in property <string> day-back;
-    in property <string> hint-day;
     in property <[DayRow]> day-rows;
     in property <[DayRow]> day-footer-rows;
     in property <length> day-footer-height;
@@ -245,8 +241,6 @@ export component Bar inherits Window {
     in property <bool> day-message-is-error;
     in property <length> day-focus-y;
     in property <length> day-focus-h;
-    in property <string> hint-entries;
-    in property <string> hint-values;
     in property <image> icon-play;
     in property <image> icon-pause;
     in property <image> icon-stop;
@@ -286,7 +280,6 @@ export component Bar inherits Window {
     in property <string> side-text;
     in property <string> side-text-shown;
     in property <string> side-placeholder;
-    in property <string> side-hint;
     callback side-choose(int);
     callback side-edited(string);
     callback side-day(int);
@@ -296,14 +289,29 @@ export component Bar inherits Window {
     callback side-back();
     // The clock: a part clicked (steps 0) or turned with the wheel.
     callback side-clock(bool, int);
-    in property <string> hint-rows;
-    in property <string> hint-pick;
-    in property <string> hint-save;
-    in property <string> hint-undo;
-    private property <bool> hints;
+    in property <[string]> shortcut-groups;
+    in property <[ShortcutRow]> shortcut-rows;
+    in property <ShortcutLabels> shortcut-labels;
+    in property <image> settings-icon;
+    out property <bool> settings-open: settings-popup.is-open;
+    out property <bool> shortcut-recording;
+    callback shortcut-lookup(int, string);
+    callback shortcut-update(string, string, int) -> string;
+    callback shortcut-editable-row(int, int) -> int;
+    function open-settings() {
+        if !root.settings-open {
+            root.shortcut-recording = false;
+            root.shortcut-lookup(0, "");
+            settings-popup.show();
+        }
+    }
+    public function close-settings() {
+        if root.settings-open { settings-popup.close(); }
+        root.shortcut-recording = false;
+    }
     private property <length> value-x: Theme.padding + Theme.label-width;
     public function focus-input() { input.focus(); }
-    public function focus-line() { root.hints = false; if root.entry-open { input.focus(); input.select-all(); } else if root.notepad-open { root.focus-notepad(); } else { search.focus(); } }
+    public function focus-line() { if root.entry-open { input.focus(); input.select-all(); } else if root.notepad-open { root.focus-notepad(); } else { search.focus(); } }
     public function focus-notepad() { root.notepad-focus-request += 1; }
     public function focus-entry() { input.focus(); input.select-all(); }
     public function focus-search() { search.focus(); }
@@ -349,7 +357,12 @@ export component Bar inherits Window {
     default-font-family: Theme.ui-font;
     FocusScope {
         x: 0px; y: 0px; width: root.width; height: root.height;
-        capture-key-pressed(event) => {
+        capture-key-pressed(raw-event) => {
+            let event = KeyBindings.translate(ShortcutContext.window, raw-event);
+            if event.text == Key.F1 && !root.settings-open {
+                if !event.repeat { root.open-settings(); }
+                return accept;
+            }
             if event.modifiers.control && event.modifiers.shift && !event.modifiers.alt &&
                 (event.text == "n" || event.text == "N") {
                 if !event.repeat { root.open-notepad(); }
@@ -453,8 +466,8 @@ export component Bar inherits Window {
                     init => { if self.open { self.focus(); } }
                     changed open => { if self.open { self.focus(); } }
                     edited => { root.side-edited(self.text); }
-                    key-pressed(event) => {
-                        root.hints = event.modifiers.control;
+                    key-pressed(raw-event) => {
+                        let event = KeyBindings.translate(ShortcutContext.side, raw-event);
                         if event.text == Key.Control || event.text == Key.Shift || event.text == Key.Alt || event.text == Key.Meta { return reject; }
                         if event.text == Key.Return || event.text == Key.Escape || event.text == Key.UpArrow || event.text == Key.DownArrow || (event.modifiers.control && event.text == Key.Delete)
                             || ((event.text == Key.LeftArrow || event.text == Key.RightArrow) && self.text == "") {
@@ -463,7 +476,6 @@ export component Bar inherits Window {
                         }
                         reject
                     }
-                    key-released(event) => { root.hints = event.modifiers.control; reject }
                 }
             }
             if root.side-kind == 2: Rectangle {
@@ -557,15 +569,12 @@ export component Bar inherits Window {
                     changed open => { if self.open { self.focus(); } }
                     edited => { root.side-edited(self.text); }
                     key-pressed(event) => {
-                        root.hints = event.modifiers.control;
                         if event.text == Key.Escape { root.day-key(event.text, 0); return accept; }
                         reject
                     }
-                    key-released(event) => { root.hints = event.modifiers.control; reject }
                 }
             }
             if root.side-kind == 4 || root.side-kind == 5 || root.side-kind == 2 || root.side-kind == 6: Rectangle { vertical-stretch: 1; }
-            if root.hints && root.side-hint != "": Text { text: root.side-hint; color: Theme.placeholder; font-size: Theme.small-size; wrap: word-wrap; }
         }
         }
         Rectangle {
@@ -581,11 +590,11 @@ export component Bar inherits Window {
         y: root.side-height;
         height: root.pane-height; width: root.form-space;
         spacing: 0px;
-        // The search bar and the shortcut to the current day's notepad.
+        // The search bar and its shortcuts to settings and the notepad.
         Rectangle {
             visible: !root.notepad-open;
             height: root.notepad-open ? 0px : Theme.line-height;
-            property <length> shortcut-space: root.entry-open ? 0px : Theme.day-symbol-box + Theme.gap;
+            property <length> shortcut-space: (Theme.day-symbol-box + Theme.gap) * (root.entry-open ? 1 : 2);
             Rectangle {
                 x: Theme.padding; y: (parent.height - Theme.search-height) / 2;
                 width: parent.width - Theme.padding * 2 - parent.shortcut-space; height: Theme.search-height;
@@ -606,8 +615,8 @@ export component Bar inherits Window {
                 vertical-alignment: center; single-line: true;
                 color: Theme.strong; selection-background-color: Theme.selection; selection-foreground-color: Theme.strong; font-size: Theme.form-size;
                 edited => { root.search-edited(self.text); }
-                key-pressed(event) => {
-                    root.hints = event.modifiers.control;
+                key-pressed(raw-event) => {
+                    let event = KeyBindings.translate(ShortcutContext.search, raw-event);
                     // Modifier keys alone do nothing (their codes are control characters too).
                     if event.text == Key.Control || event.text == Key.Shift || event.text == Key.Alt || event.text == Key.Meta { return reject; }
                     if event.text == Key.F6 { root.form-key(15, 0); return accept; }
@@ -629,7 +638,13 @@ export component Bar inherits Window {
                     }
                     reject
                 }
-                key-released(event) => { root.hints = event.modifiers.control; reject }
+            }
+            NotepadAction {
+                x: parent.width - Theme.padding - self.width - (root.entry-open ? 0px : Theme.day-symbol-box + Theme.gap);
+                y: (parent.height - self.height) / 2;
+                icon: root.settings-icon;
+                label: root.shortcut-labels.settings;
+                clicked => { root.open-settings(); }
             }
             if !root.entry-open: NotepadAction {
                 x: parent.width - Theme.padding - self.width;
@@ -649,14 +664,6 @@ export component Bar inherits Window {
                 Text { text: command.detail; color: Theme.muted; font-size: Theme.small-size; vertical-alignment: center; horizontal-stretch: 1; overflow: elide; }
             }
             command-hit := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.command-chosen(index); } }
-        }
-        // A fixed height (the wrapped text's at its width): only the day view takes the room that is left.
-        if root.hints && !root.entry-open && !root.notepad-open: Rectangle {
-            height: search-hint.preferred-height + Theme.gap;
-            search-hint := Text {
-                x: Theme.padding; width: parent.width - Theme.padding * 2;
-                text: root.hint-day + "\n" + root.hint-calendar + "\n" + root.hint-undo; color: Theme.placeholder; font-size: Theme.small-size; wrap: word-wrap;
-            }
         }
         Rectangle { height: Theme.border-width; background: Theme.divider; }
         // ----- The entry form, under the search bar while open -----
@@ -781,8 +788,8 @@ export component Bar inherits Window {
                         if pos.x + self.x < 0px { self.x = -pos.x; }
                         if pos.x + self.x > input-area.width - Theme.gap { self.x = input-area.width - Theme.gap - pos.x; }
                     }
-                    key-pressed(event) => {
-                        root.hints = event.modifiers.control;
+                    key-pressed(raw-event) => {
+                        let event = KeyBindings.translate(ShortcutContext.form, raw-event);
                         if event.text == Key.Control || event.text == Key.Shift || event.text == Key.Alt || event.text == Key.Meta { return reject; }
                         if event.text == Key.F6 { root.form-key(15, 0); return accept; }
                         if event.text == Key.Tab || event.text == Key.Backtab { root.form-key(0, root.mods(event.modifiers.shift || event.text == Key.Backtab, event.modifiers.control, event.modifiers.alt)); return accept; }
@@ -815,7 +822,6 @@ export component Bar inherits Window {
                         if !root.editable { return accept; }
                         reject
                     }
-                    key-released(event) => { root.hints = event.modifiers.control; reject }
                 }
             }
         }
@@ -949,15 +955,7 @@ export component Bar inherits Window {
                 }
             }
             if root.panel-note != "": Text { text: root.panel-note; color: Theme.muted; font-size: Theme.small-size; }
-            if root.hints: Text { text: root.panel-hint; color: Theme.placeholder; font-size: Theme.small-size; wrap: word-wrap; }
             }
-            }
-        }
-        if root.entry-open && root.hints: HorizontalLayout {
-            padding: Theme.padding; padding-top: Theme.gap; padding-bottom: Theme.gap;
-            Text {
-                text: root.hint-rows + "\n" + root.hint-pick + "\n" + root.hint-calendar + "\n" + root.hint-save + "\n" + root.hint-undo;
-                color: Theme.placeholder; font-size: Theme.small-size; wrap: word-wrap;
             }
         }
         if root.notepad-open: NotepadEditor {
@@ -966,11 +964,8 @@ export component Bar inherits Window {
             title <=> root.notepad-title;
             body <=> root.notepad-body;
             title-label: root.notepad-title-label; body-label: root.notepad-body-label;
-            hint: root.notepad-hint; show-hint: root.hints;
-            save-label: root.notepad-save-label;
             labels: root.notepad-labels; editing: root.notepad-editing; can-save: root.notepad-can-save;
             back-icon: root.icon-back; focus-request: root.notepad-focus-request;
-            card: root.notepad-card;
             panel: root.notepad-panel; preview: root.notepad-preview;
             choices: root.notepad-choices; markdown: root.notepad-markdown; tools: root.notepad-tools;
             panel-placeholder: root.notepad-panel-placeholder; panel-empty: root.notepad-panel-empty;
@@ -996,7 +991,6 @@ export component Bar inherits Window {
             follow(url) => { root.notepad-follow(url); }
             edited(body, text) => { root.notepad-edited(body, text); }
             finish(save) => { root.notepad-finish(save); }
-            hints(control) => { root.hints = control; }
         }
         // The journal entries and values have their own view.
         if !root.entry-open && !root.notepad-open: VerticalLayout {
@@ -1031,14 +1025,6 @@ export component Bar inherits Window {
                         }
                         TouchArea { clicked => { if !root.day-is-today { root.day-today(); } } }
                     }
-                }
-            }
-            if root.hints: Rectangle {
-                height: day-hint.preferred-height + Theme.gap;
-                day-hint := Text {
-                    x: Theme.padding; width: parent.width - Theme.padding * 2;
-                    text: (root.day-is-today ? "" : root.day-back + "\n") + root.hint-entries + "\n" + root.hint-values;
-                    color: Theme.placeholder; font-size: Theme.small-size; wrap: word-wrap;
                 }
             }
             if root.day-message != "": Rectangle {
@@ -1107,8 +1093,8 @@ export component Bar inherits Window {
                                     font-family: Theme.write-font; font-size: Theme.write-size;
                                     init => { self.focus(); self.select-all(); }
                                     edited => { root.day-edited(self.text); }
-                                    key-pressed(event) => {
-                                        root.hints = event.modifiers.control;
+                                    key-pressed(raw-event) => {
+                                        let event = KeyBindings.translate(ShortcutContext.day-edit, raw-event);
                                         if event.text == Key.Control || event.text == Key.Shift || event.text == Key.Alt || event.text == Key.Meta { return reject; }
                                         if event.text == Key.Return || event.text == Key.Escape || event.text == Key.UpArrow || event.text == Key.DownArrow || event.text == Key.Tab || event.text == Key.Backtab
                                             || (event.text == Key.Backspace && self.text == "") || event.modifiers.alt {
@@ -1117,7 +1103,6 @@ export component Bar inherits Window {
                                         }
                                         reject
                                     }
-                                    key-released(event) => { root.hints = event.modifiers.control; reject }
                                 }
                             }
                             if row.detail != "" && !row.editing: Rectangle {
@@ -1142,8 +1127,8 @@ export component Bar inherits Window {
                                 font-family: Theme.write-font; font-size: Theme.form-size;
                                 init => { self.focus(); self.select-all(); }
                                 edited => { root.day-edited(self.text); }
-                                key-pressed(event) => {
-                                    root.hints = event.modifiers.control;
+                                key-pressed(raw-event) => {
+                                    let event = KeyBindings.translate(ShortcutContext.day-edit, raw-event);
                                     if event.text == Key.Control || event.text == Key.Shift || event.text == Key.Alt || event.text == Key.Meta { return reject; }
                                     if event.text == Key.Return || event.text == Key.Escape || event.text == Key.UpArrow || event.text == Key.DownArrow || event.text == Key.Tab || event.text == Key.Backtab || event.modifiers.alt {
                                         root.day-key(event.text, root.mods(event.modifiers.shift, event.modifiers.control, event.modifiers.alt));
@@ -1151,7 +1136,6 @@ export component Bar inherits Window {
                                     }
                                     reject
                                 }
-                                key-released(event) => { root.hints = event.modifiers.control; reject }
                             }
                         }
                         if row.kind == 3 || row.kind == 6: DayActivity {
@@ -1290,13 +1274,12 @@ export component Bar inherits Window {
     }
     day-scope := FocusScope {
         width: 0px; height: 0px;
-        key-pressed(event) => {
-            root.hints = event.modifiers.control;
+        key-pressed(raw-event) => {
+            let event = KeyBindings.translate(root.side-open ? ShortcutContext.side : ShortcutContext.day, raw-event);
             if event.text == Key.Control || event.text == Key.Shift || event.text == Key.Alt || event.text == Key.Meta { return reject; }
             root.day-key(event.text, root.mods(event.modifiers.shift, event.modifiers.control, event.modifiers.alt));
             accept
         }
-        key-released(event) => { root.hints = event.modifiers.control; reject }
     }
     Rectangle {
         border-radius: Theme.radius;
@@ -1311,6 +1294,24 @@ export component Bar inherits Window {
         border-radius: Theme.radius - Theme.frame-inset;
         border-color: Theme.border;
         border-width: Theme.frame-stroke;
+    }
+    settings-popup := PopupWindow {
+        x: 0px; y: 0px;
+        width: root.width; height: root.height;
+        close-policy: no-auto-close;
+        ShortcutSettings {
+            width: parent.width; height: parent.height;
+            groups: root.shortcut-groups;
+            rows: root.shortcut-rows;
+            labels: root.shortcut-labels;
+            search-icon: root.search-icon;
+            close-icon: root.icon-close;
+            lookup(group, query) => { root.shortcut-lookup(group, query); }
+            dismiss => { root.close-settings(); }
+            update-binding(id, text, mask) => { root.shortcut-update(id, text, mask) }
+            editable-row(index, direction) => { root.shortcut-editable-row(index, direction) }
+            capture-changed(recording) => { root.shortcut-recording = recording; }
+        }
     }
     }
 }

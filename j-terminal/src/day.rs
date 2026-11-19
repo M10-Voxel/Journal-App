@@ -84,7 +84,6 @@ pub struct SidePanel {
     pub confirm: String,
     pub text: String,
     pub placeholder: String,
-    pub hint: String,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -766,7 +765,7 @@ impl DayPane {
         match &side.view {
             SideView::Actions => {
                 panel.kind = 0;
-                panel.hint = dt.hint_side.into();
+
                 panel.rows = Self::actions(&entry).into_iter().enumerate().map(|(i, action)| {
                     let (icon, label, value, on): (&str, &str, String, bool) = match action {
                         Action::Status => ("journal-done", dt.status, (if entry.done { dt.status_done } else if entry.cancelled { dt.status_cancelled } else { dt.status_open }).into(), entry.done),
@@ -787,29 +786,29 @@ impl DayPane {
                 }).collect();
             }
             SideView::Tags => {
-                panel.kind = 1; panel.heading = dt.tag.into(); panel.heading_icon = "tag"; panel.hint = dt.hint_list.into();
+                panel.kind = 1; panel.heading = dt.tag.into(); panel.heading_icon = "tag";
                 panel.rows = std::iter::once(SideRow { icon: String::new(), label: ft.no_tag.into(), selected: side.pick == 0, on: entry.tag.is_none(), ..SideRow::default() })
                     .chain(tags.iter().enumerate().map(|(i, t)| SideRow { icon: t.icon.clone().filter(|n| icons::exists(n)).unwrap_or_default(), label: t.name.clone(), selected: side.pick == i + 1, on: entry.tag.as_ref() == Some(&t.id), color: crate::calendar::parse_color(&t.color), ..SideRow::default() })).collect();
             }
             SideView::Reminders => {
-                panel.kind = 3; panel.heading = dt.reminder.into(); panel.heading_icon = "bell"; panel.hint = dt.hint_list.into();
+                panel.kind = 3; panel.heading = dt.reminder.into(); panel.heading_icon = "bell";
                 panel.rows = ft.reminder_presets.iter().enumerate().map(|(i, label)| SideRow { label: label.to_string(), selected: side.pick == i, on: REMINDERS[i] == entry.reminder.then_some(entry.reminder_before), ..SideRow::default() }).collect();
             }
             SideView::Icons => {
-                panel.kind = 2; panel.heading = dt.icon.into(); panel.heading_icon = "image"; panel.hint = dt.hint_icons.into(); panel.text = self.side_text.clone(); panel.placeholder = dt.icon_search.into();
+                panel.kind = 2; panel.heading = dt.icon.into(); panel.heading_icon = "image"; panel.text = self.side_text.clone(); panel.placeholder = dt.icon_search.into();
                 panel.rows = self.icons_found().into_iter().enumerate().map(|(i, name)| SideRow { icon: name.into(), label: name.into(), selected: side.pick == i, on: entry.icon.as_deref() == Some(name), ..SideRow::default() }).collect();
             }
             SideView::Description => {
-                panel.kind = 6; panel.heading = dt.description.into(); panel.heading_icon = "text-quote"; panel.hint = dt.hint_description.into(); panel.text = self.side_text.clone(); panel.placeholder = dt.description_placeholder.into();
+                panel.kind = 6; panel.heading = dt.description.into(); panel.heading_icon = "text-quote"; panel.text = self.side_text.clone(); panel.placeholder = dt.description_placeholder.into();
             }
             SideView::Time { minutes, on_minutes, .. } => {
-                panel.kind = 4; panel.heading = dt.time.into(); panel.heading_icon = "clock"; panel.hint = dt.hint_clock.into();
+                panel.kind = 4; panel.heading = dt.time.into(); panel.heading_icon = "clock";
                 let value = minutes.unwrap_or(((cx_hour(cx) + 1) % 24) * 60);
                 panel.clock = (format!("{:02}", value / 60), format!("{:02}", value % 60), *on_minutes);
             }
             SideView::Plan { multi, cursor, picked } => {
                 panel.kind = 5; panel.heading = if *multi { dt.plan_days } else { dt.plan }.into(); panel.heading_icon = if *multi { "calendar-range" } else { "calendar-arrow-up" };
-                panel.hint = if *multi { dt.hint_plan_days } else { dt.hint_plan }.into();
+
                 let t = texts(cx.language);
                 panel.month = format!("{} {}", t.months[cursor.month0() as usize], cursor.year());
                 panel.weekdays = dt.weekdays.iter().map(|w| w.chars().take(2).collect()).collect();

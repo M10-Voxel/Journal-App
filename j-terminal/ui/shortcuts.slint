@@ -1,0 +1,310 @@
+import { Theme } from "theme.slint";
+import { KeyBindings, ShortcutContext } from "key-bindings.slint";
+import { JournalIcons } from "journal-icons.slint";
+
+export struct ShortcutRow { id: string, heading: string, action: string, keys: string, changed: bool }
+export struct ShortcutLabels {
+    settings: string, title: string, search: string, empty: string, close: string,
+    record: string, reset: string, change: string,
+}
+
+export component ShortcutSettings inherits FocusScope {
+    in property <[string]> groups;
+    in property <[ShortcutRow]> rows;
+    in property <ShortcutLabels> labels;
+    in property <image> search-icon;
+    in property <image> close-icon;
+    private property <int> group;
+    private property <int> selected: -1;
+    private property <string> recording;
+    private property <string> recording-action;
+    private property <string> error;
+    callback lookup(int, string);
+    callback dismiss;
+    callback update-binding(string, string, int) -> string;
+    callback capture-changed(bool);
+    callback editable-row(int, int) -> int;
+
+    function choose(group: int) {
+        root.stop-recording();
+        root.group = group;
+        root.selected = -1;
+        root.error = "";
+        search.text = "";
+        list.content-y = 0px;
+        root.lookup(group, "");
+        search.focus();
+    }
+
+    function edit-row(row: ShortcutRow) {
+        if row.id == "" { return; }
+        root.recording = row.id;
+        root.recording-action = row.action;
+        root.error = "";
+        root.capture-changed(true);
+        search.focus();
+    }
+
+    function stop-recording() {
+        root.recording = "";
+        root.error = "";
+        root.capture-changed(false);
+    }
+
+    function save-key(id: string, text: string, mask: int) {
+        root.error = root.update-binding(id, text, mask);
+        if root.error == "" {
+            root.stop-recording();
+            root.lookup(root.group, search.text);
+        }
+    }
+
+    function select(index: int, direction: int) {
+        let candidate = root.editable-row(index, direction);
+        if candidate >= 0 { root.selected = candidate; }
+    }
+
+    init => { search.focus(); }
+    capture-key-pressed(raw-event) => {
+        if root.recording != "" {
+            if raw-event.text == Key.Escape {
+                if !raw-event.repeat { root.stop-recording(); }
+            } else if !raw-event.repeat && raw-event.text != Key.Control && raw-event.text != Key.Shift
+                && raw-event.text != Key.Alt && raw-event.text != Key.Meta {
+                root.save-key(root.recording, raw-event.text, KeyBindings.modifier-mask(raw-event));
+            }
+            return accept;
+        }
+        let event = KeyBindings.translate(ShortcutContext.window, raw-event);
+        if event.text == Key.F1 || event.text == Key.Escape {
+            if !event.repeat { root.dismiss(); }
+            return accept;
+        }
+        if event.text == Key.PageUp || event.text == Key.PageDown {
+            let step = event.text == Key.PageUp ? list.height : -list.height;
+            list.content-y = clamp(list.content-y + step, min(0px, list.height - list.content-height), 0px);
+            return accept;
+        }
+        if raw-event.text == Key.UpArrow || raw-event.text == Key.DownArrow {
+            if root.selected >= 0 {
+                let step = raw-event.text == Key.UpArrow ? -1 : 1;
+                root.select(root.selected + step, step);
+            } else if search.text == "" && root.groups.length > 0 {
+                let step = event.text == Key.UpArrow ? -1 : 1;
+                root.choose(Math.mod(root.group + step + root.groups.length, root.groups.length));
+            } else {
+                let step = event.text == Key.UpArrow ? Theme.row-height : -Theme.row-height;
+                list.content-y = clamp(list.content-y + step, min(0px, list.height - list.content-height), 0px);
+            }
+            return accept;
+        }
+        if raw-event.text == Key.Tab || raw-event.text == Key.Backtab {
+            if root.selected < 0 { root.select(0, 1); }
+            else { root.selected = -1; }
+            search.focus();
+            return accept;
+        }
+        if raw-event.text == Key.Return && !raw-event.repeat {
+            if root.selected < 0 { root.select(0, 1); }
+            if root.selected >= 0 && root.selected < root.rows.length { root.edit-row(root.rows[root.selected]); }
+            return accept;
+        }
+        if raw-event.text == Key.Delete && root.selected >= 0 && root.selected < root.rows.length
+            && root.rows[root.selected].changed {
+            root.save-key(root.rows[root.selected].id, "", 0);
+            return accept;
+        }
+        reject
+    }
+
+    Rectangle {
+        width: parent.width;
+        height: parent.height;
+        border-radius: Theme.radius;
+        background: Theme.settings-scrim;
+        TouchArea { clicked => { root.dismiss(); } }
+    }
+
+    Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: min(parent.width - Theme.gap * 2, Theme.settings-width);
+        height: min(parent.height - Theme.gap * 2, Theme.settings-height);
+        background: Theme.background;
+        border-color: Theme.border;
+        border-width: Theme.border-width;
+        border-radius: Theme.radius;
+        clip: true;
+        accessible-role: groupbox;
+        accessible-label: root.labels.settings;
+        TouchArea {}
+
+        VerticalLayout {
+            width: parent.width; height: parent.height;
+            padding: Theme.padding;
+            spacing: Theme.gap;
+            HorizontalLayout {
+                spacing: Theme.gap;
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    Text { text: root.labels.settings; color: Theme.muted; font-size: Theme.small-size; }
+                    Text { text: root.labels.title; color: Theme.strong; font-size: Theme.notepad-title-size; font-weight: Theme.weight-semibold; }
+                }
+                Rectangle {
+                    width: Theme.search-height; height: self.width;
+                    y: (parent.height - self.height) / 2;
+                    border-radius: Theme.block-radius;
+                    background: close-hit.has-hover ? Theme.hover : Theme.inset;
+                    accessible-role: button;
+                    accessible-label: root.labels.close;
+                    accessible-action-default => { root.dismiss(); }
+                    Image {
+                        width: Theme.label-icon-size; height: self.width;
+                        x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2;
+                        source: root.close-icon; colorize: Theme.text;
+                    }
+                    close-hit := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.dismiss(); } }
+                }
+            }
+            Rectangle {
+                height: Theme.search-height;
+                background: Theme.field-background;
+                border-radius: Theme.field-radius;
+                border-width: Theme.border-width;
+                border-color: search.has-focus ? Theme.field-focus : Theme.edge;
+                Image {
+                    x: Theme.field-inset; y: (parent.height - self.height) / 2;
+                    width: Theme.search-icon-size; height: self.width;
+                    source: root.search-icon; colorize: Theme.muted;
+                }
+                if search.text == "": Text {
+                    x: search.x; width: search.width; height: parent.height;
+                    text: root.labels.search; color: Theme.muted; font-size: Theme.row-size; vertical-alignment: center;
+                }
+                search := TextInput {
+                    x: Theme.field-inset + Theme.search-icon-size + Theme.gap;
+                    width: parent.width - self.x - Theme.field-inset; height: parent.height;
+                    single-line: true; vertical-alignment: center;
+                    accessible-label: root.labels.search;
+                    font-size: Theme.row-size; color: Theme.strong;
+                    selection-background-color: Theme.selection; selection-foreground-color: Theme.strong;
+                    edited => { root.selected = -1; root.error = ""; list.content-y = 0px; root.lookup(root.group, self.text); }
+                }
+            }
+            if root.recording != "" || root.error != "": Text {
+                text: root.error != "" ? root.error : root.labels.record + " · " + root.recording-action;
+                color: root.error != "" ? Theme.error : Theme.accent;
+                wrap: word-wrap; font-size: Theme.row-size;
+            }
+            HorizontalLayout {
+                vertical-stretch: 1;
+                spacing: Theme.gap;
+                Flickable {
+                    width: min(Theme.settings-navigation-width, parent.width * Theme.settings-navigation-share);
+                    min-height: 0px; max-height: Theme.settings-height;
+                    content-width: self.width;
+                    content-height: categories.preferred-height;
+                    categories := VerticalLayout {
+                        width: parent.width; height: self.preferred-height;
+                        for name[i] in root.groups: Rectangle {
+                            height: Theme.row-height;
+                            border-radius: Theme.block-radius;
+                            background: root.group == i && search.text == "" ? Theme.chip-selected : category-hit.has-hover ? Theme.hover : transparent;
+                            accessible-role: button;
+                            accessible-label: name;
+                            accessible-action-default => { root.choose(i); }
+                            Text {
+                                x: Theme.field-inset; width: parent.width - 2 * self.x;
+                                text: name; color: root.group == i && search.text == "" ? Theme.chip-selected-text : Theme.text;
+                                font-size: Theme.row-size; overflow: elide; vertical-alignment: center;
+                            }
+                            category-hit := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.choose(i); } }
+                        }
+                    }
+                }
+                Rectangle {
+                    horizontal-stretch: 1;
+                    background: Theme.inset;
+                    border-radius: Theme.block-radius;
+                    list := Flickable {
+                        x: Theme.field-inset; y: Theme.field-inset;
+                        width: parent.width - 2 * self.x; height: parent.height - 2 * self.y;
+                        content-width: self.width;
+                        content-height: entries.preferred-height;
+                        entries := VerticalLayout {
+                            width: parent.width; height: self.preferred-height;
+                            for row[i] in root.rows: shortcut := VerticalLayout {
+                                property <bool> focused: i == root.selected;
+                                changed focused => {
+                                    if self.focused {
+                                        list.content-y = clamp(
+                                            max(min(list.content-y, -self.y), list.height - self.y - self.height),
+                                            min(0px, list.height - list.content-height), 0px
+                                        );
+                                    }
+                                }
+                                if search.text != "" && row.heading != "": Text {
+                                    height: Theme.row-height; vertical-alignment: center;
+                                    text: row.heading; color: Theme.accent; font-size: Theme.label-size; font-weight: Theme.weight-semibold;
+                                }
+                                HorizontalLayout {
+                                    padding-top: Theme.gap; padding-bottom: Theme.gap;
+                                    spacing: Theme.gap;
+                                    Text {
+                                        text: row.action; wrap: word-wrap; vertical-alignment: center;
+                                        color: shortcut.focused ? Theme.accent : Theme.strong; font-size: Theme.row-size; horizontal-stretch: 1;
+                                    }
+                                    if row.changed: Rectangle {
+                                        width: Theme.label-icon-size + Theme.gap;
+                                        height: self.width;
+                                        y: (parent.height - self.height) / 2;
+                                        border-radius: Theme.block-radius;
+                                        background: reset-hit.has-hover ? Theme.hover : transparent;
+                                        accessible-role: button;
+                                        accessible-label: root.labels.reset;
+                                        accessible-action-default => { root.save-key(row.id, "", 0); }
+                                        Image {
+                                            x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2;
+                                            width: Theme.label-icon-size; height: self.width;
+                                            source: JournalIcons.undo-icon; colorize: reset-hit.has-hover ? Theme.accent : Theme.muted;
+                                        }
+                                        reset-hit := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.save-key(row.id, "", 0); } }
+                                    }
+                                    Rectangle {
+                                        width: min(key-label.preferred-width + Theme.field-inset * 2, parent.width * Theme.settings-keys-share);
+                                        height: key-label.preferred-height + Theme.gap;
+                                        y: (parent.height - self.height) / 2;
+                                        background: row.id != "" && (root.recording == row.id || key-hit.has-hover)
+                                            ? Theme.chip-selected : Theme.background;
+                                        border-width: Theme.border-width; border-color: shortcut.focused ? Theme.field-focus : Theme.edge;
+                                        border-radius: Theme.block-radius;
+                                        accessible-role: button;
+                                        accessible-enabled: row.id != "";
+                                        accessible-label: root.labels.change + " · " + row.action + " · " + row.keys;
+                                        accessible-action-default => { root.selected = i; root.edit-row(row); }
+                                        key-label := Text {
+                                            x: Theme.field-inset; width: parent.width - 2 * self.x;
+                                            text: row.keys; wrap: word-wrap; vertical-alignment: center; horizontal-alignment: center;
+                                            color: row.id != "" ? Theme.chip-selected-text : Theme.text;
+                                            font-size: Theme.small-size; font-family: Theme.write-font;
+                                        }
+                                        key-hit := TouchArea {
+                                            enabled: row.id != "";
+                                            mouse-cursor: MouseCursor.pointer;
+                                            clicked => { root.selected = i; root.edit-row(row); }
+                                        }
+                                    }
+                                }
+                                Rectangle { height: Theme.border-width; background: Theme.divider; }
+                            }
+                            if root.rows.length == 0: Text {
+                                height: Theme.row-height; vertical-alignment: center;
+                                text: root.labels.empty; color: Theme.muted; font-size: Theme.row-size; wrap: word-wrap;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
