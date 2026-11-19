@@ -185,10 +185,51 @@ const bootstrap = `
     if (command === 'drive_apply') {sessionStorage.setItem('driveApplied',JSON.stringify(payload.snapshot));return null;}
 
     // Activities bring their own tags; the tag checks start without any (localStorage 'test.noActivities').
-    if (command === 'load_period_data') return JSON.stringify({ definitions:localStorage.getItem('test.noActivities') ? [] : [{id:'reading',name:'Lesen',trackTime:!localStorage.getItem('test.activitySizes')},{id:'sport',name:'Sport'},...(localStorage.getItem('test.activitySizes')?[{id:'binary-extra',name:'Magnesium',trackTime:false}]:[])], notes:{}, ...(localStorage.getItem('test.scales') ? { scales:JSON.parse(localStorage.getItem('test.scales')) } : {}),
+    // What was saved comes back (as from the database); before that the fixture.
+    if (command === 'load_period_data') return JSON.stringify(window.__uiTest.periodData ?? { definitions:localStorage.getItem('test.noActivities') ? [] : [{id:'reading',name:'Lesen',trackTime:!localStorage.getItem('test.activitySizes')},{id:'sport',name:'Sport'},...(localStorage.getItem('test.activitySizes')?[{id:'binary-extra',name:'Magnesium',trackTime:false}]:[])], notes:{}, ...(localStorage.getItem('test.scales') ? { scales:JSON.parse(localStorage.getItem('test.scales')) } : {}),
       // With day values (test.scales): the first on every day, the second (0–20) with a gap every third day.
       days:Object.fromEntries(Array.from({length:28},(_,i)=>{ const scales=JSON.parse(localStorage.getItem('test.scales') ?? '[]'); return [shift(-i),{rating:i%4===0?undefined:4+i%7,...(scales.length && i>0 ? { scales:{ [scales[0].id]:i%5*2, ...(i%3===1 ? {} : { [scales[1].id]:20-i%9 }) } } : {}),items:{reading:{done:i%2===0,minutes:30},sport:{done:i%3===0,minutes:45}}}]; })) });
     if (command === 'save_period_data') { if (window.__uiTest.failPeriodSave) { window.__uiTest.failPeriodSave=false; throw new Error('Timer save test failure'); } window.__uiTest.periodData=JSON.parse(payload.data); return; }
+    // The activity timers, as journal-core keeps them in the database (timers.rs): start ticks, stop writes the calendar.
+    if (command.endsWith('activity_timers') || command.endsWith('activity_timer')) return (async () => {
+      const timers = JSON.parse(localStorage.getItem('test.activityTimers') || '{}');
+      const store = () => { localStorage.setItem('test.activityTimers', JSON.stringify(timers)); return structuredClone(timers); };
+      const period = async () => window.__uiTest.periodData ?? JSON.parse(await window.__TAURI_INTERNALS__.invoke('load_period_data'));
+      const tick = (data, day, id) => { const record = data.days[day] ?? { items:{} }; return { ...data, days:{ ...data.days, [day]:{ ...record, items:{ ...record.items, [id]:{ ...record.items?.[id], done:true } } } } }; };
+      const paused = (timer, now) => timer.startedAt == null ? timer : { ...timer, startedAt:null, elapsedMs:timer.elapsedMs + Math.max(0, now - timer.startedAt), segments:now > timer.startedAt ? [...timer.segments, { start:timer.startedAt, end:now }] : timer.segments };
+      const key = payload?.date + ':' + payload?.activity, now = Date.now();
+      if (command === 'load_activity_timers') return structuredClone(timers);
+      if (command === 'adopt_activity_timers') { for (const [name, timer] of Object.entries(payload.timers)) timers[name] ??= timer; return store(); }
+      if (command === 'start_activity_timer') {
+        if (timers[key]?.startedAt == null) {
+          timers[key] = { ...(timers[key] ?? { id:crypto.randomUUID(), tagId:payload.calendarTagId ?? crypto.randomUUID(), elapsedMs:0, segments:[] }), startedAt:now };
+          window.__uiTest.periodData = tick(await period(), payload.date, payload.activity);
+          void window.__uiTest.emit('period:changed', null);
+        }
+        return store();
+      }
+      if (command === 'pause_activity_timer') { if (timers[key]) timers[key] = paused(timers[key], now); return store(); }
+      if (command === 'stop_activity_timer') {
+        if (!timers[key]) return store();
+        const stopped = { ...paused(timers[key], now), tagId:payload.calendarTagId ?? timers[key].tagId }; timers[key] = stopped; store();
+        if (!tagList.some(tag => tag.id === stopped.tagId)) await window.__TAURI_INTERNALS__.invoke('save_tags', { tags:[...tagList, { id:stopped.tagId, name:payload.name || payload.fallbackName, color:payload.color || '#569eff' }] });
+        const clock = minute => String(Math.floor(minute / 60)).padStart(2, '0') + ':' + String(minute % 60).padStart(2, '0');
+        const entries = [];
+        for (const segment of stopped.segments) {
+          const start = new Date(segment.start), end = new Date(segment.end), day = [start.getFullYear(), String(start.getMonth()+1).padStart(2,'0'), String(start.getDate()).padStart(2,'0')].join('-');
+          const from = start.getHours() * 60 + start.getMinutes(), to = Math.min(1440, Math.max(from + 1, end.getHours() * 60 + end.getMinutes() + (end.getSeconds() || end.getMilliseconds() ? 1 : 0)));
+          const uid = 'activity-time:' + stopped.id + ':' + segment.start + ':' + day;
+          entries.push({ date:day, entry:{ id:crypto.randomUUID(), calendarUid:uid, kind:'event', text:payload.name, description:payload.description, time:clock(from), end:clock(to), done:false, cancelled:false, priority:false, reminder:false, showInJournal:false, tag:stopped.tagId, plan:null } });
+        }
+        if (entries.length) await window.__TAURI_INTERNALS__.invoke('import_calendar', { entries });
+        if (window.__uiTest.failPeriodSave) { window.__uiTest.failPeriodSave = false; throw new Error('Timer save test failure'); }
+        const data = tick(await period(), payload.date, payload.activity);
+        window.__uiTest.periodData = { ...data, definitions:data.definitions.map(item => item.id === payload.activity ? { ...item, calendarTagId:stopped.tagId } : item) };
+        delete timers[key];
+        void window.__uiTest.emit('period:changed', null);
+        return store();
+      }
+    })();
     if (command === 'mail_ml_status') return structuredClone(mail.model);
     if (command === 'mail_learning_status') return {...(mail.learning ?? {accepted:0,rejected:0}),ready:false};
     if (command === 'mail_learning_reset') { mail.learning={accepted:0,rejected:0};mailChanged();return; }
@@ -6148,7 +6189,7 @@ try {
     assert.equal(await evaluate("window.__uiTest.day().entries.filter(e=>e.calendarUid?.startsWith('activity-time:')).length"),2);
     await evaluate(`${reading}.querySelector('.timer-stop').click()`);
     // The typed 30 minutes stay as they are; the timer's time comes from its calendar entries and is shown on top.
-    await until("Object.keys(JSON.parse(localStorage.getItem('journal.activityTimers.v1'))).length===0");
+    await until("Object.keys(JSON.parse(localStorage.getItem('test.activityTimers')||'{}')).length===0");
     assert.equal(await evaluate("window.__uiTest.periodData.days[window.__uiTest.date].items.reading.minutes"),30);
     await until(`Number(${reading}.querySelector('input[type=number]').value)>=33`);
     assert.equal(await evaluate("window.__uiTest.day().entries.filter(e=>e.calendarUid?.startsWith('activity-time:')).length"),2);
@@ -6510,10 +6551,10 @@ try {
       const today = await evaluate("(d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`)(new Date())");
       if (layout !== 'book') {
         await evaluate("document.querySelector('.period-list.is-period [data-activity-id=reading] .timer-start').click()");
-        await until(`Boolean(JSON.parse(localStorage.getItem('journal.activityTimers.v1')||'{}')['${today}:reading'])`);
+        await until(`Boolean(JSON.parse(localStorage.getItem('test.activityTimers')||'{}')['${today}:reading'])`);
         await until(`window.__uiTest.periodData?.days?.['${today}']?.items?.reading?.done === true`);
         await evaluate("document.querySelector('.period-list.is-period [data-activity-id=reading] .timer-pause').click()");
-        await evaluate("localStorage.removeItem('journal.activityTimers.v1')");
+        await evaluate("localStorage.removeItem('test.activityTimers')");
       }
       await screenshot(`features-${layout}-${look}.png`);
     }

@@ -53,6 +53,51 @@ async fn save_period_data(data: String, store: tauri::State<'_, Mutex<Store>>, a
     Ok(())
 }
 
+// ----- Activity timers: in the database (journal-core `timers`), shared with every window and with J-TerminaL -----
+type Timers = std::collections::BTreeMap<String, journal_core::timers::ActivityTimer>;
+fn now_ms() -> i64 { std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as i64) }
+#[tauri::command]
+async fn load_activity_timers(store: tauri::State<'_, Mutex<Store>>) -> Result<Timers, String> {
+    store.lock().map_err(|e| e.to_string())?.activity_timers().map_err(|e| e.to_string())
+}
+/// Timers the app kept in a window's local storage before: taken over once, those not known yet.
+#[tauri::command]
+async fn adopt_activity_timers(timers: Timers, store: tauri::State<'_, Mutex<Store>>, app: tauri::AppHandle) -> Result<Timers, String> {
+    let store = store.lock().map_err(|e| e.to_string())?;
+    if store.adopt_activity_timers(&timers).map_err(|e| e.to_string())? > 0 { let _ = app.emit("timers:changed", ()); }
+    store.activity_timers().map_err(|e| e.to_string())
+}
+#[tauri::command]
+async fn start_activity_timer(date: String, activity: String, calendar_tag_id: Option<String>, store: tauri::State<'_, Mutex<Store>>, app: tauri::AppHandle) -> Result<Timers, String> {
+    let store = store.lock().map_err(|e| e.to_string())?;
+    store.start_activity_timer(&date, &activity, calendar_tag_id.as_deref(), now_ms()).map_err(|e| e.to_string())?;
+    // Starting ticks the activity: every window reads the period data again.
+    let _ = app.emit("timers:changed", ());
+    let _ = app.emit("period:changed", ());
+    store.activity_timers().map_err(|e| e.to_string())
+}
+#[tauri::command]
+async fn pause_activity_timer(date: String, activity: String, store: tauri::State<'_, Mutex<Store>>, app: tauri::AppHandle) -> Result<Timers, String> {
+    let store = store.lock().map_err(|e| e.to_string())?;
+    store.pause_activity_timer(&date, &activity, now_ms()).map_err(|e| e.to_string())?;
+    let _ = app.emit("timers:changed", ());
+    store.activity_timers().map_err(|e| e.to_string())
+}
+/// Stops the timer: its time goes into the calendar with the activity's tag (see journal-core `timers`).
+#[tauri::command]
+async fn stop_activity_timer(date: String, activity: String, name: String, color: String, calendar_tag_id: Option<String>, description: String, fallback_name: String,
+    store: tauri::State<'_, Mutex<Store>>, app: tauri::AppHandle) -> Result<Timers, String> {
+    let mut store = store.lock().map_err(|e| e.to_string())?;
+    let result = store.stop_activity_timer(&date, &journal_core::timers::TimerActivity { id: activity, name, color, calendar_tag_id }, &description, &fallback_name, now_ms());
+    // Also after an error: the timer may be paused now.
+    let _ = app.emit("timers:changed", ());
+    let touched = result.map_err(|e| e.to_string())?;
+    let _ = app.emit("journal:changed", &touched);
+    if let Ok(tags) = store.tags() { let _ = app.emit("journal:tags", tags); }
+    let _ = app.emit("period:changed", ());
+    store.activity_timers().map_err(|e| e.to_string())
+}
+
 /// Brings the journal window back (from the background, minimised or behind others).
 fn show_main(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") { let _ = window.unminimize(); let _ = window.show(); let _ = window.set_focus(); }
@@ -382,6 +427,6 @@ Ist die Datenbank von einer neueren Version angelegt, bitte Journal aktualisiere
             }
             if window.label() == "main" && matches!(event, tauri::WindowEvent::Destroyed) { window.app_handle().exit(0); }
         })
-.invoke_handler(tauri::generate_handler![calendar::calendar_import, calendar::calendar_export, calendar::calendar_occurrences, calendar::calendar_with_start,desktop_widgets::surface::desktop_widget_live_frame,desktop_widgets::surface::desktop_widget_covered,desktop_widgets::surface::desktop_widget_live_blur,desktop_widgets::desktop_widget_create, desktop_widgets::desktop_widget_remove, desktop_widgets::desktop_widget_layers, desktop_widgets::surface::desktop_widget_surface, desktop_widgets::smoke::widget_smoke_cdp, desktop_widgets::desktop_widget_ready, desktop_widgets::desktop_widget_state, desktop_widgets::desktop_widget_restore, desktop_widgets::desktop_widget_update, desktop_widgets::desktop_widget_open_settings, desktop_widgets::wallpaper::desktop_wallpaper_info, desktop_widgets::wallpaper::desktop_wallpaper, startup_update_check, vault::vault_status, vault::vault_choose, vault::vault_save_preferences, vault::vault_activate, move_calendar_entry, panel_detach, history::history_step,board::board_list, board::board_patch, board::board_patch_many, board::board_image_save, board::board_image_load, board::board_link_preview, board::board_open_link, board::board_detach, board::board_remove, board::board_folders, board::board_folder_save, board::board_folder_remove,drive::drive_help, drive::drive_validate, drive::drive_restore, drive::drive_status, drive::drive_connect, drive::drive_cancel, drive::drive_disconnect, drive::drive_read, drive::drive_write, drive::drive_snapshot, drive::drive_apply, drive::drive_probe, drive::drive_key_save, drive::drive_key_load, drive::drive_key_forget, session::session_sync_enabled, session::session_sync_done,load_period_data, save_period_data, ui_language::set_ui_language, load_day, load_range, load_activity_minutes, save_day, load_linked, change_linked, edit_linked, load_series, extend_series, load_tags, save_tags, search_entries, snooze_reminder, quit_app, popup_reminders, fit_popup, reminder_action, background_hint, open_window, show_day, show_note, export_calendar, import_calendar, read_calendar_file, write_calendar_file, mail::mail_drive_snapshot, mail::mail_drive_validate, mail::mail_drive_apply, mail::mail_accounts, mail::mail_save, mail::mail_cancel, mail::mail_sync, mail::mail_remove, mail::mail_pending, mail::mail_stage, mail::mail_candidates, mail::mail_resolve, mail::mail_enabled, mail::mail_auto_import, mail::mail_notices, mail::mail_help, mail::ml::mail_ml_status, mail::ml::mail_ml_enabled, mail::ml::mail_ml_install, mail::ml::mail_ml_analyze, mail::learning::mail_learning_status, mail::learning::mail_learning_reset, mail::learning::mail_learning_export, mail::learning::mail_learning_import])
+.invoke_handler(tauri::generate_handler![calendar::calendar_import, calendar::calendar_export, calendar::calendar_occurrences, calendar::calendar_with_start,desktop_widgets::surface::desktop_widget_live_frame,desktop_widgets::surface::desktop_widget_covered,desktop_widgets::surface::desktop_widget_live_blur,desktop_widgets::desktop_widget_create, desktop_widgets::desktop_widget_remove, desktop_widgets::desktop_widget_layers, desktop_widgets::surface::desktop_widget_surface, desktop_widgets::smoke::widget_smoke_cdp, desktop_widgets::desktop_widget_ready, desktop_widgets::desktop_widget_state, desktop_widgets::desktop_widget_restore, desktop_widgets::desktop_widget_update, desktop_widgets::desktop_widget_open_settings, desktop_widgets::wallpaper::desktop_wallpaper_info, desktop_widgets::wallpaper::desktop_wallpaper, startup_update_check, vault::vault_status, vault::vault_choose, vault::vault_save_preferences, vault::vault_activate, move_calendar_entry, panel_detach, history::history_step,board::board_list, board::board_patch, board::board_patch_many, board::board_image_save, board::board_image_load, board::board_link_preview, board::board_open_link, board::board_detach, board::board_remove, board::board_folders, board::board_folder_save, board::board_folder_remove,drive::drive_help, drive::drive_validate, drive::drive_restore, drive::drive_status, drive::drive_connect, drive::drive_cancel, drive::drive_disconnect, drive::drive_read, drive::drive_write, drive::drive_snapshot, drive::drive_apply, drive::drive_probe, drive::drive_key_save, drive::drive_key_load, drive::drive_key_forget, session::session_sync_enabled, session::session_sync_done,load_period_data, save_period_data, load_activity_timers, adopt_activity_timers, start_activity_timer, pause_activity_timer, stop_activity_timer, ui_language::set_ui_language, load_day, load_range, load_activity_minutes, save_day, load_linked, change_linked, edit_linked, load_series, extend_series, load_tags, save_tags, search_entries, snooze_reminder, quit_app, popup_reminders, fit_popup, reminder_action, background_hint, open_window, show_day, show_note, export_calendar, import_calendar, read_calendar_file, write_calendar_file, mail::mail_drive_snapshot, mail::mail_drive_validate, mail::mail_drive_apply, mail::mail_accounts, mail::mail_save, mail::mail_cancel, mail::mail_sync, mail::mail_remove, mail::mail_pending, mail::mail_stage, mail::mail_candidates, mail::mail_resolve, mail::mail_enabled, mail::mail_auto_import, mail::mail_notices, mail::mail_help, mail::ml::mail_ml_status, mail::ml::mail_ml_enabled, mail::ml::mail_ml_install, mail::ml::mail_ml_analyze, mail::learning::mail_learning_status, mail::learning::mail_learning_reset, mail::learning::mail_learning_export, mail::learning::mail_learning_import])
         .run(context).expect("Journal konnte nicht gestartet werden");
 }

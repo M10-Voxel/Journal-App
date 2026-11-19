@@ -7,7 +7,7 @@ use crate::storage::Store;
 
 /// Where the last look stopped.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Watch { version: i64, group: i64, cursor: i64 }
+pub struct Watch { version: i64, group: i64, cursor: i64, timers: i64 }
 
 /// What other programs changed since the last look.
 #[derive(Default, Debug, PartialEq, Eq)]
@@ -19,6 +19,8 @@ pub struct Changes {
     pub period: bool,
     /// Board cards or folders.
     pub board: bool,
+    /// The activity timers (`timers.rs`; not in the history, told by their stamp).
+    pub timers: bool,
     /// Their history was stepped (undo/redo): what changed is not listed, everything shown should be read again.
     pub restored: bool,
 }
@@ -30,6 +32,7 @@ impl Store {
             version: self.conn.query_row("PRAGMA data_version", [], |row| row.get(0))?,
             group: self.conn.query_row("SELECT COALESCE(MAX(id), 0) FROM undo_groups", [], |row| row.get(0))?,
             cursor: self.conn.query_row("SELECT cursor FROM undo_state WHERE id=1", [], |row| row.get(0))?,
+            timers: crate::timers::stamp(&self.conn)?,
         })
     }
 
@@ -59,6 +62,7 @@ impl Store {
         // so an undo elsewhere may take back one of our own writes, and the cursor can end where it was last time.)
         // A redo onto an older group moved the cursor; one onto a group made since the last look shows in its rows.
         changes.restored = next.cursor != next.group || (next.cursor != watch.cursor && next.cursor <= watch.group);
+        changes.timers = next.timers != watch.timers;
         changes.dates = dates.into_iter().collect();
         *watch = next;
         Ok(Some(changes))

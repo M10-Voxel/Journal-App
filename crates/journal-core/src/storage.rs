@@ -16,7 +16,7 @@ pub type ActivityMinutes = std::collections::BTreeMap<String, std::collections::
 fn default_true() -> bool { true }
 fn is_false(value: &bool) -> bool { !*value }
 
-type Result<T> = std::result::Result<T, Box<dyn Error>>;
+pub type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Entry {

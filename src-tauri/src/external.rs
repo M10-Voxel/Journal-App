@@ -17,6 +17,8 @@ pub fn start(app: AppHandle) {
             });
             let Some((changes, tags)) = found else { continue; };
             // A step through the history elsewhere: every window reads everything again, as after an undo here.
+            // Timers are not part of the history: they are told even then.
+            if changes.timers { let _ = app.emit("timers:changed", ()); }
             if changes.restored { let _ = app.emit("history:restored", ()); continue; }
             if !changes.dates.is_empty() {
                 let _ = app.emit("journal:changed", &changes.dates);
