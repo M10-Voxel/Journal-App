@@ -14,7 +14,27 @@ export { FooterHint, KeyIcons }
 import { ActionPopover, MenuRow, SideRow, MonthCell } from "actions.slint";
 export { MenuRow, SideRow, MonthCell }
 // A command offered under the search bar.
-export struct CommandRow { name: string, detail: string }
+export struct SearchRun { label: string, marked: bool }
+export struct CommandRow {
+    name: string, detail: string, heading: string, tag: string, icon: image, has-icon: bool,
+    sigil: bool, has-color: bool, tint: color, title-runs: [SearchRun], snippet-runs: [SearchRun],
+    top: length, tall: length, header: length,
+}
+
+component SearchLine inherits Rectangle {
+    in property <[SearchRun]> runs;
+    in property <bool> small;
+    clip: true;
+    HorizontalLayout {
+        x: 0px; width: self.preferred-width; height: parent.height;
+        for run in root.runs: Rectangle {
+            width: word.preferred-width; height: word.preferred-height; y: (parent.height - self.height) / 2;
+            background: run.marked ? Theme.selection : transparent;
+            word := Text { text: run.label; font-size: root.small ? Theme.small-size : Theme.row-size;
+                color: root.small && !run.marked ? Theme.muted : Theme.strong; vertical-alignment: center; }
+        }
+    }
+}
 // One field of the form: its line (as shown), its place in the line ("when" has three), the line's label and icon on
 // its first field, what it holds (or the pale default), and a colour dot (tag) or an icon.
 export struct FormRow { field: int, line: int, cell: int, multi: bool, label: string, has-label-icon: bool, label-icon: image, value: string, hint: string, filled: bool, error: bool, has-color: bool, color: color, has-icon: bool, icon: image }
@@ -183,11 +203,13 @@ export component Bar inherits Window {
     in property <bool> entry-open;
     in property <string> search-placeholder;
     in property <image> search-icon;
-    in property <image> command-icon;
     in property <[CommandRow]> commands;
     in property <int> command-selected;
+    in property <string> search-list-hint;
     in-out property <string> search-text <=> search.text;
-    callback search-edited(string);
+    callback search-edited(string, int);
+    callback search-cursor-moved(string, int);
+    public function place-search-cursor(offset: int) { search.set-selection-offsets(offset, offset); }
     callback command-chosen(int);
 
     in property <bool> notepad-open;
@@ -269,6 +291,8 @@ export component Bar inherits Window {
     callback day-today();
     // Every key the day view (and its pickers) has a use for: the key's text and the modifiers (1 Shift, 2 Strg, 4 Alt).
     callback day-key(string, int);
+    callback release-plan-space();
+    callback day-shortcut(string, int) -> bool;
     callback day-edited(string);
     // A click on a line: its item and the part (0 text, 1 symbol, 2 timer start/pause, 3 timer stop, 4 right click,
     // 5 the flag).
@@ -375,21 +399,30 @@ export component Bar inherits Window {
     default-font-family: Theme.ui-font;
     FocusScope {
         x: 0px; y: 0px; width: root.width; height: root.height;
+        capture-key-released(event) => {
+            if event.text == " " { root.release-plan-space(); }
+            reject
+        }
         capture-key-pressed(raw-event) => {
             let event = KeyBindings.translate(ShortcutContext.window, raw-event);
             if event.text == Key.F1 {
                 if !event.repeat { root.open-settings(); }
                 return accept;
             }
-            if event.modifiers.control && event.modifiers.shift && !event.modifiers.alt &&
+            if event.modifiers.control && !event.modifiers.alt &&
                 (event.text == "n" || event.text == "N") {
-                if !event.repeat { root.open-notepad(); }
+                if !event.repeat {
+                    if event.modifiers.shift { root.notepad-new-note(); } else { root.open-notepad(); }
+                }
                 return accept;
             }
             // The actions, from anywhere (Strg+K).
             if event.modifiers.control && !event.modifiers.shift && !event.modifiers.alt && (event.text == "k" || event.text == "K") {
                 if !event.repeat { root.toggle-menu(); }
                 return accept;
+            }
+            if !root.entry-open && !root.notepad-open {
+                if root.day-shortcut(raw-event.text, KeyBindings.modifier-mask(raw-event)) { return accept; }
             }
             reject
         }
@@ -427,7 +460,8 @@ export component Bar inherits Window {
                     width: day-switch.x - self.x - Theme.gap; height: parent.height;
                     vertical-alignment: center; single-line: true;
                     color: Theme.strong; selection-background-color: Theme.selection; selection-foreground-color: Theme.strong; font-size: Theme.search-size;
-                    edited => { root.search-edited(self.text); }
+                    edited => { root.search-edited(self.text, self.cursor-position-byte-offset); }
+                    cursor-position-changed(_) => { root.search-cursor-moved(self.text, self.cursor-position-byte-offset); }
                     key-pressed(raw-event) => {
                         let event = KeyBindings.translate(ShortcutContext.search, raw-event);
                         // Modifier keys alone do nothing (their codes are control characters too).
@@ -518,20 +552,52 @@ export component Bar inherits Window {
             }
         }
         if !root.notepad-open: Rectangle { height: Theme.border-width; background: Theme.divider; }
-        // The commands offered under the search (`/`).
-        if !root.entry-open && !root.notepad-open && root.commands.length > 0: VerticalLayout {
-            padding: Theme.popover-padding; spacing: Theme.choice-spacing;
+        if !root.entry-open && !root.notepad-open && root.commands.length > 0: Flickable {
+            property <length> selected-y: root.commands[root.command-selected].top;
+            property <length> selected-h: root.commands[root.command-selected].tall;
+            changed selected-y => {
+                self.content-y = min(0px, max(min(self.content-y, -self.selected-y), self.height - self.selected-y - self.selected-h));
+            }
+            content-height: root.commands[root.commands.length - 1].top + root.commands[root.commands.length - 1].tall;
+            height: min(self.content-height, Theme.popover-max-height);
             for command[index] in root.commands: Rectangle {
-                height: Theme.row-height;
-                border-radius: Theme.list-radius;
-                background: index == root.command-selected ? Theme.row-selection : command-hit.has-hover ? Theme.hover : transparent;
-                HorizontalLayout {
-                    padding-left: Theme.list-inset + Theme.calendar-gap; padding-right: Theme.list-inset + Theme.calendar-gap; spacing: Theme.gap;
-                    Image { source: root.command-icon; width: Theme.label-icon-size; height: Theme.label-icon-size; colorize: Theme.text; y: (parent.height - self.height) / 2; }
-                    Text { text: command.name; color: Theme.strong; font-size: Theme.row-size; vertical-alignment: center; }
-                    Text { text: command.detail; color: Theme.muted; font-size: Theme.row-size; vertical-alignment: center; horizontal-stretch: 1; horizontal-alignment: right; overflow: elide; }
+                x: Theme.popover-padding; width: parent.width - self.x * 2; y: command.top; height: command.tall;
+                if command.header > 0px: Text {
+                    x: Theme.list-inset; y: 0px; height: command.header; text: command.heading;
+                    vertical-alignment: center; color: Theme.muted; font-size: Theme.small-size;
                 }
-                command-hit := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.command-chosen(index); } }
+                Rectangle {
+                    y: command.header; height: parent.height - self.y;
+                    border-radius: Theme.list-radius;
+                    background: index == root.command-selected ? Theme.row-selection : hit.has-hover ? Theme.hover : transparent;
+                    HorizontalLayout {
+                        padding-left: Theme.list-inset; padding-right: Theme.list-inset; spacing: Theme.gap;
+                        if command.sigil: Text { text: "@"; color: Theme.muted; vertical-alignment: center; }
+                        if command.has-icon: Image { source: command.icon; width: Theme.label-icon-size; height: self.width;
+                            y: (parent.height - self.height) / 2; colorize: command.tint; }
+                        if command.has-color && !command.has-icon: Rectangle { width: Theme.label-icon-size / 2; height: self.width;
+                            y: (parent.height - self.height) / 2; background: command.tint; border-radius: self.width / 2; }
+                        VerticalLayout {
+                            horizontal-stretch: 1;
+                            SearchLine { runs: command.title-runs; }
+                            if command.snippet-runs.length > 0: SearchLine { small: true; runs: command.snippet-runs; }
+                        }
+                        if command.tag != "": Rectangle { width: Theme.label-icon-size / 2; height: self.width;
+                            y: (parent.height - self.height) / 2; background: command.tint; border-radius: self.width / 2; }
+                        if command.tag != "": Text { text: command.tag; color: Theme.muted; max-width: root.form-space / 5;
+                            overflow: elide; font-size: Theme.small-size; vertical-alignment: center; }
+                        Text { text: command.detail; color: Theme.muted; font-size: Theme.small-size; vertical-alignment: center; }
+                    }
+                    hit := TouchArea { mouse-cursor: pointer; clicked => { root.command-chosen(index); } }
+                }
+            }
+        }
+        if !root.entry-open && !root.notepad-open && root.commands.length > 0 && root.search-list-hint != "": Rectangle {
+            height: Theme.section-height;
+            Rectangle { y: 0px; height: Theme.border-width; background: Theme.divider; }
+            Text {
+                x: Theme.popover-padding + Theme.list-inset; height: parent.height; text: root.search-list-hint;
+                color: Theme.muted; font-size: Theme.small-size; vertical-alignment: center;
             }
         }
         // ----- The entry form under the top line, while open: a label at the left, the field at the right -----

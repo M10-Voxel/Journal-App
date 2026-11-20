@@ -18,6 +18,7 @@ pub struct Snapshot {
     pub today: NaiveDate,
     pub days: BTreeMap<NaiveDate, Vec<Entry>>,
     pub tags: Vec<Tag>,
+    pub tag_kind_order: Vec<String>,
     pub period: PeriodData,
     /// The days read: `from..=to`.
     from: NaiveDate,
@@ -43,7 +44,7 @@ fn read_days(store: &Store, from: NaiveDate, to: NaiveDate, into: &mut BTreeMap<
 impl Snapshot {
     pub fn load(store: &Store, today: NaiveDate) -> Result<Self, String> {
         let watch = store.watch().map_err(|e| e.to_string())?;
-        let mut snapshot = Snapshot { today, days: BTreeMap::new(), tags: Vec::new(), period: PeriodData::default(), from: repeat::shift(today, -LOOKBACK), to: repeat::shift(today, AHEAD), watch };
+        let mut snapshot = Snapshot { today, days: BTreeMap::new(), tags: Vec::new(), tag_kind_order: Vec::new(), period: PeriodData::default(), from: repeat::shift(today, -LOOKBACK), to: repeat::shift(today, AHEAD), watch };
         snapshot.read(store)?;
         Ok(snapshot)
     }
@@ -51,8 +52,19 @@ impl Snapshot {
     fn read(&mut self, store: &Store) -> Result<(), String> {
         self.days.clear();
         read_days(store, self.from, self.to, &mut self.days)?;
-        self.tags = store.tags().map_err(|e| e.to_string())?;
+        self.read_tags(store)?;
         self.period = PeriodData::parse(&store.period_data().map_err(|e| e.to_string())?);
+        Ok(())
+    }
+
+    fn read_tags(&mut self, store: &Store) -> Result<(), String> {
+        self.tags = store.tags().map_err(|e| e.to_string())?;
+        use rusqlite::OptionalExtension;
+        let raw: Option<String> = store.conn.query_row("SELECT value FROM settings WHERE key='tag-kind-order'", [], |r| r.get(0))
+            .optional().map_err(|e| e.to_string())?;
+        self.tag_kind_order = raw.and_then(|s| serde_json::from_str::<Vec<String>>(&s).ok())
+            .filter(|order| order.len() == 3 && ["own", "activity", "mail"].iter().all(|k| order.iter().any(|item| item == k)))
+            .unwrap_or_else(|| ["own", "activity", "mail"].map(str::to_owned).to_vec());
         Ok(())
     }
 
@@ -87,7 +99,7 @@ impl Snapshot {
             read_days(store, *date, *date, &mut one)?;
             match one.remove(date) { Some(entries) => { self.days.insert(*date, entries); } None => { self.days.remove(date); } }
         }
-        self.tags = store.tags().map_err(|e| e.to_string())?;
+        self.read_tags(store)?;
         self.watch = store.watch().map_err(|e| e.to_string())?;
         Ok(())
     }

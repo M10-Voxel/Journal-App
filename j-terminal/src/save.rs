@@ -86,6 +86,49 @@ pub fn save_with(store: &mut Store, outcome: &Outcome, extras: &Extras, today: N
     Ok(Saved { groups, text: outcome.text.clone(), days })
 }
 
+/// Save the source entry and its plan in one core transaction, checking for a stale edit first.
+pub fn save_planned_or_edited(store: &mut Store, outcome: &Outcome, extras: &Extras, today: NaiveDate,
+    editing: Option<&(NaiveDate, Entry)>, rule: &Option<repeat::Rule>, targets: &[NaiveDate],
+    labels: &crate::texts::FormTexts) -> Result<Saved, String> {
+    if !outcome.additional.is_empty() || !outcome.copies.is_empty() { return Err(labels.plan_single.into()); }
+    let source = editing.map_or(outcome.day, |(date, _)| *date);
+    let mut day = store.load(&source.to_string()).map_err(|e| e.to_string())?;
+    let mut updated = entry(outcome, extras, today, true)?;
+    let id = if let Some((_, original)) = editing {
+        let current = day.entries.iter_mut().find(|e| e.id == original.id).ok_or(labels.entry_changed)?;
+        if serde_json::to_value(&*current).map_err(|e| e.to_string())? != serde_json::to_value(original).map_err(|e| e.to_string())? {
+            return Err(labels.entry_changed.into());
+        }
+        updated.id = current.id.clone();
+        updated.calendar_uid = current.calendar_uid.clone();
+        updated.done = current.done && updated.kind == current.kind;
+        updated.cancelled = current.cancelled && updated.kind == current.kind;
+        updated.origin = current.origin.clone();
+        if !current.reminder && !updated.reminder { updated.reminder_before = current.reminder_before; }
+        if updated.kind == current.kind && updated.kind != "event" { updated.show_in_journal = current.show_in_journal; }
+        let old_rule = current.repeat.as_ref().and_then(|r| r.rule.clone()).and_then(|r| serde_json::from_value(r).ok());
+        if &old_rule == rule {
+            updated.repeat = current.repeat.clone();
+        } else if rule.is_none() {
+            updated.repeat = current.repeat.clone().map(|mut r| { r.rule = None; r });
+        }
+        *current = updated;
+        current.id.clone()
+    } else {
+        let id = updated.id.clone();
+        day.entries.push(updated);
+        id
+    };
+    let mut dates = targets.to_vec();
+    if outcome.day != source { dates.push(outcome.day); }
+    if !dates.is_empty() { crate::day_ops::plan(&mut day, &id, &dates, "days")?; }
+    store.save(day).map_err(|e| e.to_string())?;
+    dates.push(source);
+    dates.sort();
+    dates.dedup();
+    Ok(Saved { groups: vec![cursor(store)?], text: outcome.text.clone(), days: dates })
+}
+
 /// Takes the save back, as long as nothing was written after it (then that would go first). True when it did.
 pub fn undo(store: &mut Store, saved: &Saved) -> Result<bool, String> {
     if cursor(store)? != *saved.groups.last().unwrap_or(&-1) { return Ok(false); }

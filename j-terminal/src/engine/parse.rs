@@ -49,7 +49,6 @@ pub struct Draft {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TagName { pub id: String, pub name: String }
 
-#[cfg(test)]
 /// A tag as a word: spaces become underscores (`\Neues_Projekt`).
 pub fn tag_word(name: &str) -> String { name.split_whitespace().collect::<Vec<_>>().join("_") }
 pub fn fold(text: &str) -> String {

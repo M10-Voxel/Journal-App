@@ -13,7 +13,7 @@ pub const NOTES: i32 = 64;
 const SYSTEM: i32 = 128;
 const JOURNAL: i32 = SEARCH | FORM | DAY;
 const DATE: i32 = SEARCH | DAY;
-const ENTRY_ACTIONS: i32 = DAY | DAY_EDIT | SIDE;
+const ENTRY_ACTIONS: i32 = SEARCH | DAY | DAY_EDIT | SIDE;
 
 struct Shortcut {
     id: &'static str,
@@ -44,13 +44,15 @@ const GROUPS: &[Group] = &[
         binding!("settings", WINDOW, "F1", "Einstellungen öffnen oder schließen", "Open or close settings"),
         binding!("day-actions", WINDOW, "Ctrl+K", "Aktionen öffnen oder schließen", "Open or close the actions"),
         fixed!("Esc", "Einstellungen schließen", "Close settings"),
-        binding!("notebook", WINDOW, "Ctrl+Shift+N", "Notizblock öffnen", "Open the notebook"),
+        binding!("notebook", WINDOW, "Ctrl+N", "Notizblock öffnen", "Open the notebook"),
+        binding!("notes-new", WINDOW, "Ctrl+Shift+N", "Neue Notiz anlegen", "Create a note"),
         binding!("undo", JOURNAL, "Ctrl+Z", "Rückgängig machen", "Undo"),
         binding!("redo", JOURNAL, "Ctrl+Y", "Wiederherstellen", "Redo"),
         binding!("quit", JOURNAL, "Ctrl+Q", "J-TerminaL beenden", "Quit J-TerminaL"),
         fixed!("Esc", "Zurück, Suche leeren oder Fenster ausblenden", "Go back, clear search or hide the window"),
     ] },
     Group { name: ["Tagesansicht", "Day view"], shortcuts: &[
+        binding!("journal-search", DATE, "Ctrl+F", "Journal durchsuchen", "Search journal"),
         binding!("previous-day", DATE, "Alt+ArrowLeft", "Vorheriger Tag", "Previous day"),
         binding!("next-day", DATE, "Alt+ArrowRight", "Nächster Tag", "Next day"),
         binding!("today", DATE, "Alt+H", "Zu heute springen", "Go to today"),
@@ -66,8 +68,7 @@ const GROUPS: &[Group] = &[
         fixed!("Space", "Status der Aufgabe oder Aktivität umschalten", "Toggle the status of a task or activity"),
         binding!("day-priority", ENTRY_ACTIONS, "Alt+P", "Wichtigkeit umschalten", "Toggle priority"),
         binding!("day-tomorrow", ENTRY_ACTIONS, "Alt+M", "Auf morgen verschieben", "Move to tomorrow"),
-        binding!("day-plan", ENTRY_ACTIONS, "Alt+T", "Für einen Tag planen", "Schedule on one day"),
-        binding!("day-plan-days", ENTRY_ACTIONS, "Alt+Shift+T", "Für mehrere Tage planen", "Schedule on several days"),
+        binding!("day-plan", ENTRY_ACTIONS, "Alt+T", "Eintrag planen", "Schedule entry"),
         binding!("day-time", ENTRY_ACTIONS, "Alt+U", "Uhrzeit bearbeiten", "Edit time"),
         binding!("day-reminder", ENTRY_ACTIONS, "Alt+R", "Erinnerung bearbeiten", "Edit reminder"),
         binding!("day-tag", ENTRY_ACTIONS, "Alt+G", "Tag zuweisen", "Assign a tag"),
@@ -124,7 +125,8 @@ const GROUPS: &[Group] = &[
         fixed!("0–9 / Del", "Uhrzeit eintippen / Feld leeren", "Type a time / clear the field"),
         binding!("side-icon-reset", SIDE, "Ctrl+Delete", "Symbolzuweisung entfernen", "Remove the assigned icon"),
         fixed!("PgUp / PgDn / H", "Im Planer den Monat wechseln oder zu heute springen", "Change month in the planner or go to today"),
-        fixed!("Space", "Beim Planen über mehrere Tage den gewählten Tag umschalten", "Toggle the selected day when planning several days"),
+        fixed!("Space", "Tag auswählen oder abwählen. Gehalten beim Navigieren weitere Tage hinzufügen.", "Toggle a day. Hold while navigating to add more days."),
+        fixed!("Shift+↑ / ↓ / ← / →", "Planungsbereich markieren, mit Leertaste hinzufügen", "Mark a planning range, then press Space to add it"),
         fixed!("Esc", "Auswahl schließen. In der Beschreibung speichert Esc den Text.", "Close the picker. In the description, Esc saves the text."),
     ] },
     Group { name: ["Wiederholung", "Repeating"], shortcuts: &[
@@ -142,7 +144,7 @@ const GROUPS: &[Group] = &[
         binding!("notes-list", NOTES, "Ctrl+O", "Zur Zettelliste wechseln", "Go to the note list"),
         binding!("notes-all", NOTES, "Alt+ArrowLeft", "Alle Zettel anzeigen", "Show all notes"),
         binding!("notes-day", NOTES, "Alt+ArrowRight", "Zettel am ausgewählten Tag anzeigen", "Show notes for the selected day"),
-        binding!("notes-new", NOTES, "Ctrl+N", "Neue Notiz anlegen", "Create a note"),
+        fixed!("Tab", "Zwischen Tagesnotizen und allen Notizen wechseln", "Switch between notes on this day and all notes"),
         binding!("notes-edit", NOTES, "F2", "Geöffnete Notiz bearbeiten", "Edit the open note"),
         binding!("notes-save", NOTES, "Ctrl+Enter", "Notiz speichern und anzeigen", "Save and read the note"),
         fixed!("Enter", "Aufzählung oder Checkliste fortsetzen", "Continue a list or checklist"),
@@ -366,6 +368,16 @@ impl Bindings {
     }
 
     /// Adapt configured chords to the existing input handlers. A rejected event still edits text as before.
+    pub fn day_shortcut(&self, input: &str, mods: i32) -> Option<(&'static str, String, i32)> {
+        let pressed = chord(input, mods)?;
+        let binding = definitions().find(|binding| {
+            (binding.contexts == ENTRY_ACTIONS || binding.id == "journal-search")
+                && self.effective(binding.id) == Some(pressed)
+        })?;
+        let default = self.defaults[binding.id];
+        Some((binding.id, text(default.key)?.to_string(), mask(default.mods)))
+    }
+
     pub fn route(&self, context: i32, input: &str, mods: i32) -> Option<(String, i32)> {
         if self.overrides.is_empty() { return None; }
         let pressed = chord(input, mods)?;
@@ -473,7 +485,7 @@ mod tests {
     fn keys_become_caps_and_follow_changes() {
         let mut profile = Bindings::default();
         assert_eq!(caps(&keys(&profile, "day-actions", Language::De)), ["Strg", "K"]);
-        assert_eq!(caps(&keys(&profile, "notebook", Language::De)), ["Strg", "⇧", "N"]);
+        assert_eq!(caps(&keys(&profile, "notebook", Language::De)), ["Strg", "N"]);
         assert_eq!(caps(&keys(&profile, "form-save", Language::En)), ["Ctrl", "↵"]);
         profile.set("day-actions", Some("Ctrl+J".parse().unwrap())).unwrap();
         assert_eq!(caps(&keys(&profile, "day-actions", Language::De)), ["Strg", "J"]);

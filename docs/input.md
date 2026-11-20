@@ -108,7 +108,7 @@ Ein Fehler steht rot direkt am betroffenen Feld, darunter in einer Zeile erklär
 
 **Tab** wechselt zwischen Suche, Kategorien und Optionen. Bei einer Suche wechselt Tab direkt zu den Treffern. **↑/↓** wählt eine Kategorie oder Zeile, **Bild↑/Bild↓** blättert. **Enter** oder ein Klick schaltet eine Option um, öffnet ihre Auswahl oder startet die Kürzelaufnahme. In einer Auswahlliste wählst du mit den Pfeilen und bestätigst mit Enter. **Esc** verwirft eine offene Auswahl oder Aufnahme. Sonst schließt Esc die Einstellungen und bringt die vorherige Eingabe zurück. Der Rücksetzpfeil oder **Entf** auf einem geänderten Kürzel stellt dessen Standardbelegung wieder her.
 
-Unter **Allgemein** wählst du Fensterposition, Startansicht, Verhalten beim Öffnen und bei Fokusverlust, Sprache und Tastenhinweise. **Eintragsformular** steuert die Erkennung von Angaben im Titel und die Dauer der Speicherbestätigung. **Kalender** steuert Wochenangaben, Wochenenden und die aktuelle Zeitmarke. **Notizblock** legt den anfänglichen Tagesfilter und die Lese- oder Bearbeitungsansicht fest. J-TerminaL speichert die Auswahl lokal. Unter **Tastatur** kannst du auch das globale Kürzel zum Ein- und Ausblenden ändern. Eine Kombination kann in verschiedenen Bereichen unterschiedliche Aktionen auslösen. Grundtasten für Navigation und Texteingabe bleiben fest belegt.
+Unter **Allgemein** wählst du Fensterposition, Startansicht, Verhalten beim Öffnen, Sprache und Tastenhinweise. **Eintragsformular** steuert die Erkennung von Angaben im Titel. **Kalender** steuert Wochenangaben, Wochenenden und die aktuelle Zeitmarke. **Notizblock** legt den anfänglichen Tagesfilter und die Lese- oder Bearbeitungsansicht fest. J-TerminaL speichert die Auswahl lokal. Unter **Tastatur** kannst du auch das globale Kürzel zum Ein- und Ausblenden ändern. Eine Kombination kann in verschiedenen Bereichen unterschiedliche Aktionen auslösen. Grundtasten für Navigation und Texteingabe bleiben fest belegt.
 
 ## Die Suchleiste (links oben)
 
@@ -118,11 +118,15 @@ Mit der voreingestellten Startansicht hat die **Suchleiste** beim Öffnen den Fo
 |---|---|
 | `/Entry` (auch `/Eintrag`) | öffnet das Eintragsformular unter der Leiste, Cursor im Titel |
 
-Esc leert die Leiste, ein weiteres Esc versteckt das Fenster. Im Formular nimmt Esc erst die Änderung der Zeile zurück, dann schließt es das Formular (der Entwurf wird verworfen) und die Suchleiste hat wieder die Tastatur. Wird im Kalender etwas markiert, öffnet sich das Formular von selbst. Die Suche im Journal folgt (siehe `docs/roadmap.md`).
+**Strg+F** fokussiert in der Tagesansicht die Journalsuche. Tippe Wörter aus Titel oder Beschreibung. **@** listet alle Typfilter auf, `\` alle Tags in der Gruppenreihenfolge der Journal-App. Mit **↑/↓** blätterst du, **Enter**, **Tab** oder ein Klick übernimmt den Filter. Die Treffer sind nach Einträgen, Kalender, Tagen, Pinnwand und Notizblock gruppiert. **Enter** oder ein Klick öffnet den gewählten Treffer. **Strg+Enter** speichert einen bearbeiteten Eintrag.
+
+Über **Strg+K → Planen auf** kannst du Aufgaben und Ereignisse auf einen oder mehrere Tage planen. Beim Bearbeiten eines Suchtreffers ist das Feld direkt sichtbar. Pfeile bewegen den Cursor, Bild↑/Bild↓ wechselt den Monat. **Leertaste** oder ein Klick wählt einen Tag aus oder ab. Halte die **Leertaste** beim Navigieren mit den Pfeilen, um jeden besuchten Tag hinzuzufügen. Mit **Shift+Pfeilen** markierst du einen Bereich. **Leertaste** fügt ihn zur Auswahl hinzu. Der Ausgangstag des Eintrags ist gesperrt. **Enter** übernimmt die Auswahl, **Esc** verwirft sie. Erst beim Speichern entstehen die verknüpften Kopien.
+
+Esc leert die Leiste, ein weiteres Esc versteckt das Fenster. Im Formular nimmt Esc erst die Änderung der Zeile zurück, dann schließt es das Formular und die Suchleiste hat wieder die Tastatur. Wird im Kalender etwas markiert, öffnet sich das Formular von selbst.
 
 ## Die Tagesansicht (links, solange kein Formular offen ist)
 
-Unter der Suchleiste steht der gewählte Tag, standardmäßig **heute**. Man kann darin arbeiten wie auf der Tagesseite der App:
+Unter der Suchleiste steht der gewählte Tag, standardmäßig **heute**. Die Eintragskürzel gelten in der gesamten Tagesansicht. Du kannst etwa direkt aus der Suchleiste mit **Alt+A** eine Aufgabe, mit **Alt+E** ein Ereignis und mit **Alt+N** eine Notiz anlegen. Ein Eintragsformular oder Notizblock verwendet seine eigenen Kürzel.
 
 ```
  Mittwoch, 18. November 2026                    ⊞ ⊞ ▤  ( Heute )
@@ -160,11 +164,11 @@ Unter der Suchleiste steht der gewählte Tag, standardmäßig **heute**. Man kan
 | Alt+D / Alt+X / Leertaste | erledigt / abgebrochen / erledigt umschalten |
 | Alt+P | wichtig |
 | Alt+M | auf morgen (Aufgaben) |
-| Alt+T / Alt+Shift+T | planen auf einen Tag / auf mehrere Tage (Monat im Seitenfenster); auf einer Spur: zum Ziel |
+| Alt+T | Auf einen oder mehrere Tage planen. Auf einer Spur zum Ziel springen. |
 | Alt+U / Alt+R / Alt+G / Alt+I / Alt+B | Uhrzeit / Erinnerung / Tag / Symbol / Beschreibung (im Seitenfenster) |
 | Alt+Shift+E / A / N | als Ereignis / Aufgabe / Notiz |
 | Alt+↑ / Alt+↓ | verschieben (innerhalb der Gruppe) |
-| Entf oder Alt+Entf | löschen |
+| Entf oder Alt+Entf | Löschen. Bei verknüpften Einträgen zuerst den Umfang wählen. |
 | Alt+Enter | Einstellungen des Eintrags im Seitenfenster |
 | Regler: ←/→, Ziffern, Entf | einen Schritt, Wert tippen, Wert entfernen |
 | Aktivität: Leertaste, Ziffern+Enter, Enter, Shift+Enter | abhaken, Minuten eintragen, Timer starten/pausieren, Timer stoppen (Zeit in den Kalender) |
@@ -176,11 +180,11 @@ Unter der Suchleiste steht der gewählte Tag, standardmäßig **heute**. Man kan
 
 Ein Klick auf das Symbol eines Eintrags (oder Alt+Enter) öffnet links ein schmales Fenster. Das Hauptfenster bleibt dabei an seiner Stelle, es wird nach links breiter. Darin stehen die Einstellungen des Eintrags, je eine Zeile:
 - Status, Typ, Wichtig, Tag, Uhrzeit, Erinnerung, Symbol, Beschreibung
-- auf morgen, Planen, Mehrere Tage, Löschen
+- auf morgen, Planen, Löschen
 - bei einer Spur: zum geplanten Tag
 
 ↑/↓ wählt, ←/→ ändert Status/Typ/Wichtig, Enter oder ein Klick öffnet bzw. führt aus. Die Auswahl öffnet sich im selben Bereich:
-- **Planen:** ein Monat. Pfeile wählen den Tag, Bild↑/↓ den Monat, H springt zu heute. Enter oder ein zweiter Klick plant. Bei mehreren Tagen sammelt Leertaste oder Klick die Tage, Enter plant.
+- **Planen** öffnet den Monat mit denselben Auswahlgesten wie im Formular. H springt zu heute. Enter plant auf die ausgewählten Tage oder direkt auf den Tag unter dem Cursor.
 - **Uhrzeit:** große Uhr. ↑/↓ und das Mausrad ändern den Wert, ←/→ wechselt zwischen Stunden und Minuten, Ziffern tippen die Zeit, Entf entfernt sie. Die Dauer bleibt erhalten.
 - **Tag, Erinnerung:** Listen (beim Tag direkt per Ziffer 0–9).
 - **Symbol:** Raster mit Suche beim Tippen.
@@ -226,9 +230,9 @@ Bestehende Einträge suchen und bearbeiten (auch per Linksklick im Kalender) sow
 
 ## Notizblock
 
-**Strg+Umschalt+N** in J-TerminaL, **/Notizblock** (englisch **/Notepad**) und das Journal-Symbol neben der Suchleiste öffnen die Zettelliste. **Alt+←/→** oder die Auswahl über der Liste wechselt zwischen allen Zetteln und dem gewählten Tag. **↑/↓** und **Enter** öffnen einen Zettel in der Leseansicht.
+**Strg+N**, **/Notizblock** (englisch **/Notepad**) und das Journal-Symbol neben der Suchleiste öffnen die Liste mit ausgewähltem Filter **An diesem Tag**. **Tab** wechselt zwischen **An diesem Tag** und **Alle Notizen**. Du kannst die Filter auch anklicken oder mit **Alt+←/→** wählen. Wähle einen Zettel mit **↑/↓** und öffne ihn mit **Enter**.
 
-- **Neue Notiz** oder **Strg+N** legt einen Entwurf für den gewählten Tag an. **Bearbeiten** oder **F2** öffnet bei einem bestehenden Zettel den Editor. **Speichern** oder **Strg+Enter** speichert und zeigt den formatierten Zettel an. Neue Zettel erscheinen im Notizen-Tab der Haupt-App und auf der Tagespinnwand.
+- **Strg+Umschalt+N** legt in jeder Terminalansicht eine neue Notiz für den gewählten Tag an. Wenn bereits ein Notizentwurf offen ist, kehrst du mit **Esc** zu ihm zurück. **Bearbeiten** oder **F2** öffnet bei einem bestehenden Zettel den Editor. **Strg+Enter** speichert und zeigt den formatierten Zettel an. Neue Zettel erscheinen im Notizen-Tab der Haupt-App und auf der Tagespinnwand.
 - **Enter** setzt Aufzählungen und nummerierte Listen fort. Ein neues Checklistenelement beginnt leer und unabgehakt. **Enter** auf einem leeren Listenpunkt beendet die Liste auf dieser Ebene. **Tab** und **Umschalt+Tab** rücken Zeilen ein und aus. **Strg+Tab** wechselt zwischen Titel und Text.
 - **Strg+T** öffnet beim Bearbeiten die Tag-Auswahl, **Strg+M** die Markdown-Vorschau. In Leseansicht und Vorschau wählen **↑/↓** eine Zeile und **←/→** einen Link aus. **Enter** oder ein Klick schaltet Checklisten um, folgt Links oder kopiert Code. In der Leseansicht werden geänderte Checklisten sofort gespeichert.
 - **Strg+L** zeigt die Anhänge. Beim Bearbeiten kannst du einen Link eingeben und mit **Enter** hinzufügen oder mit **Strg+I** ein Bild anhängen (PNG, JPEG oder WebP). Bilder erscheinen unter dem formatierten Text. Klick oder **Enter** auf ein ausgewähltes Bild öffnet es groß im Notizblock.

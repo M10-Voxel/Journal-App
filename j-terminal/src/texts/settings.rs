@@ -49,8 +49,6 @@ pub const GROUPS: &[Group] = &[
         OptionText { key: WindowPosition, title: ["Fensterposition", "Window position"],
             detail: ["Öffnet das Terminal auf dem Bildschirm mit dem Mauszeiger.", "Place the terminal on the display that contains the pointer."],
             choices: &[["Oben zentriert", "Top center"], ["Bildschirmmitte", "Center of screen"]] },
-        OptionText { key: HideOnBlur, title: ["Bei Fokusverlust ausblenden", "Hide on focus loss"],
-            detail: ["Blendet das Terminal aus, sobald du in ein anderes Fenster wechselst.", "Hide the terminal when you switch to another window."], choices: &[] },
     ] },
     Group { page: Page::General, heading: ["Darstellung", "Appearance"], options: &[
         OptionText { key: Language, title: ["Sprache", "Language"], detail: ["Anzeigesprache für J-TerminaL.", "Display language for J-TerminaL."],
@@ -68,9 +66,6 @@ pub const GROUPS: &[Group] = &[
     Group { page: Page::Entry, heading: NO_HEADING, options: &[
         OptionText { key: ParseTitles, title: ["Angaben im Titel erkennen", "Recognize details in titles"],
             detail: ["Übernimmt beim Verlassen des Titels Datum, Uhrzeit, Typ, Tag und Wiederholung in die passenden Felder.", "Move dates, times, types, tags and repeats into their fields when you leave the title."], choices: &[] },
-        OptionText { key: SaveDelay, title: ["Dauer der Speicherbestätigung", "Save confirmation duration"],
-            detail: ["So lange bleibt die Bestätigung sichtbar, bevor das Terminal schließt.", "How long the confirmation stays visible before the terminal hides."],
-            choices: &[["Kurz", "Brief"], ["1 Sekunde", "1 second"], ["2 Sekunden", "2 seconds"]] },
     ] },
     Group { page: Page::Calendar, heading: NO_HEADING, options: &[
         OptionText { key: WeekNumbers, title: ["Kalenderwochen anzeigen", "Show week numbers"],
@@ -81,8 +76,6 @@ pub const GROUPS: &[Group] = &[
             detail: ["Markiert die aktuelle Minute in der heutigen Tageszeile.", "Mark the current minute in today's row."], choices: &[] },
     ] },
     Group { page: Page::Notebook, heading: NO_HEADING, options: &[
-        OptionText { key: NotesOnDay, title: ["Notizliste auf den Tag begrenzen", "Filter notes by day"],
-            detail: ["Aktiviert beim Öffnen des Notizblocks den Filter für den angezeigten Tag.", "Open the notebook with the current day filter enabled."], choices: &[] },
         OptionText { key: NoteMode, title: ["Gespeicherte Notizen öffnen", "Open saved notes in"],
             detail: ["Wählt die Ansicht beim Öffnen einer Notiz aus der Liste.", "Choose the view used when opening a note from the list."],
             choices: &[["Leseansicht", "Reader"], ["Editor", "Editor"]] },

@@ -129,11 +129,8 @@ fn choose_notepad_image() {
         std::thread::spawn(move || {
             let result = notebook::Attachment::image(&path);
             let _ = slint::invoke_from_event_loop(move || with_app(|app| {
-                if app.state.notepad().is_some_and(|draft| draft.card.id == note_id) {
-                    app.state.notepad_image_loading(false);
-                    app.state.attach_notepad(result);
-                    app.draw();
-                }
+                app.state.finish_notepad_image(note_id, result);
+                app.draw();
             }));
         });
     });
@@ -270,16 +267,20 @@ fn icon_image(name: &str, size: f32, scale: f32) -> slint::Image {
     let px = (size * scale).round().max(1.0) as u32;
     ICONS.with(|cache| {
         if let Some(found) = cache.borrow().get(&(name.to_string(), px)) { return found.clone(); }
-        let image = icons::draw(name, px).map(|drawn| {
-            let mut pixels = slint::SharedPixelBuffer::<slint::Rgba8Pixel>::new(drawn.size, drawn.size);
-            for (pixel, alpha) in pixels.make_mut_slice().iter_mut().zip(drawn.alpha) { *pixel = slint::Rgba8Pixel { r: 255, g: 255, b: 255, a: alpha }; }
-            slint::Image::from_rgba8(pixels)
-        }).unwrap_or_default();
+        let image = raster_icon(name, px);
         let mut cache = cache.borrow_mut();
         if cache.len() > 400 { cache.clear(); }
         cache.insert((name.to_string(), px), image.clone());
         image
     })
+}
+
+fn raster_icon(name: &str, px: u32) -> slint::Image {
+    icons::draw(name, px).map(|drawn| {
+        let mut pixels = slint::SharedPixelBuffer::<slint::Rgba8Pixel>::new(drawn.size, drawn.size);
+        for (pixel, alpha) in pixels.make_mut_slice().iter_mut().zip(drawn.alpha) { *pixel = slint::Rgba8Pixel { r: 255, g: 255, b: 255, a: alpha }; }
+        slint::Image::from_rgba8(pixels)
+    }).unwrap_or_default()
 }
 
 thread_local! {
@@ -326,6 +327,34 @@ fn day_key(text: &str) -> Option<day::K> {
         else if is(Key::Delete) { K::Delete } else if is(Key::Backspace) { K::Backspace } else if is(Key::Home) { K::Home } else if is(Key::End) { K::End }
         else if is(Key::PageUp) { K::PageUp } else if is(Key::PageDown) { K::PageDown } else if c == ' ' { K::Space }
         else if c.is_control() || ('\u{F700}'..='\u{F8FF}').contains(&c) { return None } else { K::Char(c) })
+}
+
+fn search_runs(text: &str, words: &[String]) -> slint::ModelRc<SearchRun> {
+    let chars: Vec<char> = text.chars().collect();
+    let mut marked = vec![false; chars.len()];
+    let mut folded = String::new();
+    let mut offsets = Vec::with_capacity(chars.len() + 1);
+    for c in &chars {
+        offsets.push(folded.len());
+        folded.push_str(&engine::parse::fold(&c.to_string()));
+    }
+    offsets.push(folded.len());
+    for word in words.iter().filter(|s| !s.is_empty()) {
+        let word = engine::parse::fold(word);
+        for (from, _) in folded.match_indices(&word) {
+            let start = offsets.partition_point(|offset| *offset <= from) - 1;
+            let end = offsets.partition_point(|offset| *offset < from + word.len());
+            marked[start..end].fill(true);
+        }
+    }
+    let mut runs = Vec::new();
+    let mut i = 0;
+    while i < chars.len() {
+        let start = i;
+        while i < chars.len() && marked[i] == marked[start] { i += 1; }
+        runs.push(SearchRun { label: chars[start..i].iter().collect::<String>().into(), marked: marked[start] });
+    }
+    std::rc::Rc::new(slint::VecModel::from(runs)).into()
 }
 
 fn strings(items: impl IntoIterator<Item = String>) -> slint::ModelRc<slint::SharedString> {
@@ -435,9 +464,12 @@ impl App {
     }
 
     fn close_settings(&mut self) {
-        let Some(settings) = self.settings.as_ref() else { return };
+        let Some(settings) = self.settings.take() else { return };
         settings.invoke_stop_recording();
         let _ = settings.hide();
+        self.settings_navigation = Default::default();
+        // Finish dispatching the close event before destroying its native window.
+        slint::Timer::single_shot(Duration::ZERO, move || drop(settings));
         if std::mem::take(&mut self.restore_launcher) {
             let _ = self.bar.show();
             self.bar.window().with_winit_window(|window| window.focus_window());
@@ -456,7 +488,7 @@ impl App {
         });
         window.set_categories(settings::categories(window, lang));
         window.set_version(env!("CARGO_PKG_VERSION").into());
-        window.set_terminal_icon(icon_image("terminal", window.global::<Theme>().get_search_icon_size(), window.window().scale_factor()));
+        window.set_terminal_icon(settings::icon(window, "terminal", window.global::<Theme>().get_search_icon_size()));
     }
 
     fn draw_settings_rows(&self, window: &SettingsWindow) {
@@ -495,7 +527,6 @@ impl App {
         self.bar.set_entry_priority(view.priority);
         self.draw_menu(view.menu.clone(), view.context);
         self.draw_footer(view.context, &view.day.heading);
-        self.bar.set_command_icon(control_image(&self.bar, "square-pen", label_px, scale));
         self.bar.set_line_count(view.rows.iter().map(|row| row.line + 1).max().unwrap_or(1) as i32);
         self.bar.set_rows(std::rc::Rc::new(slint::VecModel::from(view.rows.into_iter().map(|row| FormRow {
             field: row.field as i32, line: row.line as i32, cell: row.cell as i32, multi: row.multi,
@@ -554,7 +585,24 @@ impl App {
         self.draw_notepad();
         self.bar.set_search_placeholder(view.search_placeholder.into());
         self.bar.set_command_selected(view.command_selected as i32);
-        self.bar.set_commands(std::rc::Rc::new(slint::VecModel::from(view.commands.into_iter().map(|c| CommandRow { name: c.name.into(), detail: c.detail.into() }).collect::<Vec<_>>())).into());
+        let lang = usize::from(self.state.language == texts::Language::En);
+        self.bar.set_search_list_hint(if self.state.preferences.keycaps { texts::search::LIST_HINT[lang] } else { "" }.into());
+        let theme = self.bar.global::<Theme>();
+        let mut top = 0.;
+        let rows = view.commands.into_iter().map(|c| {
+            let header = if c.look.heading.is_empty() { 0. } else { theme.get_section_height() };
+            let tall = theme.get_row_height() + header + if c.look.snippet.is_empty() { 0. } else { theme.get_small_size() + theme.get_calendar_gap() };
+            let row = CommandRow {
+                name: c.name.clone().into(), detail: c.detail.into(), heading: c.look.heading.into(), tag: c.look.tag.into(),
+                icon: journal_image(&self.bar, c.look.icon, label_px, scale), has_icon: !c.look.icon.is_empty(),
+                sigil: c.look.sigil, has_color: c.look.color.is_some(), tint: c.look.color.map_or(theme.get_accent(), |rgb| color(Some(rgb))),
+                title_runs: search_runs(&c.name, &c.look.words), snippet_runs: search_runs(&c.look.snippet, &c.look.words),
+                top, tall, header,
+            };
+            top += tall;
+            row
+        }).collect::<Vec<_>>();
+        self.bar.set_commands(std::rc::Rc::new(slint::VecModel::from(rows)).into());
         // One short message in the footer: the day view's, the form's, or a problem from the start.
         let status = view.day_message.filter(|_| !view.entry_open).or(view.status).or_else(|| self.notice.clone().map(|notice| (notice, true)));
         self.bar.set_notice_is_error(status.as_ref().is_some_and(|(_, error)| *error));
@@ -603,12 +651,14 @@ impl App {
         let keys = |id: &str| strings(shortcuts::caps(&shortcuts::keys(&self.bindings, id, language)));
         let label = match context {
             C::Day | C::DayLine => day,
+            C::Entry if self.state.editing_entry() => at.edit,
             C::Entry => at.new_entry,
             C::NotesList | C::NotesRead | C::NotesEdit => at.notepad,
         };
         let (primary, primary_keys) = match context {
             C::Day => (at.new_task, keys("day-task")),
             C::DayLine => (at.edit, strings(["↵".to_string()])),
+            C::Entry if self.state.editing_entry() => (at.notes_save, keys("form-save")),
             C::Entry => (at.create, keys("form-save")),
             C::NotesList => (at.notes_new, keys("notes-new")),
             C::NotesRead => (at.notes_edit, keys("notes-edit")),
@@ -961,7 +1011,7 @@ impl App {
         self.bar.set_side_weekdays(strings(side.weekdays));
         self.side_cells = side.cells.iter().map(|c| c.date).collect();
         self.bar.set_side_cells(std::rc::Rc::new(slint::VecModel::from(side.cells.iter().map(|c| MonthCell {
-            label: c.label.clone().into(), in_month: c.in_month, today: c.today, cursor: c.cursor, picked: c.picked, own: c.own, disabled: c.disabled,
+            label: c.label.clone().into(), in_month: c.in_month, today: c.today, cursor: c.cursor, picked: c.picked, own: c.own, pending: c.pending, disabled: c.disabled,
         }).collect::<Vec<_>>())).into());
         self.bar.set_side_confirm_text(if side.kind == 4 { dt.take.into() } else { side.confirm.into() });
         self.bar.set_side_text_shown(side.text.into());
@@ -994,10 +1044,12 @@ impl App {
             Some(form::Pane::SideText) => self.bar.invoke_focus_menu(),
             Some(form::Pane::DayEdit) | None => {}
         }
+        if let Some(cursor) = effect.search_cursor { self.bar.invoke_place_search_cursor(cursor as i32); }
+        if let Some(id) = effect.attachment { if let Some(target) = self.state.notepad_target(&id.to_string()) { self.show_notepad_target(target); } }
         if effect.settings { self.show_settings(); }
         if effect.hide { let _ = self.bar.hide(); }
         if effect.hide_soon {
-            self.hide_timer.start(slint::TimerMode::SingleShot, self.state.preferences.save_delay.duration(), || with_bar(|bar| { let _ = bar.hide(); }));
+            self.hide_timer.start(slint::TimerMode::SingleShot, Duration::from_millis(450), || with_bar(|bar| { let _ = bar.hide(); }));
         }
         if effect.quit {
             QUITS.with(|quits| quits.set(quits.get() + 1));
@@ -1188,11 +1240,15 @@ fn connect_settings(settings: &SettingsWindow) {
         with_app(App::close_settings);
         slint::CloseRequestResponse::KeepWindowShown
     });
-    settings.window().on_winit_window_event(|window, event| {
-        if matches!(event, WindowEvent::Focused(true) | WindowEvent::ScaleFactorChanged { .. }) {
-            slint::Timer::single_shot(Duration::ZERO, || with_app(|app| {
-                if let Some(window) = &app.settings { app.draw_settings_labels(window); }
-            }));
+    let weak = settings.as_weak();
+    settings.window().on_winit_window_event(move |window, event| {
+        if matches!(event, WindowEvent::ScaleFactorChanged { .. }) {
+            let weak = weak.clone();
+            slint::Timer::single_shot(Duration::ZERO, move || {
+                if let Some(window) = weak.upgrade() {
+                    with_app(|app| app.draw_settings_labels(&window));
+                }
+            });
         }
         filter_opening_modifiers(window, event)
     });
@@ -1262,6 +1318,23 @@ fn connect(bar: &Bar) {
     }));
     bar.on_cal_wheel(|x, delta, ctrl, shift| with_app(|app| { app.state.cal_wheel(x, delta, ctrl, shift); app.draw(); }));
     bar.on_day_today(|| with_app(|app| { app.state.show_today(); app.draw(); }));
+    bar.on_release_plan_space(|| with_app(|app| app.state.release_plan_space()));
+    bar.on_day_shortcut(|text, mask| APP.with(|slot| {
+        let mut slot = slot.borrow_mut();
+        let Some(app) = slot.as_mut() else { return false };
+        let Some((id, text, mods)) = app.bindings.day_shortcut(&text, mask) else { return false };
+        if id == "journal-search" {
+            if app.state.pane.edit.is_some() || app.state.pane.side.is_some() { return false; }
+            if app.state.menu.take().is_some() { app.draw(); }
+            app.bar.invoke_focus_search();
+        } else if let Some(key) = day_key(&text) {
+            app.hide_timer.stop();
+            app.state.menu = None;
+            let effect = app.state.day_key(key, day::Mods { shift: mods & 1 != 0, ctrl: mods & 2 != 0, alt: true });
+            app.effect(effect);
+        }
+        true
+    }));
     bar.on_day_key(|text, mods| with_app(|app| {
         let Some(key) = day_key(&text) else { return };
         app.hide_timer.stop();
@@ -1320,8 +1393,8 @@ fn connect(bar: &Bar) {
     bar.on_side_edited(|text| with_app(|app| { app.state.pane.side_edited(&text); app.draw(); }));
     bar.on_side_day(|index| with_app(|app| {
         let Some(date) = app.side_cells.get(index.max(0) as usize).copied() else { return };
-        let effect = if app.state.repeat_date_open() {
-            app.state.take_repeat_date(date)
+        let effect = if app.state.month_picker_open() {
+            app.state.pick_month_date(date)
         } else {
             let out = app.state.with_pane(|pane, cx| pane.plan_click(cx, date));
             app.state.pane_effect(out)
@@ -1329,7 +1402,7 @@ fn connect(bar: &Bar) {
         app.effect(effect);
     }));
     bar.on_side_month(|by| with_app(|app| {
-        let effect = if app.state.repeat_date_open() {
+        let effect = if app.state.month_picker_open() {
             let key = if by < 0 { form::Key::PageUp } else { form::Key::PageDown };
             app.state.key(key, form::Mods::default())
         } else {
@@ -1339,7 +1412,7 @@ fn connect(bar: &Bar) {
         app.effect(effect);
     }));
     bar.on_side_confirm(|| with_app(|app| {
-        let effect = if app.state.repeat_date_open() {
+        let effect = if app.state.month_picker_open() {
             app.state.key(form::Key::Enter, form::Mods::default())
         } else {
             let out = app.state.with_pane(|pane, cx| pane.side_confirm(cx));
@@ -1348,7 +1421,7 @@ fn connect(bar: &Bar) {
         app.effect(effect);
     }));
     bar.on_side_back(|| with_app(|app| {
-        let effect = if app.state.repeat_date_open() {
+        let effect = if app.state.month_picker_open() {
             app.state.key(form::Key::Escape, form::Mods::default())
         } else {
             let out = app.state.with_pane(|pane, cx| pane.side_back(cx));
@@ -1369,8 +1442,9 @@ fn connect(bar: &Bar) {
         app.bar.invoke_focus_notepad();
     }));
     bar.on_notepad_new_note(|| with_app(|app| {
-        app.state.new_notepad_note();
-        app.draw();
+        app.close_notepad_viewer();
+        let effect = app.state.new_notepad_note();
+        app.effect(effect);
     }));
     bar.on_command_chosen(|index| with_app(|app| { let effect = app.state.choose_command(index as usize); app.effect(effect); }));
     bar.on_notepad_tool(|index| with_app(|app| {
@@ -1424,7 +1498,15 @@ fn connect(bar: &Bar) {
         app.bar.set_notice_is_error(app.notice.is_some());
     }));
     bar.on_notepad_finish(|save| with_app(|app| { let effect = app.state.finish_notepad(save); app.effect(effect); }));
-    bar.on_search_edited(|text| with_app(|app| { app.state.search_edited(&text); app.draw(); }));
+    bar.on_search_edited(|text, cursor| with_app(|app| { app.state.search_at(&text, cursor.max(0) as usize); app.draw(); }));
+    bar.on_search_cursor_moved(|text, cursor| APP.with(|slot| {
+        // Setting text or focus after a selection can synchronously move the native input cursor.
+        if let Ok(mut slot) = slot.try_borrow_mut() {
+            if let Some(app) = slot.as_mut() {
+                if app.state.move_search_cursor(&text, cursor.max(0) as usize) { app.draw(); }
+            }
+        }
+    }));
     bar.on_choice_clicked(|index| with_app(|app| { let effect = app.state.choice_click(index.max(0) as usize); app.effect(effect); }));
     bar.on_sentence_clicked(|slot, value| with_app(|app| { app.state.repeat_click(slot, value); app.draw(); }));
     bar.on_edited(|text| with_app(|app| {
@@ -1581,7 +1663,7 @@ fn main() {
         }
         if matches!(event, WindowEvent::Focused(false)) && !PICKING_IMAGE.with(|picking| picking.get()) {
             slint::Timer::single_shot(Duration::ZERO, || with_app(|app| {
-                if app.state.preferences.hide_on_blur { let _ = app.bar.hide(); }
+                let _ = app.bar.hide();
             }));
         }
         if matches!(event, WindowEvent::ScaleFactorChanged { .. }) {
@@ -1790,6 +1872,17 @@ mod tests {
         assert!(bar.get_cal_bands().iter().any(|band| band.selected), "The calendar marks the day the view shows.");
         capture(&bar, "day-view-tomorrow");
         // The command opens tomorrow's note list.
+        type_text(&bar, "@");
+        assert_eq!(bar.get_commands().row_count(), 10);
+        capture(&bar, "search-type-filters");
+        send_key_combo(&bar, [K::DownArrow]);
+        send_key_combo(&bar, [K::Return]);
+        assert_eq!(bar.get_search_text(), "@Ereignis ");
+        send_key_combo(&bar, [K::Escape]);
+        type_text(&bar, "ahn");
+        assert_eq!(bar.get_commands().row_data(0).unwrap().name, "Zahnarzt");
+        capture(&bar, "search-entry-results");
+        send_key_combo(&bar, [K::Escape]);
         type_text(&bar, "/Notizblock");
         send_key_combo(&bar, [K::Return]);
         assert!(bar.get_notepad_open() && !bar.get_entry_open());
@@ -1808,7 +1901,7 @@ mod tests {
             assert!(bar.get_notepad_open(), "The actions open the notepad.");
             assert_eq!(bar.get_notepad_panel(), 1);
             assert_eq!(bar.get_notepad_title().as_str(), "");
-            key_with_modifiers(&bar, &[K::Control], "n");
+            key_with_modifiers(&bar, &[K::Control, K::Shift], "N");
             assert!(bar.get_notepad_editing() && bar.get_notepad_panel() == 0);
             type_text(&bar, "Entwurf");
             send_key_combo(&bar, [K::Escape]);
@@ -1822,9 +1915,8 @@ mod tests {
         }
         key_with_modifiers(&bar, &[K::Control, K::Shift], "N");
         assert!(bar.get_notepad_open());
-        assert_eq!(bar.get_notepad_panel(), 1);
+        assert!(bar.get_notepad_editing() && bar.get_notepad_panel() == 0);
         let ctrl = |text: &str| key_with_modifiers(&bar, &[K::Control], text);
-        ctrl("n");
         assert!(bar.get_notepad_date().starts_with("Tagespinnwand"));
         send_key_combo(&bar, [K::Tab]);
         assert_eq!(bar.get_notepad_body().as_str(), "    ");
@@ -1874,6 +1966,10 @@ mod tests {
         capture_window(keys_window.window(), "shortcut-assignment");
         send_key_combo(&keys_window, [K::F1]);
         assert!(!settings_open() && bar.get_notepad_open());
+        let closed_window = keys_window.as_weak();
+        drop(keys_window);
+        i_slint_backend_testing::mock_elapsed_time(Duration::from_millis(1));
+        assert!(closed_window.upgrade().is_none());
         ctrl("m");
         assert!(!bar.get_notepad_preview(), "The old binding gives way to the replacement.");
         send_key_combo(&bar, [K::F8]);
@@ -1909,6 +2005,15 @@ mod tests {
         assert_eq!(bar.get_notepad_query().as_str(), "Neue");
         send_key_combo(&bar, [K::Escape]);
         assert!(!bar.get_notepad_open());
+        ctrl("n");
+        assert!(bar.get_notepad_open() && bar.get_notepad_panel() == 1);
+        assert!(bar.get_notepad_on_day());
+        send_key_combo(&bar, [K::Tab]);
+        assert_eq!(bar.get_notepad_panel(), 1);
+        assert!(!bar.get_notepad_on_day());
+        send_key_combo(&bar, [K::Tab]);
+        assert!(bar.get_notepad_on_day());
+        send_key_combo(&bar, [K::Escape]);
         bar.window().dispatch_event(slint::platform::WindowEvent::KeyPressed { text: char::from(K::Alt).into() });
         type_text(&bar, "h");
         bar.window().dispatch_event(slint::platform::WindowEvent::KeyReleased { text: char::from(K::Alt).into() });
@@ -1930,7 +2035,11 @@ mod tests {
         // Into the day: ↓ from the search bar chooses the title; Alt+A writes a task in place, Enter the next, Esc ends.
         send_key_combo(&bar, [K::DownArrow]);
         assert!(bar.get_day_rows().iter().any(|row| row.selected && row.kind == 5), "The day's title is chosen first.");
+        key_with_modifiers(&bar, &[K::Control], "f");
+        type_text(&bar, "Probe");
+        assert_eq!(bar.get_search_text(), "Probe");
         alt(&bar, "a");
+        assert_eq!(bar.get_search_text(), "");
         assert!(bar.get_day_rows().iter().any(|row| row.editing && row.kind == 1), "A line for the new task.");
         type_text(&bar, "Brot kaufen");
         send_key_combo(&bar, [K::Return]);
@@ -1956,7 +2065,7 @@ mod tests {
         let status = bar.get_menu_rows().iter().find(|row| row.label == "Status").unwrap();
         assert_eq!(status.caps.iter().map(|cap| cap.to_string()).collect::<Vec<_>>(), ["Alt", "D"], "Each action shows its keys.");
         capture(&bar, "actions-entry");
-        // Typing filters; Enter on "Planen" opens the month in the same card, Enter there plans on tomorrow.
+        // Open the month from the actions and select dates with the physical Space and arrow keys.
         type_text(&bar, "plan");
         assert_eq!(labels(&bar)[0], "Planen", "{:?}", labels(&bar));
         capture(&bar, "actions-search");
@@ -1965,8 +2074,26 @@ mod tests {
         assert_eq!(bar.get_side_kind(), 5);
         assert_eq!(bar.get_side_cells().row_count(), 42);
         capture(&bar, "actions-plan");
+        bar.window().dispatch_event(slint::platform::WindowEvent::KeyPressed { text: " ".into() });
+        send_key_combo(&bar, [K::RightArrow]);
+        bar.window().dispatch_event(slint::platform::WindowEvent::KeyReleased { text: " ".into() });
+        assert_eq!(bar.get_side_cells().iter().filter(|day| day.picked).count(), 2);
+        send_key_combo(&bar, [K::Shift, K::RightArrow]);
+        send_key_combo(&bar, [K::Shift, K::RightArrow]);
+        assert_eq!(bar.get_side_cells().iter().filter(|day| day.pending).count(), 3);
+        type_text(&bar, " ");
+        assert_eq!(bar.get_side_cells().iter().filter(|day| day.picked).count(), 4);
         send_key_combo(&bar, [K::Return]);
         assert!(!bar.get_side_open() && !bar.get_menu_open(), "Planned: the card goes.");
+        send_key_combo(&bar, [K::Alt, K::Delete]);
+        assert!(bar.get_side_open());
+        assert_eq!(bar.get_side_rows().row_data(0).unwrap().label, "Nur diesen");
+        assert!(bar.get_side_rows().row_data(0).unwrap().selected);
+        send_key_combo(&bar, [K::RightArrow]);
+        assert!(bar.get_side_rows().row_data(1).unwrap().selected);
+        send_key_combo(&bar, [K::Escape]);
+        send_key_combo(&bar, [K::Escape]);
+        assert!(!bar.get_side_open());
         // A tag only with the keyboard: Strg+K on "Post", "tag", Enter; the search has the keys, ↓ and Enter choose.
         let post = bar.get_day_rows().iter().find(|row| row.label == "Post").unwrap().item;
         bar.invoke_day_click(post, 4);
@@ -2048,11 +2175,15 @@ mod tests {
         send_key_combo(&bar, [K::Return]);
         assert!(settings_open());
         assert!(!bar.get_menu_open());
-        keys_window.window().dispatch_event(WindowEvent::CloseRequested);
+        settings().window().dispatch_event(WindowEvent::CloseRequested);
         assert!(!settings_open() && bar.window().is_visible());
 
         send_key_combo(&bar, [K::F1]);
         assert!(settings_open());
+        let keys_window = settings();
+        i_slint_backend_testing::mock_elapsed_time(Duration::from_millis(1));
+        assert!(keys_window.window().is_visible());
+        assert!(keys_window.get_query().is_empty());
         let settings_theme = keys_window.global::<Theme>();
         let key_position = |x, y| slint::LogicalPosition::new(x, y);
         assert_eq!(keys_window.get_category(), 0);
@@ -2161,6 +2292,7 @@ mod tests {
         type_text(&bar, "einst");
         send_key_combo(&bar, [K::Return]);
         assert!(settings_open());
+        let keys_window = settings();
         type_text(&keys_window, "Einstellungen öffnen");
         send_key_combo(&keys_window, [K::Return]);
         assert!(keys_window.get_recording());
@@ -2171,6 +2303,7 @@ mod tests {
         send_key_combo(&keys_window, [K::F9]);
         assert!(!settings_open());
         send_key_combo(&bar, [K::F9]);
+        let keys_window = settings();
         type_text(&keys_window, "Einstellungen öffnen");
         send_key_combo(&keys_window, [K::Tab]);
         send_key_combo(&keys_window, [K::Delete]);
@@ -2196,11 +2329,12 @@ mod tests {
         open_footer_menu();
         send_key_combo(&bar, [K::Return]);
         assert!(settings_open());
-        send_key_combo(&keys_window, [K::Escape]);
+        send_key_combo(&settings(), [K::Escape]);
         assert!(!settings_open());
         assert_eq!(bar.get_text().as_str(), "Zahnarzt");
-        key_with_modifiers(&bar, &[K::Control, K::Shift], "N");
+        key_with_modifiers(&bar, &[K::Control], "n");
         assert!(bar.get_notepad_open() && !bar.get_entry_open());
+        if bar.get_notepad_panel() == 0 { send_key_combo(&bar, [K::Tab]); }
         send_key_combo(&bar, [K::Escape]);
         assert!(bar.get_entry_open() && !bar.get_notepad_open());
         assert_eq!(bar.get_text().as_str(), "Zahnarzt");

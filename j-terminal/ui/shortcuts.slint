@@ -374,7 +374,6 @@ export component SettingsWindow inherits Window {
                     }
                     option := SettingsOption {
                         data: row; labels: root.labels; terminal-icon: root.terminal-icon;
-                        previews: row.preference == PreferenceKey.start-view && !root.searching && self.width >= Theme.settings-preview-min-room;
                         first: row.starts-group; last: i + 1 >= root.rows.length || root.rows[i + 1].starts-group;
                         property <bool> selected: root.selected == i && root.area == SettingsFocus.options;
                         focused: self.selected && root.keyboard-focus;
@@ -396,10 +395,6 @@ export component SettingsWindow inherits Window {
                             root.activate(i);
                         }
                         reset => { root.keyboard-focus = false; root.reset-binding(i); }
-                        choose(index) => {
-                            root.stop-recording(); root.selected = i; root.area = SettingsFocus.options; root.keyboard-focus = false;
-                            root.error = root.set-preference(row.preference, index); search.focus();
-                        }
                     }
                 }
                 if root.rows.length == 0: Text {

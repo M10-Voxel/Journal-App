@@ -45,6 +45,149 @@ fn go(form: &mut Form, field: Field) {
 fn type_in(form: &mut Form, text: &str) { form.edited(text); }
 
 #[test]
+fn search_filters_follow_shared_tag_order_and_replace_only_the_active_token() {
+    let mut t = test();
+    t.form.close_entry();
+    let db = &mut t.form.journal.as_mut().unwrap().store;
+    let mail = crate::texts::search::MAIL_IDS[0];
+    let mut tags = db.tags().unwrap();
+    tags.push(Tag { id: mail.into(), name: "Lieferung".into(), color: "#aaaaaa".into(), icon: None });
+    db.save_tags(&tags).unwrap();
+    db.save_period_data(&serde_json::json!({"definitions":[{"id":"work","calendarTagId":WORK}]}).to_string()).unwrap();
+    t.form.snapshot.as_mut().unwrap().reload(db).unwrap();
+    t.form.search_edited("\\");
+    assert_eq!(t.form.commands()[0].name, "Gesundheit");
+    let journal_app = Store::open(&t.path).unwrap();
+    journal_app.conn.execute("INSERT INTO settings(key,value) VALUES('tag-kind-order',?1)", [r#"["mail","activity","own"]"#]).unwrap();
+    t.form.set_clock(d("2026-11-18"), 800);
+    assert_eq!(t.form.commands().iter().map(|r| (r.name.as_str(),r.detail.as_str())).collect::<Vec<_>>(),
+        [("Lieferung","E-Mail"),("Arbeit","Checkliste"),("Gesundheit","Eigene")]);
+    t.form.search_at("Brief @pi \\Arbeit", "Brief @pi".len());
+    assert_eq!(t.form.commands().len(), 4);
+    t.form.key(Key::Down, NONE);
+    let effect = t.form.key(Key::Tab, NONE);
+    assert_eq!(effect.search.as_deref(), Some("Brief @Pinnwand/Zettel \\Arbeit"));
+    t.form.search_edited("@");
+    assert_eq!(t.form.commands().len(), 10);
+}
+
+#[test]
+fn search_finds_linked_pages_and_opens_an_unpinned_attachment_at_its_note() {
+    let mut t = test();
+    t.form.close_entry();
+    let store = &t.form.journal.as_ref().unwrap().store;
+    let [root, page, link] = std::array::from_fn::<_, 3, _>(|_| uuid::Uuid::new_v4().to_string());
+    for card in [
+        serde_json::json!({"id":root,"kind":"note","title":"Projekt","boards":{"year:2026":{},"month:2026-09":{},"month:2026-11":{}},"links":[page]}),
+        serde_json::json!({"id":page,"kind":"note","title":"Kapitel","links":[root,link]}),
+        serde_json::json!({"id":link,"kind":"link","title":"Quelle","url":"https://example.org","links":[page]}),
+    ] {
+        store.conn.execute("INSERT INTO settings(key,value) VALUES(?1,?2)",
+            rusqlite::params![format!("board:card:{}", card["id"].as_str().unwrap()), card.to_string()]).unwrap();
+    }
+    let hits = notebook::search_cards(store, &[], &[], &[]).unwrap();
+    let find = |name| hits.iter().find(|hit| hit.title == name).unwrap();
+    assert_eq!(find("Projekt").date, Some(d("2026-11-01")));
+    assert_eq!(find("Kapitel").kind, "notebook");
+    assert_eq!((find("Quelle").kind, find("Quelle").id.to_string(), find("Quelle").open_attachment), ("board-link", page, false));
+    t.form.search_edited("@Pinnwand/Link Quelle");
+    t.form.key(Key::Enter, NONE);
+    assert_eq!(t.form.notepad().unwrap().title(), "Kapitel");
+}
+
+#[test]
+fn planning_space_adds_visited_days_and_confirms_a_range_without_the_source() {
+    let mut t = test();
+    t.form.run(ActionId::Plan, None);
+    let key = |f: &mut Form, k| f.key(k, NONE);
+    key(&mut t.form, Key::Space);
+    key(&mut t.form, Key::Space); // OS repeat
+    key(&mut t.form, Key::Right);
+    t.form.release_plan_space();
+    key(&mut t.form, Key::Right);
+    assert_eq!(t.form.v.plan_days, [d("2026-11-19"),d("2026-11-20")].into());
+    for _ in 0..4 { t.form.key(Key::Left, SHIFT); }
+    assert!(t.form.month_panel().unwrap().cells.iter().any(|c| c.pending && c.date == d("2026-11-17")));
+    key(&mut t.form, Key::Space);
+    assert_eq!(t.form.v.plan_days, [d("2026-11-17"),d("2026-11-19"),d("2026-11-20"),d("2026-11-21")].into());
+    t.form.pick_month_date(d("2026-11-18"));
+    assert!(t.form.month_panel().unwrap().cells.iter().any(|c| c.disabled && !c.picked && c.date == d("2026-11-18")));
+}
+
+#[test]
+fn search_edit_and_plan_retain_the_entry_and_detect_a_stale_edit() {
+    let mut t = test();
+    type_in(&mut t.form, "Projekt \\Arbeit");
+    assert!(t.form.key(Key::Enter, CTRL).hide_soon);
+    let id = day(&t, "2026-11-18")[0].id.clone();
+    t.form.search_edited("Projekt @Note ");
+    assert!(t.form.commands().is_empty());
+    t.form.search_edited("Projekt @Aufgabe \\Arbeit ");
+    assert_eq!(t.form.commands().len(), 1);
+    t.form.choose_command(0);
+    type_in(&mut t.form, "Projekt morgen");
+    go(&mut t.form, Field::Plan);
+    type_in(&mut t.form, "19.11.2026, 21.11.2026");
+    assert!(t.form.key(Key::Enter, CTRL).hide_soon);
+    let source = day(&t, "2026-11-18");
+    assert_eq!(source.len(), 1);
+    assert_eq!(source[0].id, id);
+    assert_eq!(source[0].plan.as_ref().unwrap().targets.len(), 2);
+    assert_eq!(day(&t, "2026-11-21")[0].text, "Projekt morgen");
+    t.form.search_edited("Projekt @Task ");
+    assert_eq!(t.form.commands().len(), 2);
+    t.form.choose_command(0);
+    let store = &mut t.form.journal.as_mut().unwrap().store;
+    let mut changed = store.load("2026-11-21").unwrap();
+    changed.entries[0].text = "Extern geändert".into();
+    store.save(changed).unwrap();
+    type_in(&mut t.form, "Konflikt");
+    assert!(!t.form.key(Key::Enter, CTRL).hide_soon);
+    assert_eq!(day(&t, "2026-11-21")[0].text, "Extern geändert");
+    assert_eq!(t.form.title(), "Konflikt");
+}
+
+#[test]
+fn planning_a_new_task_with_the_month_picker_can_be_cancelled_and_saved() {
+    let mut t = test();
+    t.form.edited("Einkaufen");
+    t.form.run(ActionId::Plan, None);
+    t.form.pick_month_date(d("2026-11-20"));
+    t.form.key(Key::Escape, NONE);
+    assert!(t.form.v.plan_days.is_empty());
+    t.form.run(ActionId::Plan, None);
+    t.form.key(Key::Space, NONE);
+    t.form.pick_month_date(d("2026-11-21"));
+    assert_eq!(t.form.month_panel().unwrap().cells.iter().filter(|c| c.picked).count(), 2);
+    t.form.key(Key::Enter, NONE);
+    assert!(t.form.key(Key::Enter, CTRL).hide_soon);
+    assert_eq!(day(&t, "2026-11-19")[0].origin.as_deref(), Some("2026-11-18"));
+    assert_eq!(day(&t, "2026-11-21")[0].text, "Einkaufen");
+}
+
+#[test]
+fn editing_a_series_occurrence_preserves_its_day_status_and_series() {
+    let mut t = test();
+    type_in(&mut t.form, "Sport jeden Mo bis 7.12.");
+    assert!(t.form.key(Key::Enter, CTRL).hide_soon);
+    let store = &mut t.form.journal.as_mut().unwrap().store;
+    let mut occurrence = store.load("2026-11-30").unwrap();
+    occurrence.entries[0].done = true;
+    store.save(occurrence).unwrap();
+    let before = day(&t, "2026-11-30").remove(0);
+    t.form.search_edited("Sport");
+    let index = t.form.commands().iter().position(|hit| matches!(&hit.action, CommandAction::Hit(date, _) if *date == d("2026-11-30"))).unwrap();
+    t.form.choose_command(index);
+    type_in(&mut t.form, "Training");
+    assert!(t.form.key(Key::Enter, CTRL).hide_soon);
+    let after = day(&t, "2026-11-30").remove(0);
+    assert_eq!(after.text, "Training");
+    assert!(after.done && after.plan.is_none());
+    assert_eq!(after.id, before.id);
+    assert_eq!(after.repeat.unwrap().series, before.repeat.unwrap().series);
+}
+
+#[test]
 fn opening_and_title_preferences_preserve_the_selected_day_and_a_literal_draft() {
     let mut t = test();
     t.form.close_entry();
@@ -68,10 +211,23 @@ fn opening_and_title_preferences_preserve_the_selected_day_and_a_literal_draft()
 }
 
 #[test]
+fn starting_another_note_preserves_the_unsaved_draft() {
+    let mut t = test();
+    t.form.new_notepad_note();
+    let first = t.form.notepad().unwrap().card.id;
+    t.form.edit_notepad(true, "Entwurf behalten");
+    t.form.new_notepad_note();
+    assert_ne!(t.form.notepad().unwrap().card.id, first);
+    assert_eq!(t.form.notepad().unwrap().body(), "");
+    t.form.finish_notepad(false);
+    assert_eq!(t.form.notepad().unwrap().card.id, first);
+    assert_eq!(t.form.notepad().unwrap().body(), "Entwurf behalten");
+}
+
+#[test]
 fn notebook_defaults_apply_on_open_and_leave_the_current_session_in_control() {
     let mut t = test();
     t.form.close_entry();
-    t.form.preferences.notes_on_day = true;
     t.form.preferences.edit_notes = true;
     t.form.open_notepad();
     assert!(t.form.notepad().unwrap().notes_on_day);
@@ -139,7 +295,10 @@ fn notepad_writes_a_pinned_card_and_reopens_the_same_note_with_its_tag_and_attac
     assert_eq!(attachment["url"], "https://example.org/journal");
     assert_eq!(attachment["links"], serde_json::json!([id.to_string()]));
 
+    t.form.finish_notepad(false);
+    t.form.finish_notepad(false);
     t.form.open_notepad();
+    assert!(t.form.notepad().unwrap().notes_on_day);
     assert_eq!(t.form.notepad_choices("Planung")[0].key, id.to_string());
     t.form.pick_notepad(&id.to_string());
     assert!(t.form.notepad().unwrap().preview && !t.form.notepad().unwrap().editing);
@@ -216,7 +375,8 @@ fn notebook_browses_today_by_nested_folder_and_keeps_the_other_days_in_all() {
             rusqlite::params![format!("board:card:{id}"), card.to_string()]).unwrap();
     }
     t.form.open_notepad();
-    t.form.notepad_panel(1);
+    assert!(t.form.notepad().unwrap().notes_on_day);
+    t.form.set_notepad_day_filter(false);
     assert_eq!(t.form.notepad_choices("").len(), 3);
     t.form.set_notepad_day_filter(true);
     let rows = t.form.notepad_choices("");
@@ -718,25 +878,25 @@ fn the_repeat_month_picker_confirms_only_valid_dates_and_escape_keeps_the_rule()
     };
     let start = date_part(&mut t.form, "Ab");
     t.form.repeat_click(start.slot, start.value);
-    assert!(t.form.repeat_date_open());
+    assert!(t.form.month_picker_open());
     t.form.key(Key::PageDown, NONE);
     t.form.key(Key::Right, NONE);
     t.form.key(Key::Enter, NONE);
     assert_eq!(t.form.v.rule.as_ref().unwrap().start, d("2026-12-19"));
-    assert!(!t.form.repeat_date_open());
+    assert!(!t.form.month_picker_open());
 
     let until = date_part(&mut t.form, "Bis");
     t.form.repeat_click(until.slot, until.value);
     t.form.key(Key::Home, NONE);
     let panel = t.form.view().side.unwrap();
     assert!(panel.cells.iter().any(|cell| cell.date == d("2026-12-18") && cell.disabled));
-    t.form.take_repeat_date(d("2026-12-18"));
-    assert!(t.form.repeat_date_open());
+    t.form.pick_month_date(d("2026-12-18"));
+    assert!(t.form.month_picker_open());
     t.form.key(Key::Escape, NONE);
     assert!(t.form.v.rule.as_ref().unwrap().end.is_none());
     t.form.key(Key::Space, NONE);
-    assert!(t.form.repeat_date_open(), "Escape returns focus to the end date.");
-    t.form.take_repeat_date(d("2026-12-20"));
+    assert!(t.form.month_picker_open(), "Escape returns focus to the end date.");
+    t.form.pick_month_date(d("2026-12-20"));
     assert_eq!(t.form.v.rule.as_ref().unwrap().end.unwrap().until, Some(d("2026-12-20")));
 }
 

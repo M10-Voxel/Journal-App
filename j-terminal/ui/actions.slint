@@ -6,7 +6,7 @@ import { KeyCaps } from "footer.slint";
 export struct MenuRow { top: length, section: string, has-icon: bool, icon: image, label: string, value: string, caps: [string], on: bool, danger: bool, has-color: bool, color: color }
 // A line of a picker (a tag, a reminder, an icon) and a day of the planning month.
 export struct SideRow { has-icon: bool, icon: image, label: string, value: string, selected: bool, on: bool, has-color: bool, color: color, danger: bool }
-export struct MonthCell { label: string, in-month: bool, today: bool, cursor: bool, picked: bool, own: bool, disabled: bool }
+export struct MonthCell { label: string, in-month: bool, today: bool, cursor: bool, picked: bool, own: bool, pending: bool, disabled: bool }
 
 // The search under the list: typing filters, the keys that move or choose are handed on.
 component PopoverSearch inherits Rectangle {
@@ -207,8 +207,8 @@ export component ActionPopover inherits Rectangle {
             }
         }
         // ----- The pickers -----
-        // Tags and reminders: a line each.
-        if root.side-open && (root.side-kind == 1 || root.side-kind == 3): side-list := Flickable {
+        // Tags, reminders and deletion scopes.
+        if root.side-open && (root.side-kind == 1 || root.side-kind == 3 || root.side-kind == 7): side-list := Flickable {
             min-height: Theme.side-row-height;
             preferred-height: side-lines.preferred-height;
             vertical-stretch: 1;
@@ -301,7 +301,7 @@ export component ActionPopover inherits Rectangle {
                 x: parent.grid-x + Math.mod(i, 7) * Theme.side-cell + Theme.side-cell-inset; y: (Math.floor(i / 7) + 1) * Theme.side-cell + Theme.side-cell-inset;
                 width: Theme.side-cell - Theme.side-cell-inset * 2; height: Theme.side-cell - Theme.side-cell-inset * 2;
                 border-radius: self.height / 2;
-                background: cell.picked ? Theme.accent : cell.cursor ? Theme.row-selection : cell-touch.has-hover && !cell.disabled ? Theme.hover : transparent;
+                background: cell.picked ? Theme.accent : cell.pending ? Theme.selection : cell.cursor ? Theme.row-selection : cell-touch.has-hover && !cell.disabled ? Theme.hover : transparent;
                 border-width: cell.cursor || cell.today ? Theme.border-width : 0px; border-color: cell.cursor ? Theme.field-focus : Theme.accent;
                 Text {
                     text: cell.label; font-family: Theme.write-font; font-size: Theme.row-size; horizontal-alignment: center; vertical-alignment: center;

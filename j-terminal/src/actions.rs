@@ -13,7 +13,7 @@ pub enum Id {
     Entry(Action),
     NewTask, NewEvent, NewNote, Today, Notebook, Undo, Redo, Settings,
     /// The entry form.
-    Save, SaveStay, Priority, Repeat, Description, Reminder, Icon, Discard,
+    Save, SaveStay, Priority, Repeat, Plan, Description, Reminder, Icon, Discard,
     /// The notepad.
     NotesNew, NotesEdit, NotesSave, NotesPreview, NotesTag, NotesAttachments, NotesList, NotesClose,
 }
@@ -32,7 +32,6 @@ impl Id {
                 Action::Description => "day-description",
                 Action::Tomorrow => "day-tomorrow",
                 Action::Plan => "day-plan",
-                Action::PlanDays => "day-plan-days",
                 Action::Delete => "day-remove",
                 Action::Kind | Action::Jump => return None,
             },
@@ -57,7 +56,7 @@ impl Id {
             Id::NotesTag => "notes-tag",
             Id::NotesAttachments => "notes-attachments",
             Id::NotesList => "notes-list",
-            Id::Repeat | Id::Discard | Id::NotesClose => return None,
+            Id::Repeat | Id::Plan | Id::Discard | Id::NotesClose => return None,
         })
     }
 
@@ -149,7 +148,7 @@ mod tests {
         let bindings = crate::shortcuts::Bindings::default();
         let all = [Id::NewTask, Id::NewEvent, Id::NewNote, Id::Today, Id::Notebook, Id::Undo, Id::Redo, Id::Settings, Id::Save, Id::SaveStay,
             Id::Priority, Id::Description, Id::Reminder, Id::Icon, Id::NotesNew, Id::NotesEdit, Id::NotesSave, Id::NotesPreview, Id::NotesTag,
-            Id::NotesAttachments, Id::NotesList, Id::Entry(Action::Status), Id::Entry(Action::Delete), Id::Entry(Action::PlanDays)];
+            Id::NotesAttachments, Id::NotesList, Id::Entry(Action::Status), Id::Entry(Action::Delete), Id::Entry(Action::Plan)];
         for id in all {
             let keys = crate::shortcuts::keys(&bindings, id.binding().unwrap(), crate::texts::Language::De);
             assert!(!keys.is_empty(), "{id:?}");

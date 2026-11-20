@@ -8,7 +8,7 @@
 //! program's changes are never overwritten. The model has no window; `form.rs` hands it the store and the warm data.
 use std::collections::BTreeSet;
 use chrono::{Datelike, NaiveDate};
-use journal_core::storage::{Day, Store};
+use journal_core::storage::{Day, LinkedChange, Store};
 use crate::calendar::Rgb;
 use crate::day_ops as ops;
 use crate::day_view::{self, DayView, Item, RowKind};
@@ -46,18 +46,59 @@ pub struct Out {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum EditTarget { Title, Entry(String), New { kind: &'static str, after: Option<String>, tag: Option<String> } }
 
+/// Navigation shared by both planning months. Shift previews a range until Space commits it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PlanCursor {
+    pub date: NaiveDate,
+    anchor: Option<NaiveDate>,
+    pub holding: bool,
+}
+
+impl PlanCursor {
+    pub fn new(date: NaiveDate) -> Self { Self { date, anchor: None, holding: false } }
+    pub fn preview(&self, date: NaiveDate) -> bool {
+        self.anchor.is_some_and(|a| (a.min(self.date)..=a.max(self.date)).contains(&date))
+    }
+    pub fn travel(&mut self, next: NaiveDate, shift: bool, own: NaiveDate, picked: &mut BTreeSet<NaiveDate>) {
+        if shift { self.anchor.get_or_insert(self.date); } else { self.anchor = None; }
+        self.date = next;
+        if self.holding && !shift && next != own { picked.insert(next); }
+    }
+    pub fn space(&mut self, own: NaiveDate, picked: &mut BTreeSet<NaiveDate>) {
+        if self.holding { return; }
+        self.holding = true;
+        if let Some(anchor) = self.anchor.take() {
+            for date in anchor.min(self.date).iter_days().take_while(|d| *d <= anchor.max(self.date)) {
+                if date != own { picked.insert(date); }
+            }
+        } else if self.date != own && !picked.remove(&self.date) { picked.insert(self.date); }
+    }
+    pub fn click(&mut self, date: NaiveDate, own: NaiveDate, picked: &mut BTreeSet<NaiveDate>) {
+        if date == own { return; }
+        *self = Self::new(date);
+        if !picked.remove(&date) { picked.insert(date); }
+    }
+}
+
 /// The panel at the left: the actions of an entry, or one of its pickers.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SideView {
     Actions,
+    Delete(Vec<DeleteScope>),
     Tags,
     Icons,
     Reminders,
     /// The clock: minutes since midnight (none: no time), which part has the arrows, digits typed so far.
     Time { minutes: Option<u32>, on_minutes: bool, typed: String },
-    /// A month to plan on: one day, or several (`multi`) collected with Space or clicks.
-    Plan { multi: bool, cursor: NaiveDate, picked: BTreeSet<NaiveDate> },
+    /// The planning month and all confirmed target dates.
+    Plan { cursor: PlanCursor, picked: BTreeSet<NaiveDate> },
     Description,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DeleteScope {
+    label: String,
+    ids: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -65,7 +106,7 @@ pub struct Side { pub entry: String, pub view: SideView, pub pick: usize }
 
 /// One action of an entry in the panel.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Action { Status, Kind, Priority, Tag, Time, Reminder, Icon, Description, Tomorrow, Plan, PlanDays, Jump, Delete }
+pub enum Action { Status, Kind, Priority, Tag, Time, Reminder, Icon, Description, Tomorrow, Plan, Jump, Delete }
 
 /// The panel as drawn.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -99,7 +140,7 @@ impl SidePanel {
             Cell {
                 label: date.day().to_string(), date, in_month: date.month() == cursor.month(),
                 today: date == today, cursor: date == cursor, picked: picked(date), own: own == Some(date),
-                disabled: earliest.is_some_and(|first| date < first),
+                pending: false, disabled: own == Some(date) || earliest.is_some_and(|first| date < first),
             }
         }).collect();
     }
@@ -113,7 +154,7 @@ pub struct ActionLine { pub action: Action, pub icon: String, pub label: String,
 pub struct SideRow { pub icon: String, pub label: String, pub value: String, pub selected: bool, pub on: bool, pub color: Option<Rgb>, pub danger: bool }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Cell { pub label: String, pub date: NaiveDate, pub in_month: bool, pub today: bool, pub cursor: bool, pub picked: bool, pub own: bool, pub disabled: bool }
+pub struct Cell { pub label: String, pub date: NaiveDate, pub in_month: bool, pub today: bool, pub cursor: bool, pub picked: bool, pub own: bool, pub pending: bool, pub disabled: bool }
 
 /// What the day view needs from the rest: the store and the warm data, the day shown and the clock.
 pub struct Ctx<'a> {
@@ -307,14 +348,13 @@ impl DayPane {
             (_, Some('e'), true) => { let r = self.change(cx, |day, tags| ops::set_kind(day, tags, &id, "event")); self.report(r) }
             (_, Some('a'), true) => { let r = self.change(cx, |day, tags| ops::set_kind(day, tags, &id, "task")); self.report(r) }
             (_, Some('n'), true) => { let r = self.change(cx, |day, tags| ops::set_kind(day, tags, &id, "note")); self.report(r) }
-            (_, Some('t'), true) => self.open_plan(cx, &id, true),
             (_, Some('d'), false) => { let r = self.change(cx, |day, _| ops::toggle_status(day, &id, false)); self.report(r) }
             (_, Some('x'), false) => { let r = self.change(cx, |day, _| ops::toggle_status(day, &id, true)); self.report(r) }
             (_, Some('p'), false) => { let r = self.change(cx, |day, tags| ops::toggle_priority(day, tags, &id)); self.report(r) }
             (_, Some('m'), false) => { let r = self.change(cx, |day, _| ops::plan_tomorrow(day, &id)); self.report(r) }
             // On a trace Alt+T goes to where it went.
             (_, Some('t'), false) if entry.plan.is_some() => Out { go_to: entry.plan.as_ref().and_then(|plan| plan.targets.first()).and_then(|t| NaiveDate::parse_from_str(&t.date, "%Y-%m-%d").ok()), ..Out::default() },
-            (_, Some('t'), false) => self.open_plan(cx, &id, false),
+            (_, Some('t'), false) => self.open_plan(cx, &id),
             (_, Some('u'), false) => self.open_side(cx, &id, SideView::Time { minutes: entry.time.as_deref().and_then(ops::minutes), on_minutes: false, typed: String::new() }),
             (_, Some('g'), false) => { let _ = tags; self.open_side(cx, &id, SideView::Tags) }
             (_, Some('i'), false) => self.open_side(cx, &id, SideView::Icons),
@@ -326,10 +366,54 @@ impl DayPane {
 
     fn delete(&mut self, cx: &mut Ctx, id: &str) -> Out {
         if Self::entry(cx, id).is_none() { self.message = Some((day_texts(cx.language).foreign.into(), false)); return Out { focus: true, ..Out::default() }; }
+        let Some(store) = cx.store.as_deref() else { return self.report(Err(texts(cx.language).read_only.into())); };
+        let group = match store.linked(id) {
+            Ok(group) => group,
+            Err(error) => return self.report(Err(error.to_string())),
+        };
+        let Some(index) = group.iter().position(|entry| entry.id == id) else { return Out::default(); };
+        let en = cx.language == Language::En;
+        let mut scopes = vec![DeleteScope { label: if en { "Only this one" } else { "Nur diesen" }.into(), ids: vec![id.into()] }];
+        let mut add = |label: String, others: Vec<String>| {
+            let ids = std::iter::once(id.to_owned()).chain(others).collect();
+            scopes.push(DeleteScope { label, ids });
+        };
+        let following = group.len() - index - 1;
+        if following > 0 {
+            let label = match (en, following) {
+                (true, 1) => "Also the next one".into(),
+                (false, 1) => "Auch den folgenden".into(),
+                (true, _) => format!("Also the next {following}"),
+                (false, _) => format!("Auch die {following} folgenden"),
+            };
+            add(label, group[index + 1..].iter().map(|entry| entry.id.clone()).collect());
+        }
+        let weekday = repeat::weekday_of(cx.date);
+        let occurrences: Vec<_> = group.iter().filter(|entry| entry.id != id && !entry.trace).collect();
+        let same: Vec<_> = occurrences.iter().filter(|entry| entry.date.parse::<NaiveDate>().is_ok_and(|date| repeat::weekday_of(date) == weekday))
+            .map(|entry| entry.id.clone()).collect();
+        if !same.is_empty() && same.len() < occurrences.len() {
+            let name = day_texts(cx.language).weekdays[weekday as usize];
+            add(if en { format!("Every {name}") } else { format!("Jeden {name}") }, same);
+        }
+        if index > 0 {
+            let total = group.len();
+            add(if en { format!("All {total}") } else { format!("Alle {total}") }, group.iter().filter(|entry| entry.id != id).map(|entry| entry.id.clone()).collect());
+        }
+        if scopes.len() > 1 { return self.open_side(cx, id, SideView::Delete(scopes)); }
+        self.remove_entries(cx, id, scopes.remove(0).ids)
+    }
+
+    fn remove_entries(&mut self, cx: &mut Ctx, id: &str, ids: Vec<String>) -> Out {
         // The chosen line goes to the next one (or the one before).
         let items = self.items(cx);
         let at = items.iter().position(|item| *item == Item::Entry(id.to_string()));
-        let r = self.change(cx, |day, _| ops::remove(day, id));
+        let Some(store) = cx.store.as_deref_mut() else { return self.report(Err(texts(cx.language).read_only.into())); };
+        let changes: Vec<_> = ids.into_iter().map(|id| LinkedChange { id, action: "remove".into() }).collect();
+        let r = store.change_linked(&changes).map(|dates| {
+            let dates: Vec<_> = dates.iter().filter_map(|date| date.parse().ok()).collect();
+            if let Some(snapshot) = cx.snapshot.as_deref_mut() { let _ = snapshot.reload_days(store, &dates); }
+        }).map_err(|error| error.to_string());
         if r.is_ok() {
             let after = self.items(cx);
             self.cursor = at.and_then(|at| after.get(at).or_else(|| after.get(at.saturating_sub(1)))).cloned();
@@ -553,9 +637,9 @@ impl DayPane {
         }
     }
 
-    fn open_plan(&mut self, cx: &Ctx, id: &str, multi: bool) -> Out {
+    fn open_plan(&mut self, cx: &Ctx, id: &str) -> Out {
         match Self::entry(cx, id) {
-            Some(entry) if ops::can_plan(&entry) => self.open_side(cx, id, SideView::Plan { multi, cursor: repeat::shift(cx.date, 1), picked: BTreeSet::new() }),
+            Some(entry) if ops::can_plan(&entry) => self.open_side(cx, id, SideView::Plan { cursor: PlanCursor::new(repeat::shift(cx.date, 1)), picked: BTreeSet::new() }),
             Some(_) => { self.message = Some((day_texts(cx.language).cannot_plan.into(), true)); Out { focus: true, ..Out::default() } }
             None => self.open_side(cx, id, SideView::Actions),
         }
@@ -569,7 +653,7 @@ impl DayPane {
         list.extend([Action::Kind, Action::Priority, Action::Tag]);
         if entry.kind != "note" { list.extend([Action::Time, Action::Reminder]); }
         list.extend([Action::Icon, Action::Description]);
-        if ops::can_plan(entry) { if entry.kind == "task" { list.push(Action::Tomorrow); } list.extend([Action::Plan, Action::PlanDays]); }
+        if ops::can_plan(entry) { if entry.kind == "task" { list.push(Action::Tomorrow); } list.push(Action::Plan); }
         list.push(Action::Delete);
         list
     }
@@ -594,7 +678,6 @@ impl DayPane {
                 Action::Description => ("journal-details", dt.description, entry.description.lines().next().unwrap_or_default().to_string(), false),
                 Action::Tomorrow => ("journal-tomorrow", dt.tomorrow_action, String::new(), false),
                 Action::Plan => ("journal-plan-tomorrow", dt.plan, String::new(), false),
-                Action::PlanDays => ("journal-plan-days", dt.plan_days, String::new(), false),
                 Action::Jump => ("journal-jump", dt.jump, String::new(), false),
                 Action::Delete => ("journal-trash", dt.delete, String::new(), false),
             };
@@ -654,6 +737,12 @@ impl DayPane {
         let count = |n: usize| n.max(1);
         let pick = |by: i32, n: usize| ((side.pick as i32 + by).rem_euclid(count(n) as i32)) as usize;
         match side.view.clone() {
+            SideView::Delete(scopes) => match key {
+                K::Up | K::Left | K::BackTab => self.set_pick(pick(-1, scopes.len())),
+                K::Down | K::Right | K::Tab => self.set_pick(pick(1, scopes.len())),
+                K::Enter | K::Space => self.choose(cx, side.pick),
+                _ => Out::default(),
+            },
             SideView::Actions => {
                 let actions = Self::actions(&entry);
                 match key {
@@ -721,19 +810,20 @@ impl DayPane {
                     _ => Out { focus: true, ..Out::default() },
                 }
             }
-            SideView::Plan { multi, cursor, mut picked } => {
-                let set = |this: &mut Self, cursor: NaiveDate, picked: BTreeSet<NaiveDate>| { if let Some(side) = &mut this.side { side.view = SideView::Plan { multi, cursor, picked }; } Out { focus: true, ..Out::default() } };
-                match key {
-                    K::Left => set(self, repeat::shift(cursor, -1), picked),
-                    K::Right => set(self, repeat::shift(cursor, 1), picked),
-                    K::Up => set(self, repeat::shift(cursor, -7), picked),
-                    K::Down => set(self, repeat::shift(cursor, 7), picked),
-                    K::PageUp | K::PageDown => set(self, add_months(cursor, if key == K::PageUp { -1 } else { 1 }), picked),
-                    K::Home | K::Char('h') | K::Char('H') => set(self, cx.today, picked),
-                    K::Space if multi => { if cursor != cx.date && !picked.remove(&cursor) { picked.insert(cursor); } set(self, cursor, picked) }
-                    K::Enter => self.confirm_plan(cx),
-                    _ => Out { focus: true, ..Out::default() },
+            SideView::Plan { .. } => {
+                if key == K::Enter { return self.confirm_plan(cx); }
+                if let Some(Side { view: SideView::Plan { cursor, picked }, .. }) = &mut self.side {
+                    let next = match key {
+                        K::Left => repeat::shift(cursor.date, -1), K::Right => repeat::shift(cursor.date, 1),
+                        K::Up => repeat::shift(cursor.date, -7), K::Down => repeat::shift(cursor.date, 7),
+                        K::PageUp => add_months(cursor.date, -1), K::PageDown => add_months(cursor.date, 1),
+                        K::Home | K::Char('h' | 'H') => cx.today,
+                        K::Space => { cursor.space(cx.date, picked); return Out { focus: true, ..Out::default() }; }
+                        _ => return Out::default(),
+                    };
+                    cursor.travel(next, mods.shift, cx.date, picked);
                 }
+                Out { focus: true, ..Out::default() }
             }
         }
     }
@@ -753,8 +843,7 @@ impl DayPane {
             Action::Icon => self.open_side(cx, &id, SideView::Icons),
             Action::Description => self.open_side(cx, &id, SideView::Description),
             Action::Tomorrow => { let r = self.change(cx, |day, _| ops::plan_tomorrow(day, &id)); let out = self.report(r); self.side = None; out }
-            Action::Plan => self.open_plan(cx, &id, false),
-            Action::PlanDays => self.open_plan(cx, &id, true),
+            Action::Plan => self.open_plan(cx, &id),
             Action::Jump => Out { go_to: entry.plan.as_ref().and_then(|plan| plan.targets.first()).and_then(|t| NaiveDate::parse_from_str(&t.date, "%Y-%m-%d").ok()), ..Out::default() },
             Action::Delete => self.delete(cx, &id),
         }
@@ -765,6 +854,10 @@ impl DayPane {
         let Some(side) = self.side.clone() else { return Out::default() };
         let id = side.entry.clone();
         let r = match side.view {
+            SideView::Delete(scopes) => return match scopes.into_iter().nth(index) {
+                Some(scope) => self.remove_entries(cx, &id, scope.ids),
+                None => Out::default(),
+            },
             SideView::Tags => {
                 let Some(choice) = self.tag_choices(cx).get(index).cloned() else { return Out::default() };
                 let tag = choice.map(|t| t.id);
@@ -780,25 +873,20 @@ impl DayPane {
         out
     }
 
-    /// A click on a day of the planning month: one day is planned at once on a second click, several are collected.
+    /// Toggle one target day without closing the month.
     pub fn plan_click(&mut self, cx: &mut Ctx, date: NaiveDate) -> Out {
-        let Some(Side { view: SideView::Plan { multi, cursor, mut picked }, .. }) = self.side.clone() else { return Out::default() };
-        if multi {
-            if date != cx.date && !picked.remove(&date) { picked.insert(date); }
-            if let Some(side) = &mut self.side { side.view = SideView::Plan { multi, cursor: date, picked }; }
-            return Out { focus: true, ..Out::default() };
+        if let Some(Side { view: SideView::Plan { cursor, picked }, .. }) = &mut self.side {
+            cursor.click(date, cx.date, picked);
         }
-        if cursor == date { return self.confirm_plan(cx); }
-        if let Some(side) = &mut self.side { side.view = SideView::Plan { multi, cursor: date, picked }; }
         Out { focus: true, ..Out::default() }
     }
 
     /// Enter in the planning month (or a click on its confirming line).
     pub fn confirm_plan(&mut self, cx: &mut Ctx) -> Out {
-        let Some(Side { entry, view: SideView::Plan { multi, cursor, picked }, .. }) = self.side.clone() else { return Out::default() };
-        let dates: Vec<NaiveDate> = if multi && !picked.is_empty() { picked.into_iter().collect() } else { vec![cursor] };
+        let Some(Side { entry, view: SideView::Plan { cursor, picked }, .. }) = self.side.clone() else { return Out::default() };
+        let dates: Vec<NaiveDate> = if !picked.is_empty() { picked.into_iter().collect() } else { vec![cursor.date] };
         if dates.iter().all(|d| *d == cx.date) { return Out { focus: true, ..Out::default() }; }
-        let r = self.change(cx, |day, _| ops::plan(day, &entry, &dates, if multi { "days" } else { "date" }));
+        let r = self.change(cx, |day, _| ops::plan(day, &entry, &dates, "days"));
         let out = self.report(r);
         self.side = None;
         out
@@ -806,7 +894,7 @@ impl DayPane {
 
     /// The planning month a month back or on (the arrows beside its name).
     pub fn plan_month(&mut self, by: i32) -> Out {
-        if let Some(Side { view: SideView::Plan { cursor, .. }, .. }) = &mut self.side { *cursor = add_months(*cursor, by); }
+        if let Some(Side { view: SideView::Plan { cursor, .. }, .. }) = &mut self.side { *cursor = PlanCursor::new(add_months(cursor.date, by)); }
         Out { focus: true, ..Out::default() }
     }
 
@@ -838,6 +926,14 @@ impl DayPane {
         let (dt, ft) = (day_texts(cx.language), form_texts(cx.language));
         let mut panel = SidePanel { title: if entry.text.trim().is_empty() { dt.untitled.into() } else { entry.text.clone() }, ..SidePanel::default() };
         match &side.view {
+            SideView::Delete(scopes) => {
+                panel.kind = 7;
+                panel.heading = dt.delete.into();
+                panel.heading_icon = "journal-trash";
+                panel.rows = scopes.iter().enumerate().map(|(i, scope)| SideRow {
+                    label: scope.label.clone(), selected: side.pick == i, danger: true, ..SideRow::default()
+                }).collect();
+            }
             SideView::Actions => {
                 panel.kind = 0;
                 panel.rows = self.entry_actions(cx, &side.entry).map(|(_, lines)| lines).unwrap_or_default().into_iter().enumerate()
@@ -866,11 +962,12 @@ impl DayPane {
                 let value = minutes.unwrap_or(((cx_hour(cx) + 1) % 24) * 60);
                 panel.clock = (format!("{:02}", value / 60), format!("{:02}", value % 60), *on_minutes);
             }
-            SideView::Plan { multi, cursor, picked } => {
-                panel.kind = 5; panel.heading = if *multi { dt.plan_days } else { dt.plan }.into(); panel.heading_icon = if *multi { "calendar-range" } else { "calendar-arrow-up" };
+            SideView::Plan { cursor, picked } => {
+                panel.kind = 5; panel.heading = dt.plan.into(); panel.heading_icon = "calendar-arrow-up";
 
-                panel.set_month(*cursor, cx.today, cx.language, Some(cx.date), None, |date| picked.contains(&date));
-                let chosen: Vec<NaiveDate> = if *multi && !picked.is_empty() { picked.iter().copied().collect() } else { vec![*cursor] };
+                panel.set_month(cursor.date, cx.today, cx.language, Some(cx.date), None, |date| picked.contains(&date));
+                for cell in &mut panel.cells { cell.pending = !cell.disabled && cursor.preview(cell.date); }
+                let chosen: Vec<NaiveDate> = if !picked.is_empty() { picked.iter().copied().collect() } else { vec![cursor.date] };
                 panel.confirm = if chosen.len() == 1 { dt.plan_on.replace("%s", &repeat::format_occurrence(chosen[0], cx.language)) } else { dt.plan_on_days.replace("%d", &chosen.len().to_string()) };
             }
         }

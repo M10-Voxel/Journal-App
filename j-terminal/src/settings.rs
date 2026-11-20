@@ -14,39 +14,26 @@ pub enum StartView { #[default] Day, Entry }
 #[serde(rename_all = "kebab-case")]
 pub enum DisplayLanguage { #[default] Journal, German, English }
 
-#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "kebab-case")]
-pub enum SaveDelay { #[default] Brief, OneSecond, TwoSeconds }
-
-impl SaveDelay {
-    pub fn duration(self) -> std::time::Duration {
-        std::time::Duration::from_millis(match self { Self::Brief => 450, Self::OneSecond => 1000, Self::TwoSeconds => 2000 })
-    }
-}
-
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(default, rename_all = "kebab-case")]
 pub struct Preferences {
     pub start_view: StartView,
     pub center_window: bool,
-    pub hide_on_blur: bool,
     pub return_today: bool,
     pub language: DisplayLanguage,
     pub keycaps: bool,
     pub parse_titles: bool,
-    pub save_delay: SaveDelay,
     pub week_numbers: bool,
     pub weekends: bool,
     pub now_line: bool,
-    pub notes_on_day: bool,
     pub edit_notes: bool,
 }
 
 impl Default for Preferences {
     fn default() -> Self {
-        Self { start_view: StartView::Day, center_window: false, hide_on_blur: true, return_today: true,
-            language: DisplayLanguage::Journal, keycaps: true, parse_titles: true, save_delay: SaveDelay::Brief,
-            week_numbers: true, weekends: true, now_line: true, notes_on_day: false, edit_notes: false }
+        Self { start_view: StartView::Day, center_window: false, return_today: true,
+            language: DisplayLanguage::Journal, keycaps: true, parse_titles: true,
+            week_numbers: true, weekends: true, now_line: true, edit_notes: false }
     }
 }
 
@@ -69,16 +56,13 @@ impl Preferences {
             PreferenceKey::None => 0,
             PreferenceKey::StartView => self.start_view as i32,
             PreferenceKey::WindowPosition => self.center_window.into(),
-            PreferenceKey::HideOnBlur => self.hide_on_blur.into(),
             PreferenceKey::ReturnToday => self.return_today.into(),
             PreferenceKey::Language => self.language as i32,
             PreferenceKey::Keycaps => self.keycaps.into(),
             PreferenceKey::ParseTitles => self.parse_titles.into(),
-            PreferenceKey::SaveDelay => self.save_delay as i32,
             PreferenceKey::WeekNumbers => self.week_numbers.into(),
             PreferenceKey::Weekends => self.weekends.into(),
             PreferenceKey::NowLine => self.now_line.into(),
-            PreferenceKey::NotesOnDay => self.notes_on_day.into(),
             PreferenceKey::NoteMode => self.edit_notes.into(),
         }
     }
@@ -89,9 +73,7 @@ impl Preferences {
         match key {
             K::StartView => self.start_view = *[StartView::Day, StartView::Entry].get(index as usize)?,
             K::Language => self.language = *[DisplayLanguage::Journal, DisplayLanguage::German, DisplayLanguage::English].get(index as usize)?,
-            K::SaveDelay => self.save_delay = *[SaveDelay::Brief, SaveDelay::OneSecond, SaveDelay::TwoSeconds].get(index as usize)?,
             _ if !(0..=1).contains(&index) => return None,
-            K::HideOnBlur => self.hide_on_blur = checked,
             K::WindowPosition => self.center_window = checked,
             K::ReturnToday => self.return_today = checked,
             K::Keycaps => self.keycaps = checked,
@@ -99,7 +81,6 @@ impl Preferences {
             K::WeekNumbers => self.week_numbers = checked,
             K::Weekends => self.weekends = checked,
             K::NowLine => self.now_line = checked,
-            K::NotesOnDay => self.notes_on_day = checked,
             K::NoteMode => self.edit_notes = checked,
             K::None => return None,
         }
@@ -148,14 +129,18 @@ impl Navigation {
     }
 }
 
+pub fn icon(window: &SettingsWindow, name: &str, size: f32) -> slint::Image {
+    let px = (size * window.window().scale_factor()).round().max(1.0) as u32;
+    crate::raster_icon(name, px)
+}
+
 pub fn categories(window: &SettingsWindow, language: Language) -> slint::ModelRc<SettingsCategory> {
     let theme = window.global::<crate::Theme>();
-    let scale = window.window().scale_factor();
     PAGES.iter().map(|page| {
-        let (name, description, icon) = page.copy();
+        let (name, description, symbol) = page.copy();
         SettingsCategory { name: tr(name, language).into(), description: tr(description, language).into(),
-            icon: crate::icon_image(icon, theme.get_settings_icon_size(), scale),
-            hero_icon: crate::icon_image(icon, theme.get_settings_hero_symbol(), scale) }
+            icon: icon(window, symbol, theme.get_settings_icon_size()),
+            hero_icon: icon(window, symbol, theme.get_settings_hero_symbol()) }
     }).collect::<Vec<_>>().as_slice().into()
 }
 
@@ -206,9 +191,9 @@ mod tests {
     fn all_controls_round_trip_in_an_older_profile() {
         let path = std::env::temp_dir().join(format!("j-terminal-preferences-{}.json", uuid::Uuid::new_v4()));
         assert_eq!(Preferences::load(Some(&path)).unwrap(), Preferences::default());
-        fs::write(&path, br#"{"hide-on-blur":false}"#).unwrap();
+        fs::write(&path, br#"{"hide-on-blur":false,"save-delay":"two-seconds","start-view":"entry"}"#).unwrap();
         let mut prefs = Preferences::load(Some(&path)).unwrap();
-        assert_eq!(prefs, Preferences { hide_on_blur: false, ..Default::default() });
+        assert_eq!(prefs, Preferences { start_view: StartView::Entry, ..Default::default() });
         for option in copy::GROUPS.iter().flat_map(|group| group.options) {
             let limit = option.choices.len().max(2) as i32;
             for index in 0..limit {

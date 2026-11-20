@@ -146,13 +146,6 @@ pub fn plan_tomorrow(day: &mut Day, id: &str) -> Result<(), String> {
     plan(day, id, &[repeat::shift(today, 1)], "tomorrow")
 }
 
-pub fn remove(day: &mut Day, id: &str) -> Result<(), String> {
-    let before = day.entries.len();
-    day.entries.retain(|entry| entry.id != id);
-    if day.entries.len() == before { return Err("Eintrag nicht gefunden".into()); }
-    Ok(())
-}
-
 /// One place up or down among the shown entries of its group (`moveEntryByOffset`); false when it cannot.
 pub fn move_by(day: &mut Day, tags: &[Tag], id: &str, offset: i32) -> bool {
     let Some(at) = day.entries.iter().position(|e| e.id == id) else { return false };

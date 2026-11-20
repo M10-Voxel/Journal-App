@@ -125,7 +125,7 @@ fn the_panel_at_the_left_sets_tag_time_reminder_icon_description_and_plans_on_a_
     let side = t.side().unwrap();
     assert_eq!((side.kind, side.title.as_str()), (0, "Bericht"));
     let labels: Vec<_> = side.rows.iter().map(|r| r.label.as_str()).collect();
-    assert_eq!(labels, ["Status", "Typ", "Wichtig", "Tag", "Uhrzeit", "Erinnerung", "Symbol", "Beschreibung", "Auf morgen", "Planen", "Mehrere Tage", "Löschen"]);
+    assert_eq!(labels, ["Status", "Typ", "Wichtig", "Tag", "Uhrzeit", "Erinnerung", "Symbol", "Beschreibung", "Auf morgen", "Planen", "Löschen"]);
     // The tag: Enter on its line, ↓ to "Arbeit", Enter.
     for _ in 0..3 { t.press(K::Down); }
     t.press(K::Enter);
@@ -171,25 +171,56 @@ fn the_panel_at_the_left_sets_tag_time_reminder_icon_description_and_plans_on_a_
 }
 
 #[test]
+fn deleting_linked_entries_asks_for_scope_and_can_be_undone_in_one_step() {
+    let mut t = t();
+    t.alt('e'); t.typed("Kurs"); t.press(K::Escape);
+    t.select("Kurs");
+    t.alt('t');
+    for date in ["2026-11-20", "2026-11-27", "2026-11-28"] {
+        t.with(|pane, cx| pane.plan_click(cx, d(date)));
+    }
+    t.with(|pane, cx| pane.confirm_plan(cx));
+    t.date = d("2026-11-20");
+    let id = t.day("2026-11-20").entries[0].id.clone();
+    t.pane.cursor = Some(Item::Entry(id.clone()));
+    t.press(K::Delete);
+    let options = t.side().unwrap().rows;
+    assert_eq!(options.iter().map(|row| row.label.as_str()).collect::<Vec<_>>(),
+        ["Nur diesen", "Auch die 2 folgenden", "Jeden Freitag", "Alle 4"]);
+    assert!(options[0].selected);
+    t.press(K::Escape);
+    assert_eq!(t.store.linked(&id).unwrap().len(), 4);
+    t.press(K::Escape);
+    t.press(K::Delete);
+    t.press(K::Left);
+    t.press(K::Enter);
+    for date in ["2026-11-19", "2026-11-20", "2026-11-27", "2026-11-28"] {
+        assert!(t.day(date).entries.is_empty());
+    }
+    assert!(crate::save::step(&mut t.store, false).unwrap());
+    assert_eq!(t.store.linked(&id).unwrap().len(), 4);
+}
+
+#[test]
 fn several_days_are_collected_with_space_or_clicks() {
     let mut t = t();
     t.alt('e'); t.typed("Kurs"); t.press(K::Escape);
     t.select("Kurs");
-    t.key(K::Char('T'), ALT_SHIFT);
+    t.alt('t');
     t.press(K::Space);
     t.with(|pane, cx| pane.plan_click(cx, d("2026-11-26")));
     t.with(|pane, cx| pane.plan_click(cx, d("2026-11-19")));
     assert_eq!(t.side().unwrap().confirm, "Auf 2 Tage planen", "Its own day is not a target.");
     t.with(|pane, cx| pane.confirm_plan(cx));
     for date in ["2026-11-20", "2026-11-26"] { assert_eq!(t.day(date).entries.len(), 1, "{date}"); }
-    // A single day: a second click on it plans.
+    // A single mouse-selected date is applied with the same confirmation as multiple dates.
     let mut t = self::t();
     t.alt('a'); t.typed("Anrufen"); t.press(K::Escape);
     t.select("Anrufen");
     t.alt('t');
     t.with(|pane, cx| pane.plan_click(cx, d("2026-11-24")));
     assert_eq!(t.day("2026-11-24").entries.len(), 0);
-    t.with(|pane, cx| pane.plan_click(cx, d("2026-11-24")));
+    t.with(|pane, cx| pane.confirm_plan(cx));
     assert_eq!(t.day("2026-11-24").entries.len(), 1);
 }
 

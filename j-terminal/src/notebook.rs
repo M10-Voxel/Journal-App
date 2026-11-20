@@ -38,6 +38,102 @@ pub struct Item {
 
 pub enum Target { Link(String), Image { title: String, source: ImageSource } }
 
+pub struct SearchCard {
+    pub kind: &'static str,
+    pub id: Uuid,
+    pub open_attachment: bool,
+    pub title: String,
+    pub snippet: String,
+    pub date: Option<NaiveDate>,
+    pub tag: Option<String>,
+}
+
+fn board_date(card: &Value) -> Option<NaiveDate> {
+    if let Some(day) = card["dates"][0].as_str().and_then(|s| s.parse().ok()) { return Some(day); }
+    let boards = card["boards"].as_object()?;
+    let (_, date) = boards.iter().filter(|(_, placement)| placement.is_object()).filter_map(|(key, _)| {
+        let (period, value) = key.split_once(':')?;
+        let (rank, date) = match period {
+            "week" => (0, value.parse().ok()?),
+            "month" => (1, format!("{value}-01").parse().ok()?),
+            "quarter" => {
+                let (year, quarter) = value.split_once("-Q")?;
+                let q = quarter.parse::<u32>().ok().filter(|q| (1..=4).contains(q))?;
+                (2, NaiveDate::from_ymd_opt(year.parse().ok()?, 1 + 3 * (q - 1), 1)?)
+            }
+            "year" => (3, NaiveDate::from_ymd_opt(value.parse().ok()?, 1, 1)?),
+            _ => return None,
+        };
+        Some((rank, std::cmp::Reverse(date)))
+    }).min()?;
+    Some(date.0)
+}
+
+pub fn search_cards(store: &Store, words: &[String], tags: &[String], kinds: &[String]) -> Result<Vec<SearchCard>, String> {
+    // Select searchable fields only. Historical image cards can contain their entire image.
+    let mut stmt = store.conn.prepare_cached("SELECT json_object(
+        'id', value->'id', 'kind', value->'kind', 'title', value->'title', 'text', value->'text',
+        'url', value->'url', 'tag', value->'tag', 'dates', value->'dates', 'boards', value->'boards',
+        'notebook', value->'notebook', 'links', value->'links') FROM settings
+        WHERE key >= 'board:card:' AND key < 'board:card;'").map_err(|e| e.to_string())?;
+    let records = stmt.query_map([], |r| r.get::<_, String>(0)).map_err(|e| e.to_string())?;
+    let mut cards = BTreeMap::new();
+    for record in records {
+        let card: Value = serde_json::from_str(&record.map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+        cards.insert(text(&card, "id").to_owned(), card);
+    }
+
+    // A note linked to a visible page also belongs to its notebook, including chains and old one-way links.
+    let mut neighbors = BTreeMap::<&str, Vec<&str>>::new();
+    let mut queue = Vec::new();
+    for (id, note) in cards.iter().filter(|(_, c)| c["kind"] == "note") {
+        if note["notebook"] == true || board_date(note).is_some() { queue.push(id.as_str()); }
+        for other in links(note).filter(|other| cards.get(*other).is_some_and(|c| c["kind"] == "note")) {
+            neighbors.entry(id).or_default().push(other);
+            neighbors.entry(other).or_default().push(id);
+        }
+    }
+    let mut visible_notes = BTreeSet::new();
+    while let Some(id) = queue.pop() {
+        if visible_notes.insert(id) {
+            if let Some(others) = neighbors.get(id) { queue.extend(others); }
+        }
+    }
+
+    let folded: Vec<_> = words.iter().map(|w| crate::engine::parse::fold(w)).collect();
+    let mut found = Vec::new();
+    for (id, card) in &cards {
+        let mut date = board_date(card);
+        let mut target = id.as_str();
+        let mut open_attachment = false;
+        let kind = match text(card, "kind") {
+            "note" if visible_notes.contains(id.as_str()) => {
+                if date.is_some() && card["notebook"] != true { "board-note" } else { "notebook" }
+            }
+            "image" | "link" => {
+                if date.is_some() { open_attachment = true; }
+                else if let Some(owner) = links(card).find(|key| visible_notes.contains(key)) {
+                    target = owner;
+                    date = board_date(&cards[owner]);
+                } else { continue; }
+                if card["kind"] == "image" { "board-image" } else { "board-link" }
+            }
+            _ => continue,
+        };
+        if !kinds.is_empty() && !kinds.iter().any(|k| k == kind || k == "board" && kind.starts_with("board-")) { continue; }
+        let tag = card["tag"].as_str();
+        if !tags.is_empty() && !tags.iter().any(|t| Some(t.as_str()) == tag) { continue; }
+        let title = text(card, "title");
+        let snippet = format!("{} {}", text(card, "text"), text(card, "url"));
+        let haystack = crate::engine::parse::fold(&format!("{title} {snippet}"));
+        if !folded.iter().all(|w| haystack.contains(w)) { continue; }
+        if let Ok(id) = target.parse() {
+            found.push(SearchCard { kind, id, open_attachment, date, title: title.to_owned(), snippet, tag: tag.map(str::to_owned) });
+        }
+    }
+    Ok(found)
+}
+
 #[derive(Clone)]
 pub enum ImageSource { File(PathBuf), Bytes(Arc<[u8]>) }
 

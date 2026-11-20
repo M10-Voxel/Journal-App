@@ -2,6 +2,7 @@
 //! setting (`ui-language`); keywords typed into the line work in both languages regardless (docs/plan.md, 1.4).
 
 pub mod settings;
+pub mod search;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Language { De, En }
@@ -274,7 +275,7 @@ pub struct FormTexts {
     /// The four types, as the app has them: calendar only, event (in the journal too), task, note.
     pub types: [&'static str; 4],
     /// Line labels: type, title, when, repetition, tag, more, description, important, reminder, icon.
-    pub labels: [&'static str; 10],
+    pub labels: [&'static str; 11],
     /// What an empty title, date, start, end, repetition, tag, description, reminder and icon show, pale.
     pub empty_title: &'static str,
     pub empty_day: &'static str,
@@ -312,6 +313,10 @@ pub struct FormTexts {
     pub cal_moment: &'static str,
     pub cal_range: &'static str,
     pub search: &'static str,
+    pub no_hits: &'static str,
+    pub plan_hint: &'static str,
+    pub entry_changed: &'static str,
+    pub plan_single: &'static str,
     pub cmd_entry: &'static str,
     pub cmd_unknown: &'static str,
     /// The repetition's sentence.
@@ -332,7 +337,7 @@ pub struct FormTexts {
 
 const FORM_DE: FormTexts = FormTexts {
     types: ["Kalender", "Ereignis", "Aufgabe", "Notiz"],
-    labels: ["Typ", "Titel", "Wann", "Wiederholung", "Tag", "Mehr", "Beschreibung", "Wichtig", "Erinnerung", "Symbol"],
+    labels: ["Typ", "Titel", "Wann", "Wiederholung", "Tag", "Mehr", "Beschreibung", "Wichtig", "Erinnerung", "Symbol", "Planen auf"],
     empty_title: "Was?",
     empty_day: "Heute",
     empty_start: "ganztägig",
@@ -362,6 +367,10 @@ const FORM_DE: FormTexts = FormTexts {
     bad_reminder: "Erinnerung nicht verstanden (z. B. 45, 2 h, 1 Tag; höchstens 30 Tage)",
     title_needed: "Der Titel fehlt",
     search: "Suchen oder / für Befehle",
+    no_hits: "Keine Treffer",
+    plan_hint: "Zieltage, z. B. morgen, Freitag",
+    entry_changed: "Der Eintrag wurde zwischenzeitlich geändert oder entfernt. Bitte erneut suchen.",
+    plan_single: "Für weitere Tage die Zieltage unter „Planen auf“ angeben.",
     cmd_entry: "Neuen Eintrag anlegen",
     cmd_unknown: "Unbekannter Befehl:",
     repeat_presets: ["D", "M-F", "W", "2W", "M", "Y"],
@@ -386,7 +395,7 @@ const FORM_DE: FormTexts = FormTexts {
 
 const FORM_EN: FormTexts = FormTexts {
     types: ["Calendar", "Event", "Task", "Note"],
-    labels: ["Type", "Title", "When", "Repeat", "Tag", "More", "Description", "Important", "Reminder", "Icon"],
+    labels: ["Type", "Title", "When", "Repeat", "Tag", "More", "Description", "Important", "Reminder", "Icon", "Plan for"],
     empty_title: "What?",
     empty_day: "Today",
     empty_start: "all day",
@@ -416,6 +425,10 @@ const FORM_EN: FormTexts = FormTexts {
     bad_reminder: "Reminder not understood (e.g. 45, 2 h, 1 day; 30 days at most)",
     title_needed: "The title is missing",
     search: "Search, or / for commands",
+    no_hits: "No matches",
+    plan_hint: "Target dates, e.g. tomorrow, Friday",
+    entry_changed: "The entry was changed or removed. Please search again.",
+    plan_single: "Enter additional target dates under “Plan for”.",
     cmd_entry: "Make a new entry",
     cmd_unknown: "Unknown command:",
     repeat_presets: ["D", "M-F", "W", "2W", "M", "Y"],
@@ -492,7 +505,6 @@ pub struct DayTexts {
     pub tag_search: &'static str,
     pub tomorrow_action: &'static str,
     pub plan: &'static str,
-    pub plan_days: &'static str,
     pub plan_on: &'static str,
     pub plan_on_days: &'static str,
     pub jump: &'static str,
@@ -542,7 +554,6 @@ const DAY_DE: DayTexts = DayTexts {
     tag_search: "Tag suchen …",
     tomorrow_action: "Auf morgen",
     plan: "Planen",
-    plan_days: "Mehrere Tage",
     plan_on: "Planen auf %s",
     plan_on_days: "Auf %d Tage planen",
     jump: "Zum geplanten Tag",
@@ -592,7 +603,6 @@ const DAY_EN: DayTexts = DayTexts {
     tag_search: "Search tags …",
     tomorrow_action: "To tomorrow",
     plan: "Plan",
-    plan_days: "Several days",
     plan_on: "Plan for %s",
     plan_on_days: "Plan for %d days",
     jump: "Go to the planned day",
@@ -622,6 +632,7 @@ pub struct ActionTexts {
     pub settings: &'static str,
     pub save: &'static str,
     pub save_stay: &'static str,
+    pub edit_save_stay: &'static str,
     pub priority: &'static str,
     pub description: &'static str,
     pub reminder: &'static str,
@@ -650,7 +661,7 @@ const ACTIONS_DE: ActionTexts = ActionTexts {
     section_entry: "Eintrag", section_general: "Allgemein", section_note: "Notiz",
     new_task: "Neue Aufgabe", new_event: "Neues Ereignis", new_note: "Neue Notiz", today: "Zu heute", notebook: "Notizblock öffnen",
     undo: "Rückgängig", redo: "Wiederherstellen", settings: "Einstellungen",
-    save: "Erstellen", save_stay: "Erstellen und weiter", priority: "Wichtig", description: "Beschreibung", reminder: "Erinnerung", icon: "Symbol", discard: "Verwerfen",
+    save: "Erstellen", save_stay: "Erstellen und weiter", edit_save_stay: "Speichern und weiter", priority: "Wichtig", description: "Beschreibung", reminder: "Erinnerung", icon: "Symbol", discard: "Verwerfen",
     notes_new: "Neue Notiz", notes_edit: "Bearbeiten", notes_save: "Speichern", notes_preview: "Vorschau umschalten", notes_tag: "Tag zuweisen",
     notes_attachments: "Anhänge", notes_list: "Zettelliste", notes_close: "Schließen",
     edit: "Bearbeiten", create: "Erstellen",
@@ -663,7 +674,7 @@ const ACTIONS_EN: ActionTexts = ActionTexts {
     section_entry: "Entry", section_general: "General", section_note: "Note",
     new_task: "New task", new_event: "New event", new_note: "New note", today: "Go to today", notebook: "Open the notebook",
     undo: "Undo", redo: "Redo", settings: "Settings",
-    save: "Create", save_stay: "Create and continue", priority: "Important", description: "Description", reminder: "Reminder", icon: "Icon", discard: "Discard",
+    save: "Create", save_stay: "Create and continue", edit_save_stay: "Save and continue", priority: "Important", description: "Description", reminder: "Reminder", icon: "Icon", discard: "Discard",
     notes_new: "New note", notes_edit: "Edit", notes_save: "Save", notes_preview: "Toggle preview", notes_tag: "Assign a tag",
     notes_attachments: "Attachments", notes_list: "Note list", notes_close: "Close",
     edit: "Edit", create: "Create",
