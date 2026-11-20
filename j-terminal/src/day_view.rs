@@ -166,6 +166,7 @@ pub struct Row {
     pub label: String,
     /// The time (entries), the count (headings), the minutes (activities), the day (timers of other days).
     pub detail: String,
+    pub description: String,
     /// Lucide icon in front (the entry's symbol, the heading's icon).
     pub icon: &'static str,
     /// The entry's own or its tag's icon at the right.
@@ -189,7 +190,7 @@ pub struct Row {
 
 impl Row {
     pub fn new(kind: RowKind, label: impl Into<String>) -> Row {
-        Row { kind, item: None, label: label.into(), detail: String::new(), icon: "", tag_icon: String::new(), color: None, done: false, priority: false,
+        Row { kind, item: None, label: label.into(), detail: String::new(), description: String::new(), icon: "", tag_icon: String::new(), color: None, done: false, priority: false,
             trace: false, foreign: false, track: false, timer: None, dials: Vec::new(), selected: false, editing: false }
     }
 }
@@ -337,6 +338,7 @@ pub fn build(source: &Source, date: NaiveDate, today: NaiveDate, language: Langu
         };
         Row { item: Some(Item::Entry(entry.id.clone())), detail, icon: symbol(entry), tag_icon: tag_icon.to_string(), color: known.and_then(|tag| calendar::parse_color(&tag.color)),
             done: entry.done || entry.cancelled, priority: entry.priority, trace: entry.plan.is_some(), foreign: first != date,
+            description: entry.description.clone(),
             ..Row::new(RowKind::Entry, if entry.text.trim().is_empty() { dt.untitled.to_string() } else { entry.text.trim().to_string() }) }
     };
     let found = entries_on(source, date);

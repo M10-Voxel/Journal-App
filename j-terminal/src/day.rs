@@ -51,31 +51,52 @@ pub enum EditTarget { Title, Entry(String), New { kind: &'static str, after: Opt
 pub struct PlanCursor {
     pub date: NaiveDate,
     anchor: Option<NaiveDate>,
-    pub holding: bool,
+    painting: Option<bool>,
+    touched: bool,
 }
 
 impl PlanCursor {
-    pub fn new(date: NaiveDate) -> Self { Self { date, anchor: None, holding: false } }
+    pub fn new(date: NaiveDate) -> Self { Self { date, anchor: None, painting: None, touched: false } }
     pub fn preview(&self, date: NaiveDate) -> bool {
         self.anchor.is_some_and(|a| (a.min(self.date)..=a.max(self.date)).contains(&date))
     }
     pub fn travel(&mut self, next: NaiveDate, shift: bool, own: NaiveDate, picked: &mut BTreeSet<NaiveDate>) {
-        if shift { self.anchor.get_or_insert(self.date); } else { self.anchor = None; }
+        if let Some(select) = self.painting {
+            self.apply(self.date, next, own, picked, select);
+        } else if shift {
+            self.anchor.get_or_insert(self.date);
+        } else {
+            self.anchor = None;
+        }
         self.date = next;
-        if self.holding && !shift && next != own { picked.insert(next); }
     }
     pub fn space(&mut self, own: NaiveDate, picked: &mut BTreeSet<NaiveDate>) {
-        if self.holding { return; }
-        self.holding = true;
-        if let Some(anchor) = self.anchor.take() {
-            for date in anchor.min(self.date).iter_days().take_while(|d| *d <= anchor.max(self.date)) {
-                if date != own { picked.insert(date); }
-            }
-        } else if self.date != own && !picked.remove(&self.date) { picked.insert(self.date); }
+        if self.painting.is_some() { return; }
+        let anchor = self.anchor.take().unwrap_or(self.date);
+        let select = Self::range(anchor, self.date, own).any(|date| !picked.contains(&date));
+        self.painting = Some(select || anchor == own && self.date == own);
+        self.apply(anchor, self.date, own, picked, select);
+    }
+    fn range(a: NaiveDate, b: NaiveDate, own: NaiveDate) -> impl Iterator<Item = NaiveDate> {
+        a.min(b).iter_days().take_while(move |date| *date <= a.max(b)).filter(move |date| *date != own)
+    }
+    fn apply(&mut self, a: NaiveDate, b: NaiveDate, own: NaiveDate, picked: &mut BTreeSet<NaiveDate>, select: bool) {
+        for date in Self::range(a, b, own) {
+            self.touched = true;
+            if select { picked.insert(date); } else { picked.remove(&date); }
+        }
+    }
+    pub fn release_space(&mut self) { self.painting = None; }
+    fn targets(&self, own: NaiveDate, picked: &BTreeSet<NaiveDate>) -> Vec<NaiveDate> {
+        if !self.touched && picked.is_empty() && self.date != own {
+            return vec![self.date];
+        }
+        picked.iter().copied().collect()
     }
     pub fn click(&mut self, date: NaiveDate, own: NaiveDate, picked: &mut BTreeSet<NaiveDate>) {
         if date == own { return; }
         *self = Self::new(date);
+        self.touched = true;
         if !picked.remove(&date) { picked.insert(date); }
     }
 }
@@ -264,6 +285,17 @@ impl DayPane {
         self.cursor = self.items(cx).into_iter().next();
         self.typed.clear();
         Out { focus: true, ..Out::default() }
+    }
+
+    pub fn focus_period(&mut self, cx: &Ctx, rating: bool) -> Out {
+        self.cursor = if rating {
+            Some(Item::Value("rating".into()))
+        } else {
+            self.items(cx).into_iter().find(|item| matches!(item, Item::Activity(_)))
+        };
+        self.typed.clear();
+        self.message = self.cursor.is_none().then(|| (day_texts(cx.language).no_activities.into(), false));
+        Out { focus: self.cursor.is_some(), to_search: self.cursor.is_none(), ..Out::default() }
     }
 
     /// The day shown changed (or the window was shown again): nothing stays chosen or open.
@@ -884,8 +916,8 @@ impl DayPane {
     /// Enter in the planning month (or a click on its confirming line).
     pub fn confirm_plan(&mut self, cx: &mut Ctx) -> Out {
         let Some(Side { entry, view: SideView::Plan { cursor, picked }, .. }) = self.side.clone() else { return Out::default() };
-        let dates: Vec<NaiveDate> = if !picked.is_empty() { picked.into_iter().collect() } else { vec![cursor.date] };
-        if dates.iter().all(|d| *d == cx.date) { return Out { focus: true, ..Out::default() }; }
+        let dates = cursor.targets(cx.date, &picked);
+        if dates.is_empty() { return Out { focus: true, ..Out::default() }; }
         let r = self.change(cx, |day, _| ops::plan(day, &entry, &dates, "days"));
         let out = self.report(r);
         self.side = None;
@@ -894,7 +926,11 @@ impl DayPane {
 
     /// The planning month a month back or on (the arrows beside its name).
     pub fn plan_month(&mut self, by: i32) -> Out {
-        if let Some(Side { view: SideView::Plan { cursor, .. }, .. }) = &mut self.side { *cursor = PlanCursor::new(add_months(cursor.date, by)); }
+        if let Some(Side { view: SideView::Plan { cursor, .. }, .. }) = &mut self.side {
+            cursor.date = add_months(cursor.date, by);
+            cursor.anchor = None;
+            cursor.release_space();
+        }
         Out { focus: true, ..Out::default() }
     }
 
@@ -967,8 +1003,12 @@ impl DayPane {
 
                 panel.set_month(cursor.date, cx.today, cx.language, Some(cx.date), None, |date| picked.contains(&date));
                 for cell in &mut panel.cells { cell.pending = !cell.disabled && cursor.preview(cell.date); }
-                let chosen: Vec<NaiveDate> = if !picked.is_empty() { picked.iter().copied().collect() } else { vec![cursor.date] };
-                panel.confirm = if chosen.len() == 1 { dt.plan_on.replace("%s", &repeat::format_occurrence(chosen[0], cx.language)) } else { dt.plan_on_days.replace("%d", &chosen.len().to_string()) };
+                let chosen = cursor.targets(cx.date, picked);
+                panel.confirm = match chosen.as_slice() {
+                    [] => String::new(),
+                    [date] => dt.plan_on.replace("%s", &repeat::format_occurrence(*date, cx.language)),
+                    _ => dt.plan_on_days.replace("%d", &chosen.len().to_string()),
+                };
             }
         }
         Some(panel)

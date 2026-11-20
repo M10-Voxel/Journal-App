@@ -43,6 +43,7 @@ const GROUPS: &[Group] = &[
         binding!("window-toggle", SYSTEM, "Ctrl+Alt+Space", "J-TerminaL ein- oder ausblenden", "Show or hide J-TerminaL"),
         binding!("settings", WINDOW, "F1", "Einstellungen öffnen oder schließen", "Open or close settings"),
         binding!("day-actions", WINDOW, "Ctrl+K", "Aktionen öffnen oder schließen", "Open or close the actions"),
+        binding!("entry-preview", WINDOW, "F3", "Vorschau zum ausgewählten Eintrag zeigen", "Preview the selected entry"),
         fixed!("Esc", "Einstellungen schließen", "Close settings"),
         binding!("notebook", WINDOW, "Ctrl+N", "Notizblock öffnen", "Open the notebook"),
         binding!("notes-new", WINDOW, "Ctrl+Shift+N", "Neue Notiz anlegen", "Create a note"),
@@ -125,8 +126,8 @@ const GROUPS: &[Group] = &[
         fixed!("0–9 / Del", "Uhrzeit eintippen / Feld leeren", "Type a time / clear the field"),
         binding!("side-icon-reset", SIDE, "Ctrl+Delete", "Symbolzuweisung entfernen", "Remove the assigned icon"),
         fixed!("PgUp / PgDn / H", "Im Planer den Monat wechseln oder zu heute springen", "Change month in the planner or go to today"),
-        fixed!("Space", "Tag auswählen oder abwählen. Gehalten beim Navigieren weitere Tage hinzufügen.", "Toggle a day. Hold while navigating to add more days."),
-        fixed!("Shift+↑ / ↓ / ← / →", "Planungsbereich markieren, mit Leertaste hinzufügen", "Mark a planning range, then press Space to add it"),
+        fixed!("Space", "Tag umschalten. Mit Pfeilen alle überquerten Tage auf denselben Zustand setzen.", "Toggle a day. Hold with the arrow keys to apply that state to every crossed day."),
+        fixed!("Shift+↑ / ↓ / ← / →", "Bereich markieren. Leertaste wählt alle Tage aus oder wählt den vollständig gewählten Bereich ab.", "Mark a range. Space selects all days or clears a fully selected range."),
         fixed!("Esc", "Auswahl schließen. In der Beschreibung speichert Esc den Text.", "Close the picker. In the description, Esc saves the text."),
     ] },
     Group { name: ["Wiederholung", "Repeating"], shortcuts: &[

@@ -35,6 +35,7 @@ export component Calendar inherits Rectangle {
     in property <length> time-x;
     // button: 0 left, 1 right, 2 middle (pressed only); kind: 0 pressed, 1 moved, 2 released; the position inside the calendar.
     callback mouse(int, int, length, length, bool);
+    callback hover(bool, length, length);
     // The wheel: x, how far, Strg, Shift.
     callback wheel(length, length, bool, bool);
     clip: true;
@@ -184,16 +185,22 @@ export component Calendar inherits Rectangle {
         }
     }
     TouchArea {
+        changed has-hover => { if !self.has-hover { root.hover(false, 0px, 0px); } }
         pointer-event(event) => {
+            if event.kind == PointerEventKind.down { root.hover(false, 0px, 0px); }
             // The middle button chooses the day for the day view at the left.
             if event.button == PointerEventButton.middle && event.kind == PointerEventKind.down { root.mouse(2, 0, self.mouse-x, self.mouse-y, event.modifiers.shift); }
             if event.button == PointerEventButton.left || event.button == PointerEventButton.right {
                 if event.kind == PointerEventKind.down { root.mouse(event.button == PointerEventButton.right ? 1 : 0, 0, self.mouse-x, self.mouse-y, event.modifiers.shift); }
                 if event.kind == PointerEventKind.up { root.mouse(event.button == PointerEventButton.right ? 1 : 0, 2, self.mouse-x, self.mouse-y, event.modifiers.shift); }
             }
-            if event.kind == PointerEventKind.move { root.mouse(1, 1, self.mouse-x, self.mouse-y, event.modifiers.shift); }
+            if event.kind == PointerEventKind.move {
+                root.mouse(1, 1, self.mouse-x, self.mouse-y, event.modifiers.shift);
+                if !self.pressed { root.hover(true, self.mouse-x, self.mouse-y); }
+            }
         }
         scroll-event(event) => {
+            root.hover(false, 0px, 0px);
             root.wheel(self.mouse-x, event.delta-y != 0px ? event.delta-y : event.delta-x, event.modifiers.control, event.modifiers.shift);
             accept
         }

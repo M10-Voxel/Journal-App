@@ -224,6 +224,17 @@ export component NotepadEditor inherits VerticalLayout {
                     text: root.date; font-size: Theme.small-size; color: Theme.muted; overflow: elide;
                 }
             }
+            if root.panel == 0 && root.editing && !root.viewer-open: HorizontalLayout {
+                alignment: end;
+                spacing: Theme.gap;
+                for item in root.tools: NotepadAction {
+                    y: (parent.height - self.height) / 2;
+                    label: item.label;
+                    icon: item.icon;
+                    highlighted: item.active;
+                    clicked => { root.tool(item.id); }
+                }
+            }
         }
         Rectangle { x: -Theme.padding; y: parent.height - self.height; width: parent.width + Theme.padding * 2; height: Theme.border-width; background: Theme.divider; }
     }
@@ -258,10 +269,9 @@ export component NotepadEditor inherits VerticalLayout {
             }
         }
     }
-    if root.panel == 0 && !root.viewer-open: HorizontalLayout {
+    if root.panel == 0 && !root.editing && !root.viewer-open: HorizontalLayout {
         spacing: Theme.gap;
-        alignment: root.editing ? start : stretch;
-        if !root.editing: Text {
+        Text {
             text: root.date; color: Theme.muted; font-size: Theme.small-size;
             vertical-alignment: center; horizontal-stretch: 1; overflow: elide;
         }

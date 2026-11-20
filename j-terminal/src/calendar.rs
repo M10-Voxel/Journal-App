@@ -63,6 +63,7 @@ pub type Rgb = [u8; 3];
 /// One entry as the calendar draws it: the days it covers and when it starts and ends.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Item {
+    pub entry_id: Option<String>,
     pub first: NaiveDate,
     pub last: NaiveDate,
     /// Minutes since midnight of `first`.
@@ -106,11 +107,12 @@ impl Item {
             }
             _ => (date, None),
         };
-        Item { first: date, last, start, end, title: title.to_string(), icon: String::new(), time_grid: false, color, fresh, done }
+        Item { entry_id: None, first: date, last, start, end, title: title.to_string(), icon: String::new(), time_grid: false, color, fresh, done }
     }
 
     pub fn from_entry(date: NaiveDate, entry: &Entry, color: Option<Rgb>) -> Item {
         let mut item = Item::new(date, entry.time.as_deref(), entry.end.as_deref(), &entry.text, color, false, entry.done || entry.cancelled);
+        item.entry_id = Some(entry.id.clone());
         item.icon = entry.icon.clone().unwrap_or_default();
         item.time_grid = entry.time_grid;
         item

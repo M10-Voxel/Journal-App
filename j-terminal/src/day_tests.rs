@@ -171,6 +171,21 @@ fn the_panel_at_the_left_sets_tag_time_reminder_icon_description_and_plans_on_a_
 }
 
 #[test]
+fn clearing_all_planning_targets_does_not_plan_the_cursor_day() {
+    let mut t = t();
+    t.alt('a'); t.typed("Bericht"); t.press(K::Escape);
+    t.select("Bericht");
+    t.alt('t');
+    let target = d("2026-11-20");
+    t.with(|pane, cx| pane.plan_click(cx, target));
+    t.with(|pane, cx| pane.plan_click(cx, target));
+    assert!(t.side().unwrap().confirm.is_empty());
+    t.press(K::Enter);
+    assert!(t.pane.side.is_some());
+    assert!(t.day("2026-11-20").entries.is_empty());
+}
+
+#[test]
 fn deleting_linked_entries_asks_for_scope_and_can_be_undone_in_one_step() {
     let mut t = t();
     t.alt('e'); t.typed("Kurs"); t.press(K::Escape);

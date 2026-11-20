@@ -13,6 +13,7 @@ mod icons;
 mod notepad;
 mod notebook;
 mod note_markdown;
+mod mail_preview;
 mod note_images;
 mod repeat_sentence;
 mod save;
@@ -539,6 +540,7 @@ impl App {
         self.bar.set_active_multi(view.active_multi);
         self.bar.set_editable(view.editable);
         self.bar.set_native_arrows(view.native_arrows);
+        self.bar.set_day_picker_open(self.state.day_picker_open());
         self.bar.set_type_names(strings(view.type_names));
         self.bar.set_type_icons(std::rc::Rc::new(slint::VecModel::from(view.type_icons.iter().map(|name| journal_image(&self.bar, name, label_px, scale)).collect::<Vec<_>>())).into());
         self.bar.set_options(view.options);
@@ -590,6 +592,7 @@ impl App {
         let theme = self.bar.global::<Theme>();
         let mut top = 0.;
         let rows = view.commands.into_iter().map(|c| {
+            let preview = c.has_preview();
             let header = if c.look.heading.is_empty() { 0. } else { theme.get_section_height() };
             let tall = theme.get_row_height() + header + if c.look.snippet.is_empty() { 0. } else { theme.get_small_size() + theme.get_calendar_gap() };
             let row = CommandRow {
@@ -597,7 +600,7 @@ impl App {
                 icon: journal_image(&self.bar, c.look.icon, label_px, scale), has_icon: !c.look.icon.is_empty(),
                 sigil: c.look.sigil, has_color: c.look.color.is_some(), tint: c.look.color.map_or(theme.get_accent(), |rgb| color(Some(rgb))),
                 title_runs: search_runs(&c.name, &c.look.words), snippet_runs: search_runs(&c.look.snippet, &c.look.words),
-                top, tall, header,
+                top, tall, header, preview, description: c.look.description.into(),
             };
             top += tall;
             row
@@ -702,6 +705,7 @@ impl App {
             0 if draft.editing => if stored.is_some() { labels.edit_heading } else { labels.new_note },
             2 => labels.choose_tag,
             3 => labels.attachments,
+            4 => labels.choose_folder,
             _ => labels.heading,
         };
         self.bar.set_notepad_editor_heading(heading.into());
@@ -741,6 +745,7 @@ impl App {
                 id: 1, icon: icon("tag"),
                 label: tag.as_deref().unwrap_or(labels.choose_tag).into(), active: tag.is_some(),
             });
+            tools.push(NotepadTool { id: 4, icon: icon("folder"), label: labels.choose_folder.into(), active: draft.card.folder.is_some() });
         }
         tools.push(NotepadTool { id: 2, icon: icon("paperclip"), label: labels.attachments.into(), active: false });
         if draft.editing {
@@ -754,6 +759,7 @@ impl App {
             1 => (labels.filter_notes, labels.browse_empty),
             2 => (labels.choose_tag, ""),
             3 => (if draft.editing { labels.link } else { labels.filter_attachments }, labels.attachments_empty),
+            4 => (labels.choose_folder, ""),
             _ => ("", ""),
         };
         self.bar.set_notepad_panel_placeholder(placeholder.into());
@@ -972,7 +978,7 @@ impl App {
                 has_color: row.color.is_some(), color: color(row.color), done: row.done, priority: row.priority, trace: row.trace, foreign: row.foreign,
                 selected: row.selected, editing: row.editing, track: row.track, has_timer: row.timer.is_some(),
                 timer_running: row.timer.as_ref().is_some_and(|t| t.running), timer_clock: row.timer.as_ref().map(|t| t.clock.clone()).unwrap_or_default().into(),
-                label: row.label.clone().into(), detail: row.detail.clone().into(),
+                label: row.label.clone().into(), detail: row.detail.clone().into(), description: row.description.trim().into(),
                 dial_columns: columns as i32, dial_cell: cell, dial_size, dial_row,
                 dials: std::rc::Rc::new(slint::VecModel::from(row.dials.iter().map(|d| DialCell {
                     raw: d.raw.unwrap_or(d.min) as i32, low: d.min as i32, high: d.max as i32, item: index_of(&Some(d.item.clone())), label: d.label.clone().into(), value: d.value.clone().into(), selected: d.selected,
@@ -1021,6 +1027,7 @@ impl App {
     }
 
     fn effect(&mut self, effect: form::Effect) {
+        self.bar.invoke_dismiss_preview();
         if let Some(text) = effect.text {
             self.bar.set_text(text.into());
             self.bar.invoke_select_text();
@@ -1316,6 +1323,25 @@ fn connect(bar: &Bar) {
         let effect = app.state.cal_mouse(button, kind, x, y, shift);
         app.effect(effect);
     }));
+    bar.on_preview_body(|source| mail_preview::body(&source));
+    bar.on_calendar_hover_preview(|x, y| APP.with(|slot| {
+        let slot = slot.borrow();
+        let Some((index, x, y, entry)) = slot.as_ref().and_then(|app| app.state.calendar_hover_entry(x, y)) else { return EntryPreview::default() };
+        EntryPreview { source: 3, index: index as i32, title: entry.text.trim().into(), description: entry.description.trim().into(), x, y }
+    }));
+    bar.on_calendar_keyboard_preview(|step| APP.with(|slot| {
+        let slot = slot.borrow();
+        let Some((index, x, y, entry)) = slot.as_ref().and_then(|app| app.state.calendar_keyboard_preview(step.max(0) as usize)) else { return EntryPreview::default() };
+        EntryPreview { source: 3, index: index as i32, title: entry.text.trim().into(), description: entry.description.trim().into(), x, y }
+    }));
+    bar.on_day_keyboard_preview(|| APP.with(|slot| {
+        use slint::Model;
+        let slot = slot.borrow();
+        let Some(app) = slot.as_ref() else { return EntryPreview::default() };
+        let Some(row) = app.bar.get_day_rows().iter().find(|row| row.kind == 1 && row.selected && !row.editing) else { return EntryPreview::default() };
+        EntryPreview { source: 2, index: row.item, title: row.label, description: row.description,
+            x: app.bar.get_form_space(), y: app.bar.global::<Theme>().get_line_height() }
+    }));
     bar.on_cal_wheel(|x, delta, ctrl, shift| with_app(|app| { app.state.cal_wheel(x, delta, ctrl, shift); app.draw(); }));
     bar.on_day_today(|| with_app(|app| { app.state.show_today(); app.draw(); }));
     bar.on_release_plan_space(|| with_app(|app| app.state.release_plan_space()));
@@ -1448,10 +1474,10 @@ fn connect(bar: &Bar) {
     }));
     bar.on_command_chosen(|index| with_app(|app| { let effect = app.state.choose_command(index as usize); app.effect(effect); }));
     bar.on_notepad_tool(|index| with_app(|app| {
-        if index == 3 {
-            app.state.notepad_preview();
-        } else {
-            app.state.notepad_panel(index + 1);
+        match index {
+            3 => app.state.notepad_preview(),
+            4 => app.state.notepad_panel(4),
+            _ => app.state.notepad_panel(index + 1),
         }
         app.draw();
     }));
@@ -1770,15 +1796,30 @@ mod tests {
         }
         let path = std::env::temp_dir().join(format!("j-terminal-ui-{}.sqlite3", uuid::Uuid::new_v4()));
         let mut store = journal_core::storage::Store::open(&path).unwrap();
+        let folder = uuid::Uuid::new_v4();
+        store.conn.execute("INSERT INTO settings(key,value) VALUES(?1,?2)", rusqlite::params![
+            format!("board:folder:{folder}"),
+            serde_json::json!({"id": folder.to_string(), "name": "Projekte", "parent": null, "order": 1}).to_string(),
+        ]).unwrap();
         // Something to look at: two coloured tags, an appointment, a holiday and a weekly series.
         {
             let tags = [("3f2a6c1e-0000-4000-8000-000000000001", "Gesundheit", "#76d982"), ("3f2a6c1e-0000-4000-8000-000000000002", "Arbeit", "#569eff"), ("3f2a6c1e-0000-4000-8000-000000000003", "Reise", "#ff9f43")];
             store.save_tags(&tags.iter().map(|(id, name, color)| journal_core::storage::Tag { id: id.to_string(), name: name.to_string(), color: color.to_string(), icon: Some(match *name { "Gesundheit" => "stethoscope", "Arbeit" => "briefcase", _ => "plane" }.into()) }).collect::<Vec<_>>()).unwrap();
             let names: Vec<engine::parse::TagName> = tags.iter().map(|(id, name, _)| engine::parse::TagName { id: id.to_string(), name: name.to_string() }).collect();
             let today = repeat::d("2026-11-18");
+            let mail = format!("journal-mail:v1\n{}", serde_json::json!({
+                "html": format!("<h2>Programm</h2>{}", "<p><strong>Praxis</strong> mit Beispielen.</p>".repeat(25)),
+                "text": "Programm und Praxis mit Beispielen."
+            }));
             for line in ["Zahnarzt Do 14–15 \\Gesundheit", "Urlaub ▬ 23.11.2026–27.11.2026 \\Reise", "Team Mo 9–10 jede Woche \\Arbeit", "Workshop 30.11.2026 10–17 \\Arbeit", "Sport heute 18–19", "Recherche heute \\Arbeit"] {
                 let outcome = engine::resolve::resolve(&engine::parse::parse(line, today, &names), today).choices.remove(0);
-                save::save(&mut store, &outcome, today).unwrap();
+                let description = match outcome.text.as_str() {
+                    "Zahnarzt" => "Versichertenkarte mitnehmen.\nDie Praxis liegt im zweiten Stock neben dem Aufzug. Bitte fünfzehn Minuten vor dem vereinbarten Termin dort sein.",
+                    "Sport" => "Turnschuhe mitnehmen.",
+                    "Workshop" => mail.as_str(),
+                    _ => "",
+                };
+                save::save_with(&mut store, &outcome, &save::Extras { description: description.into(), ..Default::default() }, today).unwrap();
             }
             // The app's rating, a day value and two activities for the day view.
             store.save_period_data(&serde_json::json!({
@@ -1822,6 +1863,60 @@ mod tests {
         assert!(bar.get_day_footer_rows().iter().any(|row| row.kind == 7 && row.dials.iter().any(|dial| dial.label == "Bewertung" && dial.value == "7")));
         assert!(bar.get_day_footer_rows().iter().any(|row| row.kind == 3 && row.label == "Lesen" && row.done && row.detail == "45 Min."));
         capture(&bar, "search");
+        type_text(&bar, "Workshop");
+        send_key_combo(&bar, [K::F3]);
+        assert_eq!(bar.get_entry_preview_title(), "Workshop");
+        capture(&bar, "mail-entry-preview");
+        send_key_combo(&bar, [K::PageDown]);
+        i_slint_backend_testing::mock_elapsed_time(Duration::from_millis(1));
+        assert!(bar.get_preview_scroll_y() < 0.0);
+        send_key_combo(&bar, [K::Escape]);
+        send_key_combo(&bar, [K::Escape]);
+        let hover = |x, y| {
+            bar.window().dispatch_event(slint::platform::WindowEvent::PointerMoved { position: slint::LogicalPosition::new(x, y) });
+            i_slint_backend_testing::mock_elapsed_time(Duration::from_millis(1));
+            i_slint_backend_testing::mock_elapsed_time(Duration::from_millis(bar.global::<Theme>().get_entry_preview_delay() as u64 + 1));
+        };
+        fit_viewport(&bar);
+        let theme = bar.global::<Theme>();
+        type_text(&bar, "Workshop");
+        let result = bar.get_commands().row_data(0).unwrap();
+        let left = theme.get_padding() * 3.0;
+        let top = theme.get_line_height() + result.top;
+        hover(left, top + result.header + theme.get_row_height() / 2.0);
+        assert_eq!(bar.get_entry_preview_title(), "Workshop");
+        let inside_y = top + result.tall + theme.get_preview_tail() + theme.get_preview_padding() * 2.0;
+        hover(left, inside_y);
+        assert_eq!(bar.get_entry_preview_title(), "Workshop");
+        bar.window().dispatch_event(slint::platform::WindowEvent::PointerScrolled {
+            position: slint::LogicalPosition::new(left, inside_y), delta_x: 0.0, delta_y: -90.0,
+        });
+        i_slint_backend_testing::mock_elapsed_time(Duration::from_millis(250));
+        assert!(bar.get_preview_scroll_y() < 0.0, "Wheel scrolls the mail body");
+        hover(left, theme.get_line_height() / 2.0);
+        send_key_combo(&bar, [K::Escape]);
+        let sport = bar.get_day_rows().iter().find(|row| row.label == "Sport").unwrap();
+        hover(theme.get_padding() + theme.get_day_symbol_box() + theme.get_gap() * 2.0,
+            theme.get_line_height() + theme.get_calendar_gap() + sport.top + sport.tall / 2.0);
+        assert_eq!(bar.get_entry_preview_title(), "Sport");
+        assert_eq!(bar.get_entry_preview_description(), "Turnschuhe mitnehmen.");
+        assert!(!bar.get_day_rows().iter().any(|row| row.selected || row.editing));
+        capture(&bar, "day-entry-preview");
+        hover(theme.get_padding(), theme.get_line_height() / 2.0);
+        assert_eq!(bar.get_entry_preview_title(), "");
+        send_key_combo(&bar, [K::DownArrow]);
+        for _ in 0..3 {
+            if bar.get_day_rows().iter().any(|row| row.kind == 1 && row.selected) { break; }
+            send_key_combo(&bar, [K::DownArrow]);
+        }
+        let selected = bar.get_day_rows().iter().find(|row| row.kind == 1 && row.selected).unwrap();
+        send_key_combo(&bar, [K::F3]);
+        assert_eq!(bar.get_entry_preview_title(), selected.label);
+        send_key_combo(&bar, [K::Escape]);
+        assert_eq!(bar.get_entry_preview_title(), "");
+        assert!(bar.get_day_rows().iter().any(|row| row.label == selected.label && row.selected));
+        send_key_combo(&bar, [K::Escape]);
+        bar.invoke_focus_line();
         // Drag the first value through both scroll containers using real pointer events.
         {
             use slint::platform::{PointerEventButton, WindowEvent};
@@ -1862,6 +1957,21 @@ mod tests {
             bar.invoke_dial_set(rating.item, 7, false);
             bar.invoke_focus_line();
         }
+        type_text(&bar, "/Tag");
+        send_key_combo(&bar, [K::Return]);
+        assert!(bar.get_side_open() && bar.get_day_picker_open());
+        let initial_month = bar.get_side_month_title();
+        send_key_combo(&bar, [K::PageDown]);
+        assert_ne!(bar.get_side_month_title(), initial_month);
+        send_key_combo(&bar, [K::Home]);
+        send_key_combo(&bar, [K::RightArrow]);
+        send_key_combo(&bar, [K::Return]);
+        assert!(!bar.get_side_open() && !bar.get_entry_open());
+        assert_eq!(day_labels(&bar), ["Zahnarzt"]);
+        type_text(&bar, "/Today");
+        let theme = bar.global::<Theme>();
+        click(&bar, slint::LogicalPosition::new(theme.get_padding() * 2.0, theme.get_line_height() + theme.get_choice_height() / 2.0));
+        assert_eq!(bar.get_day_relative().as_str(), "Heute");
         // Alt+→ shows tomorrow (the dentist), Alt+H today again; the search bar keeps the keyboard.
         bar.window().dispatch_event(slint::platform::WindowEvent::KeyPressed { text: char::from(K::Alt).into() });
         send_key_combo(&bar, [K::RightArrow]);
@@ -1881,6 +1991,16 @@ mod tests {
         send_key_combo(&bar, [K::Escape]);
         type_text(&bar, "ahn");
         assert_eq!(bar.get_commands().row_data(0).unwrap().name, "Zahnarzt");
+        let result = bar.get_commands().row_data(0).unwrap();
+        hover(theme.get_padding() * 2.0, theme.get_line_height() + result.header + theme.get_row_height() / 2.0);
+        assert_eq!(bar.get_entry_preview_title(), "Zahnarzt");
+        assert!(bar.get_entry_preview_description().ends_with("dort sein."));
+        hover(theme.get_padding(), theme.get_line_height() / 2.0);
+        send_key_combo(&bar, [K::F3]);
+        assert_eq!(bar.get_entry_preview_title(), "Zahnarzt");
+        assert_eq!(bar.get_search_text(), "ahn");
+        send_key_combo(&bar, [K::Escape]);
+        assert_eq!(bar.get_search_text(), "ahn");
         capture(&bar, "search-entry-results");
         send_key_combo(&bar, [K::Escape]);
         type_text(&bar, "/Notizblock");
@@ -1991,6 +2111,18 @@ mod tests {
         assert!(bar.get_notepad_open() && bar.get_notepad_preview() && !bar.get_notepad_editing());
         assert!(bar.get_notepad_date().ends_with("Arbeit"));
         capture(&bar, "notebook-reader");
+        ctrl("k");
+        type_text(&bar, "Ordner");
+        assert_eq!(bar.get_menu_rows().row_data(0).unwrap().label, "Ordner zuweisen");
+        send_key_combo(&bar, [K::Return]);
+        assert_eq!(bar.get_notepad_panel(), 4);
+        type_text(&bar, "Projekte");
+        send_key_combo(&bar, [K::Return]);
+        assert!(bar.get_notepad_preview() && !bar.get_notepad_editing() && bar.get_notepad_panel() == 0);
+        with_app(|app| {
+            let note = app.state.notepad().unwrap();
+            assert_eq!(note.card.original.as_ref().unwrap()["folder"], folder.to_string());
+        });
         send_key_combo(&bar, [K::Escape]);
         assert_eq!(bar.get_notepad_panel(), 1);
         capture(&bar, "notebook-list");
@@ -2483,6 +2615,20 @@ mod tests {
         send_key_combo(&bar, [K::Return]);
         assert!(bar.get_cal_focus());
         assert!(bar.get_cal_has_caret());
+        send_key_combo(&bar, [K::F3]);
+        let first = bar.get_entry_preview_title();
+        assert!(!first.is_empty());
+        let mut titles = vec![first];
+        for _ in 0..20 {
+            send_key_combo(&bar, [K::F3]);
+            let next = bar.get_entry_preview_title();
+            if next == titles[0] { break; }
+            assert!(!next.is_empty());
+            titles.push(next);
+        }
+        assert!(titles.iter().any(|title| title == "Recherche") && titles.iter().any(|title| title == "Sport"));
+        send_key_combo(&bar, [K::Escape]);
+        assert!(bar.get_cal_focus());
         for _ in 0..4 { send_key_combo(&bar, [K::Shift, K::DownArrow]); }
         assert_eq!(value(F::Day), "18.11.2026–22.11.2026", "A range: one entry over several days.");
         capture(&bar, "calendar-range");
@@ -2498,6 +2644,20 @@ mod tests {
         let m = with_app_value(|app| app.state.metrics);
         let row_of = |day: &str| with_app_value(|app| app.state.view().calendar.layout.rows.iter().find(|row| row.date == repeat::d(day)).map(|row| row.y + 2.0).unwrap());
         let x_of = |minutes: f32| m.time_x() + m.time_w() * minutes / 1440.0;
+        let calendar_x = bar.get_form_space() + theme.get_border_width();
+        let chip = with_app_value(|app| app.state.view().calendar.layout.chips.iter()
+            .find(|chip| chip.title == "Recherche" && chip.y > m.head_h).cloned().unwrap());
+        hover(calendar_x + chip.x + chip.w / 2.0, chip.y + chip.h / 2.0);
+        assert_eq!(bar.get_entry_preview_title(), "Recherche");
+        let dentist = bar.get_cal_blocks().iter().find(|block| block.title == "Zahnarzt").unwrap();
+        hover(calendar_x + dentist.x + dentist.w / 2.0, dentist.y + dentist.h / 2.0);
+        assert_eq!(bar.get_entry_preview_title(), "Zahnarzt");
+        assert!(bar.get_entry_preview_description().starts_with("Versichertenkarte"));
+        let lane = bar.get_cal_lanes().iter().find(|lane| !lane.fresh && lane.y + lane.h > m.head_h && lane.y < m.height).unwrap();
+        hover(calendar_x + lane.x + lane.w / 2.0, (lane.y + 2.0).max(m.head_h + 1.0));
+        assert_eq!(bar.get_entry_preview_title(), "Urlaub");
+        assert_eq!(bar.get_entry_preview_description(), "");
+        capture(&bar, "calendar-entry-preview");
         bar.invoke_cal_mouse(0, 0, 30.0, row_of("2026-11-19"), false);
         with_app(|app| assert!(app.state.opened().contains(&repeat::d("2026-11-19"))));
         bar.invoke_cal_mouse(0, 0, 30.0, row_of("2026-11-19"), false);
@@ -2522,13 +2682,15 @@ mod tests {
         bar.invoke_cal_mouse(1, 0, 30.0, row_of("2026-11-25"), false);
         bar.invoke_cal_mouse(1, 2, 30.0, row_of("2026-11-25"), false);
         assert_eq!((value(F::Day), value(F::Start)), ("Mi 25.11.2026".to_string(), String::new()));
-        // A left click on an entry opens its day too.
+        // A left click opens the existing entry after the current draft is closed.
         let block = with_app_value(|app| app.state.view().calendar.layout.blocks.iter().find(|b| !b.fresh && b.y > m.head_h).cloned().unwrap());
-        let day = with_app_value(|app| app.state.view().calendar.layout.rows.iter().find(|row| block.y >= row.y && block.y < row.y + row.h).unwrap().date);
-        let before = with_app_value(|app| app.state.opened().contains(&day));
         bar.invoke_cal_mouse(0, 0, block.x + 2.0, block.y + 2.0, false);
-        with_app(|app| assert_ne!(app.state.opened().contains(&day), before));
-        // Esc on a field without changes closes the form; marking in the calendar opens it again by itself.
+        with_app(|app| assert!(!app.state.editing_entry(), "The open draft is kept."));
+        send_key_combo(&bar, [K::Escape]);
+        assert!(!bar.get_entry_open());
+        let block = with_app_value(|app| app.state.view().calendar.layout.blocks.iter().find(|b| !b.fresh && b.y > m.head_h).cloned().unwrap());
+        bar.invoke_cal_mouse(0, 0, block.x + 2.0, block.y + 2.0, false);
+        with_app(|app| assert!(app.state.editing_entry(), "Clicking a stored block opens it for editing."));
         send_key_combo(&bar, [K::Escape]);
         assert!(!bar.get_entry_open());
         bar.invoke_cal_mouse(1, 0, 30.0, row_of("2026-11-26"), false);

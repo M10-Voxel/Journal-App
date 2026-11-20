@@ -313,7 +313,7 @@ export component ActionPopover inherits Rectangle {
         // The clock's and the month's confirming line.
         if root.side-open && (root.side-kind == 4 || root.side-kind == 5): Rectangle {
             height: Theme.side-row-height + Theme.popover-padding * 2;
-            Rectangle {
+            if root.side-confirm-text != "": Rectangle {
                 x: Theme.popover-padding; y: Theme.popover-padding; width: parent.width - Theme.popover-padding * 2; height: Theme.side-row-height;
                 border-radius: Theme.list-radius;
                 background: take-touch.has-hover ? Theme.row-selection-strong : Theme.row-selection;

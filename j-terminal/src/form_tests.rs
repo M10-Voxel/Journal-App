@@ -115,6 +115,28 @@ fn planning_space_adds_visited_days_and_confirms_a_range_without_the_source() {
 }
 
 #[test]
+fn planning_space_fills_and_clears_week_jumps_and_shift_ranges() {
+    let mut t = test();
+    t.form.run(ActionId::Plan, None);
+    t.form.key(Key::Space, NONE);
+    t.form.key(Key::Up, NONE);
+    t.form.release_plan_space();
+    let week = d("2026-11-12").iter_days().take(8).filter(|date| *date != t.form.today).collect();
+    assert_eq!(t.form.v.plan_days, week);
+    t.form.key(Key::Space, NONE);
+    t.form.key(Key::Down, NONE);
+    t.form.release_plan_space();
+    assert!(t.form.v.plan_days.is_empty());
+    for direction in [Key::Up, Key::Down] {
+        t.form.key(direction, SHIFT);
+        t.form.key(Key::Space, NONE);
+        t.form.release_plan_space();
+        if direction == Key::Up { assert_eq!(t.form.v.plan_days, week); }
+    }
+    assert!(t.form.v.plan_days.is_empty());
+}
+
+#[test]
 fn search_edit_and_plan_retain_the_entry_and_detect_a_stale_edit() {
     let mut t = test();
     type_in(&mut t.form, "Projekt \\Arbeit");
@@ -382,6 +404,20 @@ fn notebook_browses_today_by_nested_folder_and_keeps_the_other_days_in_all() {
     let rows = t.form.notepad_choices("");
     assert_eq!(rows.iter().map(|row| (row.title.as_str(), row.group.as_str())).collect::<Vec<_>>(),
         [("Lose", "Ohne Ordner"), ("Angepinnt", "Projekt / Notizen")]);
+    t.form.pick_notepad(&rows[0].key);
+    if !t.form.notepad().unwrap().editing { t.form.notepad_preview(); }
+    t.form.run(ActionId::NotesFolder, None);
+    let choices = t.form.notepad_choices("Projekt / Notizen");
+    assert_eq!(choices.len(), 1);
+    assert_eq!(choices[0].key, child);
+    t.form.pick_notepad(&child);
+    t.form.finish_notepad(true);
+    assert_eq!(t.form.notepad().unwrap().card.original.as_ref().unwrap()["folder"], child);
+    t.form.notepad_preview();
+    t.form.notepad_panel(4);
+    t.form.pick_notepad("");
+    t.form.finish_notepad(true);
+    assert!(t.form.notepad().unwrap().card.original.as_ref().unwrap()["folder"].is_null());
 }
 
 #[test]
@@ -391,7 +427,7 @@ fn journal_text_command_is_unavailable_in_both_languages() {
     for (language, command) in [(Language::De, "/Journaltext"), (Language::En, "/JournalText")] {
         t.form.language = language;
         t.form.search_edited("/");
-        assert_eq!(t.form.view().commands.len(), 2);
+        assert!(t.form.view().commands.iter().all(|item| item.name != command));
         t.form.search_edited(command);
         assert!(t.form.view().commands.is_empty());
         t.form.key(Key::Enter, NONE);
@@ -677,6 +713,13 @@ fn mouse_hour_ranges_keep_their_presentation_after_saving_but_typed_ranges_keep_
     let saved = t.form.view().calendar.layout;
     assert_eq!(saved.blocks.len(), 3);
     assert!(saved.lanes.is_empty());
+    let later = saved.blocks.iter().max_by(|a, b| a.y.total_cmp(&b.y)).unwrap();
+    let opened = t.form.cal_mouse(0, 0, later.x + later.w / 2.0, later.y + later.h / 2.0, false);
+    assert_eq!(opened.focus, Some(Pane::Entry));
+    let (date, entry) = t.form.editing.as_ref().unwrap();
+    assert_eq!((*date, entry.text.as_str()), (d("2026-11-18"), "Projekt"));
+    t.form.close_entry();
+    open(&mut t.form);
     type_in(&mut t.form,"Manuell");
     go(&mut t.form,Field::Day); type_in(&mut t.form,"18.11.2026–20.11.2026");
     go(&mut t.form,Field::Start); type_in(&mut t.form,"14");
@@ -963,6 +1006,51 @@ fn the_search_bar_comes_first_and_only_knows_its_commands() {
     assert!(form.view().entry_open);
     assert_eq!(form.key(Key::Escape, NONE).focus, Some(Pane::Search), "Esc without changes closes the form again.");
     assert!(form.key(Key::Escape, NONE).hide, "And then the window.");
+}
+
+#[test]
+fn search_actions_choose_a_day_focus_its_values_and_use_shared_history() {
+    let mut t = test();
+    type_in(&mut t.form, "Probe");
+    t.form.key(Key::Enter, CTRL);
+    let date = d("2026-11-18");
+
+    t.form.search_edited("/Undo");
+    assert_eq!(t.form.key(Key::Enter, NONE).search.as_deref(), Some(""));
+    assert!(t.form.journal.as_ref().unwrap().store.load(&date.to_string()).unwrap().entries.is_empty());
+    t.form.search_edited("/Wiederherstellen");
+    t.form.choose_command(0);
+    assert_eq!(t.form.journal.as_ref().unwrap().store.load(&date.to_string()).unwrap().entries[0].text, "Probe");
+
+    t.form.search_edited("/Tag");
+    t.form.key(Key::Enter, NONE);
+    assert!(t.form.day_picker_open());
+    t.form.key(Key::Right, NONE);
+    t.form.key(Key::Escape, NONE);
+    assert_eq!(t.form.day_shown(), date);
+    t.form.search_edited("/Day");
+    t.form.choose_command(0);
+    t.form.key(Key::Right, NONE);
+    t.form.key(Key::Enter, NONE);
+    assert_eq!(t.form.day_shown(), d("2026-11-19"));
+    assert!(!t.form.view().entry_open);
+
+    t.form.search_edited("/Rating");
+    assert_eq!(t.form.key(Key::Enter, NONE).focus, Some(Pane::Day));
+    assert_eq!(t.form.pane.cursor, Some(day_view::Item::Value("rating".into())));
+    t.form.search_edited("/Aktivitäten");
+    assert_eq!(t.form.choose_command(0).focus, Some(Pane::Search));
+    assert_eq!(t.form.pane.message.as_ref().unwrap().0, "Keine Aktivitäten für diesen Tag");
+
+    let db = &mut t.form.journal.as_mut().unwrap().store;
+    db.save_period_data(r#"{"definitions":[{"id":"walk","name":"Spaziergang"}]}"#).unwrap();
+    t.form.snapshot.as_mut().unwrap().reload(db).unwrap();
+    t.form.search_edited("/Activities");
+    assert_eq!(t.form.key(Key::Enter, NONE).focus, Some(Pane::Day));
+    assert_eq!(t.form.pane.cursor, Some(day_view::Item::Activity("walk".into())));
+    t.form.search_edited("/Heute");
+    t.form.choose_command(0);
+    assert_eq!(t.form.day_shown(), date);
 }
 
 #[test]

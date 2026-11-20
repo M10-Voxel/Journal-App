@@ -17,6 +17,7 @@ pub struct Card {
     pub id: Uuid,
     pub original: Option<Value>,
     pub tag: Option<String>,
+    pub folder: Option<String>,
     pub pending: Vec<Attachment>,
 }
 
@@ -166,7 +167,9 @@ fn write(conn: &Connection, id: &str, card: &Value) -> Result<(), SaveError> {
     Ok(())
 }
 
-fn folder_paths(conn: &Connection) -> Result<BTreeMap<String, Vec<(i64, String)>>, SaveError> {
+type FolderPath = Vec<(i64, String)>;
+
+fn folder_paths(conn: &Connection) -> Result<BTreeMap<String, FolderPath>, SaveError> {
     let mut statement = conn.prepare_cached("SELECT value FROM settings WHERE key >= 'board:folder:' AND key < 'board:folder;'")?;
     let rows = statement.query_map([], |row| row.get::<_, String>(0))?;
     let mut folders = BTreeMap::new();
@@ -185,6 +188,14 @@ fn folder_paths(conn: &Connection) -> Result<BTreeMap<String, Vec<(i64, String)>
         }
         path.reverse();
         (id.clone(), path)
+    }).collect())
+}
+
+pub fn folders(store: &Store) -> Result<Vec<(String, String)>, SaveError> {
+    let mut paths: Vec<_> = folder_paths(&store.conn)?.into_iter().collect();
+    paths.sort_by(|a, b| a.1.cmp(&b.1));
+    Ok(paths.into_iter().map(|(id, path)| {
+        (id, path.into_iter().map(|(_, name)| name).collect::<Vec<_>>().join(" / "))
     }).collect())
 }
 
@@ -217,17 +228,18 @@ pub fn notes(store: &Store, query: &str, day: Option<NaiveDate>) -> Result<Vec<I
 
 impl Card {
     pub fn new() -> Self {
-        Self { id: Uuid::new_v4(), original: None, tag: None, pending: Vec::new() }
+        Self { id: Uuid::new_v4(), original: None, tag: None, folder: None, pending: Vec::new() }
     }
 
     pub fn open(store: &Store, id: Uuid) -> Result<Self, SaveError> {
         let record = read(&store.conn, id)?.filter(|card| card["kind"] == "note").ok_or(SaveError::Conflict)?;
-        Ok(Self { id, tag: record["tag"].as_str().map(str::to_owned), original: Some(record), pending: Vec::new() })
+        Ok(Self { id, tag: record["tag"].as_str().map(str::to_owned), folder: record["folder"].as_str().map(str::to_owned), original: Some(record), pending: Vec::new() })
     }
 
     pub fn dirty(&self) -> bool {
         let original_tag = self.original.as_ref().and_then(|card| card["tag"].as_str());
-        original_tag != self.tag.as_deref() || !self.pending.is_empty()
+        let original_folder = self.original.as_ref().and_then(|card| card["folder"].as_str());
+        original_tag != self.tag.as_deref() || original_folder != self.folder.as_deref() || !self.pending.is_empty()
     }
 
     pub fn attachments(&self, store: &Store, vault: &Path) -> Result<Vec<Item>, SaveError> {
@@ -300,7 +312,16 @@ impl Card {
                 changed.push((field, value));
             }
         }
-        if self.original.is_some() && changed.is_empty() && self.pending.is_empty() { return Ok(false); }
+        // Folder placement belongs to the individual card, including for synced copies.
+        let current_folder = text(&record, "folder");
+        let before_folder = self.original.as_ref().map_or("", |card| text(card, "folder"));
+        let folder = merge(before_folder, self.folder.as_deref().unwrap_or_default(), current_folder)?;
+        let moved = folder != current_folder;
+        if moved {
+            if !folder.is_empty() && !folder_paths(&tx)?.contains_key(folder) { return Err(SaveError::Conflict); }
+            record["folder"] = if folder.is_empty() { Value::Null } else { json!(folder) };
+        }
+        if self.original.is_some() && !moved && changed.is_empty() && self.pending.is_empty() { return Ok(false); }
         let content_changed = changed.iter().any(|(field, _)| *field == "title" || *field == "text");
         if content_changed { record["updatedAt"] = json!(now); }
         let mut files = Vec::new();

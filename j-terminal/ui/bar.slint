@@ -18,8 +18,10 @@ export struct SearchRun { label: string, marked: bool }
 export struct CommandRow {
     name: string, detail: string, heading: string, tag: string, icon: image, has-icon: bool,
     sigil: bool, has-color: bool, tint: color, title-runs: [SearchRun], snippet-runs: [SearchRun],
-    top: length, tall: length, header: length,
+    top: length, tall: length, header: length, preview: bool, description: string,
 }
+
+export struct EntryPreview { source: int, index: int, title: string, description: string, x: length, y: length }
 
 component SearchLine inherits Rectangle {
     in property <[SearchRun]> runs;
@@ -50,7 +52,7 @@ export struct DialCell { color: color, raw: int, low: int, high: int, item: int,
 export struct DayRow { top: length, tall: length, column: int, kind: int, item: int, label: string, detail: string, icon: image, has-tag-icon: bool, tag-icon: image, has-color: bool, color: color,
     done: bool, priority: bool, trace: bool, foreign: bool, selected: bool, editing: bool, track: bool, has-timer: bool, timer-running: bool, timer-clock: string,
     // The dials' line: how many side by side, the width of each, the ring's size, the height of a line of them.
-    dial-columns: int, dial-cell: length, dial-size: length, dial-row: length, dials: [DialCell] }
+    dial-columns: int, dial-cell: length, dial-size: length, dial-row: length, dials: [DialCell], description: string }
 
 // A section's heading, as Raycast's: small, grey, its count beside it.
 component DayHeading inherits Rectangle {
@@ -143,6 +145,7 @@ export component Bar inherits Window {
     // The input shows the active field's text; otherwise the keys go to the field's switch or its open options.
     in property <bool> editable;
     in property <bool> native-arrows;
+    in property <bool> day-picker-open;
     in property <bool> options;
     in property <[string]> type-names;
     in property <[image]> type-icons;
@@ -193,6 +196,9 @@ export component Bar inherits Window {
     in property <bool> cal-focus;
     changed cal-focus => { if root.stacked { page-scroll.content-y = root.cal-focus ? min(0px, root.height - root.full-height) : 0px; } }
     callback cal-mouse(int, int, length, length, bool);
+    callback calendar-hover-preview(length, length) -> EntryPreview;
+    callback calendar-keyboard-preview(int) -> EntryPreview;
+    callback day-keyboard-preview() -> EntryPreview;
     callback cal-wheel(length, length, bool, bool);
     callback calendar-resized(length, length);
     private property <length> calendar-viewport-width: calendar.width;
@@ -389,7 +395,74 @@ export component Bar inherits Window {
     property <length> title-x: Theme.padding + Theme.back-size + Theme.gap;
     property <length> title-width: root.form-space - root.title-x - Theme.padding - type-chip.width - flag.width - Theme.accessory-gap * 2;
     property <bool> type-list-open;
-    changed entry-open => { root.type-list-open = false; }
+    pure callback preview-body(string) -> styled-text;
+    private property <length> search-scroll;
+    private property <length> day-scroll-offset;
+    private property <bool> over-preview;
+    private property <int> preview-scroll-step;
+    out property <length> preview-scroll-y;
+    private property <EntryPreview> preview-target;
+    private property <bool> preview-ready;
+    private property <bool> keyboard-preview;
+    private property <int> preview-step;
+    out property <string> entry-preview-title: root.preview-ready ? root.preview-target.title : "";
+    out property <string> entry-preview-description: root.preview-ready ? root.preview-target.description : "";
+    public function dismiss-preview() {
+        root.preview-target = {};
+        root.over-preview = false;
+        root.preview-scroll-y = 0px;
+        leave-delay.running = false;
+        root.preview-ready = false;
+        root.keyboard-preview = false;
+        root.preview-step = 0;
+        preview-delay.running = false;
+    }
+    function leave-preview(source: int, index: int) {
+        if !root.keyboard-preview && root.preview-target.source == source && root.preview-target.index == index { leave-delay.running = true; }
+    }
+    function hover-preview(target: EntryPreview) {
+        if root.menu-open || root.side-open || root.keyboard-preview { return; }
+        if target.title == "" { root.leave-preview(root.preview-target.source, root.preview-target.index); return; }
+        leave-delay.running = false;
+        if target.source == root.preview-target.source && target.index == root.preview-target.index
+            && target.title == root.preview-target.title && target.description == root.preview-target.description { return; }
+        root.preview-target = target;
+        root.preview-ready = false;
+        preview-delay.running = false;
+        preview-delay.running = true;
+    }
+    function show-keyboard-preview() {
+        let step = root.preview-step;
+        let was-open = root.keyboard-preview;
+        root.dismiss-preview();
+        if root.menu-open || root.side-open || root.notepad-open { return; }
+        if root.cal-focus {
+            let target = root.calendar-keyboard-preview(step);
+            root.preview-target = { source: target.source, index: target.index, title: target.title, description: target.description,
+                x: target.x + calendar.absolute-position.x, y: target.y + calendar.absolute-position.y };
+            root.preview-step = step + 1;
+        } else if !was-open && search.has-focus && root.commands.length > 0 {
+            let row = root.commands[root.command-selected];
+            if row.preview { root.preview-target = { source: 1, index: root.command-selected, title: row.name, description: row.description, x: Theme.padding * 3, y: Theme.line-height + root.search-scroll + row.top + row.tall + page-scroll.content-y }; }
+        } else if !was-open && day-scope.has-focus {
+            let target = root.day-keyboard-preview();
+            root.preview-target = { source: target.source, index: target.index, title: target.title, description: target.description,
+                x: Theme.padding * 3, y: Theme.line-height + Theme.calendar-gap + root.day-scroll-offset + root.day-focus-y + root.day-focus-h + page-scroll.content-y };
+        }
+        root.preview-ready = root.preview-target.title != "";
+        root.keyboard-preview = root.preview-ready;
+    }
+    leave-delay := Timer { interval: Theme.preview-crossing-time; running: false;
+        triggered => { self.running = false; if !root.over-preview { root.dismiss-preview(); } }
+    }
+    preview-delay := Timer {
+        interval: Theme.entry-preview-delay; running: false;
+        triggered => { root.preview-ready = true; self.running = false; }
+    }
+    changed entry-open => { root.type-list-open = false; root.dismiss-preview(); }
+    changed notepad-open => { root.dismiss-preview(); }
+    changed menu-open => { root.dismiss-preview(); }
+    changed side-open => { root.dismiss-preview(); }
     title: "J-TerminaL";
     no-frame: true;
     always-on-top: true;
@@ -405,6 +478,15 @@ export component Bar inherits Window {
         }
         capture-key-pressed(raw-event) => {
             let event = KeyBindings.translate(ShortcutContext.window, raw-event);
+            if event.text == Key.F3 && !event.modifiers.shift && !event.modifiers.control && !event.modifiers.alt {
+                if !event.repeat { root.show-keyboard-preview(); }
+                return accept;
+            }
+            if root.keyboard-preview && (event.text == Key.PageDown || event.text == Key.PageUp) {
+                root.preview-scroll-step += event.text == Key.PageDown ? 1 : -1; return accept;
+            }
+            if event.text == Key.Escape && root.keyboard-preview { root.dismiss-preview(); return accept; }
+            if event.text != Key.Control && event.text != Key.Shift && event.text != Key.Alt && event.text != Key.Meta { root.dismiss-preview(); }
             if event.text == Key.F1 {
                 if !event.repeat { root.open-settings(); }
                 return accept;
@@ -431,6 +513,7 @@ export component Bar inherits Window {
         border-radius: Theme.radius;
         clip: true;
     page-scroll := Flickable {
+    changed content-y => { root.dismiss-preview(); }
     x: 0px; y: 0px; width: root.width; height: root.height;
     interactive: !root.dragging-dial;
     content-height: root.full-height;
@@ -466,6 +549,13 @@ export component Bar inherits Window {
                         let event = KeyBindings.translate(ShortcutContext.search, raw-event);
                         // Modifier keys alone do nothing (their codes are control characters too).
                         if event.text == Key.Control || event.text == Key.Shift || event.text == Key.Alt || event.text == Key.Meta { return reject; }
+                        if root.day-picker-open {
+                            if event.text == Key.LeftArrow { root.form-key(5, 0); return accept; }
+                            if event.text == Key.RightArrow { root.form-key(6, 0); return accept; }
+                            if event.text == Key.PageUp { root.form-key(7, 0); return accept; }
+                            if event.text == Key.PageDown { root.form-key(8, 0); return accept; }
+                            if event.text == Key.Home { root.form-key(9, 0); return accept; }
+                        }
                         if event.text == Key.F6 { root.form-key(15, 0); return accept; }
                         if event.text == Key.Tab { root.form-key(0, 0); return accept; }
                         if event.text == Key.UpArrow { root.form-key(1, 0); return accept; }
@@ -558,6 +648,8 @@ export component Bar inherits Window {
             changed selected-y => {
                 self.content-y = min(0px, max(min(self.content-y, -self.selected-y), self.height - self.selected-y - self.selected-h));
             }
+            changed content-y => { root.search-scroll = self.content-y; root.dismiss-preview(); }
+            init => { root.search-scroll = self.content-y; }
             content-height: root.commands[root.commands.length - 1].top + root.commands[root.commands.length - 1].tall;
             height: min(self.content-height, Theme.popover-max-height);
             for command[index] in root.commands: Rectangle {
@@ -588,7 +680,16 @@ export component Bar inherits Window {
                             overflow: elide; font-size: Theme.small-size; vertical-alignment: center; }
                         Text { text: command.detail; color: Theme.muted; font-size: Theme.small-size; vertical-alignment: center; }
                     }
-                    hit := TouchArea { mouse-cursor: pointer; clicked => { root.command-chosen(index); } }
+                    hit := TouchArea {
+                        mouse-cursor: pointer;
+                        changed has-hover => {
+                            if self.has-hover && command.preview {
+                                root.hover-preview({ source: 1, index: index, title: command.name, description: command.description,
+                                    x: self.absolute-position.x + self.mouse-x, y: self.absolute-position.y + self.height });
+                            } else { root.leave-preview(1, index); }
+                        }
+                        clicked => { root.dismiss-preview(); root.command-chosen(index); }
+                    }
                 }
             }
         }
@@ -812,6 +913,8 @@ export component Bar inherits Window {
             spacing: 0px;
             DayScroll {
                 vertical-stretch: 1;
+                changed content-y => { root.day-scroll-offset = self.content-y; root.dismiss-preview(); }
+                init => { root.day-scroll-offset = self.content-y; }
                 content-height: root.day-list-height + Theme.gap;
                 focus-y: root.day-focus-y;
                 focus-h: root.day-focus-footer ? 0px : root.day-focus-h;
@@ -819,9 +922,16 @@ export component Bar inherits Window {
                     x: 0px; y: Theme.calendar-gap;
                     width: layout.width;
                     height: root.day-list-height;
-                    for row in root.day-rows: Rectangle {
+                    for row in root.day-rows: TouchArea {
                         x: Theme.padding; width: parent.width - Theme.padding * 2;
                         y: row.top; height: row.tall;
+                        enabled: row.kind == 1 && !row.editing;
+                        changed has-hover => {
+                            if self.has-hover {
+                                root.hover-preview({ source: 2, index: row.item, title: row.label, description: row.description,
+                                    x: self.absolute-position.x + self.mouse-x, y: self.absolute-position.y + self.height });
+                            } else { root.leave-preview(2, row.item); }
+                        }
                         // The line the keyboard is on.
                         if row.selected && row.kind != 7: Rectangle {
                             x: -Theme.day-select-inset; width: parent.width + Theme.day-select-inset * 2;
@@ -1202,6 +1312,15 @@ export component Bar inherits Window {
         caret-h: root.cal-caret-h;
         focused: root.cal-focus;
         mouse(button, kind, x, y, shift) => { root.cal-mouse(button, kind, x, y, shift); }
+        hover(active, x, y) => {
+            if !active {
+                if root.preview-target.source == 3 { root.leave-preview(3, root.preview-target.index); }
+            } else {
+                let target = root.calendar-hover-preview(x, y);
+                root.hover-preview({ source: target.source, index: target.index, title: target.title, description: target.description,
+                    x: self.absolute-position.x + target.x, y: self.absolute-position.y + target.y });
+            }
+        }
         wheel(x, delta, ctrl, shift) => { root.cal-wheel(x, delta, ctrl, shift); }
     }
     }
@@ -1213,6 +1332,64 @@ export component Bar inherits Window {
             if event.text == Key.Control || event.text == Key.Shift || event.text == Key.Alt || event.text == Key.Meta { return reject; }
             root.day-key(event.text, root.mods(event.modifiers.shift, event.modifiers.control, event.modifiers.alt));
             accept
+        }
+    }
+    if root.entry-preview-title != "": preview-card := Rectangle {
+        property <length> pad: Theme.preview-padding;
+        property <length> anchor-x: clamp(root.preview-target.x, Theme.popover-inset, root.width - Theme.popover-inset);
+        property <length> anchor-y: clamp(root.preview-target.y, Theme.popover-inset, root.height - Theme.popover-inset);
+        property <bool> below: self.anchor-y + Theme.preview-tail + self.height <= root.height - Theme.popover-inset;
+        width: min(root.width - Theme.popover-inset * 2, Theme.popover-width,
+            max(title-measure.preferred-width, body-measure.preferred-width) + self.pad * 2 + Theme.gap);
+        height: min(Theme.entry-preview-max-height, root.height - Theme.popover-inset * 2, scroll.content-height + self.pad * 2);
+        x: clamp(self.anchor-x - self.pad * 2, Theme.popover-inset, root.width - self.width - Theme.popover-inset);
+        y: clamp(self.below ? self.anchor-y + Theme.preview-tail : self.anchor-y - Theme.preview-tail - self.height,
+            Theme.popover-inset, root.height - self.height - Theme.popover-inset);
+        background: Theme.popover-background;
+        border-width: Theme.border-width; border-color: Theme.popover-border; border-radius: Theme.popover-radius;
+        drop-shadow-blur: Theme.popover-shadow-blur; drop-shadow-color: Theme.popover-shadow;
+        Rectangle {
+            x: parent.anchor-x - parent.x - self.width / 2; width: Theme.focus-ring;
+            y: parent.below ? -self.height : parent.height; height: Theme.preview-tail;
+            background: Theme.accent;
+            Rectangle { width: Theme.preview-pin; height: self.width; x: (parent.width - self.width) / 2;
+                y: preview-card.below ? -self.height / 2 : parent.height - self.height / 2;
+                border-radius: self.width / 2; background: Theme.accent; }
+        }
+        title-measure := Text { visible: false; text: root.entry-preview-title; font-size: Theme.row-size; font-weight: Theme.weight-semibold; }
+        body-measure := StyledText { visible: false; text: root.preview-body(root.entry-preview-description);
+            default-font-family: Theme.ui-font; default-font-size: Theme.small-size; }
+        TouchArea {
+            changed has-hover => {
+                root.over-preview = self.has-hover;
+                if self.has-hover { leave-delay.running = false; }
+                else if !root.keyboard-preview { leave-delay.running = true; }
+            }
+            scroll := Flickable {
+                x: Theme.preview-padding; y: self.x; width: parent.width - self.x * 2;
+                height: parent.height - self.y * 2; content-width: self.width;
+                content-y <=> root.preview-scroll-y;
+                content-height: title.height + (root.entry-preview-description == "" ? 0px : Theme.gap + body.preferred-height);
+                interactive: self.content-height > self.height;
+                property <int> step: root.preview-scroll-step;
+                property <int> last-step;
+                init => { self.last-step = self.step; }
+                changed step => {
+                    self.content-y = clamp(self.content-y + (self.last-step - self.step) * self.height, min(0px, self.height - self.content-height), 0px);
+                    self.last-step = self.step;
+                }
+                property <EntryPreview> target: root.preview-target;
+                changed target => { self.content-y = 0px; }
+                title := Text { x: 0px; y: 0px; width: scroll.width; height: self.preferred-height; text: root.entry-preview-title;
+                    color: Theme.strong; font-size: Theme.row-size; font-weight: Theme.weight-semibold; wrap: word-wrap; }
+                body := StyledText { x: 0px; y: title.height + Theme.gap; width: scroll.width; height: self.preferred-height;
+                    text: body-measure.text; default-color: Theme.text; link-color: Theme.accent;
+                    default-font-family: Theme.ui-font; default-font-size: Theme.small-size; }
+            }
+            if scroll.content-height > scroll.height: Rectangle { width: Theme.focus-ring; x: parent.width - Theme.popover-padding;
+                height: max(Theme.gap, scroll.height * scroll.height / scroll.content-height);
+                y: scroll.y - (scroll.height - self.height) * (scroll.content-y / (scroll.content-height - scroll.height));
+                border-radius: self.width; background: Theme.muted; }
         }
     }
     // The outline where Windows draws none (its own corners and edge replace it where it can).

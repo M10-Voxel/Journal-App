@@ -260,14 +260,23 @@ pub struct Command {
     pub name: String, pub detail: String, pub look: SearchRow, action: CommandAction,
 }
 
+impl Command {
+    pub fn has_preview(&self) -> bool {
+        matches!(self.action, CommandAction::Hit(..) | CommandAction::Day(_) | CommandAction::Card(..))
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SearchRow {
     pub heading: String, pub icon: &'static str, pub tag: String, pub color: Option<calendar::Rgb>,
-    pub snippet: String, pub words: Vec<String>, pub sigil: bool,
+    pub snippet: String, pub description: String, pub words: Vec<String>, pub sigil: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-enum CommandAction { Filter(String, usize), Card(uuid::Uuid, bool), Entry, Notepad, Hit(NaiveDate, String), Day(NaiveDate) }
+enum CommandAction {
+    Filter(String, usize), Card(uuid::Uuid, bool), Entry, Notepad, Hit(NaiveDate, String), Day(NaiveDate),
+    PickDay, Today, Undo, Redo, Rating, Activities,
+}
 
 pub struct NotepadChoice {
     pub key: String,
@@ -322,6 +331,7 @@ pub struct Form {
     mark_layout: Option<(Layout, Metrics)>,
     /// What the calendar shows now (the mouse is matched against it).
     shown_layout: Layout,
+    shown_entries: Vec<Option<(NaiveDate, String)>>,
     shown_metrics: Metrics,
     /// The moment given to `at` stays (tests); otherwise each showing reads the clock.
     fixed_clock: bool,
@@ -364,6 +374,7 @@ enum Options {
     Repeat,
     RepeatDate { field: DateField, cursor: NaiveDate },
     PlanDates(day_pane::PlanCursor),
+    GoToDate(NaiveDate),
 }
 
 /// The keyboard in the calendar: on the side of the days (whole days) or in the 24 hours (a moment); with Shift a range
@@ -474,7 +485,7 @@ impl Form {
         Form { journal, snapshot, language, preferences: Default::default(), today, now: minutes, backup: v.clone(), v, active: TITLE, buffer: String::new(), row_error: None, query: String::new(),
             pick: 0, editor: Editor::default(), menu: None, tried: false, last_saved: None, status: None, flash: None,
             metrics: Metrics::default(), options: None, options_backup: Values::default(), cal_top: repeat::shift(today, -1), cal_offset: 0.0, cal_target: None,
-            cal_open: BTreeSet::from([today]), cal_clicked: None, mark: None, mark_layout: None, shown_layout: Layout::default(), shown_metrics: Metrics::default(),
+            cal_open: BTreeSet::from([today]), cal_clicked: None, mark: None, mark_layout: None, shown_layout: Layout::default(), shown_entries: Vec::new(), shown_metrics: Metrics::default(),
             fixed_clock: true, clock_ms: 0, kind_chosen: false, entry_open: false, hits: Vec::new(), editing: None, search: String::new(), search_cursor: 0, command_selected: 0, notepad: None, suspended_notes: Vec::new(), zoom_days: 1.0, zoom_hours: 1.0, pan: 0.0, view_day: None, cal_selected: BTreeSet::new(), pane: DayPane::default() }
     }
 
@@ -531,6 +542,7 @@ impl Form {
     }
 
     pub fn search_at(&mut self, text: &str, cursor: usize) {
+        if matches!(self.options, Some(Options::GoToDate(_))) { self.options = None; }
         self.search = text.to_string();
         self.search_cursor = cursor;
         self.command_selected = 0;
@@ -559,12 +571,23 @@ impl Form {
         if !query.starts_with('/') { return self.hits.clone(); }
         let query = parse::fold(&query[1..]);
         let notepad = notepad_texts(self.language);
+        let actions = crate::texts::action_texts(self.language);
+        let day = crate::texts::day_texts(self.language);
+        let ft = self.ft();
         let all = [
-            ("/Entry", ["entry", "eintrag"], self.ft().cmd_entry, CommandAction::Entry),
-            (notepad.command, ["notepad", "notizblock"], notepad.command_detail, CommandAction::Notepad),
+            ("/Entry".into(), ["entry", "eintrag"], ft.cmd_entry, CommandAction::Entry),
+            (notepad.command.into(), ["notepad", "notizblock"], notepad.command_detail, CommandAction::Notepad),
+            (format!("/{}", ft.cmd_day), ["day", "tag"], ft.cmd_day_detail, CommandAction::PickDay),
+            (format!("/{}", day.today), ["today", "heute"], actions.today, CommandAction::Today),
+            (format!("/{}", actions.undo), ["undo", "ruckgangig"], actions.undo, CommandAction::Undo),
+            (format!("/{}", actions.redo), ["redo", "wiederherstellen"], actions.redo, CommandAction::Redo),
+            (format!("/{}", day.rating), ["rating", "bewertung"], day.rating, CommandAction::Rating),
+            (format!("/{}", day.activities), ["activities", "aktivitaten"], day.activities, CommandAction::Activities),
         ];
-        all.into_iter().filter(|(_, names, _, _)| names.iter().any(|name| name.starts_with(&query) || query.starts_with(name)))
-            .map(|(name, _, detail, action)| Command { name: name.into(), detail: detail.into(), look: Default::default(), action }).collect()
+        let mut matching: Vec<_> = all.into_iter().filter(|(_, names, _, _)| names.iter().any(|name| name.starts_with(&query))).collect();
+        matching.sort_by_key(|(_, names, _, _)| !names.contains(&query.as_str()));
+        matching.into_iter()
+            .map(|(name, _, detail, action)| Command { name, detail: detail.into(), look: Default::default(), action }).collect()
     }
 
     pub fn choose_command(&mut self, index: usize) -> Effect {
@@ -587,6 +610,25 @@ impl Form {
             }
             Some(CommandAction::Entry) => self.open_entry(),
             Some(CommandAction::Notepad) => self.open_notepad(),
+            Some(action @ (CommandAction::PickDay | CommandAction::Today | CommandAction::Undo |
+                CommandAction::Redo | CommandAction::Rating | CommandAction::Activities)) => {
+                self.search_edited("");
+                let effect = match action {
+                    CommandAction::PickDay => {
+                        self.options = Some(Options::GoToDate(self.day_shown()));
+                        Effect { focus: Some(Pane::Search), ..Effect::default() }
+                    }
+                    CommandAction::Today => self.run(ActionId::Today, None),
+                    CommandAction::Undo => self.run(ActionId::Undo, None),
+                    CommandAction::Redo => self.run(ActionId::Redo, None),
+                    _ => {
+                        let rating = action == CommandAction::Rating;
+                        let out = self.with_pane(|pane, cx| pane.focus_period(cx, rating));
+                        self.pane_effect(out)
+                    }
+                };
+                Effect { search: Some(String::new()), ..effect }
+            }
             None => {
                 if self.search.trim().starts_with('/') {
                     self.status = Some((format!("{} {}", self.ft().cmd_unknown, self.search.trim()), true));
@@ -969,7 +1011,7 @@ impl Form {
 
     pub fn notepad_panel(&mut self, panel: i32) {
         if let Some(draft) = self.notepad.as_mut() {
-            if panel == 2 && !draft.editing { return; }
+            if panel == 2 && !draft.editing || panel == 4 && !draft.editing && draft.card.original.is_none() { return; }
             if panel == 1 {
                 if draft.dirty() {
                     self.status = Some((notepad_texts(self.language).dirty_switch.into(), true));
@@ -1042,6 +1084,20 @@ impl Form {
                     key: tag.id, group: String::new(), title: tag.name, detail: String::new(), color: calendar::parse_color(&tag.color),
                 })).collect();
         }
+        if draft.panel == 4 {
+            let folders = match notebook::folders(&journal.store) {
+                Ok(folders) => folders,
+                Err(error) => { self.notepad_error(error); return Vec::new(); }
+            };
+            let query = query.to_lowercase();
+            let current = draft.card.folder.as_deref().unwrap_or_default();
+            return std::iter::once((String::new(), labels.unfiled.to_owned())).chain(folders)
+                .filter(|(_, title)| title.to_lowercase().contains(&query))
+                .map(|(key, title)| NotepadChoice {
+                    detail: if key == current { labels.current_folder.to_owned() } else { String::new() },
+                    key, title, group: String::new(), color: None,
+                }).collect();
+        }
         let items = match draft.panel {
             1 => notebook::notes(&journal.store, query, draft.notes_on_day.then_some(draft.date)),
             3 => draft.card.attachments(&journal.store, &journal.vault),
@@ -1074,11 +1130,14 @@ impl Form {
     /// Selecting a card reads its latest state. Selecting an attachment can open it outside the editor.
     pub fn pick_notepad(&mut self, key: &str) -> Option<notebook::Target> {
         let (draft, journal) = self.notepad.as_mut().zip(self.journal.as_ref())?;
-        if draft.panel == 2 {
-            draft.card.tag = (!key.is_empty()).then(|| key.to_owned());
+        if matches!(draft.panel, 2 | 4) {
+            let save_folder = draft.panel == 4 && !draft.editing;
+            let value = (!key.is_empty()).then(|| key.to_owned());
+            if draft.panel == 2 { draft.card.tag = value; } else { draft.card.folder = value; }
             draft.panel = 0;
             draft.confirm_discard = false;
             self.status = None;
+            if save_folder { self.save_notepad_card(); }
             return None;
         }
         let id = key.parse().ok()?;
@@ -1245,6 +1304,15 @@ impl Form {
     // ----- Keys -----
 
     pub fn key(&mut self, key: Key, mods: Mods) -> Effect {
+        if let Some(Options::GoToDate(cursor)) = self.options {
+            if key == Key::Enter { return self.pick_month_date(cursor); }
+            if key == Key::Escape {
+                self.options = None;
+                return Effect { focus: Some(Pane::Search), ..Effect::default() };
+            }
+            if let Some(date) = self.month_cursor(cursor, key) { self.options = Some(Options::GoToDate(date)); }
+            return Effect::default();
+        }
         if self.notepad.is_some() {
             return match key {
                 Key::Enter if mods.ctrl => self.finish_notepad(true),
@@ -1443,7 +1511,7 @@ impl Form {
                     _ => Effect::default(),
                 }
             }
-            None => Effect::default(),
+            None | Some(Options::GoToDate(_)) => Effect::default(),
         }
     }
 
@@ -1601,13 +1669,15 @@ impl Form {
     fn plan_source(&self) -> NaiveDate { self.editing.as_ref().map(|e| e.0).or_else(|| self.v.days.first().copied()).unwrap_or(self.today) }
 
     pub fn release_plan_space(&mut self) {
-        if let Some(Options::PlanDates(cursor)) = &mut self.options { cursor.holding = false; }
-        if let Some(day_pane::Side { view: day_pane::SideView::Plan { cursor, .. }, .. }) = &mut self.pane.side { cursor.holding = false; }
+        if let Some(Options::PlanDates(cursor)) = &mut self.options { cursor.release_space(); }
+        if let Some(day_pane::Side { view: day_pane::SideView::Plan { cursor, .. }, .. }) = &mut self.pane.side { cursor.release_space(); }
     }
 
     pub fn month_picker_open(&self) -> bool {
-        matches!(self.options, Some(Options::RepeatDate { .. } | Options::PlanDates(_)))
+        matches!(self.options, Some(Options::RepeatDate { .. } | Options::PlanDates(_) | Options::GoToDate(_)))
     }
+
+    pub fn day_picker_open(&self) -> bool { matches!(self.options, Some(Options::GoToDate(_))) }
 
     fn open_repeat_date(&mut self, field: DateField) {
         if let Some(rule) = &self.v.rule {
@@ -1616,6 +1686,11 @@ impl Form {
     }
 
     pub fn pick_month_date(&mut self, date: NaiveDate) -> Effect {
+        if matches!(self.options, Some(Options::GoToDate(_))) {
+            self.options = None;
+            self.show_day(date);
+            return Effect { focus: Some(Pane::Search), ..Effect::default() };
+        }
         let own = self.plan_source();
         if let Some(Options::PlanDates(cursor)) = &mut self.options {
             cursor.click(date, own, &mut self.v.plan_days);
@@ -1658,6 +1733,14 @@ impl Form {
     }
 
     fn month_panel(&self) -> Option<day_pane::SidePanel> {
+        if let Some(Options::GoToDate(cursor)) = self.options {
+            let mut panel = day_pane::SidePanel {
+                kind: 5, heading: self.ft().cmd_day_detail.into(),
+                confirm: crate::texts::day_texts(self.language).take.into(), ..Default::default()
+            };
+            panel.set_month(cursor, self.today, self.language, None, None, |date| date == self.day_shown());
+            return Some(panel);
+        }
         if let Some(Options::PlanDates(cursor)) = &self.options {
             let mut panel = day_pane::SidePanel {
                 kind: 5, heading: self.ft().labels[Field::Plan.line()].into(),
@@ -1691,8 +1774,8 @@ impl Form {
         self.mark = None; self.mark_layout = None;
     }
 
-    /// The mouse in the calendar, as in the app: the left button opens and closes days (Shift: everything up to the last
-    /// one clicked; an entry's details will open here too); the right button marks a new entry, whole days on the side,
+    /// The left button opens entries and toggles days (Shift: open the range to the last clicked day).
+    /// The right button marks a new entry, whole days on the side,
     /// times in the 24 hours, and writes it into the form. `button` 0 left, 1 right; `kind` 0 pressed, 1 moved, 2 released.
     pub fn cal_mouse(&mut self, button: i32, kind: i32, x: f32, y: f32, shift: bool) -> Effect {
         if self.month_picker_open() {
@@ -1713,6 +1796,9 @@ impl Form {
             if kind != 0 { return Effect::default(); }
             let day = match calendar::spot(&self.shown_layout, &m, x, y) {
                 calendar::Spot::Nothing => return Effect::default(),
+                calendar::Spot::Item(index, _) if !shift => {
+                    return self.open_calendar_entry(index);
+                }
                 calendar::Spot::Item(_, day) | calendar::Spot::Side(day) | calendar::Spot::Time(day, _) => day,
             };
             match self.cal_clicked.filter(|_| shift) {
@@ -1753,6 +1839,64 @@ impl Form {
         }
     }
 
+    fn open_calendar_entry(&mut self, index: usize) -> Effect {
+        let Some((date, id)) = self.shown_entries.get(index).and_then(Clone::clone) else { return Effect::default(); };
+        if self.notepad.is_some() || self.pane.edit.is_some() || self.pane.side.is_some() { return Effect::default(); }
+        let original = self.editing.as_ref().map(|(date, entry)| Self::entry_values(*date, entry)).unwrap_or_default();
+        if self.entry_open && (self.v != original || self.row_error.is_some()) {
+            self.status = Some((self.ft().finish_entry_first.into(), true));
+            return Effect::default();
+        }
+        let effect = self.edit_hit(date, &id);
+        if effect.focus == Some(Pane::Entry) {
+            self.menu = None;
+            self.options = None;
+            self.tried = false;
+        }
+        effect
+    }
+
+    fn calendar_preview_entry(&self, index: usize) -> Option<&journal_core::storage::Entry> {
+        let (date, id) = self.shown_entries.get(index)?.as_ref()?;
+        self.snapshot.as_ref()?.days.get(date)?.iter().find(|entry| entry.id == *id)
+    }
+
+    /// Visible parts of the entries on one day, including continuations and collapsed chips.
+    fn preview_anchors(&self, day: NaiveDate) -> impl Iterator<Item = (usize, f32, f32)> + '_ {
+        let layout = &self.shown_layout;
+        let m = &self.shown_metrics;
+        let row = layout.rows.iter().find(|row| row.date == day);
+        layout.blocks.iter().map(|b| (b.item, b.x, b.y, b.w, b.h))
+            .chain(layout.chips.iter().map(|c| (c.item, c.x, c.y, c.w, c.h)))
+            .chain(layout.lanes.iter().map(|l| (l.item, l.x, l.y, l.w, l.h)))
+            .filter_map(move |(index, x, y, w, h)| {
+                let row = row?;
+                let left = x.max(0.0);
+                let right = (x + w).min(m.width);
+                let top = y.max(row.y).max(m.head_h);
+                let bottom = (y + h).min(row.y + row.h).min(m.height);
+                (right > left && bottom > top).then_some((index, (left + right) / 2.0, (top + bottom) / 2.0))
+            })
+    }
+
+    pub fn calendar_hover_entry(&self, x: f32, y: f32) -> Option<(usize, f32, f32, &journal_core::storage::Entry)> {
+        if self.mark.is_some() { return None; }
+        let calendar::Spot::Item(index, day) = calendar::spot(&self.shown_layout, &self.shown_metrics, x, y) else { return None; };
+        let (_, x, y) = self.preview_anchors(day).find(|(item, ..)| *item == index)?;
+        Some((index, x, y, self.calendar_preview_entry(index)?))
+    }
+
+    pub fn calendar_keyboard_preview(&self, step: usize) -> Option<(usize, f32, f32, &journal_core::storage::Entry)> {
+        let Some(Options::Calendar(cursor)) = self.options else { return None; };
+        let mut seen = BTreeSet::new();
+        let mut candidates = self.preview_anchors(cursor.day)
+            .filter(|(index, ..)| seen.insert(*index))
+            .filter_map(|(index, x, y)| Some((index, x, y, self.calendar_preview_entry(index)?)))
+            .collect::<Vec<_>>();
+        candidates.sort_by(|a, b| a.1.total_cmp(&b.1).then_with(|| a.2.total_cmp(&b.2)));
+        candidates.get(step.checked_rem(candidates.len())?).copied()
+    }
+
     /// The marked range becomes the entry's day(s) and time.
     fn apply_mark(&mut self) -> Effect {
         let Some(mark) = self.mark else { return Effect::default() };
@@ -1781,6 +1925,7 @@ impl Form {
 
     /// The day view moves to `day` (today again follows the clock, also over midnight).
     pub fn show_day(&mut self, day: NaiveDate) {
+        if self.day_picker_open() { self.options = None; }
         if day != self.day_shown() { self.pane.reset(); }
         self.view_day = (day != self.today).then_some(day);
         self.status = None;
@@ -1998,6 +2143,7 @@ impl Form {
         }
         let layout = calendar::layout(&self.cal_input(&items, &open), &m);
         self.shown_layout = layout.clone();
+        self.shown_entries = items.into_iter().map(|item| item.entry_id.map(|id| (item.first, id))).collect();
         self.shown_metrics = m;
         CalendarView { layout, focus: matches!(self.options, Some(Options::Calendar(_))), metrics: m }
     }
@@ -2164,7 +2310,7 @@ impl Form {
             calendar,
             entry_open: self.entry_open && self.notepad.is_none(),
             day,
-            side: if self.entry_open { self.month_panel() } else { side },
+            side: self.month_panel().or(side),
             day_message,
             commands: if self.notepad.is_some() { Vec::new() } else { self.commands() },
             command_selected: self.command_selected,
@@ -2273,12 +2419,14 @@ impl Form {
                 items.push(ActionItem::new(ActionId::NotesSave, 0, "save", at.notes_save));
                 items.push(ActionItem::new(ActionId::NotesPreview, 0, "eye", at.notes_preview).on(draft.preview));
                 items.push(ActionItem::new(ActionId::NotesTag, 0, "tag", at.notes_tag).value(self.notepad_tag_name().unwrap_or_default()));
-                items.push(ActionItem::new(ActionId::NotesAttachments, 0, "paperclip", at.notes_attachments));
             } else {
                 items.push(ActionItem::new(ActionId::NotesEdit, 0, "pencil", at.notes_edit));
-                items.push(ActionItem::new(ActionId::NotesAttachments, 0, "paperclip", at.notes_attachments));
             }
-            if draft.panel != 1 { items.push(ActionItem::new(ActionId::NotesList, 0, "list", at.notes_list)); }
+            if draft.panel != 1 {
+                items.push(ActionItem::new(ActionId::NotesFolder, 0, "folder", notepad_texts(self.language).choose_folder));
+                items.push(ActionItem::new(ActionId::NotesAttachments, 0, "paperclip", at.notes_attachments));
+                items.push(ActionItem::new(ActionId::NotesList, 0, "list", at.notes_list));
+            }
             items.push(ActionItem::new(ActionId::NotesClose, 0, "x", at.notes_close));
             items.push(ActionItem::new(ActionId::Settings, 1, "settings", at.settings));
         } else if self.entry_open {
@@ -2374,6 +2522,7 @@ impl Form {
             ActionId::NotesEdit | ActionId::NotesPreview => { self.notepad_preview(); Effect { focus: Some(Pane::Notes), ..Effect::default() } }
             ActionId::NotesSave => { self.save_notepad_card(); Effect { focus: Some(Pane::Notes), ..Effect::default() } }
             ActionId::NotesTag => { self.notepad_panel(2); Effect { focus: Some(Pane::Notes), ..Effect::default() } }
+            ActionId::NotesFolder => { self.notepad_panel(4); Effect { focus: Some(Pane::Notes), ..Effect::default() } }
             ActionId::NotesAttachments => { self.notepad_panel(3); Effect { focus: Some(Pane::Notes), ..Effect::default() } }
             ActionId::NotesList => { self.notepad_panel(1); Effect { focus: Some(Pane::Notes), ..Effect::default() } }
             ActionId::NotesClose => { let effect = self.finish_notepad(false); Effect { focus: effect.focus.or(Some(Pane::Notes)), ..effect } }
@@ -2384,7 +2533,7 @@ impl Form {
     fn panel(&self) -> (Panel, String) {
         let ft = self.ft();
         match &self.options {
-            None | Some(Options::PlanDates(_)) => (Panel::None, String::new()),
+            None | Some(Options::PlanDates(_) | Options::GoToDate(_)) => (Panel::None, String::new()),
             Some(Options::Calendar(c)) => {
                 let label = if c.anchor.is_some() { ft.cal_range } else if c.hours { ft.cal_moment } else { ft.cal_day };
                 (Panel::Calendar { label: format!("{label}: {}", self.when_text()), hours: c.hours }, String::new())

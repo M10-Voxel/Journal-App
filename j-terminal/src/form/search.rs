@@ -70,7 +70,8 @@ impl Form {
             let detail = date.map(|d| format!("{} {}", repeat::weekday_short(self.language)[repeat::weekday_of(d) as usize],
                 d.format(if lang == 1 { "%d/%m" } else { "%d.%m." }))).unwrap_or_default();
             let look = SearchRow { heading: copy::SECTIONS[group][lang].to_owned(), icon, tag: tag.map(|t| t.name.clone()).unwrap_or_default(),
-                color: tag.and_then(|t| calendar::parse_color(&t.color)), snippet: excerpt(snippet, &words), words: words.clone(), sigil: false };
+                color: tag.and_then(|t| calendar::parse_color(&t.color)), snippet: excerpt(&crate::mail_preview::excerpt_source(snippet), &words),
+                description: snippet.trim().to_owned(), words: words.clone(), sigil: false };
             rows.push((group, Reverse(date), parse::fold(&title), Command { name: title, detail, look, action }));
         };
         let store_kinds: Vec<_> = kinds.iter().filter(|k| !k.starts_with("board") && *k != "notebook").cloned().collect();
@@ -109,7 +110,14 @@ impl Form {
             self.status = Some((self.ft().entry_changed.into(), true));
             return Effect::default();
         };
-        self.v = Values {
+        self.v = Self::entry_values(date, &entry);
+        self.editing = Some((date, entry));
+        self.kind_chosen = true;
+        self.open_entry()
+    }
+
+    pub(super) fn entry_values(date: NaiveDate, entry: &journal_core::storage::Entry) -> Values {
+        let mut values = Values {
             typ: entry_type(&entry), title: entry.text.clone(), description: entry.description.clone(),
             days: BTreeSet::from([date]), start: entry.time.as_deref().and_then(crate::day_ops::minutes),
             end: entry.end.as_deref().and_then(crate::day_ops::minutes), time_grid: entry.time_grid,
@@ -117,14 +125,12 @@ impl Form {
             tag: entry.tag.clone(), icon: entry.icon.clone(), priority: entry.priority,
             reminder: entry.reminder.then_some(entry.reminder_before), ..Values::default()
         };
-        if let Some(end) = self.v.end.filter(|end| *end > 1440) {
+        if let Some(end) = values.end.filter(|end| *end > 1440) {
             let last = (end - 1) / 1440;
-            self.v.days.extend((1..=last).map(|offset| repeat::shift(date, i64::from(offset))));
-            self.v.end = Some(end - last * 1440);
+            values.days.extend((1..=last).map(|offset| repeat::shift(date, i64::from(offset))));
+            values.end = Some(end - last * 1440);
         }
-        self.editing = Some((date, entry));
-        self.kind_chosen = true;
-        self.open_entry()
+        values
     }
 }
 

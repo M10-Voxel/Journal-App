@@ -15,7 +15,7 @@ pub enum Id {
     /// The entry form.
     Save, SaveStay, Priority, Repeat, Plan, Description, Reminder, Icon, Discard,
     /// The notepad.
-    NotesNew, NotesEdit, NotesSave, NotesPreview, NotesTag, NotesAttachments, NotesList, NotesClose,
+    NotesNew, NotesEdit, NotesSave, NotesPreview, NotesTag, NotesFolder, NotesAttachments, NotesList, NotesClose,
 }
 
 impl Id {
@@ -56,7 +56,7 @@ impl Id {
             Id::NotesTag => "notes-tag",
             Id::NotesAttachments => "notes-attachments",
             Id::NotesList => "notes-list",
-            Id::Repeat | Id::Plan | Id::Discard | Id::NotesClose => return None,
+            Id::Repeat | Id::Plan | Id::Discard | Id::NotesFolder | Id::NotesClose => return None,
         })
     }
 
