@@ -1,0 +1,204 @@
+import { InkTools, InkPicker } from "ink-tools.slint";
+import { InkSheet, BoardGlyph } from "board-ink.slint";
+import { Theme } from "theme.slint";
+import { KeyBindings } from "key-bindings.slint";
+
+import { BoardUi, InkDocument } from "board-model.slint";
+import { BoardSurface } from "board-surface.slint";
+import { ActionPopover } from "actions.slint";
+export { InkShape, InkDocument, BoardUi, BoardTile, BoardThread, BoardGroup, BoardHit, BoardBox, BoardTool } from "board-model.slint";
+
+component Control inherits Rectangle {
+    in property <string> label;
+    callback invoke();
+    width: text.preferred-width + Theme.padding;
+    height: Theme.row-height;
+    border-radius: Theme.block-radius;
+    background: area.has-hover ? Theme.hover : transparent;
+    text := Text { text:root.label; color:Theme.text; font-size:Theme.row-size; horizontal-alignment:center; vertical-alignment:center; }
+    area := TouchArea { clicked => {root.invoke();} }
+}
+
+export component BoardView inherits Rectangle {
+    background:Theme.background;
+    forward-focus: focus;
+    focus := FocusScope { }
+    property <bool> stacked: root.width < Theme.calendar-width;
+    property <length> header:Theme.line-height + (root.stacked && BoardUi.editor==2 ? Theme.row-height : 0px);
+    property <length> footer:Theme.footer-height;
+    property <bool> split:BoardUi.editor > 0;
+    property <length> edit-width: BoardUi.maximized || root.stacked ? root.width : root.width * (BoardUi.editor==2 ? 0.6 : 0.4);
+    property <length> available: root.height - root.header - root.footer;
+    property <length> edit-height: root.stacked && !BoardUi.maximized ? root.available*0.5 : root.available;
+    property <int> focus-request:BoardUi.focus-request;
+    changed focus-request => { root.take-focus(); }
+    public function take-focus() {
+        if BoardUi.menu-open || BoardUi.prompt != "" { return; }
+        if BoardUi.editor == 1 { if BoardUi.title-focus { title-input.focus(); } else {body-input.focus();} }
+        else {focus.focus();}
+    }
+    clipboard := TextInput {width:0px;height:0px;}
+    property <int> copy-request: BoardUi.copy-request;
+    changed copy-request => {clipboard.text=BoardUi.copy-value;clipboard.select-all();clipboard.copy();clipboard.text="";}
+    HorizontalLayout {
+        x:Theme.gap; y:0px; height:Theme.line-height;width:parent.width - 2*Theme.gap;alignment:start;spacing:Theme.gap;
+        Control {y:(Theme.line-height - self.height)/2;label:"‹"; invoke=>{BoardUi.command("back");}}
+        Control {y:(Theme.line-height - self.height)/2;label:"←"; invoke=>{BoardUi.command("prev");}}
+        Text {text:BoardUi.heading;font-size:Theme.form-size;font-weight:Theme.weight-semibold;color:Theme.strong;vertical-alignment:center;}
+        Control {y:(Theme.line-height - self.height)/2;label:"→"; invoke=>{BoardUi.command("next");}}
+
+        if BoardUi.editor==1 || BoardUi.editor==2: Control {y:(Theme.line-height - self.height)/2;label:BoardUi.draw-label;invoke=>{BoardUi.command("mode");}}
+        if BoardUi.editor==2: Rectangle {
+            width:Theme.row-height;height:self.width;y:(Theme.line-height - self.height)/2;
+            background:max-touch.has-hover ? Theme.hover : transparent;border-radius:Theme.block-radius;
+            accessible-role:button;accessible-label:BoardUi.maximize-label;
+            BoardGlyph {name:BoardUi.maximized ? "minimize" : "maximize";width:Theme.label-icon-size;height:self.width;tint:Theme.text;}
+            max-touch := TouchArea {mouse-cursor:pointer;clicked=>{BoardUi.command("maximize");}}
+        }
+    }
+    ink-tools := InkTools {
+        visible:BoardUi.editor==2;x:root.stacked ? Theme.gap : root.width - self.width - Theme.gap;
+        y:root.stacked ? Theme.line-height : (Theme.line-height - self.height)/2;
+    }
+    pane := Rectangle {
+        visible:root.split;x:0px;y:root.header;width:root.edit-width;height:root.edit-height;clip:true;background:Theme.task-background;
+        title-input := TextInput {
+            changed has-focus=>{if self.has-focus {BoardUi.title-focus=true;}}
+            visible:BoardUi.editor==1; x:Theme.padding;y:Theme.gap;width:parent.width - 2*self.x;height:Theme.row-height;
+            single-line:true;text <=> BoardUi.title;color:Theme.strong;font-size:Theme.line-size;
+            edited=>{BoardUi.edited(false,self.text);}
+        }
+        if BoardUi.editor==1 && BoardUi.title=="": Text { x:title-input.x;y:title-input.y;height:title-input.height;text:BoardUi.title-label;color:Theme.muted;vertical-alignment:center; }
+        edit-scroll := Flickable {
+            visible:BoardUi.editor==1;x:Theme.padding;y:title-input.y+title-input.height+Theme.gap;width:parent.width - 2*self.x;height:parent.height - self.y - Theme.padding;
+            content-width:self.width;content-height:max(self.height,body-input.preferred-height);
+            body-input := TextInput {changed has-focus=>{if self.has-focus {BoardUi.title-focus=false;}}
+                width:edit-scroll.width;height:edit-scroll.content-height;vertical-alignment:top;wrap:word-wrap;single-line:false;
+                text <=> BoardUi.body;color:Theme.text;font-size:Theme.write-size;font-family:Theme.write-font;
+                edited=>{BoardUi.edited(true,self.text);}
+            }
+            if BoardUi.body=="": Text {text:BoardUi.body-label;color:Theme.muted;font-size:Theme.write-size;}
+        }
+        Image {visible:BoardUi.editor==3;source:BoardUi.attachment;image-fit:contain;}
+        // Both surfaces use the Journal card body's top-left as the ink origin.
+        property <float> sheet-w:BoardUi.ink-width(BoardUi.tiles[BoardUi.selected].w);
+        property <float> sheet-h:BoardUi.ink-height(BoardUi.tiles[BoardUi.selected].h);
+        property <float> fit:max(0.001,min(self.width/1px/sheet-w,self.height/1px/sheet-h));
+        property <float> scale:fit*BoardUi.ink-zoom;
+        if BoardUi.editor==2: Rectangle {background:Theme.background;}
+        canvas := Rectangle {
+            x:0px;y:0px;width:pane.sheet-w*pane.fit*1px;height:pane.sheet-h*pane.fit*1px;
+            visible:BoardUi.editor==2;background:BoardUi.tiles[BoardUi.selected].paper;clip:true;
+            if BoardUi.editor==2: InkSheet {
+                document:BoardUi.tiles[BoardUi.selected].ink;scale:pane.scale;editing:true;ink:Theme.board-paper-ink;
+                pan-x:BoardUi.ink-pan-x;pan-y:BoardUi.ink-pan-y;
+            }
+        }
+        TouchArea {
+            x:canvas.x;y:canvas.y;width:canvas.width;height:canvas.height;visible:BoardUi.editor==2;
+            property<bool> panning;
+            changed visible=>{if !self.visible { self.panning=false; }}
+            property<float> last-x;
+            property<float> last-y;
+            mouse-cursor:panning ? MouseCursor.grabbing : MouseCursor.crosshair;
+            pointer-event(e)=>{
+                let x=self.mouse-x/1px;let y=self.mouse-y/1px;
+                if e.kind==PointerEventKind.cancel {
+                    self.panning=false;BoardUi.point(3,0,0);
+                } else if e.button==PointerEventButton.middle {
+                    if e.kind==PointerEventKind.down {self.panning=true;self.last-x=x;self.last-y=y;}
+                    if e.kind==PointerEventKind.up {self.panning=false;}
+                } else if !self.panning && e.button==PointerEventButton.left && (e.kind==PointerEventKind.down || e.kind==PointerEventKind.up) {
+                    BoardUi.point(e.kind==PointerEventKind.down ? 0 : 2,x,y);
+                }
+            }
+            moved=>{
+                let x=self.mouse-x/1px;let y=self.mouse-y/1px;
+                if self.panning {
+                    BoardUi.ink-camera(1,self.last-x,self.last-y,x,y);self.last-x=x;self.last-y=y;
+                } else if self.pressed {BoardUi.point(1,x,y);}
+            }
+            scroll-event(e)=>{
+                let x=self.mouse-x/1px;let y=self.mouse-y/1px;
+                if e.modifiers.control {BoardUi.ink-camera(pow(1.002,e.delta-y/1px),x,y,x,y);}
+                else if e.modifiers.shift {BoardUi.ink-camera(1,0,0,(e.delta-x==0px ? e.delta-y : e.delta-x)/1px,0);}
+                else {BoardUi.ink-camera(1,0,0,e.delta-x/1px,e.delta-y/1px);}
+                accept
+            }
+        }
+    }
+    out property<float> viewport-w:board.width/1px;
+    out property<float> viewport-h:board.height/1px;
+    out property<float> viewport-x:board.absolute-position.x/1px;
+    out property<float> viewport-y:board.absolute-position.y/1px;
+    out property<float> canvas-x:canvas.absolute-position.x/1px;
+    out property<float> canvas-y:canvas.absolute-position.y/1px;
+    out property<float> canvas-w:canvas.width/1px;
+    out property<float> canvas-h:canvas.height/1px;
+    out property<float> canvas-scale:pane.scale;
+    board := BoardSurface {
+        visible: !BoardUi.maximized;
+        x:root.split && !root.stacked ? root.edit-width : 0px;
+        y:root.header + (root.split && root.stacked ? root.edit-height : 0px);
+        width:root.width - self.x; height:root.height - self.y - root.footer;
+    }
+    Rectangle {
+        y:root.height - root.footer; height:root.footer; background:Theme.background;
+        Rectangle {height:Theme.border-width;background:Theme.divider;}
+        Text {x:Theme.padding;width:max(0px,add.x - self.x - Theme.gap);height:parent.height;
+            text:BoardUi.message!="" ? BoardUi.message : BoardUi.editor==2 && ink-tools.hovered!="" ? ink-tools.hovered : BoardUi.hint;
+            color:BoardUi.message!="" ? Theme.priority : Theme.muted;
+            font-size:Theme.footer-size;vertical-alignment:center;overflow:elide;}
+        add := Control {x:parent.width - self.width - Theme.gap; height:parent.height;
+            label:BoardUi.pin-label;invoke=>{BoardUi.command("new-menu");}}
+    }
+    if BoardUi.menu-open || BoardUi.prompt!="": TouchArea {clicked=>{BoardUi.command("dismiss");}}
+    if BoardUi.menu-open && BoardUi.ink-picker!="": InkPicker {
+        x:parent.width - self.width - Theme.gap;y:root.height - root.footer - self.height - Theme.calendar-gap;
+    }
+    if (BoardUi.menu-open && BoardUi.ink-picker=="") || BoardUi.prompt!="": ActionPopover {
+        x:parent.width - self.width - Theme.gap;
+        y:root.height - root.footer - self.height - Theme.calendar-gap;
+        width:min(Theme.popover-width, parent.width - 2*Theme.gap);
+        height:min(self.preferred-height,Theme.popover-max-height,root.available);
+        menu-open:BoardUi.menu-open && !BoardUi.tag-open; menu-title:BoardUi.menu-title;
+        menu-rows:BoardUi.options; menu-pick:BoardUi.option-index;
+        menu-placeholder:BoardUi.menu-search; menu-empty:BoardUi.menu-empty;
+        menu-choose(i)=>{BoardUi.choose(i);}
+        menu-edited(query)=>{BoardUi.filter(query);}
+        menu-key(key,mods)=>{BoardUi.key(key,mods,false);}
+        icon-back:BoardUi.back-icon;menu-can-back:BoardUi.can-back;
+        search-reset:BoardUi.menu-reset; focus-request:BoardUi.focus-request;
+        side-open:BoardUi.tag-open || BoardUi.prompt!="";side-kind:BoardUi.tag-open ? 1 : 8;
+        side-heading:BoardUi.tag-open ? BoardUi.menu-title : BoardUi.prompt;
+        side-title:BoardUi.tag-open ? BoardUi.tag-context : "";side-rows:BoardUi.tag-rows;
+        side-focus-index:BoardUi.option-index;side-placeholder:BoardUi.menu-search;side-text:BoardUi.value;
+        side-choose(i)=>{BoardUi.choose(i);} day-key(key,mods)=>{BoardUi.key(key,mods,false);}
+        side-edited(v)=>{if BoardUi.tag-open {BoardUi.filter(v);}else{BoardUi.value=v;}} side-confirm()=>{BoardUi.command("submit");}
+        side-back()=>{BoardUi.menu-back();}
+    }
+}
+
+
+export component FloatingBoardNote inherits Window {
+    in property <string> note-title;
+    in property <styled-text> body;
+    in property <InkDocument> ink;
+    in property <bool> is-ink;
+    callback edit();
+    callback dismiss();
+    callback drag();
+    forward-focus:keys;
+    keys := FocusScope {key-pressed(e)=>{if e.text==Key.Escape {root.dismiss();return accept;} if e.text==Key.Return || e.text==Key.F2{root.edit();return accept;}reject}}
+    title:root.note-title;always-on-top:true;background:Theme.background;
+    preferred-width:Theme.form-width;preferred-height:Theme.stacked-day-min-height;
+    VerticalLayout {padding:Theme.padding;spacing:Theme.gap;
+        Text {text:root.note-title;color:Theme.strong;font-size:Theme.line-size;}
+        if !root.is-ink: StyledText {text:root.body;default-color:Theme.text;default-font-size:Theme.write-size;}
+        if root.is-ink: InkSheet {document:root.ink;vertical-stretch:1;}
+    }
+    TouchArea {double-clicked=>{root.edit();}}
+    Rectangle {x:Theme.gap;y:Theme.gap;width:parent.width - Theme.line-height;height:Theme.row-height;
+        TouchArea {pointer-event(e)=>{if e.button==PointerEventButton.left && e.kind==PointerEventKind.down {root.drag();}}}}
+    Control {x:parent.width - self.width - Theme.gap;y:Theme.gap;label:"×";invoke=>{root.dismiss();}}
+}

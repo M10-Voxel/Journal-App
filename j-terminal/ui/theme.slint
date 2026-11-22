@@ -10,6 +10,7 @@ import "../assets/fonts/IBMPlexSans-500.ttf";
 import "../assets/fonts/IBMPlexSans-600.ttf";
 import "../assets/fonts/Lilex-400.ttf";
 import "../assets/fonts/Lilex-500.ttf";
+import "../assets/fonts/Lilex-700.ttf";
 
 export global Theme {
     // ── The palette ──
@@ -40,6 +41,40 @@ export global Theme {
     out property <color> now: #ff5f57;
     out property <color> saturday: #8fb8f0;
     out property <color> sunday: #e58a8a;
+    out property <string> board-title-font: "IBM Plex Sans SemiBold";
+    out property <color> board-yellow: #e9d98c;
+    out property <color> board-green: #b7d6a4;
+    out property <color> board-blue: #a9c8e6;
+    out property <color> board-pink: #e5b3c2;
+    out property <color> board-paper-ink: #2c2714;
+    out property <color> board-photo: #ece8e0;
+    out property <color> board-index: #f1efe9;
+    out property <color> board-pin: #d9534f;
+    out property <color> board-blue-pin: #4f8fd9;
+    out property <color> board-green-pin: #59a86b;
+    out property <color> board-glint: #ffffffaa;
+    out property <color> board-ground: #171717;
+    out property <color> board-dot: #303030;
+    out property <color> board-group-fill: #559dff08;
+    out property <color> board-group-edge: #42648c;
+    out property <color> board-shadow: #00000066;
+    out property <physical-length> ink-grid-line: 1phx;
+    out property <length> ink-grid-dot: 1.5px;
+    out property <length> ink-grid-min-gap: 4px;
+    out property <float> ink-graphite-opacity: 0.84;
+    out property <float> ink-grid-opacity: 0.14;
+    out property <length> board-grid: 18px;
+    out property <length> board-pin-size: 15px;
+    out property <length> board-paper-radius: 3px;
+    out property <length> board-paper-inset: 12px;
+    out property <length> board-text-size: 14.5px;
+    out property <length> board-heading-size: 21px;
+    out property <length> board-title-height: 24px;
+    out property <length> board-tool-size: 19px;
+    out property <length> board-body-inset: 18px;
+    out property <length> board-body-top: 48px;
+    out property <length> board-paragraph-gap: 28px;
+    out property <length> board-note-height: 164px;
     // What the parts are made of.
     out property <color> recognised: #ffffff0a;    // a choice not chosen
     out property <color> row-selection: #ffffff1a; // the active line

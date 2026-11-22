@@ -228,6 +228,7 @@ pub struct Effect {
     /// Created: show it briefly, then hide.
     pub hide_soon: bool,
     pub quit: bool,
+    pub board: Option<crate::board::Period>,
     /// The settings window is to open.
     pub settings: bool,
     /// The search bar gets this text.
@@ -274,7 +275,7 @@ pub struct SearchRow {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum CommandAction {
-    Filter(String, usize), Card(uuid::Uuid, bool), Entry, Notepad, Hit(NaiveDate, String), Day(NaiveDate),
+    Board(crate::board::Period), BoardHelp, Filter(String, usize), Card(uuid::Uuid, bool), Entry, Notepad, Hit(NaiveDate, String), Day(NaiveDate),
     PickDay, Today, Undo, Redo, Rating, Activities,
 }
 
@@ -287,7 +288,8 @@ pub struct NotepadChoice {
 }
 
 pub struct Form {
-    journal: Option<Journal>,
+    pub(crate) journal: Option<Journal>,
+    pub board_scopes: Option<Vec<crate::board::Period>>,
     snapshot: Option<Snapshot>,
     pub language: Language,
     pub preferences: crate::settings::Preferences,
@@ -486,7 +488,7 @@ impl Form {
             pick: 0, editor: Editor::default(), menu: None, tried: false, last_saved: None, status: None, flash: None,
             metrics: Metrics::default(), options: None, options_backup: Values::default(), cal_top: repeat::shift(today, -1), cal_offset: 0.0, cal_target: None,
             cal_open: BTreeSet::from([today]), cal_clicked: None, mark: None, mark_layout: None, shown_layout: Layout::default(), shown_entries: Vec::new(), shown_metrics: Metrics::default(),
-            fixed_clock: true, clock_ms: 0, kind_chosen: false, entry_open: false, hits: Vec::new(), editing: None, search: String::new(), search_cursor: 0, command_selected: 0, notepad: None, suspended_notes: Vec::new(), zoom_days: 1.0, zoom_hours: 1.0, pan: 0.0, view_day: None, cal_selected: BTreeSet::new(), pane: DayPane::default() }
+            board_scopes: None, fixed_clock: true, clock_ms: 0, kind_chosen: false, entry_open: false, hits: Vec::new(), editing: None, search: String::new(), search_cursor: 0, command_selected: 0, notepad: None, suspended_notes: Vec::new(), zoom_days: 1.0, zoom_hours: 1.0, pan: 0.0, view_day: None, cal_selected: BTreeSet::new(), pane: DayPane::default() }
     }
 
     fn t(&self) -> &'static Texts { texts(self.language) }
@@ -586,8 +588,19 @@ impl Form {
         ];
         let mut matching: Vec<_> = all.into_iter().filter(|(_, names, _, _)| names.iter().any(|name| name.starts_with(&query))).collect();
         matching.sort_by_key(|(_, names, _, _)| !names.contains(&query.as_str()));
-        matching.into_iter()
-            .map(|(name, _, detail, action)| Command { name, detail: detail.into(), look: Default::default(), action }).collect()
+        let mut commands: Vec<_> = matching.into_iter()
+            .map(|(name, _, detail, action)| Command { name, detail: detail.into(), look: Default::default(), action }).collect();
+        let en = self.language == Language::En;
+        if let Some(enabled) = &self.board_scopes {
+            for period in crate::board::Period::ALL {
+                if enabled.contains(&period) && [Language::De, Language::En].iter().any(|lang| parse::fold(&period.command(*lang)[1..]).starts_with(&query)) {
+                    commands.push(Command { name: period.command(self.language).into(), detail: if en {"Open board"}else{"Pinnwand öffnen"}.into(),look:Default::default(),action:CommandAction::Board(period) });
+                }
+            }
+        } else if !query.is_empty() && ["pinnwand","board"].iter().any(|s|s.starts_with(&query)||query.starts_with(s)) {
+            commands.push(Command {name: if en {"Board"}else{"Pinnwand"}.into(), detail: crate::board_ui::projection_hint(self.language).into(),look:Default::default(),action:CommandAction::BoardHelp});
+        }
+        commands
     }
 
     pub fn choose_command(&mut self, index: usize) -> Effect {
@@ -609,6 +622,11 @@ impl Form {
                 Effect { search: Some(String::new()), focus: Some(Pane::Day), ..Effect::default() }
             }
             Some(CommandAction::Entry) => self.open_entry(),
+            Some(CommandAction::Board(period)) => {
+                self.search_edited("");
+                Effect {board:Some(period),search:Some(String::new()),..Effect::default()}
+            }
+            Some(CommandAction::BoardHelp) => { self.status=Some((crate::board_ui::projection_hint(self.language).into(),false)); Effect::default() }
             Some(CommandAction::Notepad) => self.open_notepad(),
             Some(action @ (CommandAction::PickDay | CommandAction::Today | CommandAction::Undo |
                 CommandAction::Redo | CommandAction::Rating | CommandAction::Activities)) => {

@@ -5,6 +5,19 @@ use interprocess::local_socket::{prelude::*, GenericNamespaced, ListenerOptions,
 
 pub const NAME: &str = "j-terminal.sock";
 
+/// An explicit device data directory (including a test vault) has its own launcher.
+pub fn socket(data:Option<&std::path::Path>)->String {
+    use std::hash::{Hash,Hasher};
+    let Some(path)=data else{return NAME.into()};
+    if journal_core::vault::app_data_folder().is_some_and(|default| default == path ||
+        std::fs::canonicalize(default).ok().zip(std::fs::canonicalize(path).ok()).is_some_and(|(a,b)| a == b)) {
+        return NAME.into();
+    }
+    let mut hash=std::collections::hash_map::DefaultHasher::new();
+    path.canonicalize().unwrap_or_else(|_|path.to_owned()).hash(&mut hash);
+    format!("j-terminal-{:016x}.sock",hash.finish())
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Message { Show }
 

@@ -1,0 +1,85 @@
+import { Theme } from "theme.slint";
+import { BoardUi, InkDocument, InkShape } from "board-model.slint";
+
+export component BoardGlyph inherits Path {
+    in property<string> name;
+    in property<color> tint:Theme.text;
+    commands:BoardUi.glyph(name);
+    viewbox-width:24;viewbox-height:24;
+    stroke:tint;stroke-width:self.width/12;stroke-line-cap:round;stroke-line-join:round;
+}
+
+component InkPath inherits Path {
+    in property<InkShape> shape;
+    viewbox-x:shape.x;viewbox-y:shape.y;viewbox-width:shape.w;viewbox-height:shape.h;
+}
+
+component Stroke inherits Rectangle {
+    in property<InkShape> shape;
+    in property<float> scale;
+    in property<color> ink;
+    in property<float> offset-x;
+    in property<float> offset-y;
+    property<color> tint:shape.selected ? Theme.accent : shape.custom ? shape.color : ink;
+    x:(shape.x + offset-x)*scale*1px;y:(shape.y + offset-y)*scale*1px;
+    width:shape.w*scale*1px;height:shape.h*scale*1px;
+    InkPath {width:parent.width;height:parent.height;shape:root.shape;commands:root.shape.commands;fill:root.tint;opacity:root.shape.alpha;}
+    if shape.grain!="": InkPath {
+        width:parent.width;height:parent.height;shape:root.shape;commands:root.shape.grain;fill:root.tint;opacity:Theme.ink-graphite-opacity;
+    }
+}
+
+export component InkSheet inherits Rectangle {
+    in property<InkDocument> document;
+    in property<float> scale:1;
+    in property<float> pan-x;
+    in property<float> pan-y;
+    in property<bool> editing;
+    in property<color> ink:Theme.text;
+    clip:true;
+    property<length> step:max(0.01px,document.step*scale*1px);
+    property<length> pitch:step*max(1,ceil(Theme.ink-grid-min-gap/step));
+    property<length> origin-x:-Math.mod(Math.mod(pan-x*scale*1px,pitch)+pitch,pitch);
+    property<length> origin-y:-Math.mod(Math.mod(pan-y*scale*1px,pitch)+pitch,pitch);
+    if document.pattern=="lines" || document.pattern=="grid": Rectangle {
+        for n[i] in ceil(root.height/root.pitch)+1: Rectangle {
+            y:root.origin-y+i*root.pitch;height:Theme.ink-grid-line;background:root.ink;opacity:Theme.ink-grid-opacity;
+        }
+    }
+    if document.pattern=="grid": Rectangle {
+        for n[i] in ceil(root.width/root.pitch)+1: Rectangle {
+            x:root.origin-x+i*root.pitch;width:Theme.ink-grid-line;background:root.ink;opacity:Theme.ink-grid-opacity;
+        }
+    }
+    if document.pattern=="dots" && root.pitch<=24px: dots := Rectangle {
+        property<length> block:root.pitch*16;
+        property<image> tile:BoardUi.paper-dots(root.pitch/1px,root.ink,Theme.ink-grid-dot/1px);
+        opacity:Theme.ink-grid-opacity;
+        for row[i] in ceil(root.height/block)+1: Rectangle {
+            y:root.origin-y+i*dots.block;height:dots.block;
+            for col[j] in ceil(root.width/dots.block)+1: Image {
+                x:root.origin-x+j*dots.block;y:0px;width:dots.block;height:dots.block;source:dots.tile;image-fit:fill;
+            }
+        }
+    }
+    if document.pattern=="dots" && root.pitch>24px: Rectangle {
+        for row[i] in ceil(root.height/root.pitch)+1: Rectangle {
+            y:root.origin-y+(i+0.5)*root.pitch - Theme.ink-grid-dot/2;
+            for col[j] in ceil(root.width/root.pitch)+1: Rectangle {
+                x:root.origin-x+(j+0.5)*root.pitch - Theme.ink-grid-dot/2;
+                width:Theme.ink-grid-dot;height:self.width;border-radius:self.width/2;
+                background:root.ink;opacity:Theme.ink-grid-opacity;
+            }
+        }
+    }
+    // Keep the same Path item when the live stroke becomes the final document row.
+    // This also preserves its antialiased edges in the software renderer's backing buffer.
+    property <int> saved-count: document.shapes.length;
+    property <bool> has-draft: editing && BoardUi.draft.commands != "";
+    for i in root.saved-count + (root.has-draft ? 1 : 0): Stroke {
+        shape: i < root.saved-count ? root.document.shapes[i] : BoardUi.draft;
+        scale:root.scale;ink:root.ink;
+        offset-x:(root.editing && self.shape.selected ? BoardUi.ink-move-x : 0) - root.pan-x;
+        offset-y:(root.editing && self.shape.selected ? BoardUi.ink-move-y : 0) - root.pan-y;
+    }
+}

@@ -1,0 +1,121 @@
+name: J-TerminaL Windows release
+on:
+  push:
+    tags: ['j-terminal-v*']
+  workflow_dispatch:
+    inputs:
+      core_commit:
+        description: Optional Windows commit SHA for testing a different journal-core
+        required: false
+      publish:
+        description: Publish the tested installer and portable EXE
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+env:
+  RELEASE_CORE: 583d1dbfcc478ec221905bc4e5dda57bcecbfb11
+jobs:
+  package:
+    if: github.ref == 'refs/heads/J-TerminaL' || github.event_name == 'push'
+    runs-on: windows-latest
+    outputs:
+      version: ${{ steps.package.outputs.version }}
+      core: ${{ steps.core.outputs.commit }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: terminal
+          fetch-depth: 0
+      - name: Verify terminal source
+        working-directory: terminal
+        run: |
+          git merge-base --is-ancestor HEAD origin/J-TerminaL
+          if ($LASTEXITCODE) { throw 'Release source must belong to J-TerminaL' }
+      - uses: actions/checkout@v4
+        with:
+          ref: Windows
+          path: Journal-App
+          fetch-depth: 0
+      - name: Select the release data core
+        id: core
+        working-directory: Journal-App
+        env:
+          CORE: ${{ inputs.core_commit }}
+        run: |
+          if (!$env:CORE) { $env:CORE = $env:RELEASE_CORE }
+          if (('${{ inputs.publish }}' -eq 'true' -or $env:GITHUB_REF_TYPE -eq 'tag') -and $env:CORE -ne $env:RELEASE_CORE) {
+            throw 'Publishing requires the data core pinned in the release source'
+          }
+          if ($env:CORE -notmatch '^[0-9a-fA-F]{40}$') { throw 'Expected a full commit SHA' }
+          git merge-base --is-ancestor $env:CORE HEAD
+          if ($LASTEXITCODE) { throw 'Core commit must belong to Windows' }
+          git checkout --detach $env:CORE
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          if (!(Test-Path 'crates/journal-core/src/board.rs')) { throw 'The selected Windows commit does not include the shared board data core' }
+          "commit=$env:CORE" >> $env:GITHUB_OUTPUT
+      - name: Install build tools
+        run: |
+          choco install nasm nsis -y --no-progress
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          "$env:ProgramFiles\NASM" >> $env:GITHUB_PATH
+      - name: Test and build
+        working-directory: terminal/j-terminal
+        run: |
+          cargo test --locked
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          cargo build --release --locked
+      - name: Package and verify on a clean runner
+        id: package
+        working-directory: terminal/j-terminal
+        run: |
+          $version = (cargo metadata --no-deps --format-version 1 | ConvertFrom-Json).packages[0].version
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "j-terminal-v$version") { throw 'Tag and Cargo version differ' }
+          $out = New-Item -Type Directory -Path dist
+          $exe = (Copy-Item target/release/j-terminal.exe $out -PassThru).FullName
+          $setup = Join-Path $out "J-TerminaL-$version-Setup.exe"
+          & "${env:ProgramFiles(x86)}\NSIS\makensis.exe" /INPUTCHARSET UTF8 "/DVERSION=$version" "/DBINARY=$exe" "/DOUTPUT=$setup" installer/windows.nsi
+          if ($LASTEXITCODE) { throw 'NSIS failed' }
+          $result = Start-Process $setup -ArgumentList /S -Wait -PassThru
+          if ($result.ExitCode) { throw 'Installation failed' }
+          $app = (Get-Item 'HKCU:\Software\Microsoft\Windows\CurrentVersion\App Paths\j-terminal.exe').GetValue('')
+          if ((Get-FileHash $app).Hash -ne (Get-FileHash $exe).Hash) { throw 'Incorrect installed executable' }
+          $testVault = Join-Path $env:RUNNER_TEMP 'standalone-smoke'
+          $p = Start-Process $app -ArgumentList "--background --data `"$testVault`"" -PassThru
+          try {
+            foreach ($n in 1..100) {
+              if (Test-Path "$testVault/journal.sqlite3") { break }
+              if ($p.HasExited) { throw 'First start failed' }
+              Start-Sleep -Milliseconds 100
+            }
+            if (!(Test-Path "$testVault/journal.sqlite3")) { throw 'Journal missing' }
+          } finally { if (!$p.HasExited) { $p.Kill(); $p.WaitForExit() } }
+          $dir = Split-Path $app
+          $result = Start-Process "$dir/Uninstall.exe" -ArgumentList /S -WindowStyle Hidden -Wait -PassThru
+          if ($result.ExitCode -or (Test-Path $app) -or !(Test-Path "$testVault/journal.sqlite3")) { throw 'Uninstall failed' }
+          "version=$version" >> $env:GITHUB_OUTPUT
+      - uses: actions/upload-artifact@v4
+        with:
+          name: j-terminal-windows
+          path: terminal/j-terminal/dist/*.exe
+  publish:
+    if: inputs.publish || github.event_name == 'push'
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: j-terminal-windows
+          path: dist
+      - name: Publish independent terminal release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.package.outputs.version }}
+          CORE: ${{ needs.package.outputs.core }}
+        run: |
+          gh release create "j-terminal-v$VERSION" dist/*.exe --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --latest=false --title "J-TerminaL $VERSION" --notes "Windows x64 · Benutzer-Setup und portable EXE. Datenkern: $CORE.
+
+          [![Made with Slint](https://raw.githubusercontent.com/slint-ui/slint/master/logo/MadeWithSlint-logo-whitebg.png)](https://slint.dev)"

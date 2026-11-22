@@ -141,6 +141,21 @@ const GROUPS: &[Group] = &[
         fixed!("Shift+← / → / ↑ / ↓", "Datum um einen Tag oder eine Woche ändern", "Adjust a date by a day or a week"),
         fixed!("Del / Enter / Esc", "Zurücksetzen / übernehmen / abbrechen", "Reset / apply / cancel"),
     ] },
+    Group { name: ["Pinnwand", "Board"], shortcuts: &[
+        fixed!("Ctrl+← / Ctrl+→", "Zeitraum wechseln", "Change period"),
+        fixed!("← / → / ↑ / ↓", "Benachbarte Karte auswählen", "Select neighbouring card"),
+        fixed!("Shift+Pfeil / Ctrl+Shift+Pfeil", "Karte bewegen oder Größe ändern", "Move or resize card"),
+        fixed!("Alt+L, Pfeile, Enter", "Ziel für einen Faden wählen und verbinden", "Select a thread target and connect"),
+        fixed!("Enter / Ctrl+K", "Karte öffnen oder Aktionen wählen", "Open card or choose actions"),
+        fixed!("Ctrl+N", "Menü zum Anpinnen öffnen", "Open the pin menu"),
+        fixed!("Ctrl+Tab", "Im Texteditor zwischen Titel und Notiztext wechseln", "Switch between title and note text in the editor"),
+        fixed!("↑ / ↓ / Enter / Esc", "Menüauswahl bewegen, bestätigen oder zurückgehen", "Navigate, choose or go back in the actions menu"),
+        fixed!("Ctrl+S", "Textentwurf speichern", "Save text draft"),
+        fixed!("Ctrl++ / Ctrl+- / Ctrl+0", "Zeichnung zoomen oder Ansicht zurücksetzen", "Zoom drawing or reset view"),
+        fixed!("Pfeile / Mitteltaste", "Zeichenfläche verschieben", "Pan drawing canvas"),
+        fixed!("F11", "Zeichenfläche maximieren oder wieder teilen", "Maximize or restore drawing area"),
+        fixed!("Esc", "Auswahl, Werkzeugmenü oder Editor verlassen", "Leave selection, tool menu or editor"),
+    ] },
     Group { name: ["Notizblock", "Notebook"], shortcuts: &[
         binding!("notes-list", NOTES, "Ctrl+O", "Zur Zettelliste wechseln", "Go to the note list"),
         binding!("notes-all", NOTES, "Alt+ArrowLeft", "Alle Zettel anzeigen", "Show all notes"),
@@ -245,7 +260,7 @@ fn text(code: Code) -> Option<char> {
         .or_else(|| PUNCTUATION.iter().find(|(_, key)| *key == code).map(|(character, _)| *character))
 }
 
-fn label(key: HotKey, language: Language) -> String {
+pub fn label(key: HotKey, language: Language) -> String {
     let lang = language_index(language);
     let mut parts = Vec::with_capacity(4);
     if key.mods.contains(Modifiers::CONTROL) { parts.push(["Strg", "Ctrl"][lang].to_owned()); }
@@ -305,6 +320,17 @@ impl Bindings {
 
     pub fn system_hotkey(&self) -> HotKey { self.effective("window-toggle").expect("default global hotkey") }
     pub fn default_system_hotkey(&self) -> HotKey { self.defaults["window-toggle"] }
+    pub fn register_system_hotkey(&self, mut register: impl FnMut(HotKey) -> bool) -> Option<HotKey> {
+        let preferred = self.system_hotkey();
+        if register(preferred) { return Some(preferred); }
+        for candidate in ["Ctrl+Alt+Space", "Ctrl+Alt+Shift+Space", "Ctrl+Alt+F12"] {
+            let key = candidate.parse().expect("built-in global shortcut");
+            if key != preferred && self.validate_conflicts(definition("window-toggle").unwrap(), key).is_ok() && register(key) {
+                return Some(key);
+            }
+        }
+        None
+    }
 
     /// Reads the own keys. One that no longer fits (unknown, reserved, or taken by another, e.g. by a shortcut that is
     /// new in this version) is left out; the others stay. Returns the ids left out.
@@ -468,6 +494,15 @@ pub fn caps(keys: &str) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_busy_global_key_gets_a_working_alternative_without_changing_preferences() {
+        let bindings = super::Bindings::default();
+        let preferred = bindings.system_hotkey();
+        let fallback = bindings.register_system_hotkey(|key| key != preferred).unwrap();
+        assert_ne!(preferred, fallback);
+        assert_eq!(bindings.system_hotkey(), preferred);
+        assert_eq!(bindings.register_system_hotkey(|_| false), None);
+    }
     use super::*;
 
     #[test]

@@ -103,6 +103,9 @@ export component ActionPopover inherits Rectangle {
     callback side-clock(bool, int);
     callback day-key(string, int);
 
+    in property <bool> menu-can-back;
+    in property <int> search-reset;
+    changed search-reset => { search.reset(); if root.searching { search.grab(); } }
     private property <length> inner: self.width - Theme.popover-padding * 2;
     // As high as its content, at most the theme's height; the list scrolls inside.
     preferred-height: content.preferred-height;
@@ -125,7 +128,7 @@ export component ActionPopover inherits Rectangle {
             HorizontalLayout {
                 padding-left: Theme.popover-inset + Theme.popover-padding; padding-right: Theme.popover-inset; padding-top: Theme.popover-padding;
                 spacing: Theme.gap; alignment: start;
-                if root.side-open: Image {
+                if root.side-open || root.menu-can-back: Image {
                     width: Theme.label-icon-size; height: Theme.label-icon-size; y: (parent.height - self.height) / 2;
                     source: root.icon-back; colorize: back-touch.has-hover ? Theme.strong : Theme.muted;
                     back-touch := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.side-back(); } }
@@ -324,6 +327,15 @@ export component ActionPopover inherits Rectangle {
                 }
                 take-touch := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.side-confirm(); } }
             }
+        }
+        if root.side-open && root.side-kind == 8: HorizontalLayout {
+            padding:Theme.popover-padding;spacing:Theme.gap;height:Theme.popover-search-height;
+            TextInput {text:root.side-text;single-line:true;color:Theme.strong;
+                horizontal-stretch:1;vertical-alignment:center;init=>{self.focus();}
+                edited=>{root.side-edited(self.text);}accepted=>{root.side-confirm();}}
+            Rectangle {width:Theme.side-row-height;border-radius:Theme.list-radius;background:Theme.row-selection;
+                Text {text:"↵";color:Theme.strong;horizontal-alignment:center;vertical-alignment:center;}
+                TouchArea {clicked=>{root.side-confirm();}}}
         }
         // The description: written in place; Esc keeps it.
         if root.side-open && root.side-kind == 6: Rectangle {

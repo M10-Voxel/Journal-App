@@ -366,7 +366,7 @@ impl Card {
     }
 }
 
-fn synced_copies(cards: &[Value], id: &str) -> BTreeSet<String> {
+pub(crate) fn synced_copies(cards: &[Value], id: &str) -> BTreeSet<String> {
     let mut group = BTreeSet::from([id.to_owned()]);
     loop {
         let before = group.len();
@@ -407,6 +407,20 @@ impl Attachment {
         Ok(Self { id: Uuid::new_v4(), title, content: AttachmentContent::Link(url) })
     }
 
+    pub fn pin(self,store:&mut Store,vault:&Path,date:NaiveDate,key:&str,position:Option<(f32,f32)>)->Result<String,String>{
+        let AttachmentContent::Image(bytes)=self.content else{return Err("image".into())};
+        let mut files=PendingFiles::default();files.write(asset_path(vault,self.id),&bytes).map_err(|e|format!("{e:?}"))?;
+        let id=self.id.to_string();let now=Utc::now().timestamp_millis();
+        let mut card=json!({"id":id,"kind":"image","asset":id,"size":bytes.len(),"title":self.title,"text":"","dates":[],
+            "order":now,"created":date.to_string(),"createdAt":now,"updatedAt":now});
+        crate::board::assign(&mut card,key,true);
+        if let Some((x,y))=position {
+            let layout=crate::board::layout_mut(&mut card,key);
+            layout["boardX"]=json!(x); layout["y"]=json!(y);
+        }
+        journal_core::board::edit(store,&[(Value::Null,card)])?;
+        files.committed=true;Ok(id)
+    }
     pub fn image(path: &Path) -> Result<Self, SaveError> {
         use image::{codecs::avif::AvifEncoder, ColorType, ImageEncoder};
         if fs::metadata(path)?.len() > MAX_IMAGE_BYTES { return Err(SaveError::TooLarge); }
@@ -429,7 +443,7 @@ fn asset_path(vault: &Path, id: Uuid) -> PathBuf {
     vault.join("board-images").join(format!("{id}.avif"))
 }
 
-fn stored_image(card: &Value, vault: &Path) -> Option<ImageSource> {
+pub(crate) fn stored_image(card: &Value, vault: &Path) -> Option<ImageSource> {
     Some(ImageSource::File(asset_path(vault, text(card, "asset").parse().ok()?)))
 }
 

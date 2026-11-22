@@ -174,6 +174,28 @@ pub struct ActionLine { pub action: Action, pub icon: String, pub label: String,
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct SideRow { pub icon: String, pub label: String, pub value: String, pub selected: bool, pub on: bool, pub color: Option<Rgb>, pub danger: bool }
 
+pub(crate) fn tag_row(tag: Option<&journal_core::storage::Tag>, current: Option<&str>, selected: bool, none: &str) -> SideRow {
+    SideRow {
+        label: tag.map_or(none, |t| &t.name).to_owned(),
+        icon: tag.and_then(|t| t.icon.as_deref()).filter(|n| icons::exists(n)).unwrap_or_default().to_owned(),
+        selected, on: current == tag.map(|t| t.id.as_str()),
+        color: tag.and_then(|t| crate::calendar::parse_color(&t.color)),
+        ..Default::default()
+    }
+}
+
+/// Both tag pickers preserve the journal order and rank prefix matches first.
+pub(crate) fn tag_indices(tags: &[journal_core::storage::Tag], query: &str) -> Vec<Option<usize>> {
+    let query = crate::engine::parse::fold(query.trim());
+    if query.is_empty() { return std::iter::once(None).chain((0..tags.len()).map(Some)).collect(); }
+    let mut found: Vec<_> = tags.iter().enumerate().filter_map(|(i, tag)| {
+        let name = crate::engine::parse::fold(&tag.name);
+        name.contains(&query).then(|| (!name.starts_with(&query), i))
+    }).collect();
+    found.sort_by_key(|(later, _)| *later);
+    found.into_iter().map(|(_, i)| Some(i)).collect()
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Cell { pub label: String, pub date: NaiveDate, pub in_month: bool, pub today: bool, pub cursor: bool, pub picked: bool, pub own: bool, pub pending: bool, pub disabled: bool }
 
@@ -728,15 +750,8 @@ impl DayPane {
     /// The tags to choose from: none first, then all; while something is typed only the tags with it in their name
     /// (starting with it first).
     fn tag_choices(&self, cx: &Ctx) -> Vec<Option<journal_core::storage::Tag>> {
-        let query = crate::engine::parse::fold(self.side_text.trim());
         let tags = Self::tags(cx);
-        if query.is_empty() { return std::iter::once(None).chain(tags.into_iter().map(Some)).collect(); }
-        let mut found: Vec<(bool, journal_core::storage::Tag)> = tags.into_iter().filter_map(|tag| {
-            let name = crate::engine::parse::fold(&tag.name);
-            name.contains(&query).then(|| (!name.starts_with(&query), tag))
-        }).collect();
-        found.sort_by_key(|(later, _)| *later);
-        found.into_iter().map(|(_, tag)| Some(tag)).collect()
+        tag_indices(&tags, &self.side_text).into_iter().map(|index| index.map(|i| tags[i].clone())).collect()
     }
 
     /// The panel's text changed (the tag filter, the icon search, the description).
@@ -977,10 +992,8 @@ impl DayPane {
             }
             SideView::Tags => {
                 panel.kind = 1; panel.heading = dt.tag.into(); panel.heading_icon = "tag"; panel.text = self.side_text.clone(); panel.placeholder = dt.tag_search.into();
-                panel.rows = self.tag_choices(cx).into_iter().enumerate().map(|(i, choice)| match choice {
-                    None => SideRow { icon: String::new(), label: ft.no_tag.into(), selected: side.pick == i, on: entry.tag.is_none(), ..SideRow::default() },
-                    Some(t) => SideRow { icon: t.icon.clone().filter(|n| icons::exists(n)).unwrap_or_default(), label: t.name.clone(), selected: side.pick == i, on: entry.tag.as_ref() == Some(&t.id), color: crate::calendar::parse_color(&t.color), ..SideRow::default() },
-                }).collect();
+                panel.rows = self.tag_choices(cx).into_iter().enumerate().map(|(i, tag)|
+                    tag_row(tag.as_ref(), entry.tag.as_deref(), side.pick == i, ft.no_tag)).collect();
             }
             SideView::Reminders => {
                 panel.kind = 3; panel.heading = dt.reminder.into(); panel.heading_icon = "bell";

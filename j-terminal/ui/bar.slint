@@ -134,7 +134,19 @@ component DayScroll inherits Flickable {
     changed content-height => { self.reveal-focus(); }
 }
 
+import { BoardView, BoardUi } from "board.slint";
+export { InkShape, InkDocument, BoardUi, BoardTile, BoardThread, BoardGroup, BoardBox, BoardHit, BoardTool, FloatingBoardNote } from "board.slint";
 export component Bar inherits Window {
+    out property <float> board-viewport-w:board-page.viewport-w;
+    out property <float> board-viewport-h:board-page.viewport-h;
+    out property <float> board-viewport-x:board-page.viewport-x;
+    out property <float> board-viewport-y:board-page.viewport-y;
+    out property <float> board-canvas-scale:board-page.canvas-scale;
+    out property <float> board-canvas-x:board-page.canvas-x;
+    out property <float> board-canvas-y:board-page.canvas-y;
+    out property <float> board-canvas-w:board-page.canvas-w;
+    out property <float> board-canvas-h:board-page.canvas-h;
+
     // The form
     in property <[FormRow]> rows;
     in property <int> line-count;
@@ -379,7 +391,7 @@ export component Bar inherits Window {
     in property <length> screen-width: Theme.width + Theme.border-width;
     in property <length> screen-height: Theme.calendar-height * 4;
     out property <bool> stacked: root.screen-width < Theme.width;
-    out property <length> content-width: root.stacked ? min(root.screen-width, Theme.calendar-width) : min(root.screen-width, Theme.width);
+    out property <length> content-width: BoardUi.maximized ? root.screen-width : root.stacked ? min(root.screen-width, Theme.calendar-width) : min(root.screen-width, Theme.width);
     out property <length> form-space: root.stacked ? root.content-width : Theme.form-width;
     property <length> stacked-height: min(root.screen-height, Theme.calendar-height * 2);
     property <length> preferred-pane-height: root.stacked
@@ -390,7 +402,7 @@ export component Bar inherits Window {
         ? max(Theme.stacked-calendar-min-height, root.stacked-height - root.pane-height - Theme.border-width)
         : root.pane-height;
     property <length> full-height: root.stacked ? root.pane-height + Theme.border-width + root.calendar-height : root.pane-height;
-    out property <length> content-height: min(root.full-height, root.screen-height);
+    out property <length> content-height: BoardUi.maximized ? root.screen-height : BoardUi.opened ? min(root.screen-height, Theme.calendar-height) : min(root.full-height, root.screen-height);
     // The top line of the form: where the title's input begins and how much room the type and the flag leave it.
     property <length> title-x: Theme.padding + Theme.back-size + Theme.gap;
     property <length> title-width: root.form-space - root.title-x - Theme.padding - type-chip.width - flag.width - Theme.accessory-gap * 2;
@@ -463,7 +475,7 @@ export component Bar inherits Window {
     changed notepad-open => { root.dismiss-preview(); }
     changed menu-open => { root.dismiss-preview(); }
     changed side-open => { root.dismiss-preview(); }
-    title: "J-TerminaL";
+    title: BoardUi.opened ? BoardUi.heading + " · J-TerminaL" : "J-TerminaL";
     no-frame: true;
     always-on-top: true;
     background: transparent;
@@ -478,6 +490,10 @@ export component Bar inherits Window {
         }
         capture-key-pressed(raw-event) => {
             let event = KeyBindings.translate(ShortcutContext.window, raw-event);
+            if BoardUi.opened && event.text != Key.F1 {
+                if BoardUi.key(raw-event.text,KeyBindings.modifier-mask(raw-event),raw-event.repeat) { return accept; }
+                return reject;
+            }
             if event.text == Key.F3 && !event.modifiers.shift && !event.modifiers.control && !event.modifiers.alt {
                 if !event.repeat { root.show-keyboard-preview(); }
                 return accept;
@@ -509,6 +525,7 @@ export component Bar inherits Window {
             reject
         }
     Rectangle {
+        visible: !BoardUi.opened;
         background: Theme.background;
         border-radius: Theme.radius;
         clip: true;
@@ -1392,6 +1409,7 @@ export component Bar inherits Window {
                 border-radius: self.width; background: Theme.muted; }
         }
     }
+    board-page := BoardView {visible: BoardUi.opened;}
     // The outline where Windows draws none (its own corners and edge replace it where it can).
     Rectangle {
         border-radius: Theme.radius;

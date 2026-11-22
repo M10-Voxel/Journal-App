@@ -3,6 +3,7 @@
 
 pub mod settings;
 pub mod search;
+pub mod board;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Language { De, En }
@@ -26,6 +27,7 @@ pub struct Texts {
     /// Followed by the reason.
     pub open_failed: &'static str,
     /// Followed by the reason.
+    pub alternate_hotkey: &'static str,
     pub hotkey_failed: &'static str,
     pub today: &'static str,
     pub tomorrow: &'static str,
@@ -47,11 +49,12 @@ const DE: Texts = Texts {
     unclear: "Bitte vervollständigen oder korrigieren:",
     week_short: "KW",
     months: ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"],
-    no_vault: "Noch kein Journal eingerichtet. Bitte zuerst die Journal-App starten.",
+    no_vault: "Journal-Datenordner nicht verfügbar oder Vault-Wechsel ausstehend.",
     unreachable: "Journal nicht erreichbar:",
     too_new: "Das Journal ist neuer als J-TerminaL. Bitte J-TerminaL aktualisieren.",
     open_failed: "Journal konnte nicht geöffnet werden:",
-    hotkey_failed: "Strg+Alt+Leertaste ist schon belegt:",
+    alternate_hotkey: "Globales Ersatzkürzel:",
+    hotkey_failed: "Kein globales Kürzel verfügbar. In F1 ein anderes wählen.",
     today: "heute",
     tomorrow: "morgen",
     after_tomorrow: "übermorgen",
@@ -75,11 +78,12 @@ const EN: Texts = Texts {
     unclear: "Please complete or correct:",
     week_short: "CW",
     months: ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"],
-    no_vault: "No journal set up yet. Please start the Journal app first.",
+    no_vault: "Journal data folder unavailable or vault switch pending.",
     unreachable: "Journal not reachable:",
     too_new: "The journal is newer than J-TerminaL. Please update J-TerminaL.",
     open_failed: "The journal could not be opened:",
-    hotkey_failed: "Ctrl+Alt+Space is already taken:",
+    alternate_hotkey: "Alternate global shortcut:",
+    hotkey_failed: "No global shortcut available. Choose another in F1.",
     today: "today",
     tomorrow: "tomorrow",
     after_tomorrow: "day after tomorrow",

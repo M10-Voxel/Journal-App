@@ -91,7 +91,7 @@ Offene Aufgaben. Erledigtes mit `[x]` markieren. Vollständiger Plan: `docs/plan
   - [x] Ordner in der Leseansicht über Strg+K direkt zuweisen. Editor-Aktionen als Symbole rechts in die Kopfzeile setzen.
 - [x] **Suchleiste: Journal durchsuchen und Quick-Actions**, ausgehend von der vorhandenen `/Entry`-Aktion.
   - [x] Treffer mit `@Typ`-/`\Tag`-Filtern finden, anzeigen und zum Bearbeiten in dasselbe Formular laden.
-  - [x] Tageswahl/Heute, Rückgängig/Wiederherstellen, Notizblock, Bewertung und Aktivitäten als deutsch/englische Befehle. Treffer und Aktionen per Tastatur und Maus. Den Pinnwand-Befehl mit Stufe 6 ergänzen.
+  - [x] Tageswahl/Heute, Rückgängig/Wiederherstellen, Notizblock, Bewertung und Aktivitäten als deutsch/englische Befehle. Treffer und Aktionen per Tastatur und Maus. Die Zeitraum-Befehle öffnen die aktivierten Pinnwände aus Stufe 6.
 - [x] **Einträge: kompakte Vorschau** – Titel und ggf. Beschreibung in Kalender, Tagesansicht und Suchtreffern. Auch schmale Zeitstücke, Symbole und mehrtägige Spuren verwenden die Vorschau. Sie bleibt im Fenster. F3 zeigt dieselben Informationen für die Tastaturauswahl und blättert im Kalender durch den markierten Tag. Die Karte passt ihre Breite dem Inhalt an. Ein Akzentpunkt mit Verbindungslinie markiert den Ursprung. Lange Inhalte lassen sich mit dem Mausrad und in der F3-Vorschau mit Bild↑/Bild↓ lesen. E-Mails zeigen formatierten Nachrichtentext aus HTML oder den mitgespeicherten Klartext.
 - [ ] **Felder und Aktionsflächen vollständig mit der Maus bedienen** – Felder fokussieren/bearbeiten, Typ/„Mehr“/Optionen und Suchtreffer anklicken, kompakte Aktionen auslösen. Alle Funktionen zusätzlich per Tastatur; keine zusätzlichen Buttonleisten. Beide Eingabewege prüfen.
 - [x] **Neu-Designs nach der Kritik vom 18.11.2026** – noch nicht committet.
@@ -139,11 +139,19 @@ Offene Aufgaben. Erledigtes mit `[x]` markieren. Vollständiger Plan: `docs/plan
 - [x] **Stufe 5: Bewertung und Aktivitäten in der Tagesansicht** – mit dem Punkt darüber umgesetzt.
   - Tagesbewertung und eigene Skalen als platzsparende runde Dials mit Bezeichnung und Wert; Maus, Pfeiltasten und Zahleneingabe. Vorhandene Skalenregeln beachten und auf den angezeigten Tag speichern.
   - Aktivitäten starten/stoppen, abhaken und Zeiten nachtragen; laufende Timer auch beim Betrachten eines anderen Tages sichtbar halten. Vorhandene Aktivitätslogik übernehmen und zusammen mit dem Tageswechsel prüfen.
-- [ ] **Stufe 6: Pinnwand per Tastatur** – in J-TerminaL. Die Kürzel für die Pinnwand der Haupt-App kommen im Branch `Windows` dazu. Später kommen mehr Funktionen, z. B. Karten verbinden.
-- [ ] **Stufe 7: Anbindung und Release**
-  - `Strg+Leertaste` in der Haupt-App (im Branch `Windows`).
-  - Eigener Release-Workflow für diesen Branch mit eigener Versionsnummer.
-  - „Made with Slint“-Logo auch in den Release-Notizen (in der README steht es schon).
+- [x] **Stufe 6 · Pinnwand per Tastatur** – Zeitraum-Befehle, Karten, Gruppen und Fäden, geteilter Texteditor und native Zeichenfläche. Bedienung und Abnahme im [Pinnwand-Plan](plan-pinnwand.md).
+  - [x] Papierkarten und Gruppen nach dem Normal-Design, flüssiges Ziehen und Skalieren, formatierte Live-Vorschau und durchsuchbare Pinnwandmenüs unten rechts.
+  - [x] Gemeinsame Tag-Auswahl, deckungsgleiche Stiftvorschau, Zoom am Mauszeiger und Abbruch bei verlorener Mausaufnahme.
+  - [x] Vektorhandschrift mit Live-Strich, skalierbaren Kartensymbolen und Werkzeugleiste mit Stiftarten, Dicken und Farbpaletten.
+  - [x] Haarlinienraster, gekörnter Bleistift, Stiftvorschau im nächsten Bild und eigene Zeichenansicht mit Verschieben und Zoom über Maus, Tastatur und Touch.
+  - [x] Stabile Strichkontur beim Abheben, mit Bildvergleich einer Druckkurve und versetztem Windows-Stiftende im Test.
+  - [x] Nativer Windows-Test mit temporärer Datenbank und simuliertem Stift (`scripts/measure_board.py <EXE> --pen` im Verzeichnis `j-terminal`). Er prüft gespeicherte Druckwerte, beide Enden und die Lücke nach dem Teilradieren mit dem gewählten Werkzeug, Fokusverlust und die Wiederherstellung der Fenstergröße nach F11.
+  - [ ] Abnahme am physischen Windows-Stift mit Druck, umgedrehtem Stift und schnellen Strichen bei verschiedenen Display-Skalierungen. Beim simulierten Umdrehen lieferte Windows auf dem Testsystem kein Radiererflag.
+- [ ] **Stufe 7: Eigenständige Installation und Release**
+  - [x] Eigener Release-Workflow mit Cargo-Version, Windows-Setup pro Benutzer und portabler EXE.
+  - [x] „Made with Slint“-Logo in den generierten Release-Notizen.
+  - [x] Eigenständiger Erststart mit gemeinsamem Journalformat, Pinnwänden und Ausweichkürzel bei Systemkonflikten.
+  - [ ] GitHub-Release veröffentlichen, sobald der gemeinsame Datenkern mit Pinnwand-Modul in einem Commit auf `Windows` verfügbar ist.
 
 ## Offene Fragen
 - keine (Timer: entschieden am 19.11.2026, gemeinsam in der Datenbank)

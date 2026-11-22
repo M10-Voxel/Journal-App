@@ -1,0 +1,128 @@
+import { Theme } from "theme.slint";
+import { MenuRow, SideRow } from "actions.slint";
+import { NotepadMarkdownRow } from "notepad.slint";
+
+export struct InkShape {commands:string,grain:string,x:float,y:float,w:float,h:float,color:color,custom:bool,selected:bool,alpha:float}
+export struct InkDocument {shapes:[InkShape],pattern:string,step:float}
+export struct BoardTile {
+    ink:InkDocument,is-ink:bool,
+    id:string, kind:string, title:string, rows:[NotepadMarkdownRow], left:float, top:float,
+    w:float, h:float, auto-height:bool, group:int, selected:bool, source:bool, picture:image, has-picture:bool,
+    paper:color, pin:color, detail:string
+}
+export struct BoardBox { x:float, y:float, w:float, h:float }
+export struct BoardHit { index:int, other:int, operation:string }
+export struct BoardTool { command:string, label:string, icon:string, note-only:bool }
+export struct BoardThread { first:int, second:int, arrow:bool, preview:bool, a:string, b:string }
+export struct BoardGroup { members:[int], name:string }
+export global BoardUi {
+    in-out property <bool> opened;
+    in-out property <bool> maximized;
+    in-out property <string> maximize-label;
+    in-out property <string> ink-tool;
+    in-out property <color> ink-color;
+    in-out property <float> ink-size;
+    in-out property <string> ink-picker;
+    in-out property <[BoardTool]> ink-tools;
+    in-out property <InkShape> draft;
+    in-out property <float> ink-zoom: 1;
+    callback ink-camera(float,float,float,float,float);
+    in-out property <float> ink-pan-x;
+    in-out property <float> ink-pan-y;
+    in-out property <float> ink-move-x;
+    in-out property <float> ink-move-y;
+    pure callback glyph(string)->string;
+    in-out property <int> editor;
+    in-out property <string> heading;
+    in-out property <string> title;
+    in-out property <string> body;
+    in-out property <string> title-label;
+    in-out property <string> body-label;
+    in-out property <string> hint;
+    in-out property <string> message;
+    in-out property <string> action-label;
+    in-out property <string> draw-label;
+    in-out property <[BoardTile]> tiles;
+    in-out property <[BoardThread]> threads;
+    in-out property <[BoardGroup]> groups;
+    in-out property <[MenuRow]> options;
+    in-out property <bool> tag-open;
+    in-out property <string> tag-context;
+    in-out property <[SideRow]> tag-rows;
+    in-out property <bool> menu-open;
+    in-out property <string> menu-title;
+    in-out property <string> menu-search;
+    in-out property <string> menu-empty;
+    in-out property <string> pin-label;
+    in-out property <int> menu-reset;
+    callback filter(string);
+    callback menu-back();
+    callback tool(int,string);
+    callback surface-menu(float,float);
+    pure callback paper-dots(float,color,float)->image;
+    pure callback grid-image(float,color)->image;
+    pure callback hit(float,float)->BoardHit;
+    pure callback group-box([int])->BoardBox;
+    callback measured(int,float);
+    in-out property <[float]> heights;
+    in-out property <float> zoom: 1;
+    in-out property <int> selected: -1;
+    in-out property <int> hover: -1;
+    in-out property <bool> keyboard-focus;
+    in-out property <int> drag-index: -1;
+    in-out property <int> drag-group: -1;
+    in-out property <string> operation;
+    in-out property <float> dx;
+    in-out property <float> dy;
+    in-out property <float> start-width;
+    in-out property <float> start-height;
+    in-out property <[BoardTool]> tools;
+    in-out property <bool> can-back;
+    in-out property <image> back-icon;
+    in-out property <string> group-label;
+    in-out property <bool> move-group;
+    callback viewport(string);
+    public pure function ink-width(w:float)->float {return max(1,w - 2*Theme.board-body-inset/1px);}
+    public pure function ink-height(h:float)->float {return max(1,h - (Theme.board-body-top + Theme.board-paper-inset)/1px);}
+    public function cancel-gesture() {
+        self.operation=""; self.drag-index=-1; self.drag-group=-1; self.dx=0; self.dy=0;
+    }
+    public pure function scaled(value:length)->length { return value*self.zoom; }
+    public pure function project(b:BoardBox)->BoardBox {
+        return {x:b.x*self.zoom, y:b.y*self.zoom, w:b.w*self.zoom, h:b.h*self.zoom};
+    }
+    public function zoom-at(factor:float,x:float,y:float) {
+        let old=self.zoom;
+        let next=clamp(old*factor,0.1,8);
+        self.left+=x*(1/old - 1/next);
+        self.top+=y*(1/old - 1/next);
+        self.zoom=next;
+    }
+    public pure function box-at(i: int) -> BoardBox {
+        let c = self.tiles[i];
+        let move = (self.operation == "move" && i == self.drag-index)
+            || (self.operation == "group" && c.group >= 0 && c.group == self.drag-group);
+        let size = self.operation == "resize" && i == self.drag-index;
+        return { x: c.left + (move ? self.dx : 0), y: c.top + (move ? self.dy : 0),
+            w: size ? max(160,self.start-width + self.dx) : c.w,
+            h: size ? max(120,self.start-height + self.dy) : c.auto-height ? max(Theme.board-note-height/1px, self.heights[i]) : c.h };
+    }
+    in-out property <int> option-index;
+    in-out property <string> prompt;
+    in-out property <bool> title-focus;
+    in-out property <string> copy-value;
+    in-out property <int> copy-request;
+    in-out property <string> value;
+    in-out property <float> left;
+    in-out property <float> top;
+    in-out property <image> attachment;
+    in-out property <int> focus-request;
+    callback command(string);
+    callback choose(int);
+    callback key(string,int,bool)->bool;
+    callback select(string);
+    callback release(int,string,float,float,float,float);
+    callback edge(string,string);
+    callback edited(bool,string);
+    callback point(int,float,float);
+}

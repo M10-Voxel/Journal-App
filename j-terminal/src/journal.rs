@@ -1,6 +1,6 @@
 //! Opening the journal the Journal app uses: follow `vault.json` in the app's data folder to the vault and open its
 //! `journal.sqlite3` through `journal-core` (WAL, so both programs may use it at once).
-//! J-TerminaL never creates a journal and never falls back to another one, and it leaves a database alone that is newer
+//! On first use J-TerminaL creates a shared local journal and never falls back from a configured vault, and it leaves a database alone that is newer
 //! than its `journal-core` (it would not understand what it writes).
 use std::path::{Path, PathBuf};
 use journal_core::{storage::Store, vault};
@@ -30,6 +30,11 @@ pub fn open(data: &Path) -> Result<Journal, Problem> {
     let vault = match config.active {
         Some(path) => path,
         None if data.join(vault::DB).is_file() => data.to_path_buf(),
+        None if config.pending.is_none() => {
+            std::fs::create_dir_all(data).map_err(|e| Problem::Failed(e.to_string()))?;
+            let store = Store::open(&data.join(vault::DB)).map_err(|e| Problem::Failed(e.to_string()))?;
+            return Ok(Journal { vault: data.to_owned(), store });
+        }
         None => return Err(Problem::NoVault),
     };
     let db = vault.join(vault::DB);
@@ -71,10 +76,12 @@ mod tests {
     fn serde_json_string(path: &Path) -> String { format!("{:?}", path.to_str().unwrap()) }
 
     #[test]
-    fn without_a_journal_nothing_is_created() {
+    fn standalone_first_start_creates_a_persistent_shared_journal() {
         let data = Temp::new();
-        assert_eq!(open(&data.0).err(), Some(Problem::NoVault));
-        assert!(!data.0.join(vault::DB).exists());
+        let folder = data.0.join("first");
+        open(&folder).unwrap().store.set_interface_language("en").unwrap();
+        assert_eq!(open(&folder).unwrap().store.interface_language().unwrap(), "en");
+        assert_eq!(vault::active_vault(&folder).unwrap(), folder);
     }
 
     #[test]

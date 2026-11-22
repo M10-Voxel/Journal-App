@@ -76,7 +76,7 @@ Rechts neben dem Formular steht dauerhaft der Kalender als „Zeitgewebe“ (`ca
 - **Eigenständiger Notizblock.** Strg+N, /Notizblock und das Journal-Symbol öffnen die Zettelliste mit dem Filter „An diesem Tag“. Tab wechselt in beide Richtungen zwischen „An diesem Tag“ und „Alle Notizen“. Die Liste hat eine Suche und gruppiert Zettel nach Ordnern. Beim Bearbeiten weist „Ordner zuweisen“ der Notiz einen vorhandenen Ordner oder Unterordner zu. „Ohne Ordner“ hebt die Zuweisung auf. In der Leseansicht öffnet Strg+K dieselbe Ordnerauswahl und speichert die Zuordnung bei der Auswahl. Im Editor stehen Tag, Ordner, Anhänge und Markdown-Vorschau als Symbole rechts in der Kopfzeile. Strg+Umschalt+N startet überall im Terminal einen neuen Zettel im Editor. Esc kehrt zu einem vorherigen ungespeicherten Entwurf zurück. Beschriftete Aktionen führen zwischen Liste, Leseansicht und Editor. Speichern zeigt den formatierten Zettel. Neue Zettel erscheinen im gemeinsamen Notizblock und auf der Tagespinnwand. Der Editor unterstützt Ein- und Ausrücken und setzt Aufzählungen, nummerierte Listen und Checklisten mit Enter fort. Die Vorschau und die Leseansicht zeigen Überschriften, verschachtelte Listen, kopierbare Codeblöcke, Checklisten und Links. Bildanhänge werden als AVIF im Vault gespeichert und direkt im Notizblock angezeigt. Tags verwenden die gemeinsame Auswahl. Gleichzeitige Änderungen an anderen Kartenfeldern bleiben erhalten.
 - **Bewertungen als runde Dials:** Vorhandene Tagesbewertung und eigene Skalen werden als platzsparende runde Regler mit Bezeichnung und lesbarem Wert dargestellt. Sie lassen sich mit der Maus sowie mit Pfeiltasten und direkter Zahleneingabe bedienen. Grenzen, Schrittweite und fehlende Werte folgen den vorhandenen Skalen; gespeichert wird für den angezeigten Tag.
 - **Aktivitäten in der Tagesansicht:** Aktivitäten starten/stoppen, laufende Zeit sehen, Aktivitäten abhaken und Zeiten nachtragen. Laufende Timer bleiben unabhängig vom betrachteten Tag sichtbar. Vorhandene Aktivitätsdefinitionen und die Logik der Haupt-App bleiben die Grundlage.
-- **Suche und Quick-Actions in der oberen Leiste:** Die Leiste durchsucht das Journal mit `@Typ`- und `\Tag`-Filtern und öffnet Einträge im bestehenden Formular. `/Tag` öffnet den Monatsdialog, `/Heute` springt zu heute. `/Rückgängig` und `/Wiederherstellen` verwenden die gemeinsame Historie. `/Bewertung` fokussiert den Regler des angezeigten Tages, `/Aktivitäten` seine erste Aktivität. `/Entry` und `/Notizblock` öffnen die jeweiligen Ansichten. Alle Befehle akzeptieren deutsche und englische Eingaben und lassen sich per Enter oder Klick ausführen. Der Pinnwand-Befehl folgt in Stufe 6.
+- **Suche und Quick-Actions in der oberen Leiste:** Die Leiste durchsucht das Journal mit `@Typ`- und `\Tag`-Filtern und öffnet Einträge im bestehenden Formular. `/Tag` öffnet den Monatsdialog, `/Heute` springt zu heute. `/Rückgängig` und `/Wiederherstellen` verwenden die gemeinsame Historie. `/Bewertung` fokussiert den Regler des angezeigten Tages, `/Aktivitäten` seine erste Aktivität. `/Entry` und `/Notizblock` öffnen die jeweiligen Ansichten. Alle Befehle akzeptieren deutsche und englische Eingaben und lassen sich per Enter oder Klick ausführen. Die Befehle von `/Pinnwand-Tag` bis `/Pinnwand-Jahr` öffnen die jeweils aktivierte Pinnwand.
 
 **Stand der Tagesansicht (19.11.2026):** `day_view.rs` baut aus dem warmen Datenspeicher eine reine Lesesicht des gewählten Tags: Datum mit Abstand zu heute, Termine (mehrtägige an jedem abgedeckten Tag; Stundenraster-Spannen mit Beginn/Ende am ersten/letzten Tag, sonst die Tage), offene Aufgaben mit Zählung der erledigten, Notizen, Werte und Aktivitäten. Die Werte stammen aus der Einstellung `period-data` der App (`periodData.ts`), die `snapshot.rs` zusammen mit Einträgen und Tags liest und bei `PRAGMA data_version` neu lädt; ungültige Spannen werden wie in der App zu 0–10, Werte auf die Spanne begrenzt. Die Werte erscheinen vorerst als Balken; die runden, bedienbaren Dials folgen in Stufe 5. `Form` hält den gewählten Tag (`view_day`, leer = heute, folgt also auch Mitternacht); Alt+←/→, Alt+H, Mittelklick im Kalender und ein Klick auf den Tagesabstand ändern ihn. Der Kalender markiert ihn (`Input.selected`), solange die Tagesansicht sichtbar ist. Ein neues Öffnen des Fensters zeigt wieder heute. In `bar.slint` füllt die Ansicht den freien Platz unter der Suchleiste (scrollbar); Hinweis- und Statuszeilen haben dafür feste Höhen. Laufende Timer liegen im Browser-Speicher der App und sind hier nicht sichtbar (offene Frage in der Roadmap).
 
@@ -86,7 +86,7 @@ Ereignisse, Aufgaben und Notizen teilen sich die scrollbare Liste „Einträge�
 
 Die Suchleiste zeigt rechts den Tagesabstand (z. B. `in 4 d`) und daneben beide Tagespfeile. Ein Klick auf den Abstand springt zurück zu heute. Das ausgeschriebene Datum steht unten neben dem Menü für die Einstellungen. Das Aktionsmenü zeigt sechs ganze Zeilen und eine angeschnittene siebte, wenn weitere Aktionen vorhanden sind. Suche, Pfeiltasten und Scrollen erreichen die ganze Liste. Im Wiederholungseditor stehen die sechs Rhythmen in einer Zeile. Backspace schaltet die Wiederholung aus. Die Datumsfelder „Ab“ und „Bis“ öffnen per Leertaste oder Klick die Monatsauswahl.
 
-**Bereits vorgemerkt und weiterhin offen:** Einträge direkt im Kalender verschieben, Pinnwand samt Tastatursteuerung, Haupt-App-Kürzel und eigener Release-Ablauf. Diese Punkte werden durch die Tagesansicht nicht ersetzt.
+**Bereits vorgemerkt und weiterhin offen:** Einträge direkt im Kalender verschieben, Haupt-App-Kürzel und eigener Release-Ablauf. Diese Punkte werden durch die Tagesansicht nicht ersetzt.
 
 **Bei der Umsetzung prüfen:** Hover mit und ohne Beschreibung, schmale Einträge und Fensterränder; gleiche Aktionen per Maus und Tastatur; Wechsel heute/anderer Tag ohne falsch zugeordnete Bewertungen; separaten Aufruf des Notizblocks und Zuordnung des Zettels zur Tagespinnwand; Speichern von Zetteln, Anhängen und Skalen sowie Start/Stop/Nachtragen von Aktivitäten gegen Test-Datenbanken. Gestaltung bleibt im Theme, Texte deutsch/englisch, vorhandene Rust-/Slint-Bausteine bevorzugen und RAM-/Startzeitziele beibehalten.
 
@@ -96,7 +96,7 @@ Die Suchleiste zeigt rechts den Tagesabstand (z. B. `in 4 d`) und daneben beide 
 
 Es gibt nur **eine Eingabezeile**. Darunter stehen **Vorschläge** und bei Bedarf **ein eingebettetes Bedienelement** (Kalender, Skala, Liste, Band, Pinnwand). Es gibt keine Fußzeile mit Tasten und keine Überschriften, sofern sie nicht nötig sind. Die Tastenkürzel stehen in den mit F1 aufrufbaren Einstellungen.
 
-> **Bedienungsregel, aktualisiert durch Abschnitt 0c:** Alle Funktionen bleiben vollständig per Tastatur bedienbar. Die Maus darf Felder bearbeiten, Optionen wählen und kompakte Aktionsflächen direkt auslösen. Das gilt auch für Kalender, Bewertungs-Dials, Aktivitäten und die spätere Pinnwand. Zusätzliche Buttonleisten sind nicht vorgesehen.
+> **Bedienungsregel, aktualisiert durch Abschnitt 0c:** Alle Funktionen bleiben vollständig per Tastatur bedienbar. Die Maus darf Felder bearbeiten, Optionen wählen und kompakte Aktionsflächen direkt auslösen. Das gilt auch für Kalender, Bewertungs-Dials, Aktivitäten und die Pinnwand. Zusätzliche Buttonleisten sind nicht vorgesehen.
 
 ### 1.1 Vorschläge als Lückentext
 Jeder Vorschlag ist eine Vorlage mit **Feldern**, ähnlich wie Snippets in VS Code:
@@ -188,22 +188,23 @@ Ein Bereich wird durch das erste Wort gewählt (z. B. `bew`, `start`, `kal`, `pi
   - Sie ist ohne Knöpfe und lädt sofort.
 - Die Rechenteile aus `dayWindow.ts` dienen als Vorbild.
 
-**e) Pinnwand – ganz per Tastatur** (gilt auch für die Pinnwand in der App)
+**e) Pinnwand**
+
+Die Befehle von `/Pinnwand-Tag` bis `/Pinnwand-Jahr` öffnen den gewählten Zeitraum im gesamten Fenster. Die aktivierten Zeiträume kommen über `board-scopes.json` von der Haupt-App. Der [Pinnwand-Plan](plan-pinnwand.md) beschreibt die Bedienung und die Abnahme.
 
 | Taste | Wirkung |
 |---|---|
-| Pfeile | Fokus zur nächsten Karte in dieser Richtung |
-| `Enter` / `Esc` | Karte bearbeiten / Bearbeiten beenden |
-| `Shift`+Pfeile | Karte verschieben (Raster) |
-| `Strg+Shift`+Pfeile | Größe ändern |
-| `N` | neue Karte neben der fokussierten (`N`+`L` Link, `N`+`B` Bild aus Zwischenablage) |
-| `T` / `F` | Tag / Ordner zuweisen |
-| `Entf` | entfernen (mit Undo) |
-| `/` | in der Pinnwand filtern |
-| `Strg+V` | Zwischenablage als neue Karte |
+| Strg+← / Strg+→ | Zeitraum wechseln |
+| Pfeile | Benachbarte Karte auswählen |
+| Shift+Pfeile / Strg+Shift+Pfeile | Karte verschieben / Größe ändern |
+| Alt+L, Pfeile, Enter | Gerichtete Notizseite oder richtungslosen Anhang verbinden |
+| Strg+N / Strg+K | Karte anpinnen / Kartenaktionen oder Zeichenwerkzeuge öffnen |
+| Enter / Esc | Karte öffnen / eine Ebene zurückgehen |
+| Strg+Plus / Strg+Minus / Strg+0 | Zeichenansicht zoomen oder zurücksetzen |
+| Mitteltaste ziehen / Strg+Mausrad | Zeichenpapier verschieben oder am Zeiger zoomen |
+| F11 | Zeichenfläche maximieren oder zur geteilten Ansicht zurückkehren |
 
-- Im Schnellfenster wird nur eine Pinnwand gezeigt. Ordner wählt man mit `Tab`.
-- Für „nächste Karte in Richtung X“ kommt eine eigene reine Rechenfunktion mit Tests.
+Links stehen Texteditor oder Zeichenfläche. Rechts zeigt die Papierkarte den formatierten Markdown-Entwurf während der Eingabe. Karten und Gruppen lassen sich auf dem Punktraster direkt ziehen und am Eckgriff vergrößern. „Anpinnen“, Rechtsklick und Strg+K öffnen die Pinnwandmenüs unten rechts. Die Textbearbeitung speichert nach einer Schreibpause, das Zeichnen am Ende der Geste. Die Zeichenfläche übernimmt Seitenverhältnis und Papierfarbe der Karte. Editor und Karte zeichnen die Stiftpunkte als druckabhängige Vektorpfade. Schon beim Schreiben verwenden sie dieselben Viertelpixel-Koordinaten wie beim Wiederöffnen. Der Strich endet am letzten Kontaktpunkt. Der Editor übernimmt neue Punkte direkt vor der Bildausgabe. Bleistiftkörnung bleibt am Strich verankert, Rasterlinien bleiben bei jedem Zoom dünn. Die Werkzeugleiste bietet Stifte, Farbflächen und Dicken. Ein Klick außerhalb lässt den Zeichenmodus rahmenlos geöffnet. Die Tag-Auswahl verwendet dieselbe durchsuchbare Liste mit Symbolen, Farben und Häkchen wie die Tagesansicht.
 
 **f) Suchen und Befehle**
 - Die Suchleiste durchsucht Titel und Beschreibungen von Einträgen sowie Tagestitel über journal-core. Beispiel: `Bericht @Aufgabe \Arbeit`. Bei mehrteiligen Tag-Namen steht ein Unterstrich für ein Leerzeichen. Pfeiltasten wählen den Treffer, Enter oder Klick öffnet ihn. Beim Bearbeiten bleiben ID und bestehende Verknüpfungen erhalten. Hat sich der Eintrag seit dem Öffnen geändert, bleibt der Entwurf für die Konfliktauflösung offen.
@@ -260,12 +261,20 @@ Ein Bereich wird durch das erste Wort gewählt (z. B. `bew`, `start`, `kal`, `pi
 
 **Stand des Grundgerüsts (Stufe 1)**
 - `src/main.rs`: Argumente (`--background` beim Autostart, `--data <Ordner>` für einen Test-Datenordner statt `%LOCALAPPDATA%\de.journal.local`), Fenster, Kürzel. Das Fenster wird beim Start versteckt erzeugt.
-- `src/instance.rs`: eine Instanz über den lokalen Socket `j-terminal.sock` (Named Pipe). Die Nachricht `show` holt das Fenster nach vorne. Darüber meldet sich in Stufe 7 auch die Haupt-App.
+- `src/instance.rs`: eine Instanz über den lokalen Socket `j-terminal.sock` (Named Pipe). Ein erneuter Start sendet `show` und holt das Fenster nach vorne.
 - `src/journal.rs`: Vault über `vault.json` finden und die Datenbank über `journal-core` öffnen. Die Version wird vorher schreibgeschützt gelesen.
 - `src/placement.rs`: Lage oben mittig auf dem Bildschirm mit der Maus, in physischen Pixeln über winit.
 - `src/autostart.rs`, `src/texts.rs` (Texttabelle de/en, Sprache aus der App-Einstellung `ui-language`).
 - Slint nur mit Software-Renderer und winit: am wenigsten RAM. Gemessen: 2,5 MB privater Arbeitssatz im Leerlauf, ca. 5 MB nach dem Öffnen.
 - Schriften seit der Design-Anpassung als kleine TTF-Dateien eingebettet: IBM Plex Sans und Lilex wie in der Haupt-App (siehe Abschnitt 4).
+
+**Stufe 7 – Eigenständige Installation und Release**
+
+Das Windows-Setup installiert J-TerminaL für das aktuelle Benutzerkonto, erstellt einen Startmenüeintrag und richtet den Hintergrundstart bei der Anmeldung ein. Bei der Deinstallation bleiben die Journaldaten erhalten. Beim ersten Start legt J-TerminaL den Standard-Vault an. Eine vorhandene Vault-Konfiguration hat Vorrang. Ohne von der Journal-App gespeicherte Auswahl stehen alle fünf Pinnwand-Zeiträume zur Verfügung.
+
+Bei einem belegten globalen Kürzel versucht J-TerminaL die Standardbelegung und verfügbare Ersatzkürzel. Die Statuszeile zeigt das tatsächlich registrierte Ersatzkürzel an. Die gespeicherte Wunschbelegung bleibt für den nächsten Start erhalten. Eine portable und eine installierte Kopie mit demselben Standardprofil verwenden dieselbe Windows-Pipe.
+
+Die Release-Version kommt aus `Cargo.toml`. Der Release-Workflow erzeugt das Setup und die portable EXE, prüft die Installation auf einem Windows-Runner und verwendet einen eigenen Release-Tag samt „Made with Slint“-Logo.
 
 **Stand der Eingabezeile (Stufe 2)**
 - `src/app.rs` verarbeitet Text, Cursor und Tasten ohne Oberfläche. Die `View` enthält Vorschläge, erkannte Werte, Felder und die Tagesvorschau; `Effect` beschreibt Textauswahl, Speichern und Schließen.
@@ -341,12 +350,12 @@ Ein Bereich wird durch das erste Wort gewählt (z. B. `bew`, `start`, `kal`, `pi
 1. **Aufzählung:** `Mo` [Tab] `Di` [Tab] `Mi` … baut eine Liste.
 2. **Zeiträume:** Aufgabe → täglich, Termin/Eintrag → mehrtägig, ein Hinweis auf Wiederholung → Wiederholung. Ist es unklar, werden beide Möglichkeiten mit Zeichen vorgeschlagen.
 3. **Globales Kürzel:** `Strg+Alt+Leertaste`.
-4. **Pinnwand:** Einzelbuchstaben gelten auch in der Haupt-Pinnwand. **Später** kommen deutlich mehr Funktionen dazu, z. B. Karten verbinden. Die Tastatursteuerung wird so gebaut, dass weitere Aktionen leicht hinzukommen.
+4. **Pinnwand:** Die Tastaturbelegung und der Funktionsumfang stehen im [Pinnwand-Plan](plan-pinnwand.md).
 5. **Reihenfolge der Stufen:** Zeile → Bedienelemente → **Kalender (neue Oberfläche)** → Bewertung und Aktivitäten → Pinnwand. Davor kommen Datenkern und Grundgerüst, siehe Abschnitt 5.
 
 **Am 18.11.2026 dazu:**
 6. **Eigenes Programm statt Webview-Fenster:** Rust mit Slint, eigener Download, läuft ohne Haupt-App, gleiche Datenbank.
-7. **Kürzel:** global `Strg+Alt+Leertaste`, in der Haupt-App `Strg+Leertaste`. `Strg+K` bleibt beim Kalender.
+7. **Kürzel:** global `Strg+Alt+Leertaste`. `Strg+K` bleibt beim Kalender.
 8. **Design:** zuerst nur eines. Weitere Designs kommen, wenn die Haupt-App fertig ist.
 9. **Slint-Lizenz:** freie Lizenz (Royalty-free 2.0), mit dem Hinweis nach Variante b): Das „Made with Slint“-Logo steht in der README bzw. auf der Releases-Seite auf GitHub.
 10. **Branch:** `J-TerminaL`, eigener Ordner per `git worktree`, eigene Releases. Er enthält nur J-TerminaL, wird nie mit `Windows` gemergt und teilt nur `journal-core`.

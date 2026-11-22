@@ -59,3 +59,16 @@ pub fn to_slint(image: &RgbaImage) -> slint::Image {
     }
     slint::Image::from_rgba8(pixels)
 }
+
+/// Pre-asset cards can carry a local data URL instead of a vault-relative AVIF.
+pub fn inline(url:&str,size:u32)->Option<RgbaImage>{
+    use base64::{engine::general_purpose::STANDARD,Engine};
+    let (mime,data)=url.split_once(',')?;
+    if data.len()>2_000_000 || !matches!(mime,"data:image/avif;base64"|"data:image/jpeg;base64"|"data:image/png;base64"|"data:image/webp;base64"){return None}
+    let bytes=STANDARD.decode(data).ok()?;
+    if mime=="data:image/avif;base64"{return decode(&ImageSource::Bytes(bytes.into()),size)}
+    let input=std::io::Cursor::new(bytes);
+    let mut reader=image::ImageReader::new(input).with_guessed_format().ok()?;
+    let mut limits=image::Limits::default();limits.max_alloc=Some(64*1024*1024);limits.max_image_width=Some(8192);limits.max_image_height=Some(8192);reader.limits(limits);
+    Some(reader.decode().ok()?.thumbnail(size,size).into_rgba8())
+}

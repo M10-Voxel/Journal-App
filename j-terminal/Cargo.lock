@@ -2418,6 +2418,7 @@ dependencies = [
  "ab_glyph",
  "avif-decode",
  "avif-parse",
+ "base64",
  "chrono",
  "global-hotkey",
  "htmd",

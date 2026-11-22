@@ -10,6 +10,11 @@ mod day_view;
 mod dial;
 mod form;
 mod icons;
+mod board;
+mod board_ink;
+mod board_ui;
+mod board_surface;
+#[cfg(windows)] mod board_pointer;
 mod notepad;
 mod notebook;
 mod note_markdown;
@@ -65,6 +70,9 @@ struct NotepadMedia {
 }
 
 struct App {
+    floating_notes:std::collections::HashMap<String,FloatingBoardNote>,
+    board: Option<board::Board>,
+    board_images: std::collections::HashMap<String, slint::Image>,
     notepad_media: NotepadMedia,
     notepad_list_query: slint::SharedString,
     bar: Bar,
@@ -156,7 +164,6 @@ fn open_notepad_link(url: String) {
     }
 }
 
-#[cfg(test)]
 fn with_app_value<T>(f: impl FnOnce(&mut App) -> T) -> T {
     APP.with(|app| f(app.borrow_mut().as_mut().expect("the app is set up")))
 }
@@ -218,6 +225,15 @@ fn control_image(bar: &Bar, name: &str, size: f32, scale: f32) -> slint::Image {
         other => other,
     };
     journal_image(bar, name, size, scale)
+}
+
+fn picker_row(bar: &Bar, r: &day::SideRow, size: f32) -> SideRow {
+    SideRow {
+        has_icon: !r.icon.is_empty(), icon: journal_image(bar, &r.icon, size, bar.window().scale_factor()),
+        label: r.label.as_str().into(), value: r.value.as_str().into(), selected: r.selected, on: r.on,
+        has_color: r.color.is_some(), color: r.color.map_or(bar.global::<Theme>().get_accent(), |[r,g,b]| slint::Color::from_rgb_u8(r,g,b)),
+        danger: r.danger,
+    }
 }
 
 fn journal_image(bar: &Bar, name: &str, size: f32, scale: f32) -> slint::Image {
@@ -358,6 +374,21 @@ fn search_runs(text: &str, words: &[String]) -> slint::ModelRc<SearchRun> {
     std::rc::Rc::new(slint::VecModel::from(runs)).into()
 }
 
+fn markdown_rows(source: &str) -> Vec<NotepadMarkdownRow> {
+    note_markdown::blocks(source).into_iter().map(|block| NotepadMarkdownRow {
+        text: block.display,
+        heading: block.heading as i32,
+        indent: block.indent as i32,
+        marker: block.marker.into(),
+        offset: block.check.map_or(-1, |(offset, _)| offset as i32),
+        checked: block.check.is_some_and(|(_, checked)| checked),
+        urls: strings(block.links),
+        is_code: block.code.is_some(),
+        code: block.code.unwrap_or_default().into(),
+        language: block.language.into(),
+    }).collect()
+}
+
 fn strings(items: impl IntoIterator<Item = String>) -> slint::ModelRc<slint::SharedString> {
     std::rc::Rc::new(slint::VecModel::from(items.into_iter().map(slint::SharedString::from).collect::<Vec<_>>())).into()
 }
@@ -384,7 +415,7 @@ impl App {
         if replacing {
             if self.hotkeys.is_none() { self.hotkeys = GlobalHotKeyManager::new().ok(); }
             let Some(manager) = &self.hotkeys else { return labels.system_error.into(); };
-            if let Err(error) = manager.register(new_hotkey) { return format!("{} {error}", labels.system_error); }
+            if manager.register(new_hotkey).is_err() { return labels.system_error.into(); }
         }
         if let Err(error) = next.save() {
             if replacing {
@@ -607,7 +638,13 @@ impl App {
         }).collect::<Vec<_>>();
         self.bar.set_commands(std::rc::Rc::new(slint::VecModel::from(rows)).into());
         // One short message in the footer: the day view's, the form's, or a problem from the start.
-        let status = view.day_message.filter(|_| !view.entry_open).or(view.status).or_else(|| self.notice.clone().map(|notice| (notice, true)));
+        let hotkey_hint = || {
+            if self.bindings.system_hotkey() == self.active_hotkey? { return None; }
+            let key = shortcuts::label(self.active_hotkey?, self.state.language);
+            Some((format!("{} {key}", texts::texts(self.state.language).alternate_hotkey), false))
+        };
+        let status = view.day_message.filter(|_| !view.entry_open).or(view.status).or_else(|| self.notice.clone().map(|notice| (notice, true))).or_else(hotkey_hint)
+            .or_else(|| self.active_hotkey.is_none().then(|| (texts::texts(self.state.language).hotkey_failed.to_string(), true)));
         self.bar.set_notice_is_error(status.as_ref().is_some_and(|(_, error)| *error));
         self.bar.set_notice(status.map_or_else(String::new, |(text, _)| text).into());
     }
@@ -767,11 +804,7 @@ impl App {
         self.bar.set_notepad_panel(draft.panel);
         self.bar.set_notepad_preview(draft.preview);
         let markdown: Vec<_> = if draft.preview {
-            note_markdown::blocks(draft.body()).into_iter().map(|block| NotepadMarkdownRow {
-                text: block.display, heading: block.heading as i32, indent: block.indent as i32, marker: block.marker.into(), offset: block.check.map_or(-1, |(offset, _)| offset as i32),
-                checked: block.check.is_some_and(|(_, checked)| checked), urls: strings(block.links),
-                is_code: block.code.is_some(), code: block.code.unwrap_or_default().into(), language: block.language.into(),
-            }).collect()
+            markdown_rows(draft.body())
         } else { Vec::new() };
         self.bar.set_notepad_markdown(std::rc::Rc::new(slint::VecModel::from(markdown)).into());
         self.refresh_notepad_media(Some(card_id));
@@ -1006,10 +1039,7 @@ impl App {
         self.bar.set_side_heading(side.heading.into());
         self.bar.set_side_heading_icon(control_image(&self.bar, side.heading_icon, theme.get_label_icon_size(), scale));
         let row_icon = if side.kind == 2 { theme.get_icon_size() } else { theme.get_label_icon_size() };
-        self.bar.set_side_rows(std::rc::Rc::new(slint::VecModel::from(side.rows.iter().map(|r| SideRow {
-            has_icon: !r.icon.is_empty(), icon: journal_image(&self.bar, &r.icon, row_icon, scale), label: r.label.clone().into(), value: r.value.clone().into(),
-            selected: r.selected, on: r.on, has_color: r.color.is_some(), color: color(r.color), danger: r.danger,
-        }).collect::<Vec<_>>())).into());
+        self.bar.set_side_rows(std::rc::Rc::new(slint::VecModel::from(side.rows.iter().map(|r| picker_row(&self.bar, r, row_icon)).collect::<Vec<_>>())).into());
         self.bar.set_side_clock_hours(side.clock.0.into());
         self.bar.set_side_clock_minutes(side.clock.1.into());
         self.bar.set_side_clock_on_minutes(side.clock.2);
@@ -1053,6 +1083,7 @@ impl App {
         }
         if let Some(cursor) = effect.search_cursor { self.bar.invoke_place_search_cursor(cursor as i32); }
         if let Some(id) = effect.attachment { if let Some(target) = self.state.notepad_target(&id.to_string()) { self.show_notepad_target(target); } }
+        if let Some(period)=effect.board {self.open_board(period);}
         if effect.settings { self.show_settings(); }
         if effect.hide { let _ = self.bar.hide(); }
         if effect.hide_soon {
@@ -1102,8 +1133,8 @@ fn present(bar: &Bar) {
     slint::Timer::single_shot(Duration::ZERO, || with_app(|app| {
         app.hide_timer.stop();
         app.restore_launcher = false;
-        let effect = app.state.shown();
-        app.effect(effect);
+        if app.board.is_some(){app.tick_board();app.draw_board();board_ui::focus_board(&app.bar);}
+        else{let effect = app.state.shown();app.effect(effect);}
     }));
     release_opening_modifiers(bar.window());
     if let Err(e) = bar.show() { eprintln!("J-TerminaL: Fenster: {e}"); return; }
@@ -1153,17 +1184,34 @@ fn place_and_focus(bar: &Bar, centered: bool, tries: u32) {
     if placed.is_some() {
         #[cfg(windows)]
         round_window(bar);
-        bar.invoke_focus_line();
+        if bar.global::<BoardUi>().get_opened(){board_ui::focus_board(bar);}else{bar.invoke_focus_line();}
     } else if tries > 0 {
         slint::Timer::single_shot(std::time::Duration::from_millis(5), move || with_bar(|bar| place_and_focus(bar, centered, tries - 1)));
     }
+}
+
+// The launcher owns its full client area. Keep winit's focus handling, but
+// suppress the non-client repaint Windows would otherwise do on activation.
+#[cfg(windows)]
+unsafe extern "system" fn launcher_frame(hwnd: windows_sys::Win32::Foundation::HWND, msg: u32, wp: usize, lp: isize, id: usize, _: usize) -> isize {
+    use windows_sys::Win32::UI::{Shell::{DefSubclassProc, RemoveWindowSubclass}, WindowsAndMessaging::*};
+    match msg {
+        WM_STYLECHANGING if wp as i32 == GWL_STYLE && lp != 0 => {
+            (*(lp as *mut STYLESTRUCT)).styleNew &= !WS_CAPTION;
+        }
+        WM_NCACTIVATE => return DefSubclassProc(hwnd, msg, wp, -1),
+        WM_NCPAINT => return 0,
+        WM_NCDESTROY => { RemoveWindowSubclass(hwnd, Some(launcher_frame), id); }
+        _ => {}
+    }
+    DefSubclassProc(hwnd, msg, wp, lp)
 }
 
 #[cfg(windows)]
 fn round_window(bar: &Bar) {
     use slint::winit_030::winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
     use windows_sys::Win32::Graphics::Gdi::{DeleteObject, InvalidateRect, SetWindowRgn};
-    use windows_sys::Win32::UI::WindowsAndMessaging::{GetWindowLongW, SetWindowLongW, GWL_STYLE, WS_CAPTION};
+    use windows_sys::Win32::UI::{Shell::SetWindowSubclass, WindowsAndMessaging::*};
 
     bar.window().with_winit_window(|window| {
         let Ok(handle) = window.window_handle() else { return };
@@ -1178,9 +1226,11 @@ fn round_window(bar: &Bar) {
                 let hwnd = handle.hwnd.get() as _;
                 // Winit normally hides WS_CAPTION through WM_NCCALCSIZE. With a
                 // custom region Windows can still paint that caption on activation.
+                SetWindowSubclass(hwnd, Some(launcher_frame), 2, 0);
                 let style = GetWindowLongW(hwnd, GWL_STYLE) as u32;
                 if style & WS_CAPTION != 0 {
                     SetWindowLongW(hwnd, GWL_STYLE, (style & !WS_CAPTION) as i32);
+                    SetWindowPos(hwnd, std::ptr::null_mut(), 0, 0, 0, 0, SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
                 }
                 // A non-client repaint can draw the Win32 caption across the Slint header.
                 if SetWindowRgn(hwnd, region, 0) == 0 {
@@ -1300,6 +1350,7 @@ fn connect_settings(settings: &SettingsWindow) {
 }
 
 fn connect(bar: &Bar) {
+    board_ui::connect(bar);
     bar.global::<KeyBindings>().on_resolve(route_key);
     bar.on_open_settings(|| with_app(App::show_settings));
     let weak = bar.as_weak();
@@ -1560,15 +1611,21 @@ fn main() {
         Err(e) => { eprintln!("J-TerminaL: {e}"); std::process::exit(2); }
     };
 
-    // Before anything else: a second start only wakes the first.
-    let start = instance::claim(instance::NAME, |instance::Message::Show| {
+    // Canonicalize an explicit first-run profile the same way on every launch.
+    if let Some(path) = &args.data {
+        if let Err(e) = std::fs::create_dir_all(path) {
+            eprintln!("J-TerminaL: {}: {e}", path.display());
+            std::process::exit(1);
+        }
+    }
+    // A second start only wakes the first.
+    let start = instance::claim(&instance::socket(args.data.as_deref()), |instance::Message::Show| {
         let _ = slint::invoke_from_event_loop(|| with_bar(present));
     });
     match start {
         Ok(instance::Start::Another) => return,
         Ok(instance::Start::First) => {}
-        // Without the lock it still works, only a second start is not caught.
-        Err(e) => eprintln!("J-TerminaL: Instanz: {e}"),
+        Err(e) => { eprintln!("J-TerminaL: Instanz: {e}"); std::process::exit(1); }
     }
 
     // Both windows paint their own frame. Settings are resizable and have a taskbar entry.
@@ -1641,26 +1698,9 @@ fn main() {
         }
         Ok(_) => {}
     }
-    let hotkeys = match GlobalHotKeyManager::new() {
-        Ok(manager) => Some(manager),
-        Err(error) => { notice.get_or_insert_with(|| format!("{} {error}", t.hotkey_failed)); None }
-    };
-    let mut active_hotkey = None;
-    if let Some(manager) = &hotkeys {
-        let key = bindings.system_hotkey();
-        match manager.register(key) {
-            Ok(()) => active_hotkey = Some(key),
-            Err(error) => {
-                notice.get_or_insert_with(|| format!("{} {error}", t.hotkey_failed));
-                let mut fallback = bindings.clone();
-                let default = fallback.default_system_hotkey();
-                if key != default && fallback.set("window-toggle", None).is_ok() && manager.register(default).is_ok() {
-                    bindings = fallback;
-                    active_hotkey = Some(default);
-                }
-            }
-        }
-    }
+    let hotkeys = GlobalHotKeyManager::new().ok();
+    let active_hotkey = hotkeys.as_ref().and_then(|manager|
+        bindings.register_system_hotkey(|key| manager.register(key).is_ok()));
     GlobalHotKeyEvent::set_event_handler(Some(|event: GlobalHotKeyEvent| {
         if event.state != HotKeyState::Pressed { return; }
         let _ = slint::invoke_from_event_loop(move || {
@@ -1676,6 +1716,13 @@ fn main() {
     connect(&bar);
     // Preserve drafts when the launcher hides on focus loss.
     bar.window().on_winit_window_event(|window, event| {
+        if matches!(event, WindowEvent::RedrawRequested) {
+            APP.with(|slot| {
+                if let Ok(mut slot) = slot.try_borrow_mut() {
+                    if let Some(app) = slot.as_mut() { app.paint_pending_ink(); }
+                }
+            });
+        }
         if matches!(filter_opening_modifiers(window, event), EventResult::PreventDefault) {
             return EventResult::PreventDefault;
         }
@@ -1689,7 +1736,7 @@ fn main() {
         }
         if matches!(event, WindowEvent::Focused(false)) && !PICKING_IMAGE.with(|picking| picking.get()) {
             slint::Timer::single_shot(Duration::ZERO, || with_app(|app| {
-                let _ = app.bar.hide();
+                if !app.board.as_ref().is_some_and(|b|b.editor==2) {let _ = app.bar.hide();}
             }));
         }
         if matches!(event, WindowEvent::ScaleFactorChanged { .. }) {
@@ -1699,16 +1746,18 @@ fn main() {
         EventResult::Propagate
     });
 
-    let show_now = !args.background;
+    let show_now = !args.background || active_hotkey.is_none();
     let mut state = form::Form::new(opened.ok(), language);
     state.preferences = preferences;
     state.metrics = metrics(&bar);
-    APP.with(|app| *app.borrow_mut() = Some(App { notepad_media: NotepadMedia::default(), notepad_list_query: Default::default(),
+    APP.with(|app| *app.borrow_mut() = Some(App { floating_notes:Default::default(),board:None, board_images:Default::default(), notepad_media: NotepadMedia::default(), notepad_list_query: Default::default(),
         bar, settings: None, settings_navigation: Default::default(), preferences_path, journal_language, restore_launcher: false, state, notice,
         hide_timer: slint::Timer::default(), bindings, hotkeys, active_hotkey, day_items: Vec::new(), side_cells: Vec::new(), tick: slint::Timer::default() }));
-    with_app(|app| app.draw());
+    with_app(|app| { app.refresh_board_scopes(); app.draw(); });
     with_app(|app| app.tick.start(slint::TimerMode::Repeated, Duration::from_secs(1), || with_app(|app| {
-        if app.bar.window().is_visible() && !app.bar.get_dragging_dial() && !app.state.entry_shown() && app.state.notepad().is_none() && app.state.timers_running() { app.draw(); }
+        app.refresh_floating();
+        if app.board.as_ref().is_some_and(|b|b.changed.is_some()) || app.bar.window().is_visible() { app.tick_board(); }
+        if app.board.is_none() && app.bar.window().is_visible() && !app.bar.get_dragging_dial() && !app.state.entry_shown() && app.state.notepad().is_none() && app.state.timers_running() { app.draw(); }
     })));
     if show_now { with_bar(present); }
     if let Err(e) = slint::run_event_loop_until_quit() { eprintln!("J-TerminaL: {e}"); }
@@ -1835,7 +1884,7 @@ mod tests {
         connect(&bar);
         let mut state = form::Form::at(Some(journal), texts::Language::De, repeat::d("2026-11-18"), 800);
         state.metrics = metrics(&bar);
-        APP.with(|slot| *slot.borrow_mut() = Some(App { notepad_media: NotepadMedia::default(), notepad_list_query: Default::default(),
+        APP.with(|slot| *slot.borrow_mut() = Some(App { floating_notes:Default::default(),board:None, board_images:Default::default(), notepad_media: NotepadMedia::default(), notepad_list_query: Default::default(),
             bar: bar.clone_strong(), settings: None, settings_navigation: Default::default(), preferences_path: None,
             journal_language: texts::Language::De, restore_launcher: false, state, notice: None, hide_timer: slint::Timer::default(),
             bindings: shortcuts::Bindings::default(), hotkeys: None, active_hotkey: None, day_items: Vec::new(), side_cells: Vec::new(), tick: slint::Timer::default() }));
@@ -1854,6 +1903,370 @@ mod tests {
         bar.show().unwrap();
         with_app(|app| { let effect = app.state.shown(); app.effect(effect); });
         bar.invoke_focus_line();
+        // Use a separate vault and device projection for the complete board interaction.
+        let board_dir=std::env::temp_dir().join(format!("j-terminal-board-ui-{}",uuid::Uuid::new_v4()));
+        std::fs::create_dir(&board_dir).unwrap();
+        let scope_file=board_dir.join(journal_core::board::SCOPES_FILE);
+        std::fs::write(&scope_file, br#"["week"]"#).unwrap();
+        let mut board_store=journal_core::storage::Store::open(&board_dir.join("journal.sqlite3")).unwrap();
+        let tags = [
+            ("Privat", "circle-user", "#aa83bd"), ("Arbeit", "briefcase", "#569eff"),
+            ("Uni", "graduation-cap", "#6496ed"), ("Magnesium", "circle", "#c7b544"),
+            ("Malen", "palette", "#d48641"), ("Gitarre", "guitar", "#da514e"),
+            ("Appointments", "pin", "#65c597"), ("Delivery", "truck", "#68bf7a"),
+            ("Payment", "wallet", "#8caa42"),
+        ].map(|(name,icon,color)| journal_core::storage::Tag { id:uuid::Uuid::new_v4().to_string(),
+            name:name.into(), color:color.into(), icon:Some(icon.into()) });
+        board_store.save_tags(&tags).unwrap();
+        let previous=with_app_value(|app|{
+            app.preferences_path=Some(board_dir.join("settings.json"));app.refresh_board_scopes();
+            app.state.journal.replace(journal::Journal{vault:board_dir.clone(),store:board_store})
+        });
+        type_text(&bar,"/Pinnwand");
+        assert_eq!(bar.get_commands().row_count(),1);
+        send_key_combo(&bar,[K::Return]);
+        fit_viewport(&bar);
+        let board=bar.global::<BoardUi>();
+        assert!(board.get_opened());assert!(board.get_heading().contains("2026-11-16"));
+        key_with_modifiers(&bar,&[K::Control],"n");send_key_combo(&bar,[K::Return]);
+        assert_eq!(board.get_editor(),1);
+        i_slint_backend_testing::mock_elapsed_time(Duration::from_millis(5));
+        type_text(&bar,"# Auflistung");
+        send_key_combo(&bar,[K::Return]);send_key_combo(&bar,[K::Return]);
+        type_text(&bar,"Ich bin hier noch nicht **fertig**");
+        let rows=board.get_tiles().row_data(0).unwrap().rows;
+        assert_eq!(rows.row_count(),2);
+        assert_eq!(rows.row_data(0).unwrap().heading,1);
+        assert_eq!(rows.row_data(1).unwrap().text,slint::StyledText::from_markdown("Ich bin hier noch nicht **fertig**").unwrap());
+        assert!(with_app_value(|a|a.board.as_ref().unwrap().selected_card().unwrap()["text"]==""),
+            "The formatted preview is visible before autosave");
+        click(&bar,slint::LogicalPosition::new(70.,bar.get_board_canvas_y()+20.));
+        type_text(&bar,"Hallo ich habe einen Titel");
+        assert_eq!(board.get_tiles().row_data(0).unwrap().title,"Hallo ich habe einen Titel");
+
+        capture(&bar,"board-text-editor");
+        send_key_combo(&bar,[K::Escape]);
+        key_with_modifiers(&bar,&[K::Control],"n");send_key_combo(&bar,[K::Return]);send_key_combo(&bar,[K::Escape]);
+        assert_eq!(board.get_tiles().row_count(),2);
+        key_with_modifiers(&bar,&[K::Alt],"l");send_key_combo(&bar,[K::LeftArrow]);
+        assert!(board.get_threads().iter().any(|e|e.preview));
+        send_key_combo(&bar,[K::Escape]);assert_eq!(board.get_threads().row_count(),0);
+        key_with_modifiers(&bar,&[K::Alt],"l");send_key_combo(&bar,[K::RightArrow]);send_key_combo(&bar,[K::Return]);
+        assert!(board.get_threads().iter().any(|e|e.arrow && !e.preview));
+        {
+            use slint::platform::{WindowEvent,PointerEventButton as Button};
+            let position=|x:f32,y:f32|slint::LogicalPosition::new(
+                (x-board.get_left())*board.get_zoom(),bar.get_board_canvas_y()+(y-board.get_top())*board.get_zoom());
+            let press=|position|bar.window().dispatch_event(WindowEvent::PointerPressed{position,button:Button::Left});
+            let motion=|position|{bar.window().dispatch_event(WindowEvent::PointerMoved{position});
+                i_slint_backend_testing::mock_elapsed_time(Duration::from_millis(18));};
+            let release=|position|bar.window().dispatch_event(WindowEvent::PointerReleased{position,button:Button::Left});
+            let saved=||with_app_value(|a|{
+                let journal=a.state.journal.as_ref().unwrap();
+                journal.store.conn.total_changes()
+            });
+            // Place the second pin above and to the right, as on the reference board.
+            let second=board.invoke_box_at(1);
+            let first=board.invoke_box_at(0);
+            let dest=position(first.x+416.+32.,first.y+66.);
+            press(position(second.x+32.,second.y+66.));
+            motion(dest);release(dest);
+            let r=board.invoke_box_at(0);
+            let commits=saved();
+            let start=position(r.x+30.,r.y+70.);
+            let finish=position(r.x+110.,r.y+148.);
+            press(start);motion(finish);
+            assert_eq!(board.invoke_box_at(0).x,r.x+80.,"Paper follows the held pointer");
+            assert_eq!(saved(),commits);
+            send_key_combo(&bar,[K::Escape]);release(finish);
+            assert_eq!(board.invoke_box_at(0).x,r.x);
+            assert_eq!(saved(),commits,"Cancelling a drag leaves storage untouched");
+            press(start);motion(finish);release(finish);
+            let r=board.invoke_box_at(0);
+            assert_eq!(r.y,board.get_tiles().row_data(0).unwrap().top);
+            assert!(saved()>commits);
+            let corner=position(r.x+r.w-3.,r.y+r.h-3.);
+            let enlarged=position(r.x+r.w+18.,r.y+r.h+50.);
+            press(corner);motion(enlarged);
+            assert!(board.invoke_box_at(0).h>r.h+49.);
+            release(enlarged);
+            assert_eq!(board.get_tiles().row_data(0).unwrap().w,r.w+21.);
+            let group=board.get_groups().row_data(0).unwrap();
+            let gb=board.invoke_group_box(group.members.clone());
+            let anchor=position(gb.x+gb.w/2.,gb.y);
+            let shift=position(gb.x+gb.w/2.+10.,gb.y+5.);
+            let before=board.invoke_box_at(1);
+            press(anchor);motion(shift);
+            assert_eq!(board.invoke_box_at(1).x,before.x+10.);
+            release(shift);
+            let r=board.invoke_box_at(0);
+            motion(position(r.x+30.,r.y+35.));
+            assert_eq!(board.get_hover(),0,"Hover over the paper exposes its actions");
+            capture(&bar,"board-hover");
+            let on_card=position(r.x+30.,r.y+70.);
+            bar.window().dispatch_event(WindowEvent::PointerPressed{position:on_card,button:Button::Right});
+            bar.window().dispatch_event(WindowEvent::PointerReleased{position:on_card,button:Button::Right});
+            i_slint_backend_testing::mock_elapsed_time(Duration::from_millis(5));
+            assert!(board.get_menu_open());
+            capture(&bar,"board-actions");
+            type_text(&bar,"Papierfarbe");
+            assert_eq!(board.get_options().row_count(),1);
+            send_key_combo(&bar,[K::Return]);
+            assert_eq!(board.get_options().row_count(),4);
+            send_key_combo(&bar,[K::Escape]);
+            assert!(board.get_options().row_count()>4);
+            send_key_combo(&bar,[K::Escape]);
+            assert!(!board.get_menu_open());
+            board.invoke_tool(0,"tag".into());
+            assert!(board.get_tag_open());
+            assert_eq!(board.get_menu_search(),"Tag suchen …");
+            let tag_rows=board.get_tag_rows();
+            assert_eq!(tag_rows.row_count(),tags.len()+1);
+            assert!(tag_rows.row_data(0).unwrap().on);
+            let work=tag_rows.iter().find(|row|row.label=="Arbeit").unwrap();
+            assert!(work.has_icon && work.has_color);
+            assert_eq!(work.color,slint::Color::from_rgb_u8(0x56,0x9e,0xff));
+            type_text(&bar,"rbeit");
+            assert_eq!(board.get_tag_rows().row_count(),1);
+            send_key_combo(&bar,[K::Return]);
+            board.invoke_tool(0,"tag".into());
+            send_key_combo(&bar,[K::DownArrow]);
+            assert!(board.get_tag_rows().iter().any(|row|row.label=="Arbeit" && row.on));
+            assert!(board.get_tag_rows().row_data(1).unwrap().selected);
+            capture(&bar,"board-tags");
+            send_key_combo(&bar,[K::Escape]);
+            board.invoke_tool(0,"reset-size".into());
+            assert!(board.get_tiles().row_data(0).unwrap().auto_height);
+            assert_eq!(board.get_tiles().row_data(0).unwrap().w,232.);
+            let r=board.invoke_box_at(0);
+            let corner=position(r.x+r.w-4.,r.y+r.h-4.);
+            let reference_size=position(r.x+r.w-4.,r.y+245.-4.);
+            press(corner);motion(reference_size);release(reference_size);
+            motion(position(3.,3.));capture(&bar,"board-paper-and-thread");
+            send_key_combo(&bar,[K::Return]);capture(&bar,"board-live-markdown");
+            let original_width=bar.get_screen_width();
+            let original_scale=bar.window().scale_factor();
+            bar.set_screen_width(430.);
+            bar.window().dispatch_event(WindowEvent::ScaleFactorChanged{scale_factor:1.5});
+            fit_viewport(&bar);
+            assert_eq!(bar.get_board_viewport_w(),bar.get_content_width());
+            assert!(bar.get_board_viewport_h()<bar.get_content_height()*0.6 && bar.get_board_viewport_h()>0.);
+            capture(&bar,"board-narrow-150");
+            bar.window().dispatch_event(WindowEvent::ScaleFactorChanged{scale_factor:original_scale});
+            bar.set_screen_width(original_width);
+            fit_viewport(&bar);
+            send_key_combo(&bar,[K::Escape]);
+            board.invoke_select(board.get_tiles().row_data(1).unwrap().id);
+        }
+        send_key_combo(&bar,[K::Return]);board.invoke_command("mode".into());fit_viewport(&bar);
+        assert_eq!(board.get_editor(),2);
+        click(&bar,slint::LogicalPosition::new(68.,112.));
+        assert!(with_app_value(|a|a.board.as_ref().unwrap().selected_card().unwrap()["ink"]["strokes"].as_array().is_some_and(|v|!v.is_empty())));
+        assert!(bar.get_board_canvas_w()>600. && bar.get_board_canvas_h()>320.);
+        assert_eq!(board.get_tiles().row_data(board.get_selected() as usize).unwrap().ink.shapes.row_count(),1);
+        let image=bar.window().take_snapshot().unwrap();
+        let pen_near_click=(107..118).any(|y|(63..74).any(|x|image.as_slice()[y*image.width() as usize+x].r<140));
+        assert!(pen_near_click,"A mouse stroke appears under the pointer in the large editor.");
+        // The same local coordinate must be dark on the card during the stroke and after saving.
+        let ink_position=slint::LogicalPosition::new(bar.get_board_canvas_x()+bar.get_board_canvas_w()*0.14,
+            bar.get_board_canvas_y()+bar.get_board_canvas_h()*0.16);
+        let ink_on_paper=|| {
+            let r=board.invoke_box_at(board.get_selected());
+            let theme=bar.global::<Theme>();
+            let x=r.x+theme.get_board_body_inset()+board.invoke_ink_width(r.w)*0.14;
+            let y=r.y+theme.get_board_body_top()+board.invoke_ink_height(r.h)*0.16;
+            let px=(bar.get_board_viewport_x()+(x-board.get_left())*board.get_zoom())*bar.window().scale_factor();
+            let py=(bar.get_board_viewport_y()+(y-board.get_top())*board.get_zoom())*bar.window().scale_factor();
+            let image=bar.window().take_snapshot().unwrap();
+            (-2..=2).any(|dy|(-2..=2).any(|dx|{
+                let (x,y)=(px.round() as i32+dx,py.round() as i32+dy);
+                x>=0 && y>=0 && x<image.width() as i32 && y<image.height() as i32 &&
+                    image.as_slice()[y as usize*image.width() as usize+x as usize].r<140
+            }))
+        };
+        assert!(!ink_on_paper(),"The expected stroke location starts as blank paper");
+        bar.window().dispatch_event(slint::platform::WindowEvent::PointerPressed{
+            position:ink_position,button:slint::platform::PointerEventButton::Left});
+        assert!(ink_on_paper(),"A held stroke is visible at the corresponding paper coordinate");
+        bar.window().dispatch_event(slint::platform::WindowEvent::PointerReleased{
+            position:ink_position,button:slint::platform::PointerEventButton::Left});
+        assert!(ink_on_paper(),"Releasing the stroke preserves its location");
+        // Pick a pen with the command search, then use the visible palette and stroke widths.
+        key_with_modifiers(&bar,&[K::Control],"k");
+        type_text(&bar,"Stiftart");send_key_combo(&bar,[K::Return]);
+        type_text(&bar,"Textmarker");send_key_combo(&bar,[K::Return]);
+        assert_eq!(board.get_ink_tool(),"marker");
+        board.invoke_command("color".into());
+        assert_eq!(board.get_ink_picker(),"color");
+        send_key_combo(&bar,[K::Home]); send_key_combo(&bar,[K::RightArrow]); send_key_combo(&bar,[K::RightArrow]);
+        send_key_combo(&bar,[K::Return]);
+        assert_eq!(board.get_ink_color(),slint::Color::from_rgb_u8(0x7e,0xe0,0x7e));
+        board.invoke_command("size".into()); send_key_combo(&bar,[K::RightArrow]);send_key_combo(&bar,[K::Return]);
+        assert_eq!(board.get_ink_size(),24.);
+        // The displayed outline should extend under movement before the release or any disk write.
+        let start=slint::LogicalPosition::new(145.,175.);
+        let end=slint::LogicalPosition::new(235.,215.);
+        let n=board.get_tiles().row_data(board.get_selected() as usize).unwrap().ink.shapes.row_count();
+        bar.window().dispatch_event(slint::platform::WindowEvent::PointerPressed{position:start,button:slint::platform::PointerEventButton::Left});
+        bar.window().dispatch_event(slint::platform::WindowEvent::PointerMoved{position:end});
+        i_slint_backend_testing::mock_elapsed_time(Duration::from_millis(20));
+        with_app(|a| a.paint_pending_ink());
+        assert!(board.get_draft().w>25.);
+        assert_eq!(board.get_tiles().row_data(board.get_selected() as usize).unwrap().ink.shapes.row_count(),n);
+        bar.window().dispatch_event(slint::platform::WindowEvent::PointerReleased{position:end,button:slint::platform::PointerEventButton::Left});
+        assert!(board.get_draft().commands.is_empty());
+        let tile=board.get_tiles().row_data(board.get_selected() as usize).unwrap();
+        assert_eq!(tile.ink.shapes.row_count(),n+1);
+        assert_eq!(tile.ink.shapes.row_data(n).unwrap().color,board.get_ink_color());
+        // Pen settings are independent from the highlighter. Reopen a preset, draw a
+        // pressure-varying curve, then inspect the same path and controls at 2x zoom.
+        key_with_modifiers(&bar,&[K::Control],"z");
+        board.invoke_command("pen".into());
+        assert_eq!(board.get_ink_size(),3.);
+        board.invoke_command("color".into());
+        let blue=board.get_options().iter().position(|row|row.label=="Blau").unwrap();
+        board.invoke_choose(blue as i32);
+        let tip = |i: usize| {
+            let t=i as f32/110.;
+            (74.+t*320., 140.+(t*20.).sin()*32.+(t*50.).sin()*8., 0.32+0.58*(t*8.).sin().abs())
+        };
+        with_app(|a|{
+            for i in 0..=110 {
+                let (x,y,p)=tip(i);
+                a.board_point(if i==0 {0} else {1},x,y,p,false);
+            }
+        });
+        i_slint_backend_testing::mock_elapsed_time(Duration::from_millis(20));
+        with_app(|a| a.paint_pending_ink());
+        let live_stroke = board.get_draft();
+        let before_lift = bar.window().take_snapshot().unwrap();
+        with_app(|a| {
+            let (x, y, pressure) = tip(110);
+            a.board_point(2, x, y, pressure, false);
+        });
+        let shapes = board.get_tiles().row_data(board.get_selected() as usize).unwrap().ink.shapes;
+        let saved_stroke = shapes.row_data(shapes.row_count() - 1).unwrap();
+        assert!(!live_stroke.commands.is_empty());
+        assert!(live_stroke.commands == saved_stroke.commands, "The pressure curve changed on release");
+        let after_lift = bar.window().take_snapshot().unwrap();
+        assert_eq!(before_lift.size(), after_lift.size());
+        let scale = bar.window().scale_factor();
+        let x = (bar.get_board_canvas_x() * scale).ceil() as usize;
+        let y = (bar.get_board_canvas_y() * scale).ceil() as usize;
+        let right = ((bar.get_board_canvas_x() + bar.get_board_canvas_w()) * scale).floor() as usize;
+        let bottom = ((bar.get_board_canvas_y() + bar.get_board_canvas_h()) * scale).floor() as usize;
+        let stride = before_lift.width() as usize;
+        for row in y..bottom {
+            let span = (row * stride + x)..(row * stride + right);
+            assert!(before_lift.as_slice()[span.clone()] == after_lift.as_slice()[span],
+                "The drawing canvas changed on release in row {row}");
+        }
+        board.invoke_command("color".into());capture(&bar,"board-ink-palette");send_key_combo(&bar,[K::Escape]);
+        capture(&bar,"board-ink-editor");
+        {
+            use slint::platform::{WindowEvent as E, PointerEventButton as Button};
+            let position = |x, y| slint::LogicalPosition::new(bar.get_board_canvas_x()+x, bar.get_board_canvas_y()+y);
+            let old_scale = bar.get_board_canvas_scale();
+            let old_board_zoom = board.get_zoom();
+            let start = position(240., 100.);
+            bar.window().dispatch_event(E::PointerPressed { position: start, button: Button::Middle });
+            bar.window().dispatch_event(E::PointerMoved { position: position(270., 115.) });
+            bar.window().dispatch_event(E::PointerReleased { position: position(270.,115.), button: Button::Middle });
+            assert!((board.get_ink_pan_x()*old_scale + 30.).abs() < 0.01);
+            assert!((board.get_ink_pan_y()*old_scale + 15.).abs() < 0.01);
+            let under_pointer = || (board.get_ink_pan_x()+270./bar.get_board_canvas_scale(),
+                board.get_ink_pan_y()+115./bar.get_board_canvas_scale());
+            let old_anchor = under_pointer();
+            bar.window().dispatch_event(E::KeyPressed { text: K::Control.into() });
+            bar.window().dispatch_event(E::PointerScrolled { position: position(270.,115.), delta_x:0., delta_y:90. });
+            bar.window().dispatch_event(E::KeyReleased { text: K::Control.into() });
+            let new_anchor = under_pointer();
+            assert!(board.get_ink_zoom()>1. && (old_anchor.0-new_anchor.0).abs()<0.01 && (old_anchor.1-new_anchor.1).abs()<0.01);
+            assert_eq!(old_board_zoom, board.get_zoom());
+            key_with_modifiers(&bar, &[K::Control], "0");
+            assert_eq!((board.get_ink_zoom(),board.get_ink_pan_x(),board.get_ink_pan_y()), (1.,0.,0.));
+            board.invoke_command("grid".into());
+            board.invoke_command("spacing".into());
+            board.set_value("4".into());board.invoke_command("submit".into());
+            let doc = board.get_tiles().row_data(board.get_selected() as usize).unwrap().ink;
+            assert_eq!((doc.pattern.as_str(),doc.step),("grid",4.));
+            board.invoke_ink_camera(2.,0.,0.,0.,0.);
+            let pitch = 4.*bar.get_board_canvas_scale()*scale;
+            let image = bar.window().take_snapshot().unwrap();
+            let row = y+(0.5*pitch) as usize;
+            let start = x+(14.5*pitch) as usize;
+            let paper = image.as_slice()[row*stride+start];
+            let line_width = (start..start+pitch.round() as usize)
+                .filter(|&col| image.as_slice()[row*stride+col]!=paper).count();
+            assert!((1..=2).contains(&line_width), "Grid at spacing 4 and 2x zoom has {line_width} painted pixels per line");
+            board.invoke_command("pencil".into());
+            with_app(|a| {
+                a.board_point(0,80.,260.,0.8,false);
+                a.board_point(1,350.,275.,0.8,false);
+                a.paint_pending_ink();
+            });
+            let graphite = board.get_draft();
+            assert!(!graphite.grain.is_empty());
+            let live = bar.window().take_snapshot().unwrap();
+            with_app(|a| a.board_point(2,350.,275.,0.8,false));
+            let saved = bar.window().take_snapshot().unwrap();
+            for row in y..bottom {
+                let span = (row*stride+x)..(row*stride+right);
+                assert!(live.as_slice()[span.clone()] == saved.as_slice()[span], "Graphite changed on release");
+            }
+            capture(&bar,"board-pencil-grid");
+            board.invoke_command("reset-view".into());
+            board.invoke_command("blank".into());
+            board.invoke_command("pen".into());
+        }
+        let (z,left,top)=(board.get_zoom(),board.get_left(),board.get_top());
+        let r=board.invoke_box_at(board.get_selected());
+        board.set_zoom(2.);board.set_left(r.x-7.);board.set_top(r.y-10.);
+        bar.window().dispatch_event(slint::platform::WindowEvent::PointerMoved{position:slint::LogicalPosition::new(
+            bar.get_board_viewport_x()+90.,bar.get_board_viewport_y()+160.)});
+        assert_eq!(board.get_hover(),board.get_selected());
+        capture(&bar,"board-ink-zoom");
+        board.set_zoom(z);board.set_left(left);board.set_top(top);
+        send_key_combo(&bar,[K::F11]);assert!(board.get_maximized());
+        send_key_combo(&bar,[K::Escape]);assert!(!board.get_maximized());
+        send_key_combo(&bar,[K::Escape]);assert_eq!(board.get_editor(),0);
+        fit_viewport(&bar);
+        let edge=board.get_threads().row_data(0).unwrap();
+        let a=board.invoke_box_at(edge.first);let z=board.invoke_box_at(edge.second);
+        let ax=a.x+a.w/2.;let zx=z.x+z.w/2.;
+        let sag=(12.+(zx-ax).hypot(z.y-a.y)*0.16).min(90.);
+        let hit=board.invoke_hit((ax+zx)/2.,(a.y+z.y)/2.+sag);
+        assert_eq!(hit.operation,"edge","The curved thread is selectable between the two pins");
+        let pixels=bar.window().take_snapshot().unwrap();
+        let scale=bar.window().scale_factor();
+        let px=(((ax+zx)/2.-board.get_left())*board.get_zoom()*scale) as i32;
+        let py=((bar.get_board_canvas_y()+((a.y+z.y)/2.+sag-board.get_top())*board.get_zoom())*scale) as i32;
+        assert!((-4..=4).any(|dy|(-4..=4).any(|dx|{
+            let x=px+dx;let y=py+dy;
+            if x<0 || y<0 || x>=pixels.width() as i32 || y>=pixels.height() as i32 {return false;}
+            let p=pixels.as_slice()[y as usize*pixels.width() as usize+x as usize];
+            p.b>190 && p.r<120 && p.g>105
+        })),"The rendered thread passes through its hit area");
+        capture(&bar,"period-board");
+        send_key_combo(&bar,[K::Control,K::RightArrow]);assert!(board.get_heading().contains("2026-11-23"));
+        send_key_combo(&bar,[K::Control,K::LeftArrow]);
+        assert_eq!(board.get_tiles().row_data(0).unwrap().h,245.);
+        assert_eq!(board.get_threads().row_count(),1);
+        // The right-click position is a board coordinate even in a zoomed, panned view.
+        board.invoke_viewport("zoom-in".into());
+        board.set_left(72.);board.set_top(33.);
+        let position=slint::LogicalPosition::new(840.,bar.get_board_canvas_y()+180.);
+        let (wx,wy)=(board.get_left()+position.x/board.get_zoom(),board.get_top()+180./board.get_zoom());
+        use slint::platform::{WindowEvent as BoardEvent,PointerEventButton as BoardButton};
+        bar.window().dispatch_event(BoardEvent::PointerPressed{position,button:BoardButton::Right});
+        bar.window().dispatch_event(BoardEvent::PointerReleased{position,button:BoardButton::Right});
+        assert_eq!(board.get_menu_title(),"Anpinnen");
+        send_key_combo(&bar,[K::Return]);
+        let pinned=board.invoke_box_at(board.get_selected());
+        assert!((pinned.x-wx).abs()<0.1 && (pinned.y-wy).abs()<0.1);
+        std::fs::write(&scope_file,b"[]").unwrap();with_app(App::tick_board);assert!(!board.get_opened());
+        with_app(|app|{app.state.journal=previous;app.preferences_path=None;app.refresh_board_scopes();app.draw();});
+        std::fs::remove_dir_all(board_dir).unwrap();bar.invoke_focus_line();
         // At first only the search bar: `/Entry` opens the form.
         assert!(!bar.get_entry_open());
         // Under it the day view: today with its entries and the rating.

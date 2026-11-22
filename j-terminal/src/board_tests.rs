@@ -1,0 +1,225 @@
+use super::*;
+use crate::board_ink::{decode, encode, Tools};
+fn date(s: &str) -> NaiveDate {
+    s.parse().unwrap()
+}
+fn store() -> Store {
+    Store::open(std::path::Path::new(":memory:")).unwrap()
+}
+
+#[test]
+fn periods_follow_the_monday_and_calendar_boundaries() {
+    let d = date("2027-01-01");
+    assert_eq!(Period::Week.key(d), "week:2026-12-28");
+    for (p, next, previous) in [
+        (Period::Day, "2027-01-02", "2026-12-31"),
+        (Period::Week, "2027-01-04", "2026-12-21"),
+        (Period::Month, "2027-02-01", "2026-12-01"),
+        (Period::Quarter, "2027-04-01", "2026-10-01"),
+        (Period::Year, "2028-01-01", "2026-01-01"),
+    ] {
+        assert_eq!(p.step(d, true), date(next));
+        assert_eq!(p.step(d, false), date(previous));
+        assert_eq!(p.step(p.step(d, false), true), p.start(d));
+    }
+    assert_eq!(Period::Quarter.key(date("2028-12-31")), "quarter:2028-Q4");
+}
+#[test]
+fn group_copies_keep_period_positions_threads_and_share_only_opted_in_changes() {
+    let mut s = store();
+    let mut b = Board::open(&s, Period::Week, date("2026-12-31")).unwrap();
+    b.create(&mut s, "note", "").unwrap();
+    let first = b.selected.clone();
+    b.create(&mut s, "ink", "").unwrap();
+    let second = b.selected.clone();
+    b.thread(&mut s, &first, &second, "tie").unwrap();
+    b.thread(&mut s, &first, &second, "reverse").unwrap();
+    assert!(b.directed(&second, &first));
+    b.group_move = true;
+    let previous = b.placed();
+    b.geometry(
+        &mut s,
+        Geometry::Move {
+            dx: 48.,
+            dy: 60.,
+            group: true,
+        },
+    )
+    .unwrap();
+    for (a, z) in previous.iter().zip(b.placed()) {
+        assert_eq!(z.rect.x - a.rect.x, 48.);
+        assert_eq!(z.rect.y - a.rect.y, 60.);
+    }
+    assert!(journal_core::history::step(&mut s, false).unwrap());
+    b.cards = db::cards(&s.conn).unwrap();
+    assert!(b
+        .placed()
+        .iter()
+        .zip(previous.iter())
+        .all(|(a, z)| a.rect.x == z.rect.x));
+    b.date = b.period.step(b.date, true);
+    b.copy(&mut s, &first, true).unwrap();
+    assert_eq!(b.placed().len(), 2);
+    let copied = b.selected.clone();
+    assert_ne!(copied, first);
+    let copied_second = text(b.cards.iter().find(|c| c["copyOf"] == second).unwrap(), "id").to_owned();
+    assert!(b.directed(&copied_second, &copied));
+    b.toggle_sync(&mut s).unwrap();
+    b.edit(1);
+    b.body = "gemeinsam".into();
+    b.changed = Some(std::time::Instant::now());
+    b.flush(&mut s).unwrap();
+    assert_eq!(b.card(&first).unwrap()["text"], "gemeinsam");
+    assert_eq!(b.card(&first).unwrap()["boards"][b.key()], Value::Null);
+    b.remove(&mut s, true).unwrap();
+    assert_eq!(b.cards.len(), 2);
+    assert!(journal_core::history::step(&mut s, false).unwrap());
+    assert_eq!(db::cards(&s.conn).unwrap().len(), 4);
+}
+#[test]
+fn text_autosave_merges_other_fields_and_retains_a_conflicting_draft() {
+    let mut s = store();
+    let mut b = Board::open(&s, Period::Month, date("2026-11-21")).unwrap();
+    b.create(&mut s, "note", "").unwrap();
+    b.edit(1);
+    let old = b.original.clone();
+    let mut remote = old.clone();
+    remote["tag"] = json!("external");
+    remote["title"] = json!("Titel");
+    db::edit(&mut s, &[(old, remote)]).unwrap();
+    b.body = "lokal".into();
+    b.changed = Some(std::time::Instant::now());
+    b.flush(&mut s).unwrap();
+    assert_eq!(b.original["tag"], "external");
+    assert_eq!(b.title, "Titel");
+    assert_eq!(b.body, "lokal");
+    let old = b.original.clone();
+    let mut remote = old.clone();
+    remote["text"] = json!("extern");
+    db::edit(&mut s, &[(old, remote)]).unwrap();
+    b.body = "Entwurf".into();
+    b.changed = Some(std::time::Instant::now());
+    assert_eq!(b.flush(&mut s), Err("conflict".into()));
+    assert_eq!(b.body, "Entwurf");
+    assert!(b.changed.is_some());
+    assert_eq!(db::cards(&s.conn).unwrap()[0]["text"], "extern");
+}
+#[test]
+fn attachments_are_undirected_and_a_failed_pair_edit_rolls_back() {
+    let mut s = store();
+    let mut b = Board::open(&s, Period::Day, date("2026-11-21")).unwrap();
+    b.create(&mut s, "note", "").unwrap();
+    let first = b.selected.clone();
+    b.create(&mut s, "link", "https://example.org").unwrap();
+    let link = b.selected.clone();
+    b.thread(&mut s, &first, &link, "tie").unwrap();
+    assert!(members(b.card(&first).unwrap(), "pageLinks").next().is_none());
+    let old = b.card(&link).unwrap().clone();
+    let mut remote = old.clone();
+    remote["links"] = json!(["other"]);
+    db::edit(&mut s, &[(old, remote)]).unwrap();
+    assert_eq!(b.thread(&mut s, &first, &link, "cut"), Err("conflict".into()));
+    assert!(db::cards(&s.conn)
+        .unwrap()
+        .iter()
+        .any(|c| c["id"] == first && members(c, "links").any(|id| id == link)));
+}
+#[test]
+fn ink_codec_reads_journal_bytes_and_partial_eraser_preserves_both_ends() {
+    // Generated by encodePoints in Journal-App/src/ink.ts.
+    let points = [[1.25, -1., 0.25], [31.25, 11., 0.8], [100., 400., 1.]];
+    let encoded = "BQD8//oAeAAwACYCEwEUBsgA";
+    assert_eq!(decode(encoded), points);
+    assert_eq!(encode(&points), encoded);
+    let line = json!({"size":3,"pressure":true,"tool":"pencil","points":encode(&[[0.,0.,0.4],[100.,0.,0.8]])});
+    let mut tools = Tools::default();
+    tools.prefs.tool = "eraser".into();
+    tools.path = vec![[50., -10., 0.5], [50., 10., 0.5]];
+    let ink = tools.finish(std::slice::from_ref(&line)).unwrap();
+    let pieces = ink["strokes"].as_array().unwrap();
+    assert_eq!(pieces.len(), 2);
+    assert_eq!(pieces[0]["tool"], "pencil");
+    assert_eq!(decode(pieces[1]["points"].as_str().unwrap()).last().unwrap()[0], 100.);
+
+    // When Windows reports an inverted tip, the active pen temporarily acts as an eraser.
+    let path = tools.path.clone();
+    tools.prefs.tool = "pen".into();
+    tools.start(path[0], &Value::Null, true);
+    tools.path.extend(path);
+    assert_eq!(tools.finish(&[line]).unwrap(), ink);
+    assert_eq!(tools.prefs.tool, "pen");
+}
+
+
+#[test]
+fn a_slow_diagonal_keeps_smooth_edges_when_the_note_is_reopened() {
+    use crate::board_ink::CachedInk;
+    use slint::Model;
+    use zeno::{Command, PathData};
+
+    let mut store = store();
+    let when = date("2026-11-21");
+    let mut board = Board::open(&store, Period::Day, when).unwrap();
+    board.create(&mut store, "ink", "").unwrap();
+    board.edit(2);
+    let id = board.selected.clone();
+    board.ink.down = true;
+    board.ink.prefs.size = 6.;
+    board.ink.prefs.pressure = false;
+    let slope = 0.47;
+    for i in 0..600 {
+        let x = 2.06 + i as f32 / 16.;
+        board.ink.sample([x, x * slope, 0.5]);
+    }
+    let live = board.ink.draft();
+    board.flush(&mut store).unwrap();
+    let reopened = Board::open(&store, Period::Day, when).unwrap();
+    let doc = CachedInk::default().document(reopened.card(&id).unwrap(), None);
+    let saved = doc.shapes.row_data(0).unwrap();
+    assert!(live.commands == saved.commands);
+    // Either side of this constant-width stroke should run three paper units
+    // from the ideal line, even where its encoded samples form a staircase.
+    let mut checked = 0;
+    for command in saved.commands.as_str().commands() {
+        if let Command::QuadTo(control, _) = command {
+            if (7.0..31.0).contains(&control.x) {
+                let distance = (control.y - slope * control.x).abs() / slope.hypot(1.);
+                assert!((distance - 3.).abs() < 0.1, "Edge distance {distance} at {control:?}");
+                checked += 1;
+            }
+        }
+    }
+    assert!(checked > 50);
+}
+
+#[test]
+fn period_paper_size_and_stack_order_survive_reopen_and_reset() {
+    let mut store = store();
+    let when = date("2026-11-21");
+    let mut board = Board::open(&store, Period::Month, when).unwrap();
+    board.create(&mut store, "note", "").unwrap();
+    let front = board.selected.clone();
+    board.create(&mut store, "note", "").unwrap();
+    let back = board.selected.clone();
+
+    let original = board.card(&front).unwrap().clone();
+    let mut legacy = original.clone();
+    legacy["x"] = json!(0.6);
+    legacy["w"] = json!(250);
+    legacy["boards"][board.key()]["z"] = json!(8);
+    board.apply(&mut store, vec![(original, legacy)]).unwrap();
+    board.selected = front.clone();
+    let placed = board.placed();
+    assert_eq!((&placed[0].id, &placed[1].id), (&back, &front));
+    let x = placed[1].rect.x;
+
+    board.geometry(&mut store, Geometry::Resize(320., 245.)).unwrap();
+    let mut reopened = Board::open(&store, Period::Month, when).unwrap();
+    let r = reopened.placed()[1].rect;
+    assert_eq!((r.x,r.w,r.h), (x,320.,245.));
+    assert_eq!(reopened.card(&front).unwrap()["w"],250);
+    reopened.selected = front.clone();
+    reopened.geometry(&mut store, Geometry::ResetSize).unwrap();
+    assert_eq!(reopened.card(&front).unwrap()["boards"][reopened.key()]["h"],0.);
+    assert_eq!(reopened.placed()[1].rect.w,232.);
+}

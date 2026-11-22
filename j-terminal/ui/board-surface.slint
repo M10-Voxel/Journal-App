@@ -1,0 +1,260 @@
+import { InkSheet, BoardGlyph } from "board-ink.slint";
+import { Theme } from "theme.slint";
+import { BoardUi, BoardTile, BoardBox, BoardHit } from "board-model.slint";
+
+component Thread inherits Rectangle {
+    in property <float> ax; in property <float> ay;
+    in property <float> bx; in property <float> by;
+    in property <bool> arrow; in property <bool> pending;
+    property <float> sag: pending ? 0 : min(90,12 + sqrt((bx - ax)*(bx - ax)+(by - ay)*(by - ay))*0.16);
+    property <float> pad: Theme.gap/1px;
+    property <float> left:min(ax,bx) - pad;property <float> top:min(ay,by) - pad;
+    x:BoardUi.scaled(left*1px);y:BoardUi.scaled(top*1px);
+    width:BoardUi.scaled((abs(ax - bx) + 2*pad)*1px);height:BoardUi.scaled((abs(ay - by) + 2*sag + 2*pad)*1px);
+    property <float> sx:ax - left;property <float> sy:ay - top;
+    property <float> ex:bx - left;property <float> ey:by - top;
+    property <float> mx:(sx+ex)/2;property <float> my:(sy+ey)/2+sag;
+    property <angle> direction:atan2(by - ay,bx - ax);
+    Path {x:0px;y:0px;width:parent.width;height:parent.height;viewbox-width:parent.width/1px/BoardUi.zoom;viewbox-height:parent.height/1px/BoardUi.zoom;
+        stroke:Theme.accent;stroke-width:BoardUi.scaled(Theme.footer-menu-stroke);
+        MoveTo{x:root.sx;y:root.sy;}
+        QuadraticTo{x:root.ex;y:root.ey;control-x:root.mx;control-y:root.my+root.sag;}
+    }
+    if root.arrow: Path {x:0px;y:0px;width:parent.width;height:parent.height;viewbox-width:parent.width/1px/BoardUi.zoom;viewbox-height:parent.height/1px/BoardUi.zoom;
+        stroke:Theme.accent;stroke-width:BoardUi.scaled(Theme.focus-ring);
+        MoveTo{x:root.mx - root.pad*cos(root.direction - 30deg);y:root.my - root.pad*sin(root.direction - 30deg);}
+        LineTo{x:root.mx;y:root.my;}
+        LineTo{x:root.mx - root.pad*cos(root.direction + 30deg);y:root.my - root.pad*sin(root.direction + 30deg);}
+    }
+}
+
+component Threads inherits Rectangle {
+    for edge in BoardUi.threads: Thread {
+        property <BoardBox> a:BoardUi.box-at(edge.first);
+        property <BoardBox> b:BoardUi.box-at(edge.second);
+        ax:a.x+a.w/2;ay:a.y;bx:b.x+b.w/2;by:b.y;
+        arrow:edge.arrow;pending:edge.preview;
+    }
+}
+
+component Paper inherits Rectangle {
+    in property <BoardTile> card;
+    in property <int> index;
+    in property <bool> active;
+    property <BoardBox> box:BoardUi.project(BoardUi.box-at(index));
+    x:box.x*1px;y:box.y*1px;width:box.w*1px;height:box.h*1px;
+    background:card.paper;border-radius:BoardUi.scaled(Theme.board-paper-radius);
+    drop-shadow-color:Theme.board-shadow;drop-shadow-blur:BoardUi.scaled(Theme.gap);drop-shadow-offset-y:BoardUi.scaled(Theme.calendar-gap);
+    border-width:card.source || (BoardUi.keyboard-focus && card.selected) ? BoardUi.scaled(Theme.focus-ring) : 0px;
+    border-color:Theme.accent;
+    // The pin projects above the paper. Only the body clips to the card.
+    pin := Rectangle {x:(parent.width - self.width)/2;y:-self.height/2;
+        width:BoardUi.scaled(Theme.board-pin-size);height:self.width;border-radius:self.width/2;background:card.pin;
+        drop-shadow-color:Theme.board-shadow;drop-shadow-blur:BoardUi.scaled(Theme.calendar-gap);drop-shadow-offset-y:BoardUi.scaled(Theme.calendar-gap);
+        Rectangle {x:parent.width*0.2;y:parent.height*0.16;width:parent.width*0.34;height:self.width;border-radius:self.width;background:Theme.board-glint;}
+    }
+    Text {x:BoardUi.scaled(Theme.board-paper-inset);y:BoardUi.scaled(Theme.board-paper-inset);width:parent.width - 2*self.x - (root.active ? (root.card.kind=="note" ? 6 : 2)*BoardUi.scaled(Theme.board-tool-size) : 0px);
+        height:BoardUi.scaled(Theme.board-title-height);text:card.title=="" ? BoardUi.title-label : card.title;
+        color:Theme.board-paper-ink;opacity:card.title=="" ? 0.45 : 1;font-weight:Theme.weight-semibold;
+        font-size:BoardUi.scaled(Theme.row-size);font-family:Theme.board-title-font;vertical-alignment:center;overflow:elide;}
+    body := Rectangle {
+        x:BoardUi.scaled(Theme.board-body-inset);y:BoardUi.scaled(Theme.board-body-top);width:parent.width - 2*self.x;
+        height:max(0px,parent.height - self.y - BoardUi.scaled(Theme.board-paper-inset) - (root.card.detail!="" ? BoardUi.scaled(Theme.board-title-height) : 0px));clip:true;
+        if root.card.is-ink: InkSheet {
+            document:root.card.ink;scale:BoardUi.zoom;ink:Theme.board-paper-ink;editing:root.card.selected && BoardUi.editor==2;
+        }
+        if root.card.has-picture && !root.card.is-ink: Image {
+            x:0px;y:0px;width:parent.width;height:parent.height;
+            source:root.card.picture;image-fit:root.card.kind=="note" ? fill : contain;
+        }
+        if root.card.kind=="link" && root.card.picture.width>0: Image {
+            width:parent.width;height:parent.height/2;y:0px;source:root.card.picture;image-fit:contain;}
+        lines := VerticalLayout {
+            x:0px;y:root.card.kind=="link" && root.card.picture.width>0 ? parent.height/2 : 0px;visible:!root.card.has-picture;width:parent.width;height:self.preferred-height;
+            alignment:start;spacing:BoardUi.scaled(Theme.board-paragraph-gap);
+            for block in root.card.rows: HorizontalLayout {
+                padding-left:block.indent * BoardUi.scaled(Theme.board-paper-inset);spacing:BoardUi.scaled(Theme.calendar-gap);
+                if block.marker!="" || block.offset>=0: Text {
+                    text:block.offset>=0 ? (block.checked ? "☑" : "☐") : block.marker;
+                    color:Theme.board-paper-ink;font-size:BoardUi.scaled(Theme.board-text-size);vertical-alignment:top;}
+                if block.is-code: Text {text:block.code;font-family:Theme.write-font;font-size:BoardUi.scaled(Theme.notepad-code-size);
+                    color:Theme.board-paper-ink;wrap:word-wrap;horizontal-stretch:1;}
+                if !block.is-code: StyledText {text:block.text;horizontal-stretch:1;
+                    default-color:Theme.board-paper-ink;link-color:Theme.board-group-edge;
+                    default-font-family:block.heading>0 ? Theme.board-title-font : Theme.write-font;
+                    default-font-size:block.heading==1 ? BoardUi.scaled(Theme.board-heading-size) : block.heading>1 ? BoardUi.scaled(Theme.notepad-heading-three) : BoardUi.scaled(Theme.board-text-size);}
+            }
+        }
+    }
+    if card.detail!="": Text {
+        x:BoardUi.scaled(Theme.board-paper-inset);y:parent.height - BoardUi.scaled(Theme.board-title-height) - BoardUi.scaled(Theme.calendar-gap);
+        width:parent.width - 2*self.x;height:BoardUi.scaled(Theme.board-title-height);text:card.detail;
+        color:Theme.board-paper-ink;opacity:0.72;overflow:elide;font-size:BoardUi.scaled(Theme.small-size);vertical-alignment:center;
+    }
+    property <float> natural: max(Theme.board-note-height, Theme.board-body-top + lines.preferred-height / BoardUi.zoom + Theme.board-paper-inset*2)/1px;
+    changed natural => { if root.card.auto-height { BoardUi.measured(root.index,self.natural); } }
+    init => { if root.card.auto-height { BoardUi.measured(root.index,self.natural); } }
+    if active || (BoardUi.operation=="resize" && BoardUi.drag-index==index): Path {
+        width:BoardUi.scaled(Theme.board-pin-size);height:self.width;x:parent.width - self.width - BoardUi.scaled(Theme.border-width);y:parent.height - self.height - BoardUi.scaled(Theme.border-width);
+        viewbox-width:16;viewbox-height:16;stroke:Theme.board-paper-ink;opacity:0.48;stroke-width:BoardUi.scaled(Theme.border-width);
+        MoveTo{x:1;y:15;}LineTo{x:15;y:1;}MoveTo{x:6;y:15;}LineTo{x:15;y:6;}MoveTo{x:11;y:15;}LineTo{x:15;y:11;}
+    }
+}
+
+export component BoardSurface inherits Rectangle {
+    background:Theme.board-ground;clip:true;
+    property <float> vw:self.width/1px;
+    property <float> vh:self.height/1px;
+    changed vw => { BoardUi.viewport("reveal"); }
+    changed vh => { BoardUi.viewport("reveal"); }
+    property <bool> held:BoardUi.operation!="";
+    property <bool> moved-far;
+    property <BoardHit> press;
+    property <float> start-x;property <float> start-y;
+    property <float> start-left;property <float> start-top;
+    property <float> mouse-x;property <float> mouse-y;
+    property <int> active:BoardUi.operation!="" ? -1 : BoardUi.hover>=0 ? BoardUi.hover : BoardUi.keyboard-focus ? BoardUi.selected : -1;
+    pure function wx(x:float)->float {return BoardUi.left+x/BoardUi.zoom;}
+    pure function wy(y:float)->float {return BoardUi.top+y/BoardUi.zoom;}
+    function move-frame(auto-pan:bool) {
+        if !root.held || BoardUi.operation=="" {return;}
+        if abs(mouse-x - start-x)+abs(mouse-y - start-y)>Theme.calendar-gap/1px {root.moved-far=true;}
+        if !moved-far {return;}
+        if BoardUi.operation=="pan" {
+            BoardUi.left=start-left - (mouse-x - start-x)/BoardUi.zoom;
+            BoardUi.top=start-top - (mouse-y - start-y)/BoardUi.zoom;
+        } else {
+            if auto-pan {
+                BoardUi.left+= (min(0,mouse-x)+max(0,mouse-x - vw))*0.12/BoardUi.zoom;
+                BoardUi.top+= (min(0,mouse-y)+max(0,mouse-y - vh))*0.12/BoardUi.zoom;
+            }
+            BoardUi.dx=wx(mouse-x) - (start-left + start-x/BoardUi.zoom);
+            BoardUi.dy=wy(mouse-y) - (start-top + start-y/BoardUi.zoom);
+        }
+    }
+    Timer {interval:16ms;running:root.held && BoardUi.operation!="";triggered=>{root.move-frame(true);}}
+    // World geometry is expressed in the same logical pixels as journal-core.
+    if BoardUi.opened: grid := Rectangle {
+        // The software renderer paints these cached blocks at display resolution.
+        property <length> pitch: max(Theme.calendar-gap,Theme.board-grid*BoardUi.zoom);
+        property <length> block:pitch*16;
+        property <image> dots:BoardUi.grid-image(pitch/1px,Theme.board-dot);
+        x:-(Math.mod(BoardUi.left*BoardUi.zoom,pitch/1px) + pitch/1px)*1px;
+        y:-(Math.mod(BoardUi.top*BoardUi.zoom,pitch/1px) + pitch/1px)*1px;
+        for row[index-row] in ceil((root.height+2*pitch)/block): Rectangle {
+            y:index-row*grid.block;height:grid.block;
+            for col[index-col] in ceil((root.width+2*grid.pitch)/grid.block): Image {
+                x:index-col*grid.block;width:grid.block;height:self.width;source:grid.dots;image-fit:fill;
+            }
+        }
+    }
+    world := Rectangle {
+        x:-BoardUi.left*BoardUi.zoom*1px;y:-BoardUi.top*BoardUi.zoom*1px;
+        width:root.width;height:root.height;
+        for group in BoardUi.groups: Rectangle {
+            property <BoardBox> box:BoardUi.project(BoardUi.group-box(group.members));
+            x:box.x*1px;y:box.y*1px;width:box.w*1px;height:box.h*1px;
+            border-radius:BoardUi.scaled(Theme.radius);border-width:BoardUi.scaled(Theme.border-width);border-color:Theme.board-group-edge;background:Theme.board-group-fill;
+        }
+        Threads {x:0px;y:0px;width:world.width;height:world.height;}
+        for card[i] in BoardUi.tiles: Paper {card:card;index:i;active:root.active==i;}
+        Threads {x:0px;y:0px;width:world.width;height:world.height;opacity:0.22;}
+        if BoardUi.operation=="tie" && BoardUi.drag-index>=0: Thread {
+            property <BoardBox> from:BoardUi.box-at(BoardUi.drag-index);
+            ax:from.x+from.w/2;ay:from.y;bx:root.wx(root.mouse-x);by:root.wy(root.mouse-y);pending:true;
+        }
+    }
+    input := TouchArea {
+        property <string> cursor-kind;
+        mouse-cursor:root.held && root.moved-far ? MouseCursor.grabbing : cursor-kind=="resize" ? MouseCursor.nwse-resize :
+            cursor-kind=="tie" ? MouseCursor.crosshair : cursor-kind=="edge" ? MouseCursor.pointer : MouseCursor.grab;
+        pointer-event(e)=>{
+            let x=self.mouse-x/1px;let y=self.mouse-y/1px;
+            if e.kind==PointerEventKind.move {
+                root.mouse-x=x;root.mouse-y=y;
+                if !root.held {
+                    let hit=BoardUi.hit(root.wx(x),root.wy(y));
+                    BoardUi.hover=hit.operation=="move" || hit.operation=="resize" || hit.operation=="tie" ? hit.index : -1;
+                    self.cursor-kind=hit.operation;
+                }
+            }
+            if e.kind==PointerEventKind.cancel {BoardUi.cancel-gesture();return;}
+            if e.kind==PointerEventKind.down {
+                let hit=BoardUi.hit(root.wx(x),root.wy(y));BoardUi.keyboard-focus=false;
+                if e.button==PointerEventButton.right {
+                    BoardUi.cancel-gesture();
+                    if hit.operation=="edge" {BoardUi.edge(BoardUi.tiles[hit.index].id,BoardUi.tiles[hit.other].id);}
+                    else if hit.index>=0 {BoardUi.tool(hit.index,"card-actions");}
+                    else {BoardUi.surface-menu(root.wx(x),root.wy(y));}
+                } else if e.button==PointerEventButton.left {
+                    root.start-x=x;root.start-y=y;root.mouse-x=x;root.mouse-y=y;root.start-left=BoardUi.left;root.start-top=BoardUi.top;
+                    root.press=hit;root.moved-far=false;BoardUi.cancel-gesture();
+                    if hit.index>=0 {let box=BoardUi.box-at(hit.index);BoardUi.start-width=box.w;BoardUi.start-height=box.h;}
+                    BoardUi.drag-index=hit.index;
+                    BoardUi.drag-group=hit.index>=0 ? BoardUi.tiles[hit.index].group : -1;
+                    BoardUi.operation=hit.operation=="move" && BoardUi.move-group && BoardUi.drag-group>=0 ? "group" : hit.operation;
+                }
+            }
+            if e.kind==PointerEventKind.up && e.button==PointerEventButton.left && root.held {
+                root.mouse-x=x;root.mouse-y=y;root.move-frame(false);
+                let op=BoardUi.operation;let hit=root.press;let dx=BoardUi.dx;let dy=BoardUi.dy;
+                let w=BoardUi.start-width;let h=BoardUi.start-height;let moved=root.moved-far;
+                BoardUi.cancel-gesture();
+                if op!="" && moved && hit.index>=0 {
+                    BoardUi.release(hit.index,op,op=="tie" ? root.wx(x) : dx,op=="tie" ? root.wy(y) : dy,w,h);
+                } else if op!="" && !moved && hit.index>=0 {
+                    if op=="edge" {BoardUi.edge(BoardUi.tiles[hit.index].id,BoardUi.tiles[hit.other].id);}
+                    else {BoardUi.select(BoardUi.tiles[hit.index].id);}
+                }
+            }
+        }
+        double-clicked=>{
+            if !root.moved-far && root.press.index>=0 && root.press.operation!="edge" {
+                BoardUi.tool(root.press.index,root.press.operation=="resize" ? "reset-size" : "open");
+            }
+        }
+        scroll-event(e)=>{
+            if root.held {return accept;}
+            if e.modifiers.control {BoardUi.zoom-at(pow(1.002,e.delta-y/1px),self.mouse-x/1px,self.mouse-y/1px);}
+            else if e.modifiers.shift {BoardUi.left -= (e.delta-x==0px ? e.delta-y : e.delta-x)/1px/BoardUi.zoom;}
+            else {BoardUi.left -=e.delta-x/1px/BoardUi.zoom;BoardUi.top -=e.delta-y/1px/BoardUi.zoom;}
+            accept
+        }
+    }
+    overlays := Rectangle {
+        x:world.x;y:world.y;width:world.width;height:world.height;
+        for group in BoardUi.groups: Rectangle {
+            property <BoardBox> box:BoardUi.project(BoardUi.group-box(group.members));
+            x:box.x*1px + BoardUi.scaled(Theme.board-paper-inset);y:box.y*1px - BoardUi.scaled(Theme.board-tool-size)/2;
+            width:box.w*1px - 2*BoardUi.scaled(Theme.board-paper-inset);height:BoardUi.scaled(Theme.board-tool-size);
+            Rectangle {x:0px;width:min(label.preferred-width+BoardUi.scaled(Theme.gap),parent.width - BoardUi.scaled(Theme.board-tool-size));
+            background:Theme.board-ground;border-radius:BoardUi.scaled(Theme.board-paper-radius);
+            label := Text {x:BoardUi.scaled(Theme.footer-gap);width:parent.width - 2*self.x;text:group.name=="" ? BoardUi.group-label : group.name;
+                font-size:BoardUi.scaled(Theme.small-size);color:Theme.muted;overflow:elide;vertical-alignment:center;}
+            TouchArea {mouse-cursor:MouseCursor.text;clicked=>{BoardUi.tool(group.members[0],"group-name");}}
+            }
+            Rectangle {x:parent.width - self.width;width:BoardUi.scaled(Theme.board-tool-size);height:self.width;
+                background:Theme.board-ground;border-radius:BoardUi.scaled(Theme.board-paper-radius);
+                BoardGlyph {x:BoardUi.scaled(Theme.calendar-gap);y:self.x;width:parent.width - 2*self.x;height:self.width;name:"trash";tint:Theme.muted;}
+                TouchArea {mouse-cursor:MouseCursor.pointer;clicked=>{BoardUi.tool(group.members[0],"delete-group");}}
+            }
+        }
+        if root.active>=0 && root.active<BoardUi.tiles.length: HorizontalLayout {
+            property <BoardBox> box:BoardUi.project(BoardUi.box-at(root.active));
+            property <BoardTile> card:BoardUi.tiles[root.active];
+            x:(box.x+box.w)*1px - self.width - BoardUi.scaled(Theme.board-paper-inset);y:box.y*1px+BoardUi.scaled(Theme.board-paper-inset);
+            width:self.preferred-width;height:BoardUi.scaled(Theme.board-title-height);
+            for tool in BoardUi.tools: Rectangle {
+                visible:!tool.note-only || card.kind=="note";width:self.visible ? BoardUi.scaled(Theme.board-tool-size) : 0px;
+                background:tap.has-hover ? Theme.board-shadow.transparentize(0.6) : card.paper;border-radius:BoardUi.scaled(Theme.board-paper-radius);
+                accessible-role:button;accessible-label:tool.label;
+                BoardGlyph {x:BoardUi.scaled(Theme.calendar-gap);y:(parent.height - self.height)/2;width:BoardUi.scaled(Theme.row-size);height:self.width;
+                    name:tool.icon;tint:Theme.board-paper-ink;opacity:tap.has-hover ? 1 : 0.65;
+                    visible:tool.command!="paper-next";}
+                if tool.command=="paper-next": Rectangle {width:BoardUi.scaled(Theme.row-size);height:self.width;x:BoardUi.scaled(Theme.calendar-gap);y:(parent.height - self.height)/2;
+                    border-radius:self.width/2;background:@linear-gradient(135deg,Theme.board-pink,Theme.board-blue,Theme.board-green,Theme.board-yellow);}
+                tap := TouchArea {mouse-cursor:MouseCursor.pointer;clicked=>{BoardUi.tool(root.active,tool.command);}}
+            }
+        }
+    }
+}

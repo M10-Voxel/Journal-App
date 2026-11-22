@@ -24,6 +24,7 @@ pub struct Draft {
     pub loading_image: bool,
 }
 
+#[derive(Debug)]
 pub enum SaveError {
     Conflict,
     InvalidLink,

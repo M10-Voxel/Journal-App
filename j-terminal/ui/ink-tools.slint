@@ -1,0 +1,80 @@
+import { Theme } from "theme.slint";
+import { BoardUi } from "board-model.slint";
+import { BoardGlyph } from "board-ink.slint";
+
+export component InkTools inherits Rectangle {
+    out property<string> hovered;
+    width:strip.preferred-width+2*Theme.calendar-gap;height:Theme.row-height;
+    border-radius:Theme.block-radius;background:Theme.task-background;
+    strip := HorizontalLayout {
+        x:Theme.calendar-gap;spacing:Theme.choice-spacing;width:self.preferred-width;height:parent.height;
+        for tool in BoardUi.ink-tools: Rectangle {
+            property<bool> dropdown:tool.command=="pens" || tool.command=="selects";
+            property<bool> chosen:tool.command==BoardUi.ink-tool ||
+                (tool.command=="pens" && (BoardUi.ink-tool=="pen" || BoardUi.ink-tool=="pencil" || BoardUi.ink-tool=="marker")) ||
+                (tool.command=="selects" && (BoardUi.ink-tool=="rect" || BoardUi.ink-tool=="lasso"));
+            width:Theme.side-row-height + (dropdown ? Theme.tag-dot : 0px);y:Theme.calendar-gap;height:parent.height - 2*self.y;
+            background:touch.has-hover ? Theme.hover : chosen ? Theme.row-selection : transparent;border-radius:Theme.list-radius;
+            accessible-role:button;accessible-label:tool.label;
+            if tool.command!="color" && tool.command!="size": BoardGlyph {
+                name:tool.icon;x:(Theme.side-row-height - self.width)/2;y:(parent.height - self.height)/2;
+                width:Theme.label-icon-size;height:self.width;tint:parent.chosen ? Theme.accent : Theme.text;
+            }
+            if dropdown: BoardGlyph {name:"chevron-down";width:Theme.tag-dot;height:self.width;
+                x:parent.width - self.width - Theme.calendar-gap;y:(parent.height - self.height)/2;tint:Theme.muted;}
+            if tool.command=="color" || tool.command=="size": Rectangle {
+                width:tool.command=="color" ? Theme.label-icon-size : clamp(BoardUi.ink-size*1px,Theme.calendar-gap,Theme.label-icon-size);
+                height:self.width;border-radius:self.width/2;
+                background:tool.command=="color" ? BoardUi.ink-color : Theme.text;
+                border-width:tool.command=="color" ? Theme.border-width : 0px;border-color:Theme.muted;
+            }
+            touch := TouchArea {
+                mouse-cursor:pointer;clicked=>{BoardUi.command(tool.command);}
+                changed has-hover=>{if self.has-hover {root.hovered=tool.label;} else if root.hovered==tool.label {root.hovered="";}}
+            }
+        }
+    }
+}
+
+export component InkPicker inherits Rectangle {
+    property<bool> colors:BoardUi.ink-picker=="color";
+    property<int> columns:colors ? 5 : 3;
+    property<int> custom:BoardUi.options.length - 1;
+    property<length> cell:Theme.side-icon-cell;
+    property<int> hover:-1;
+    width:columns*cell + 2*Theme.popover-padding;
+    height:header.height + ceil(custom/columns)*cell + Theme.side-row-height + 2*Theme.popover-padding;
+    background:Theme.popover-background;border-color:Theme.popover-border;border-width:Theme.border-width;border-radius:Theme.popover-radius;
+    drop-shadow-color:Theme.popover-shadow;drop-shadow-blur:Theme.popover-shadow-blur;
+    TouchArea {}
+    header := HorizontalLayout {
+        x:Theme.popover-padding;y:0px;width:parent.width - 2*self.x;height:Theme.row-height;spacing:Theme.gap;
+        Rectangle {width:Theme.label-icon-size;
+            BoardGlyph {name:"chevron-left";width:parent.width;height:self.width;tint:Theme.muted;}
+            TouchArea {mouse-cursor:pointer;clicked=>{BoardUi.menu-back();}}}
+        Text {text:BoardUi.menu-title;vertical-alignment:center;color:Theme.text;font-size:Theme.section-size;horizontal-stretch:1;}
+        Text {text:colors && (root.hover>=0 ? root.hover : BoardUi.option-index)<root.custom ?
+            BoardUi.options[root.hover>=0 ? root.hover : BoardUi.option-index].label : "";
+            color:Theme.muted;vertical-alignment:center;font-size:Theme.small-size;}
+    }
+    for row[i] in BoardUi.options: Rectangle {
+        property<bool> custom:i==root.custom;
+        x:Theme.popover-padding + (custom ? 0 : Math.mod(i,root.columns)*root.cell);
+        y:header.height + (custom ? ceil(i/root.columns) : floor(i/root.columns))*root.cell;
+        width:custom ? parent.width - 2*self.x : root.cell;height:custom ? Theme.side-row-height : root.cell;
+        border-radius:Theme.list-radius;background:touch.has-hover || i==BoardUi.option-index ? Theme.row-selection : transparent;
+        accessible-role:button;accessible-label:row.label;
+        if !custom: Rectangle {
+            width:root.colors ? Theme.board-title-height : clamp(row.value.to-float()*1px,Theme.calendar-gap,Theme.board-tool-size);
+            height:self.width;border-radius:self.width/2;background:root.colors ? row.color : Theme.text;
+            border-color:row.on ? Theme.accent : Theme.muted;border-width:row.on ? Theme.focus-ring : root.colors ? Theme.border-width : 0px;
+            y:!root.colors ? Theme.gap : (parent.height - self.height)/2;
+        }
+        if custom || !root.colors: Text {
+            y:custom ? 0px : parent.height/2;width:parent.width;height:custom ? parent.height : parent.height/2;
+            horizontal-alignment:center;vertical-alignment:center;font-size:Theme.small-size;color:row.on ? Theme.accent : Theme.text;text:row.label;
+        }
+        touch := TouchArea {mouse-cursor:pointer;clicked=>{BoardUi.choose(i);}
+            changed has-hover=>{if self.has-hover {root.hover=i;} else if root.hover==i {root.hover=-1;}}}
+    }
+}
