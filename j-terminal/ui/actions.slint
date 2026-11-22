@@ -1,6 +1,7 @@
 import { Theme } from "theme.slint";
 import { KeyBindings, ShortcutContext } from "key-bindings.slint";
 import { KeyCaps } from "footer.slint";
+import { JournalIcons } from "journal-icons.slint";
 
 // A line of the actions (Strg+K): `section` names the group it begins, `caps` are its keys.
 export struct MenuRow { top: length, section: string, has-icon: bool, icon: image, label: string, value: string, caps: [string], on: bool, danger: bool, has-color: bool, color: color }
@@ -25,12 +26,20 @@ component PopoverSearch inherits Rectangle {
     public function grab() { input.focus(); }
     height: Theme.popover-search-height;
     Rectangle { y: 0px; height: Theme.border-width; background: Theme.divider; }
+    Image {
+        x: Theme.popover-inset + Theme.popover-padding;
+        y: (parent.height - self.height) / 2; width: Theme.label-icon-size; height: self.width;
+        source: JournalIcons.search-icon; colorize: Theme.muted;
+    }
+    TouchArea { mouse-cursor: text; clicked => { input.focus(); } }
     if input.text == "": Text {
         x: input.x; width: input.width; height: parent.height;
         text: root.placeholder; color: Theme.placeholder; font-size: Theme.row-size; vertical-alignment: center;
     }
     input := TextInput {
-        x: Theme.popover-inset + Theme.popover-padding; width: parent.width - self.x * 2; height: parent.height;
+        x: Theme.popover-inset + Theme.popover-padding + Theme.label-icon-size + Theme.gap;
+        width: parent.width - self.x - Theme.popover-inset; height: parent.height;
+        accessible-label: root.placeholder;
         text: root.initial; single-line: true; vertical-alignment: center;
         color: Theme.strong; font-size: Theme.row-size;
         selection-background-color: Theme.selection; selection-foreground-color: Theme.strong;
@@ -41,7 +50,8 @@ component PopoverSearch inherits Rectangle {
             if event.text == Key.Control || event.text == Key.Shift || event.text == Key.Alt || event.text == Key.Meta { return reject; }
             let mods = root.mods(event.modifiers.shift, event.modifiers.control, event.modifiers.alt);
             if event.text == Key.Return || event.text == Key.Escape || event.text == Key.UpArrow || event.text == Key.DownArrow
-                || event.text == Key.Tab || event.text == Key.Backtab {
+                || event.text == Key.Tab || event.text == Key.Backtab
+                || (root.menu && self.text == "" && (event.text == Key.Home || event.text == Key.End)) {
                 root.hand-on(event.text, mods);
                 return accept;
             }
@@ -116,7 +126,7 @@ export component ActionPopover inherits Rectangle {
     border-color: Theme.popover-border;
     drop-shadow-blur: Theme.popover-shadow-blur;
     drop-shadow-color: Theme.popover-shadow;
-    drop-shadow-offset-y: 6px;
+    drop-shadow-offset-y: Theme.block-radius;
     clip: true;
     // Clicks inside stay inside.
     TouchArea {}
@@ -131,7 +141,6 @@ export component ActionPopover inherits Rectangle {
                 if root.side-open || root.menu-can-back: Image {
                     width: Theme.label-icon-size; height: Theme.label-icon-size; y: (parent.height - self.height) / 2;
                     source: root.icon-back; colorize: back-touch.has-hover ? Theme.strong : Theme.muted;
-                    back-touch := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.side-back(); } }
                 }
                 Text {
                     text: root.side-open ? root.side-heading : root.menu-title;
@@ -142,6 +151,10 @@ export component ActionPopover inherits Rectangle {
                     text: "· " + root.side-title; color: Theme.placeholder; font-size: Theme.section-size;
                     vertical-alignment: center; overflow: elide; horizontal-stretch: 1;
                 }
+            }
+            back-touch := TouchArea {
+                enabled: root.side-open || root.menu-can-back;
+                mouse-cursor: pointer; clicked => { root.side-back(); }
             }
         }
         // ----- The actions -----
@@ -182,7 +195,9 @@ export component ActionPopover inherits Rectangle {
                     Rectangle {
                         height: Theme.side-row-height;
                         border-radius: Theme.list-radius;
-                        background: i == root.menu-pick ? Theme.row-selection : menu-touch.has-hover ? Theme.hover : transparent;
+                        background: Theme.row-fill(i == root.menu-pick, menu-touch.has-hover, menu-touch.pressed);
+                        accessible-role: list-item; accessible-label: row.label; accessible-item-selected: i == root.menu-pick;
+                        accessible-action-default => { root.menu-choose(i); }
                         HorizontalLayout {
                             padding-left: Theme.popover-inset; padding-right: Theme.popover-inset; spacing: Theme.gap;
                             if row.has-icon: Image {
@@ -230,7 +245,9 @@ export component ActionPopover inherits Rectangle {
                 for line[i] in root.side-rows: Rectangle {
                     height: Theme.side-row-height;
                     border-radius: Theme.list-radius;
-                    background: line.selected ? Theme.row-selection : line-touch.has-hover ? Theme.hover : transparent;
+                    background: Theme.row-fill(line.selected, line-touch.has-hover, line-touch.pressed);
+                    accessible-role: list-item; accessible-label: line.label; accessible-item-selected: line.selected;
+                    accessible-action-default => { root.side-choose(i); }
                     HorizontalLayout {
                         padding-left: Theme.popover-inset; padding-right: Theme.popover-inset; spacing: Theme.gap;
                         if line.has-icon: Image { width: Theme.label-icon-size; height: Theme.label-icon-size; y: (parent.height - self.height) / 2; source: line.icon;
@@ -258,7 +275,7 @@ export component ActionPopover inherits Rectangle {
                 y: Math.floor(i / Theme.side-icon-columns) * Theme.side-icon-cell;
                 width: Theme.side-icon-cell - Theme.calendar-gap; height: Theme.side-icon-cell - Theme.calendar-gap;
                 border-radius: Theme.block-radius;
-                background: line.selected ? Theme.row-selection : icon-touch.has-hover ? Theme.hover : transparent;
+                background: Theme.row-fill(line.selected, icon-touch.has-hover, icon-touch.pressed);
                 border-width: line.on ? Theme.border-width : 0px; border-color: Theme.field-focus;
                 Image { width: Theme.icon-size; height: Theme.icon-size; x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2; source: line.icon; colorize: line.selected || line.on ? Theme.strong : Theme.muted; }
                 icon-touch := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.side-choose(i); } }

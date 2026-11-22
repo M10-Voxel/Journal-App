@@ -16,7 +16,7 @@ export global Theme {
     // ── The palette ──
     out property <color> background: #1c1c1e;      // the surface
     // How much of the surface covers the blur behind the window (only where Windows draws one).
-    out property <float> surface-alpha: 0.86;
+    out property <float> surface-alpha: 0.84;
     out property <color> ground: #000000;          // text on a light fill
     out property <color> inset: #ffffff08;
     out property <color> raised: #ffffff0d;        // a card on the surface
@@ -28,7 +28,7 @@ export global Theme {
     out property <color> text: #e4e4e4;
     out property <color> strong: #ffffff;
     out property <color> muted: #9a9a9a;
-    out property <color> placeholder: #6b6b6b;
+    out property <color> placeholder: #929295;
     out property <color> accent: #569eff;
     out property <color> priority: #f0a24a;
     out property <color> success: #6fd08a;
@@ -79,6 +79,11 @@ export global Theme {
     out property <color> recognised: #ffffff0a;    // a choice not chosen
     out property <color> row-selection: #ffffff1a; // the active line
     out property <color> row-selection-strong: #ffffff24;
+    out property <color> row-pressed: #ffffff35;
+    out property <color> menu-scrim: #08080a24;
+    public pure function row-fill(selected: bool, hovered: bool, pressed: bool) -> color {
+        return pressed ? self.row-pressed : selected ? self.row-selection : hovered ? self.hover : transparent;
+    }
     out property <color> chip-selected: #ffffff1f; // a chosen choice: lighter, its text white
     out property <color> chip-selected-text: #ffffff;
     out property <color> field-background: #ffffff0a;
@@ -109,7 +114,7 @@ export global Theme {
     out property <length> write-size: 13px;
     out property <length> type-size: 13px;
     out property <length> clock-size: 36px;
-    out property <length> search-size: 17px;
+    out property <length> search-size: 18px;
     out property <length> section-size: 12px;
 
     // ── The window ──
@@ -130,13 +135,13 @@ export global Theme {
     out property <length> calendar-gap: 3px;
     out property <length> block-radius: 6px;
     // The top line: the search (or a title) as a large borderless input, things beside it at the right.
-    out property <length> line-height: 52px;
+    out property <length> line-height: 60px;
     out property <length> search-icon-size: 18px;
     out property <length> search-height: 32px;
-    out property <length> row-height: 36px;
+    out property <length> row-height: 38px;
     out property <length> back-size: 26px;
     out property <length> accessory-gap: 6px;
-    out property <length> accessory-height: 26px;
+    out property <length> accessory-height: 32px;
     out property <length> accessory-inset: 8px;
     // Lists: the chosen line is a rounded grey field, inset from the edges.
     out property <length> list-inset: 8px;
@@ -144,12 +149,12 @@ export global Theme {
     out property <length> section-height: 28px;
 
     // ── The footer under the left half ──
-    out property <length> footer-height: 30px;
+    out property <length> footer-height: 40px;
     out property <length> footer-size: 12px;
     out property <length> footer-date-size: 11px;
     out property <length> footer-icon-size: 14px;
     out property <length> footer-gap: 4px;
-    out property <length> footer-menu-size: 24px;
+    out property <length> footer-menu-size: 32px;
     out property <length> footer-menu-stroke: 1.5px;
     out property <length> footer-menu-line-gap: 2px;
     out property <duration> toast-duration: 3s;
@@ -291,7 +296,7 @@ export global Theme {
     out property <length> day-heading-icon: 14px;
     out property <length> day-heading-size: 12px;
     out property <length> day-count-size: 11px;
-    out property <length> day-row-height: 32px;
+    out property <length> day-row-height: 36px;
     out property <length> day-symbol-size: 16px;
     out property <length> day-tag-icon-size: 14px;
     out property <length> day-chip-height: 20px;
@@ -352,7 +357,7 @@ export global Theme {
     out property <length> popover-inset: 8px;
     out property <length> popover-search-height: 38px;
     out property <int> action-visible-rows: 6;
-    out property <length> side-row-height: 30px;
+    out property <length> side-row-height: 36px;
     out property <length> side-value-width: 110px;
     out property <int> side-icon-columns: 7;
     out property <length> side-icon-cell: 44px;
@@ -364,7 +369,7 @@ export global Theme {
     //    The same surface as the rest; its head as high as the top line, so one line runs under both. ──
     out property <color> cal-background: transparent;
     out property <length> cal-pad: 6px;
-    out property <length> cal-head-height: 52px;
+    out property <length> cal-head-height: Theme.line-height;
     out property <length> cal-head-ticks-height: 18px;
     out property <int> cal-lanes: 3;
     out property <length> cal-lane-width: 20px;

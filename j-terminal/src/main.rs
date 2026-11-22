@@ -558,7 +558,7 @@ impl App {
         self.bar.set_title_error(view.title_error);
         self.bar.set_entry_priority(view.priority);
         self.draw_menu(view.menu.clone(), view.context);
-        self.draw_footer(view.context, &view.day.heading);
+        self.draw_footer(&view);
         self.bar.set_line_count(view.rows.iter().map(|row| row.line + 1).max().unwrap_or(1) as i32);
         self.bar.set_rows(std::rc::Rc::new(slint::VecModel::from(view.rows.into_iter().map(|row| FormRow {
             field: row.field as i32, line: row.line as i32, cell: row.cell as i32, multi: row.multi,
@@ -619,7 +619,10 @@ impl App {
         self.bar.set_search_placeholder(view.search_placeholder.into());
         self.bar.set_command_selected(view.command_selected as i32);
         let lang = usize::from(self.state.language == texts::Language::En);
-        self.bar.set_search_list_hint(if self.state.preferences.keycaps { texts::search::LIST_HINT[lang] } else { "" }.into());
+        self.bar.set_searching(view.searching);
+        self.bar.set_search_empty(texts::form_texts(self.state.language).no_hits.into());
+        self.bar.set_commands_label(texts::search::COMMANDS[lang].into());
+        self.bar.set_clear_label(texts::search::CLEAR[lang].into());
         let theme = self.bar.global::<Theme>();
         let mut top = 0.;
         let rows = view.commands.into_iter().map(|c| {
@@ -629,7 +632,7 @@ impl App {
             let row = CommandRow {
                 name: c.name.clone().into(), detail: c.detail.into(), heading: c.look.heading.into(), tag: c.look.tag.into(),
                 icon: journal_image(&self.bar, c.look.icon, label_px, scale), has_icon: !c.look.icon.is_empty(),
-                sigil: c.look.sigil, has_color: c.look.color.is_some(), tint: c.look.color.map_or(theme.get_accent(), |rgb| color(Some(rgb))),
+                sigil: c.look.sigil, has_color: c.look.color.is_some(), tint: c.look.color.map_or(theme.get_muted(), |rgb| color(Some(rgb))),
                 title_runs: search_runs(&c.name, &c.look.words), snippet_runs: search_runs(&c.look.snippet, &c.look.words),
                 top, tall, header, preview, description: c.look.description.into(),
             };
@@ -684,18 +687,21 @@ impl App {
     }
 
     /// The footer: where one is, the main action there and the actions, each with its keys.
-    fn draw_footer(&mut self, context: form::Context, day: &str) {
+    fn draw_footer(&mut self, view: &form::View) {
         use form::Context as C;
         let at = texts::action_texts(self.state.language);
         let language = self.state.language;
         let keys = |id: &str| strings(shortcuts::caps(&shortcuts::keys(&self.bindings, id, language)));
-        let label = match context {
-            C::Day | C::DayLine => day,
+        let label = match view.context {
+            C::Day | C::DayLine if view.searching && self.state.preferences.keycaps => texts::search::FILTER_HINT[usize::from(language == texts::Language::En)],
+            C::Day | C::DayLine => &view.day.heading,
             C::Entry if self.state.editing_entry() => at.edit,
             C::Entry => at.new_entry,
             C::NotesList | C::NotesRead | C::NotesEdit => at.notepad,
         };
-        let (primary, primary_keys) = match context {
+        let primary = if view.searching {
+            view.commands.get(view.command_selected).map(|row| (row.primary_label(language), strings(["↵".to_string()])))
+        } else { Some(match view.context {
             C::Day => (at.new_task, keys("day-task")),
             C::DayLine => (at.edit, strings(["↵".to_string()])),
             C::Entry if self.state.editing_entry() => (at.notes_save, keys("form-save")),
@@ -703,14 +709,16 @@ impl App {
             C::NotesList => (at.notes_new, keys("notes-new")),
             C::NotesRead => (at.notes_edit, keys("notes-edit")),
             C::NotesEdit => (at.notes_save, keys("notes-save")),
-        };
-        self.bar.set_footer_date(matches!(context, C::Day | C::DayLine));
+        }) };
+        self.bar.set_footer_date(matches!(view.context, C::Day | C::DayLine) && !view.searching);
         self.bar.set_footer_menu_label(at.menu.into());
         self.bar.set_footer_label(label.into());
-        self.bar.set_footer_hints(std::rc::Rc::new(slint::VecModel::from(vec![
-            FooterHint { label: primary.into(), caps: if self.state.preferences.keycaps { primary_keys } else { Default::default() }, action: 0 },
-            FooterHint { label: at.actions.into(), caps: if self.state.preferences.keycaps { keys("day-actions") } else { Default::default() }, action: 1 },
-        ])).into());
+        let mut hints = Vec::new();
+        if let Some((label, caps)) = primary {
+            hints.push(FooterHint { label: label.into(), caps: if self.state.preferences.keycaps { caps } else { Default::default() }, action: 0 });
+        }
+        hints.push(FooterHint { label: at.actions.into(), caps: if self.state.preferences.keycaps { keys("day-actions") } else { Default::default() }, action: 1 });
+        self.bar.set_footer_hints(std::rc::Rc::new(slint::VecModel::from(hints)).into());
     }
 
     fn draw_notepad(&mut self) {
@@ -1183,11 +1191,58 @@ fn place_and_focus(bar: &Bar, centered: bool, tries: u32) {
     });
     if placed.is_some() {
         #[cfg(windows)]
-        round_window(bar);
+        {
+            round_window(bar);
+            set_launcher_backdrop(bar);
+        }
         if bar.global::<BoardUi>().get_opened(){board_ui::focus_board(bar);}else{bar.invoke_focus_line();}
     } else if tries > 0 {
         slint::Timer::single_shot(std::time::Duration::from_millis(5), move || with_bar(|bar| place_and_focus(bar, centered, tries - 1)));
     }
+}
+
+#[cfg(windows)]
+fn transparency_enabled() -> bool {
+    use windows_sys::Win32::UI::{Accessibility::{HCF_HIGHCONTRASTON, HIGHCONTRASTW}, WindowsAndMessaging::{SystemParametersInfoW, SPI_GETHIGHCONTRAST}};
+    use winreg::{enums::HKEY_CURRENT_USER, RegKey};
+    let mut contrast = HIGHCONTRASTW { cbSize: size_of::<HIGHCONTRASTW>() as u32, ..Default::default() };
+    unsafe { SystemParametersInfoW(SPI_GETHIGHCONTRAST, contrast.cbSize, (&mut contrast as *mut HIGHCONTRASTW).cast(), 0) };
+    let transparency = RegKey::predef(HKEY_CURRENT_USER)
+        .open_subkey(r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize")
+        .and_then(|key| key.get_value::<u32, _>("EnableTransparency"));
+    contrast.dwFlags & HCF_HIGHCONTRASTON == 0 && transparency.unwrap_or(1) != 0
+}
+
+/// Let the compositor blur behind the launcher. Only expose it through Slint's
+/// surface after Windows has accepted both the material and the glass frame.
+#[cfg(windows)]
+fn set_launcher_backdrop(bar: &Bar) {
+    use slint::winit_030::winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
+    use windows_sys::Win32::{Graphics::Dwm::*, UI::Controls::MARGINS};
+
+    let glass = bar.window().with_winit_window(|window| {
+        let Ok(handle) = window.window_handle() else { return false };
+        let RawWindowHandle::Win32(handle) = handle.as_raw() else { return false };
+        let hwnd = handle.hwnd.get() as _;
+        let attribute = |name, value: i32| unsafe {
+            DwmSetWindowAttribute(hwnd, name as u32, (&value as *const i32).cast(), size_of::<i32>() as u32) >= 0
+        };
+        if transparency_enabled() {
+            attribute(DWMWA_USE_IMMERSIVE_DARK_MODE, 1);
+            // DWM can keep a solid acrylic fallback across hide/show. Commit
+            // the removal before requesting the material again on this HWND.
+            if bar.get_glass() && attribute(DWMWA_SYSTEMBACKDROP_TYPE, DWMSBT_NONE) {
+                unsafe { DwmFlush() };
+            }
+            if !attribute(DWMWA_SYSTEMBACKDROP_TYPE, DWMSBT_TRANSIENTWINDOW) { return false; }
+            let frame = MARGINS { cxLeftWidth: -1, ..Default::default() };
+            if unsafe { DwmExtendFrameIntoClientArea(hwnd, &frame) } >= 0 { return true; }
+        }
+        attribute(DWMWA_SYSTEMBACKDROP_TYPE, DWMSBT_NONE);
+        unsafe { DwmExtendFrameIntoClientArea(hwnd, &MARGINS::default()) };
+        false
+    });
+    bar.set_glass(glass == Some(true));
 }
 
 // The launcher owns its full client area. Keep winit's focus handling, but
@@ -1201,6 +1256,11 @@ unsafe extern "system" fn launcher_frame(hwnd: windows_sys::Win32::Foundation::H
         }
         WM_NCACTIVATE => return DefSubclassProc(hwnd, msg, wp, -1),
         WM_NCPAINT => return 0,
+        WM_SETTINGCHANGE | WM_DWMCOMPOSITIONCHANGED => {
+            slint::Timer::single_shot(Duration::ZERO, || with_bar(|bar| {
+                if bar.window().is_visible() { set_launcher_backdrop(bar); }
+            }));
+        }
         WM_NCDESTROY => { RemoveWindowSubclass(hwnd, Some(launcher_frame), id); }
         _ => {}
     }
@@ -1429,10 +1489,13 @@ fn connect(bar: &Bar) {
     bar.on_toggle_menu(|| with_app(|app| { app.hide_timer.stop(); let effect = app.state.toggle_menu(); app.effect(effect); }));
     bar.on_app_menu_clicked(|| with_app(|app| { app.hide_timer.stop(); let effect = app.state.toggle_app_menu(); app.effect(effect); }));
     bar.on_menu_edited(|text| with_app(|app| { app.state.menu_edited(&text); app.draw(); }));
-    bar.on_menu_key(|text, _mods| with_app(|app| {
+    bar.on_menu_key(|text, mods| with_app(|app| {
         let key = match day_key(&text) {
             Some(day::K::Up | day::K::BackTab) => form::Key::Up,
+            Some(day::K::Tab) if mods & 1 != 0 => form::Key::Up,
             Some(day::K::Down | day::K::Tab) => form::Key::Down,
+            Some(day::K::Home) => form::Key::Home,
+            Some(day::K::End) => form::Key::End,
             Some(day::K::Enter) => form::Key::Enter,
             Some(day::K::Escape) => form::Key::Escape,
             _ => return,
@@ -2337,7 +2400,8 @@ mod tests {
             bar.window().set_size(slint::LogicalSize::new(theme.get_width(), theme.get_calendar_height()));
             let row = bar.get_day_footer_rows().iter().find(|row| row.kind == 7).unwrap();
             let x = theme.get_padding() + theme.get_dial_cell_width() / 2.0;
-            let y = theme.get_calendar_height() - bar.get_day_footer_height() - theme.get_day_bottom() + row.top + theme.get_dial_top() + theme.get_dial_size() / 2.0;
+            let y = theme.get_calendar_height() - theme.get_footer_height() - bar.get_day_footer_height()
+                - theme.get_day_bottom() + row.top + theme.get_dial_top() + row.dial_size / 2.0;
             let start = slint::LogicalPosition::new(x, y);
             let end = slint::LogicalPosition::new(x, y - 2.0 * theme.get_dial_drag_step());
             let rating_at = |bar: &Bar| bar.get_day_footer_rows().iter().find(|row| row.kind == 7).unwrap().dials.row_data(0).unwrap();
@@ -2370,6 +2434,21 @@ mod tests {
             bar.invoke_dial_set(rating.item, 7, false);
             bar.invoke_focus_line();
         }
+        // The inline slash opens exactly the command list that typing '/' opens. A tap
+        // on the same spot clears it and returns input to the search field.
+        let theme = bar.global::<Theme>();
+        let query_tool = slint::LogicalPosition::new(theme.get_form_width() - theme.get_padding() - 4.0 * theme.get_accessory_height(), theme.get_line_height() / 2.0);
+        click(&bar, query_tool);
+        assert_eq!(bar.get_search_text(), "/");
+        assert_eq!(bar.get_commands().row_data(0).unwrap().heading.as_str(), "Befehle");
+        capture(&bar, "launcher-commands");
+        click(&bar, query_tool);
+        assert_eq!(bar.get_search_text(), "");
+        type_text(&bar, "xyz-ohne-treffer");
+        assert!(bar.get_searching() && bar.get_commands().row_count() == 0);
+        assert!(bar.get_footer_hints().iter().all(|hint| hint.action != 0));
+        send_key_combo(&bar, [K::DownArrow, K::Escape]);
+        assert!(!bar.get_searching() && bar.window().is_visible());
         type_text(&bar, "/Tag");
         send_key_combo(&bar, [K::Return]);
         assert!(bar.get_side_open() && bar.get_day_picker_open());
@@ -2383,7 +2462,8 @@ mod tests {
         assert_eq!(day_labels(&bar), ["Zahnarzt"]);
         type_text(&bar, "/Today");
         let theme = bar.global::<Theme>();
-        click(&bar, slint::LogicalPosition::new(theme.get_padding() * 2.0, theme.get_line_height() + theme.get_choice_height() / 2.0));
+        let first = bar.get_commands().row_data(0).unwrap();
+        click(&bar, slint::LogicalPosition::new(theme.get_padding() * 2.0, theme.get_line_height() + first.header + theme.get_row_height() / 2.0));
         assert_eq!(bar.get_day_relative().as_str(), "Heute");
         // Alt+→ shows tomorrow (the dentist), Alt+H today again; the search bar keeps the keyboard.
         bar.window().dispatch_event(slint::platform::WindowEvent::KeyPressed { text: char::from(K::Alt).into() });
@@ -2399,7 +2479,9 @@ mod tests {
         assert_eq!(bar.get_commands().row_count(), 10);
         capture(&bar, "search-type-filters");
         send_key_combo(&bar, [K::DownArrow]);
-        send_key_combo(&bar, [K::Return]);
+        // The footer applies precisely the filter selected with the keyboard.
+        assert_eq!(bar.get_footer_hints().row_data(0).unwrap().label.as_str(), "Filter übernehmen");
+        click(&bar, slint::LogicalPosition::new(theme.get_form_width() * 0.6, bar.get_content_height() - theme.get_footer_height() / 2.0));
         assert_eq!(bar.get_search_text(), "@Ereignis ");
         send_key_combo(&bar, [K::Escape]);
         type_text(&bar, "ahn");
@@ -2663,6 +2745,10 @@ mod tests {
         assert!(bar.get_menu_open() && !bar.get_side_open(), "Backspace: back to the actions.");
         // ↓ to the last line: the list follows.
         let rows = bar.get_menu_rows().row_count();
+        send_key_combo(&bar, [K::End]);
+        assert_eq!(bar.get_menu_pick() as usize, rows - 1);
+        send_key_combo(&bar, [K::Home]);
+        assert_eq!(bar.get_menu_pick(), 0);
         for _ in 1..rows { send_key_combo(&bar, [K::DownArrow]); }
         assert_eq!(bar.get_menu_pick() as usize, rows - 1);
         assert!(bar.get_menu_rows().row_data(rows - 1).unwrap().top > 200.0, "The last line lies below the first view.");
@@ -2693,12 +2779,15 @@ mod tests {
         assert!(bar.get_menu_open(), "A right click opens the entry's actions too.");
         fit_viewport(&bar);
         capture(&bar, "portrait-actions");
-        // A click beside the card closes it.
-        let beside = slint::LogicalPosition::new(20.0, 20.0);
+        // The calendar beneath the card also dismisses it; the same tap must
+        // not expand the day or open an entry underneath it.
+        let opened_before = with_app_value(|app| app.state.opened().clone());
+        let beside = slint::LogicalPosition::new(theme.get_padding(), bar.get_content_height() - theme.get_row_height());
         use slint::platform::{PointerEventButton, WindowEvent};
         bar.window().dispatch_event(WindowEvent::PointerPressed { position: beside, button: PointerEventButton::Left });
         bar.window().dispatch_event(WindowEvent::PointerReleased { position: beside, button: PointerEventButton::Left });
         assert!(!bar.get_menu_open() && !bar.get_side_open(), "A click beside the actions closes them.");
+        assert_eq!(with_app_value(|app| app.state.opened().clone()), opened_before);
         bar.set_screen_width(2000.0);
         bar.set_screen_height(2200.0);
         i_slint_backend_testing::mock_elapsed_time(Duration::from_millis(200));

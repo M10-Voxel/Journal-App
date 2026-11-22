@@ -43,6 +43,7 @@ const GROUPS: &[Group] = &[
         binding!("window-toggle", SYSTEM, "Ctrl+Alt+Space", "J-TerminaL ein- oder ausblenden", "Show or hide J-TerminaL"),
         binding!("settings", WINDOW, "F1", "Einstellungen öffnen oder schließen", "Open or close settings"),
         binding!("day-actions", WINDOW, "Ctrl+K", "Aktionen öffnen oder schließen", "Open or close the actions"),
+        fixed!("Home / End", "Im ungefilterten Aktionsmenü zur ersten oder letzten Aktion springen", "Jump to the first or last action when the menu search is empty"),
         binding!("entry-preview", WINDOW, "F3", "Vorschau zum ausgewählten Eintrag zeigen", "Preview the selected entry"),
         fixed!("Esc", "Einstellungen schließen", "Close settings"),
         binding!("notebook", WINDOW, "Ctrl+N", "Notizblock öffnen", "Open the notebook"),

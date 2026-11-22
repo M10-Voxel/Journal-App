@@ -74,7 +74,7 @@ component IconSpot inherits Rectangle {
     out property <bool> hovered: spot-touch.has-hover;
     width: Theme.day-symbol-box; height: Theme.day-symbol-box;
     border-radius: Theme.block-radius;
-    background: spot-touch.has-hover ? Theme.hover : transparent;
+    background: Theme.row-fill(false, spot-touch.has-hover, spot-touch.pressed);
     Image { width: root.icon-size; height: root.icon-size; x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2; source: root.icon; colorize: spot-touch.has-hover ? Theme.strong : root.tint; }
     spot-touch := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.clicked(); } }
 }
@@ -137,6 +137,7 @@ component DayScroll inherits Flickable {
 import { BoardView, BoardUi } from "board.slint";
 export { InkShape, InkDocument, BoardUi, BoardTile, BoardThread, BoardGroup, BoardBox, BoardHit, BoardTool, FloatingBoardNote } from "board.slint";
 export component Bar inherits Window {
+    in property <bool> glass;
     out property <float> board-viewport-w:board-page.viewport-w;
     out property <float> board-viewport-h:board-page.viewport-h;
     out property <float> board-viewport-x:board-page.viewport-x;
@@ -223,11 +224,22 @@ export component Bar inherits Window {
     in property <image> search-icon;
     in property <[CommandRow]> commands;
     in property <int> command-selected;
-    in property <string> search-list-hint;
+    in property <bool> searching;
+    in property <string> search-empty;
+    in property <string> commands-label;
+    in property <string> clear-label;
     in-out property <string> search-text <=> search.text;
     callback search-edited(string, int);
     callback search-cursor-moved(string, int);
     public function place-search-cursor(offset: int) { search.set-selection-offsets(offset, offset); }
+    function toggle-command-query() {
+        let query = search.text == "" ? "/" : "";
+        let cursor = query == "" ? 0 : 1;
+        search.text = query;
+        search.set-selection-offsets(cursor, cursor);
+        root.search-edited(query, cursor);
+        search.focus();
+    }
     callback command-chosen(int);
 
     in property <bool> notepad-open;
@@ -526,7 +538,7 @@ export component Bar inherits Window {
         }
     Rectangle {
         visible: !BoardUi.opened;
-        background: Theme.background;
+        background: root.glass ? Theme.background.with-alpha(Theme.surface-alpha) : Theme.background;
         border-radius: Theme.radius;
         clip: true;
     page-scroll := Flickable {
@@ -559,6 +571,7 @@ export component Bar inherits Window {
                     x: Theme.padding + Theme.search-icon-size + Theme.gap + Theme.calendar-gap;
                     width: day-switch.x - self.x - Theme.gap; height: parent.height;
                     vertical-alignment: center; single-line: true;
+                    accessible-label: root.search-placeholder;
                     color: Theme.strong; selection-background-color: Theme.selection; selection-foreground-color: Theme.strong; font-size: Theme.search-size;
                     edited => { root.search-edited(self.text, self.cursor-position-byte-offset); }
                     cursor-position-changed(_) => { root.search-cursor-moved(self.text, self.cursor-position-byte-offset); }
@@ -599,18 +612,36 @@ export component Bar inherits Window {
                     width: self.preferred-width; height: parent.height;
                     spacing: 0px;
                     Rectangle {
+                        width: Theme.accessory-height; height: self.width;
+                        y: (parent.height - self.height) / 2;
+                        accessible-role: button;
+                        accessible-label: search.text == "" ? root.commands-label : root.clear-label;
+                        accessible-action-default => { root.toggle-command-query(); }
+                        border-radius: Theme.block-radius;
+                        background: Theme.row-fill(false, query-touch.has-hover, query-touch.pressed);
+                        if search.text == "": KeyCaps {
+                            width: self.preferred-width; x: (parent.width - self.width) / 2;
+                            caps: ["/"]; lit: query-touch.has-hover;
+                        }
+                        if search.text != "": Text {
+                            text: "×"; font-size: Theme.search-size; color: query-touch.has-hover ? Theme.strong : Theme.muted;
+                            vertical-alignment: center; horizontal-alignment: center;
+                        }
+                        query-touch := TouchArea { mouse-cursor: pointer; clicked => { root.toggle-command-query(); } }
+                    }
+                    Rectangle {
                         width: day-label.preferred-width + Theme.accessory-inset * 2; height: Theme.accessory-height;
                         y: (parent.height - self.height) / 2;
                         border-radius: Theme.block-radius;
-                        background: day-touch.has-hover && !root.day-is-today ? Theme.hover : transparent;
+                        background: !root.day-is-today ? Theme.row-fill(false, day-touch.has-hover, day-touch.pressed) : transparent;
                         day-label := HorizontalLayout {
                             padding-left: Theme.accessory-inset; padding-right: Theme.accessory-inset; spacing: Theme.calendar-gap * 2;
                             Text { text: root.day-relative; color: root.day-is-today ? Theme.accent : Theme.muted; font-size: Theme.row-size; font-weight: Theme.weight-medium; vertical-alignment: center; }
                         }
                         day-touch := TouchArea { mouse-cursor: root.day-is-today ? MouseCursor.default : MouseCursor.pointer; clicked => { if !root.day-is-today { root.day-today(); } } }
                     }
-                    IconSpot { y: (parent.height - self.height) / 2; icon: root.icon-back; clicked => { root.form-key(5, 4); } }
-                    IconSpot { y: (parent.height - self.height) / 2; icon: root.icon-forward; clicked => { root.form-key(6, 4); } }
+                    IconSpot { width: Theme.accessory-height; height: self.width; y: (parent.height - self.height) / 2; icon: root.icon-back; clicked => { root.form-key(5, 4); } }
+                    IconSpot { width: Theme.accessory-height; height: self.width; y: (parent.height - self.height) / 2; icon: root.icon-forward; clicked => { root.form-key(6, 4); } }
                 }
             }
             // The entry: back, its title, the flag and the type.
@@ -662,9 +693,13 @@ export component Bar inherits Window {
         if !root.entry-open && !root.notepad-open && root.commands.length > 0: Flickable {
             property <length> selected-y: root.commands[root.command-selected].top;
             property <length> selected-h: root.commands[root.command-selected].tall;
-            changed selected-y => {
-                self.content-y = min(0px, max(min(self.content-y, -self.selected-y), self.height - self.selected-y - self.selected-h));
+            function reveal() {
+                self.content-y = clamp(max(min(self.content-y, -self.selected-y), self.height - self.selected-y - self.selected-h),
+                    min(0px, self.height - self.content-height), 0px);
             }
+            changed selected-y => { self.reveal(); }
+            changed height => { self.reveal(); }
+            changed content-height => { self.reveal(); }
             changed content-y => { root.search-scroll = self.content-y; root.dismiss-preview(); }
             init => { root.search-scroll = self.content-y; }
             content-height: root.commands[root.commands.length - 1].top + root.commands[root.commands.length - 1].tall;
@@ -673,12 +708,15 @@ export component Bar inherits Window {
                 x: Theme.popover-padding; width: parent.width - self.x * 2; y: command.top; height: command.tall;
                 if command.header > 0px: Text {
                     x: Theme.list-inset; y: 0px; height: command.header; text: command.heading;
-                    vertical-alignment: center; color: Theme.muted; font-size: Theme.small-size;
+                    vertical-alignment: center; color: Theme.muted; font-size: Theme.section-size; font-weight: Theme.weight-medium;
                 }
                 Rectangle {
                     y: command.header; height: parent.height - self.y;
                     border-radius: Theme.list-radius;
-                    background: index == root.command-selected ? Theme.row-selection : hit.has-hover ? Theme.hover : transparent;
+                    background: Theme.row-fill(index == root.command-selected, hit.has-hover, hit.pressed);
+                    accessible-role: list-item; accessible-label: command.name; accessible-description: command.detail;
+                    accessible-item-selected: index == root.command-selected;
+                    accessible-action-default => { root.command-chosen(index); }
                     HorizontalLayout {
                         padding-left: Theme.list-inset; padding-right: Theme.list-inset; spacing: Theme.gap;
                         if command.sigil: Text { text: "@"; color: Theme.muted; vertical-alignment: center; }
@@ -695,7 +733,8 @@ export component Bar inherits Window {
                             y: (parent.height - self.height) / 2; background: command.tint; border-radius: self.width / 2; }
                         if command.tag != "": Text { text: command.tag; color: Theme.muted; max-width: root.form-space / 5;
                             overflow: elide; font-size: Theme.small-size; vertical-alignment: center; }
-                        Text { text: command.detail; color: Theme.muted; font-size: Theme.small-size; vertical-alignment: center; }
+                        Text { text: command.detail; color: Theme.muted; font-size: Theme.small-size; vertical-alignment: center;
+                            max-width: root.form-space / 2.5; overflow: elide; }
                     }
                     hit := TouchArea {
                         mouse-cursor: pointer;
@@ -710,13 +749,9 @@ export component Bar inherits Window {
                 }
             }
         }
-        if !root.entry-open && !root.notepad-open && root.commands.length > 0 && root.search-list-hint != "": Rectangle {
-            height: Theme.section-height;
-            Rectangle { y: 0px; height: Theme.border-width; background: Theme.divider; }
-            Text {
-                x: Theme.popover-padding + Theme.list-inset; height: parent.height; text: root.search-list-hint;
-                color: Theme.muted; font-size: Theme.small-size; vertical-alignment: center;
-            }
+        if root.searching && root.commands.length == 0: Text {
+            vertical-stretch: 1; text: root.search-empty; color: Theme.muted; font-size: Theme.row-size;
+            horizontal-alignment: center; vertical-alignment: center;
         }
         // ----- The entry form under the top line, while open: a label at the left, the field at the right -----
         if root.entry-open && !root.notepad-open: Rectangle {
@@ -925,7 +960,7 @@ export component Bar inherits Window {
             finish(save) => { root.notepad-finish(save); }
         }
         // ----- The day view: a list as in Raycast -----
-        if !root.entry-open && !root.notepad-open && root.commands.length == 0: VerticalLayout {
+        if !root.entry-open && !root.notepad-open && !root.searching: VerticalLayout {
             vertical-stretch: 1;
             spacing: 0px;
             DayScroll {
@@ -939,7 +974,7 @@ export component Bar inherits Window {
                     x: 0px; y: Theme.calendar-gap;
                     width: layout.width;
                     height: root.day-list-height;
-                    for row in root.day-rows: TouchArea {
+                    for row in root.day-rows: day-row := TouchArea {
                         x: Theme.padding; width: parent.width - Theme.padding * 2;
                         y: row.top; height: row.tall;
                         enabled: row.kind == 1 && !row.editing;
@@ -950,9 +985,9 @@ export component Bar inherits Window {
                             } else { root.leave-preview(2, row.item); }
                         }
                         // The line the keyboard is on.
-                        if row.selected && row.kind != 7: Rectangle {
+                        if row.kind == 1 || (row.selected && row.kind != 7): Rectangle {
                             x: -Theme.day-select-inset; width: parent.width + Theme.day-select-inset * 2;
-                            background: Theme.row-selection; border-radius: Theme.list-radius;
+                            background: Theme.row-fill(row.selected, day-row.has-hover, false); border-radius: Theme.list-radius;
                         }
                         // The day's title, written in place.
                         if row.kind == 5 && !row.editing: Text {
@@ -971,7 +1006,7 @@ export component Bar inherits Window {
                                 width: Theme.day-symbol-box; height: Theme.day-symbol-box; y: (parent.height - self.height) / 2;
                                 opacity: row.done ? Theme.day-done-opacity : 1;
                                 border-radius: Theme.block-radius;
-                                background: symbol-touch.has-hover ? Theme.hover : transparent;
+                                background: Theme.row-fill(false, symbol-touch.has-hover, symbol-touch.pressed);
                                 Image {
                                     width: Theme.day-symbol-size; height: Theme.day-symbol-size; x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2;
                                     source: row.icon; colorize: row.trace || row.foreign ? Theme.placeholder : row.has-color ? row.color : Theme.text;
@@ -1033,7 +1068,7 @@ export component Bar inherits Window {
                                     width: Theme.day-tag-icon-size; height: self.width; x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2;
                                     source: root.icon-flag;
                                     colorize: row.priority ? Theme.priority : flag-touch.has-hover ? Theme.muted : Theme.placeholder;
-                                    visible: row.priority || row.selected || flag-touch.has-hover;
+                                    visible: row.priority || row.selected || day-row.has-hover;
                                     opacity: row.priority || flag-touch.has-hover ? 1 : 0.6;
                                 }
                                 flag-touch := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.day-click(row.item, 5); } }
@@ -1157,6 +1192,7 @@ export component Bar inherits Window {
         Footer {
             label: root.footer-label; date: root.footer-date;
             menu-open: root.menu-open && root.app-menu; menu-label: root.footer-menu-label;
+            actions-open: (root.menu-open && !root.app-menu) || root.side-open;
             menu => { root.app-menu-clicked(); }
             toast: root.notice; toast-is-error: root.notice-is-error;
             hints: root.footer-hints;
@@ -1268,36 +1304,6 @@ export component Bar inherits Window {
             }
         }
     }
-    // The actions (Strg+K) and an entry's pickers: a card over the footer at the right; a click beside it closes it.
-    if root.menu-open || root.side-open: TouchArea {
-        x: 0px; y: 0px; width: root.form-space; height: root.pane-height;
-        clicked => { root.toggle-menu(); }
-    }
-    if root.menu-open || root.side-open: ActionPopover {
-        width: min(root.menu-open && root.app-menu ? Theme.app-menu-width : Theme.popover-width, root.form-space - Theme.gap * 2);
-        x: root.menu-open && root.app-menu ? Theme.gap : root.form-space - self.width - Theme.gap;
-        y: root.pane-height - Theme.footer-height - self.height - Theme.calendar-gap;
-        menu-open: root.menu-open; app-menu: root.menu-open && root.app-menu;
-        menu-title: root.menu-title; menu-rows: root.menu-rows; menu-pick: root.menu-pick;
-        menu-placeholder: root.menu-placeholder; menu-empty: root.menu-empty;
-        menu-edited(text) => { root.menu-edited(text); }
-        menu-key(text, mods) => { root.menu-key(text, mods); }
-        menu-choose(index) => { root.menu-choose(index); }
-        side-open: root.side-open; side-kind: root.side-kind; side-title: root.side-title; side-heading: root.side-heading;
-        side-heading-icon: root.side-heading-icon; side-rows: root.side-rows; side-focus-index: root.side-focus-index;
-        side-clock-hours: root.side-clock-hours; side-clock-minutes: root.side-clock-minutes; side-clock-on-minutes: root.side-clock-on-minutes;
-        side-month-title: root.side-month-title; side-weekdays: root.side-weekdays; side-cells: root.side-cells;
-        side-confirm-text: root.side-confirm-text; side-text: root.side-text; side-placeholder: root.side-placeholder;
-        icon-back: root.icon-back; icon-forward: root.icon-forward; focus-request: root.popover-focus;
-        side-choose(index) => { root.side-choose(index); }
-        side-edited(text) => { root.side-edited(text); }
-        side-day(index) => { root.side-day(index); }
-        side-month(by) => { root.side-month(by); }
-        side-confirm => { root.side-confirm(); }
-        side-back => { root.side-back(); }
-        side-clock(minutes, steps) => { root.side-clock(minutes, steps); }
-        day-key(text, mods) => { root.day-key(text, mods); }
-    }
     Rectangle {
         x: root.stacked ? 0px : root.form-space;
         y: root.stacked ? root.pane-height : 0px;
@@ -1306,6 +1312,7 @@ export component Bar inherits Window {
         background: Theme.divider;
     }
     calendar := Calendar {
+        background: root.glass ? Theme.background : Theme.cal-background;
         x: root.stacked ? 0px : root.form-space + Theme.border-width;
         y: root.stacked ? root.pane-height + Theme.border-width : 0px;
         width: root.stacked ? root.content-width : root.content-width - self.x;
@@ -1340,6 +1347,42 @@ export component Bar inherits Window {
         }
         wheel(x, delta, ctrl, shift) => { root.cal-wheel(x, delta, ctrl, shift); }
     }
+    }
+    // Anchor to the visible footer even after the stacked page has scrolled.
+    // A tap outside the card dismisses it before it can reach a calendar day or entry.
+    if root.menu-open || root.side-open: Rectangle {
+        background: Theme.menu-scrim;
+        TouchArea {
+            clicked => { root.toggle-menu(); }
+            scroll-event(event) => { accept }
+        }
+        ActionPopover {
+            width: min(root.menu-open && root.app-menu ? Theme.app-menu-width : Theme.popover-width, root.form-space - Theme.gap * 2);
+            x: root.menu-open && root.app-menu ? Theme.gap : root.form-space - self.width - Theme.gap;
+            height: min(self.preferred-height, Theme.popover-max-height, parent.height - Theme.gap * 2);
+            y: clamp(root.pane-height + page-scroll.content-y - Theme.footer-height - self.height - Theme.calendar-gap,
+                Theme.gap, parent.height - self.height - Theme.gap);
+            menu-open: root.menu-open; app-menu: root.menu-open && root.app-menu;
+            menu-title: root.menu-title; menu-rows: root.menu-rows; menu-pick: root.menu-pick;
+            menu-placeholder: root.menu-placeholder; menu-empty: root.menu-empty;
+            menu-edited(text) => { root.menu-edited(text); }
+            menu-key(text, mods) => { root.menu-key(text, mods); }
+            menu-choose(index) => { root.menu-choose(index); }
+            side-open: root.side-open; side-kind: root.side-kind; side-title: root.side-title; side-heading: root.side-heading;
+            side-heading-icon: root.side-heading-icon; side-rows: root.side-rows; side-focus-index: root.side-focus-index;
+            side-clock-hours: root.side-clock-hours; side-clock-minutes: root.side-clock-minutes; side-clock-on-minutes: root.side-clock-on-minutes;
+            side-month-title: root.side-month-title; side-weekdays: root.side-weekdays; side-cells: root.side-cells;
+            side-confirm-text: root.side-confirm-text; side-text: root.side-text; side-placeholder: root.side-placeholder;
+            icon-back: root.icon-back; icon-forward: root.icon-forward; focus-request: root.popover-focus;
+            side-choose(index) => { root.side-choose(index); }
+            side-edited(text) => { root.side-edited(text); }
+            side-day(index) => { root.side-day(index); }
+            side-month(by) => { root.side-month(by); }
+            side-confirm => { root.side-confirm(); }
+            side-back => { root.side-back(); }
+            side-clock(minutes, steps) => { root.side-clock(minutes, steps); }
+            day-key(text, mods) => { root.day-key(text, mods); }
+        }
     }
     }
     day-scope := FocusScope {

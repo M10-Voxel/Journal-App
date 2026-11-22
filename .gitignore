@@ -6,3 +6,4 @@ target/
 
 # Private signing material (back up separately; never commit).
 .release-keys/
+graphify-out/

@@ -40,6 +40,7 @@ export component KeyCaps inherits HorizontalLayout {
 export component Footer inherits Rectangle {
     in property <bool> date;
     in property <bool> menu-open;
+    in property <bool> actions-open;
     in property <string> menu-label;
     in property <string> label;
     in property <string> toast;
@@ -66,7 +67,7 @@ export component Footer inherits Rectangle {
             alignment: start;
             Rectangle {
                 width: Theme.footer-menu-size; height: self.width; y: (parent.height - self.height) / 2;
-                background: root.menu-open || menu-touch.has-hover ? Theme.hover : transparent;
+                background: Theme.row-fill(root.menu-open, menu-touch.has-hover, menu-touch.pressed);
                 border-radius: Theme.block-radius;
                 accessible-role: button; accessible-label: root.menu-label;
                 accessible-action-default => { root.menu(); }
@@ -106,11 +107,13 @@ export component Footer inherits Rectangle {
                 height: Theme.footer-height - Theme.gap;
                 y: (parent.height - self.height) / 2;
                 border-radius: Theme.block-radius;
-                background: hint-touch.has-hover ? Theme.hover : transparent;
+                background: Theme.row-fill(hint.action == 1 && root.actions-open, hint-touch.has-hover, hint-touch.pressed);
+                accessible-role: button; accessible-label: hint.label;
+                accessible-action-default => { root.action(hint.action); }
                 hint-row := HorizontalLayout {
                     padding-left: Theme.footer-gap / 2; padding-right: Theme.footer-gap / 2; spacing: Theme.footer-gap;
-                    Text { text: hint.label; color: i == 0 ? Theme.strong : Theme.muted; font-size: Theme.footer-size; font-weight: i == 0 ? Theme.weight-medium : Theme.weight-normal; vertical-alignment: center; }
-                    KeyCaps { caps: hint.caps; }
+                    Text { text: hint.label; color: hint.action == 0 || root.actions-open ? Theme.strong : Theme.muted; font-size: Theme.footer-size; font-weight: hint.action == 0 ? Theme.weight-medium : Theme.weight-normal; vertical-alignment: center; }
+                    KeyCaps { caps: hint.caps; lit: hint.action == 1 && root.actions-open; }
                 }
                 hint-touch := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.action(hint.action); } }
             }

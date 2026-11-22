@@ -29,7 +29,7 @@ use crate::snapshot::Snapshot;
 use crate::texts::{action_texts, form_texts, notepad_texts, texts, FormTexts, Language, Texts};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Key { Tab, Up, Down, Left, Right, Enter, Escape, Space, PageUp, PageDown, Home, Insert, Delete, Digit(u8), Undo, Redo, Quit,
+pub enum Key { Tab, Up, Down, Left, Right, Enter, Escape, Space, PageUp, PageDown, Home, End, Insert, Delete, Digit(u8), Undo, Redo, Quit,
     /// F6: the keyboard goes to the calendar and back.
     Focus,
     /// Alt+P: important or not (the flag beside the title).
@@ -183,6 +183,7 @@ pub struct View {
     /// The day view's own message (an error of a change, a hint).
     pub day_message: Option<(String, bool)>,
     pub commands: Vec<Command>,
+    pub searching: bool,
     pub command_selected: usize,
     pub search_placeholder: String,
     pub status: Option<(String, bool)>,
@@ -264,6 +265,16 @@ pub struct Command {
 impl Command {
     pub fn has_preview(&self) -> bool {
         matches!(self.action, CommandAction::Hit(..) | CommandAction::Day(_) | CommandAction::Card(..))
+    }
+
+    pub fn primary_label(&self, language: Language) -> &'static str {
+        use crate::texts::search;
+        let label = match self.action {
+            CommandAction::Filter(..) => search::APPLY_FILTER,
+            CommandAction::Hit(..) | CommandAction::Day(_) | CommandAction::Card(..) => search::OPEN,
+            _ => search::RUN,
+        };
+        label[usize::from(language == Language::En)]
     }
 }
 
@@ -553,10 +564,7 @@ impl Form {
         self.hits.clear();
         if !text.trim().is_empty() && !text.trim_start().starts_with('/') {
             match self.find_entries(text, cursor) {
-                Ok(hits) => {
-                    if hits.is_empty() { self.status = Some((self.ft().no_hits.into(), false)); }
-                    self.hits = hits;
-                }
+                Ok(hits) => self.hits = hits,
                 Err(error) => self.status = Some((error, true)),
             }
         }
@@ -577,30 +585,37 @@ impl Form {
         let day = crate::texts::day_texts(self.language);
         let ft = self.ft();
         let all = [
-            ("/Entry".into(), ["entry", "eintrag"], ft.cmd_entry, CommandAction::Entry),
-            (notepad.command.into(), ["notepad", "notizblock"], notepad.command_detail, CommandAction::Notepad),
-            (format!("/{}", ft.cmd_day), ["day", "tag"], ft.cmd_day_detail, CommandAction::PickDay),
-            (format!("/{}", day.today), ["today", "heute"], actions.today, CommandAction::Today),
-            (format!("/{}", actions.undo), ["undo", "ruckgangig"], actions.undo, CommandAction::Undo),
-            (format!("/{}", actions.redo), ["redo", "wiederherstellen"], actions.redo, CommandAction::Redo),
-            (format!("/{}", day.rating), ["rating", "bewertung"], day.rating, CommandAction::Rating),
-            (format!("/{}", day.activities), ["activities", "aktivitaten"], day.activities, CommandAction::Activities),
+            ("/Entry".into(), ["entry", "eintrag"], ft.cmd_entry, "journal-pencil", CommandAction::Entry),
+            (notepad.command.into(), ["notepad", "notizblock"], notepad.command_detail, "notebook-pen", CommandAction::Notepad),
+            (format!("/{}", ft.cmd_day), ["day", "tag"], ft.cmd_day_detail, "journal-calendar", CommandAction::PickDay),
+            (format!("/{}", day.today), ["today", "heute"], actions.today, "calendar-check", CommandAction::Today),
+            (format!("/{}", actions.undo), ["undo", "ruckgangig"], actions.undo, "undo-2", CommandAction::Undo),
+            (format!("/{}", actions.redo), ["redo", "wiederherstellen"], actions.redo, "redo-2", CommandAction::Redo),
+            (format!("/{}", day.rating), ["rating", "bewertung"], day.rating, "gauge", CommandAction::Rating),
+            (format!("/{}", day.activities), ["activities", "aktivitaten"], day.activities, "activity", CommandAction::Activities),
         ];
-        let mut matching: Vec<_> = all.into_iter().filter(|(_, names, _, _)| names.iter().any(|name| name.starts_with(&query))).collect();
-        matching.sort_by_key(|(_, names, _, _)| !names.contains(&query.as_str()));
+        let mut matching: Vec<_> = all.into_iter().filter(|(_, names, ..)| names.iter().any(|name| name.starts_with(&query))).collect();
+        matching.sort_by_key(|(_, names, ..)| !names.contains(&query.as_str()));
         let mut commands: Vec<_> = matching.into_iter()
-            .map(|(name, _, detail, action)| Command { name, detail: detail.into(), look: Default::default(), action }).collect();
+            .map(|(name, _, detail, icon, action)| Command { name, detail: detail.into(), look: SearchRow { icon, ..Default::default() }, action }).collect();
         let en = self.language == Language::En;
         if let Some(enabled) = &self.board_scopes {
             for period in crate::board::Period::ALL {
                 if enabled.contains(&period) && [Language::De, Language::En].iter().any(|lang| parse::fold(&period.command(*lang)[1..]).starts_with(&query)) {
-                    commands.push(Command { name: period.command(self.language).into(), detail: if en {"Open board"}else{"Pinnwand öffnen"}.into(),look:Default::default(),action:CommandAction::Board(period) });
+                    commands.push(Command { name: period.command(self.language).into(), detail: if en {"Open board"}else{"Pinnwand öffnen"}.into(),look:SearchRow { icon: "panels-top-left", ..Default::default() },action:CommandAction::Board(period) });
                 }
             }
         } else if !query.is_empty() && ["pinnwand","board"].iter().any(|s|s.starts_with(&query)||query.starts_with(s)) {
-            commands.push(Command {name: if en {"Board"}else{"Pinnwand"}.into(), detail: crate::board_ui::projection_hint(self.language).into(),look:Default::default(),action:CommandAction::BoardHelp});
+            commands.push(Command {name: if en {"Board"}else{"Pinnwand"}.into(), detail: crate::board_ui::projection_hint(self.language).into(),look:SearchRow { icon: "panels-top-left", ..Default::default() },action:CommandAction::BoardHelp});
+        }
+        if let Some(first) = commands.first_mut() {
+            first.look.heading = crate::texts::search::COMMANDS[usize::from(en)].into();
         }
         commands
+    }
+
+    fn searching(&self) -> bool {
+        !self.entry_open && self.notepad.is_none() && !self.search.trim().is_empty()
     }
 
     pub fn choose_command(&mut self, index: usize) -> Effect {
@@ -666,7 +681,7 @@ impl Form {
             Key::Quit => Effect { quit: true, ..Effect::default() },
             Key::Focus => { self.open_entry(); let effect = self.open_options(Field::Day); Effect { focus: Some(Pane::Entry), ..effect } }
             // ↓ (or Tab) without commands: into the day view.
-            Key::Down | Key::Tab if commands.is_empty() => { let out = self.with_pane(|pane, cx| pane.enter(cx)); self.pane_effect(out) }
+            Key::Down | Key::Tab if commands.is_empty() && !self.searching() => { let out = self.with_pane(|pane, cx| pane.enter(cx)); self.pane_effect(out) }
             Key::Up | Key::Down if !commands.is_empty() => {
                 let n = commands.len();
                 self.command_selected = (self.command_selected + if key == Key::Down { 1 } else { n - 1 }) % n;
@@ -2331,6 +2346,7 @@ impl Form {
             side: self.month_panel().or(side),
             day_message,
             commands: if self.notepad.is_some() { Vec::new() } else { self.commands() },
+            searching: self.searching(),
             command_selected: self.command_selected,
             search_placeholder: ft.search.to_string(),
             status,
@@ -2396,7 +2412,7 @@ impl Form {
     }
 
     fn home_pane(&self) -> Pane {
-        if self.notepad.is_some() { Pane::Notes } else if self.entry_open { Pane::Entry } else if self.pane.cursor.is_some() { Pane::Day } else { Pane::Search }
+        if self.notepad.is_some() { Pane::Notes } else if self.entry_open { Pane::Entry } else if !self.searching() && self.pane.cursor.is_some() { Pane::Day } else { Pane::Search }
     }
 
     /// The search of the actions changed.
@@ -2412,6 +2428,10 @@ impl Form {
             Key::Up | Key::Down if count > 0 => {
                 let by = if key == Key::Up { count - 1 } else { 1 };
                 menu.pick = (menu.pick.min(count - 1) + by) % count;
+                Effect::default()
+            }
+            Key::Home | Key::End if count > 0 => {
+                menu.pick = if key == Key::Home { 0 } else { count - 1 };
                 Effect::default()
             }
             Key::Enter => { let pick = menu.pick; self.menu_choose(pick) }
@@ -2500,6 +2520,7 @@ impl Form {
     /// The footer's main action (Enter's meaning where the keyboard is).
     pub fn footer_primary(&mut self) -> Effect {
         self.menu = None;
+        if self.searching() { return self.choose_command(self.command_selected); }
         match self.context() {
             Context::Day => self.run(ActionId::NewTask, None),
             Context::DayLine => { let out = self.with_pane(|pane, cx| pane.key(cx, day_pane::K::Enter, day_pane::Mods::default())); self.pane_effect(out) }
