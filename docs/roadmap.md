@@ -147,11 +147,11 @@ Offene Aufgaben. Erledigtes mit `[x]` markieren. Vollständiger Plan: `docs/plan
   - [x] Stabile Strichkontur beim Abheben, mit Bildvergleich einer Druckkurve und versetztem Windows-Stiftende im Test.
   - [x] Nativer Windows-Test mit temporärer Datenbank und simuliertem Stift (`scripts/measure_board.py <EXE> --pen` im Verzeichnis `j-terminal`). Er prüft gespeicherte Druckwerte, beide Enden und die Lücke nach dem Teilradieren mit dem gewählten Werkzeug, Fokusverlust und die Wiederherstellung der Fenstergröße nach F11.
   - [ ] Abnahme am physischen Windows-Stift mit Druck, umgedrehtem Stift und schnellen Strichen bei verschiedenen Display-Skalierungen. Beim simulierten Umdrehen lieferte Windows auf dem Testsystem kein Radiererflag.
-- [ ] **Stufe 7: Eigenständige Installation und Release**
+- [x] **Stufe 7: Eigenständige Installation und Release**
   - [x] Eigener Release-Workflow mit Cargo-Version, Windows-Setup pro Benutzer und portabler EXE.
   - [x] „Made with Slint“-Logo in den generierten Release-Notizen.
   - [x] Eigenständiger Erststart mit gemeinsamem Journalformat, Pinnwänden und Ausweichkürzel bei Systemkonflikten.
-  - [ ] GitHub-Release veröffentlichen, sobald der gemeinsame Datenkern mit Pinnwand-Modul in einem Commit auf `Windows` verfügbar ist.
+  - [x] GitHub-Release [J-TerminaL 0.1.0](https://github.com/M10-Voxel/Journal-App/releases/tag/j-terminal-v0.1.0) mit Setup und portabler EXE veröffentlicht. Windows-Build, Tests, Installation, Erststart und Deinstallation auf dem Runner bestanden.
 
 ## Offene Fragen
 - keine (Timer: entschieden am 19.11.2026, gemeinsam in der Datenbank)
