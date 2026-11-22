@@ -49,3 +49,5 @@ Das Browser-Menü (Zurück, Neu laden, Speichern unter, Drucken …) erscheint n
 - auf einem Eintrag (außerhalb seines Textes) öffnen sich dessen Aktionen;
 - überall sonst passiert nichts.
 Eigene Menüs gibt es weiterhin für Fensterköpfe, Pinnwand, Notizen, Kalender, Widgets und markierten Text (Formatieren). Prüfung: `JOURNAL_UI_SCOPE=context-menus-all`.
+
+Die Hauptansicht veröffentlicht die eingeschalteten Pinnwand-Zeiträume beim Start und bei Änderungen in `board-scopes.json` im lokalen App-Datenordner. J-TerminaL übernimmt diese Auswahl für seine Zeitraum-Befehle.

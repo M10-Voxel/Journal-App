@@ -119,7 +119,7 @@ const BoardCard = memo(function BoardCard({ card, x, y, z, dx, dy, w, h, moving,
     onPointerDown={e => actions.grab(e, card, shownX, shownY)} onContextMenu={contextMenu(() => actions.menu(card, shownX))}
     onFocus={e => { if (e.target !== e.currentTarget && e.target.closest('input, textarea, [contenteditable="true"]')) actions.edit(card.id); }}
     onBlur={e => actions.blur(e, card.id)}
-    onKeyDown={e => actions.key(e, card, shownX, shownY)}>
+    onKeyDownCapture={e => actions.key(e, card, shownX, shownY)}>
     {!grouped && sync && <SyncToggle enabled={sync === 'on'} busy={busy} onToggle={() => actions.toggleSync([card.id])} />}
     <span className="board-pin" aria-hidden="true" title={t("Zu einer anderen Karte ziehen: verbinden · Alt L")} onPointerDown={e => actions.thread(e, card)} />
     <span className="board-resize" aria-hidden="true" title={t("Größe ändern · Doppelklick: zurücksetzen")}
@@ -644,8 +644,15 @@ export const BulletinBoard = memo(function BulletinBoard({ date, period = 'day',
       if (picking?.from === id) setPicking(null);
     },
     key: (e, card, x, y) => {
+      if (pickKey(e, card)) {
+        e.stopPropagation();
+        if (e.target !== e.currentTarget) {
+          e.currentTarget.focus({ preventScroll: true });
+          setEditing(null);
+        }
+        return;
+      }
       if (e.target !== e.currentTarget) return;
-      if (pickKey(e, card)) return;
       if (card.kind === 'note' && card.mode === 'ink' && inkKey(e)) return;
       if (e.altKey && e.shiftKey) {
         const sizesBy: Record<string, [number, number]> = { ArrowLeft: [-24, 0], ArrowRight: [24, 0], ArrowUp: [0, -24], ArrowDown: [0, 24] };

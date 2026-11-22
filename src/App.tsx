@@ -81,6 +81,10 @@ export function App() {
   const [settings, setSettings] = useState<Settings>(loadSettings);
   // The views and their modules (Einstellungen → Funktionen, features.ts); the calendar is always there.
   const features = settings.features;
+  const boardScopes = enabledModes(features).filter(mode => features.views[mode].modules.includes('board')).join(',');
+  useEffect(() => {
+    void invoke('publish_board_scopes', { scopes: boardScopes ? boardScopes.split(',') : [] }).catch(console.error);
+  }, [boardScopes]);
   const [chosenMode, setPeriodMode] = useState<Mode>(() => availableMode(loadSettings().features, 'day'));
   // The view shown is always one that is on: a view switched off while shown (or restored from the history) gives way to
   // the nearest one in the same render, so nothing ever renders a view that is off.

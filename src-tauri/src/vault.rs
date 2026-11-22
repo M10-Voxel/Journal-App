@@ -24,6 +24,11 @@ fn write_json(path: &Path, value: &impl Serialize) -> Result<()> {
     if result.is_err() { let _ = fs::remove_file(temp); }
     result
 }
+#[tauri::command]
+pub fn publish_board_scopes(vault: tauri::State<'_, Vault>, scopes: Vec<String>) -> Result<()> {
+    write_json(&vault.global.join(journal_core::board::SCOPES_FILE), &scopes)
+}
+
 fn empty(path: &Path) -> Result<()> {
     if fs::read_dir(path).map_err(error)?.next().is_some() { return Err(error("Für einen neuen Vault bitte einen leeren Ordner auswählen.")); }
     Ok(())

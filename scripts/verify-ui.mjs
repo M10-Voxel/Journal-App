@@ -138,6 +138,7 @@ const bootstrap = `
       void window.__uiTest.emit('history:restored',null);return true;
     }
     if (command === 'drive_validate') return null;
+    if (command === 'publish_board_scopes') { window.__uiTest.boardScopes=payload.scopes;return; }
     if (command === 'board_list') return JSON.parse(sessionStorage.getItem('boardCards')||'[]');
     if (command === 'board_folders') return JSON.parse(sessionStorage.getItem('boardFolders')||'[]');
     if (command === 'board_folder_save') {
@@ -5953,9 +5954,15 @@ try {
     await key('Escape');
     await until("!document.querySelector('.board-lightbox')");
     // New notebook threads: both ends persist together, and the thread menu cuts both ends.
-    await evaluate("document.querySelector('.board-card.is-note').focus()");
+    await evaluate("document.querySelector('.board-card.is-note header input').focus()");
     await key('l','KeyL',1);
     await until("Boolean(document.querySelector('.board-thread.is-drawing'))");
+    await key('ArrowRight','ArrowRight');
+    await key('Escape');
+    await until("!document.querySelector('.board-thread.is-drawing')");
+    assert(await evaluate("JSON.parse(sessionStorage.boardCards).every(c=>!c.links?.length)"));
+    await key('l','KeyL',1);
+    await key('ArrowRight','ArrowRight');
     await key('Enter');
     await until("JSON.parse(sessionStorage.boardCards).filter(c=>c.links?.length).length===2");
     // A third, unrelated card must fade the thread too; all card surfaces, not just their pins, mask it.
@@ -6515,6 +6522,7 @@ try {
       await command('Page.navigate', { url:origin });
       await until(`document.documentElement.dataset.layout==='${layout}' && Boolean(document.querySelector('${structure[layout]}')) && document.querySelectorAll('.entry').length>=1`);
       const where = `(${layout} + ${look})`;
+      await until("window.__uiTest.boardScopes?.join(',')==='day,week,year'");
       // Only the views that are on; no notebook (its stored "open" is ignored), the calendar stays.
       assert.deepEqual(await evaluate(`[...document.querySelectorAll('${tabs[layout]}')].map(tab => tab.dataset.periodMode ?? tab.textContent.trim())`).then(list => list.length), 4, `Four views ${where}.`);
       assert.equal(await evaluate("Boolean(document.querySelector('.journal-tab.is-notebook, .notebook-tab, .nebula-notebook-toggle, .notebook'))"), false, `No notebook ${where}.`);
@@ -6579,6 +6587,7 @@ try {
     assert.equal(await evaluate("document.querySelector('[data-feature-view=quarter] [data-feature-module=evaluation] input').disabled"), true, 'The last module of a view stays.');
     for (const mode of ['week', 'quarter', 'year']) await evaluate(`document.querySelector('[data-feature-mode=${mode}]').click()`);
     assert.equal(await evaluate("document.querySelector('[data-feature-mode=day]').disabled"), true, 'The last view stays on.');
+    await until("window.__uiTest.boardScopes?.join(',')==='day'");
     await screenshot('features-settings.png');
     await key('Escape'); await until("!document.querySelector('.settings')");
     assert.equal(await evaluate("document.querySelectorAll('.journal-tab').length"), 1, 'Only the day is left.');

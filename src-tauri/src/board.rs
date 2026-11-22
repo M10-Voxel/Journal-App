@@ -13,9 +13,7 @@ pub async fn board_list(store:tauri::State<'_,Mutex<Store>>) -> Result<Vec<Value
     card_list(&db)
 }
 fn card_list(db:&Store)->Result<Vec<Value>> {
-    let mut stmt=db.conn.prepare("SELECT value FROM settings WHERE key >= 'board:card:' AND key < 'board:card;'").map_err(|e|e.to_string())?;
-    let rows=stmt.query_map([],|r|r.get::<_,String>(0)).map_err(|e|e.to_string())?;
-    rows.map(|r|serde_json::from_str(&r.map_err(|e|e.to_string())?).map_err(|e|e.to_string())).collect()
+    journal_core::board::cards(&db.conn)
 }
 #[tauri::command]
 pub async fn board_patch(app:tauri::AppHandle,store:tauri::State<'_,Mutex<Store>>,id:String,patch:Value,source:String) -> Result<Value> {

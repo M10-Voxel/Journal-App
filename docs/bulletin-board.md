@@ -40,7 +40,7 @@ Format: `ink = { v: 1, strokes: [{ size, pressure, mouse?, tool?, color?, points
 
 ## Verbindungen und Entfernen
 
-Den Pin zu einer anderen Karte ziehen, um einen Faden anzulegen: Bilder und Links werden zu Anhängen, verbundene Zettel zu weiteren Seiten. Zwischen Notizen zeigt ein kleines Chevron auf dem Faden von der Ausgangsnotiz zur nächsten Seite. Diese Richtung bestimmt die Heftreihenfolge im Notizblock. Bilder und Links behalten richtungslose Fäden. Per Tastatur: Karte fokussieren, **Alt+L**, mit Pfeilen wählen und mit Enter verbinden. Den Faden anklicken, um seine Richtung umzukehren oder die Verbindung zu lösen. Eine Hauptnotiz-Markierung ist nicht mehr nötig.
+Den Pin zu einer anderen Karte ziehen, um einen Faden anzulegen: Bilder und Links werden zu Anhängen, verbundene Zettel zu weiteren Seiten. Zwischen Notizen zeigt ein kleines Chevron auf dem Faden von der Ausgangsnotiz zur nächsten Seite. Diese Richtung bestimmt die Heftreihenfolge im Notizblock. Bilder und Links behalten richtungslose Fäden. Per Tastatur: Karte fokussieren, **Alt+L**, mit Pfeilen wählen und mit Enter verbinden. Alt+L funktioniert auch aus dem Titelfeld oder dem Texteditor der Karte. Esc bricht die Zielwahl ab. Den Faden anklicken, um seine Richtung umzukehren oder die Verbindung zu lösen. Eine Hauptnotiz-Markierung ist nicht mehr nötig.
 
 Verbundene Karten erhalten auf der Pinnwand einen dezenten rechteckigen Rahmen. Er umfasst auch indirekt verbundene Karten und folgt Verschieben sowie Größenänderungen; Fäden und einzelne Karten bleiben wie bisher bedienbar.
 
