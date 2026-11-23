@@ -40,6 +40,8 @@ pub struct Out {
     pub go_to: Option<NaiveDate>,
     /// Something was written: the calendar shows it anew.
     pub changed: bool,
+    /// A tag was made in the picker: the tag editor opens on it (its colour and icon).
+    pub edit_tag: Option<String>,
 }
 
 /// What is written in place.
@@ -173,6 +175,11 @@ pub struct ActionLine { pub action: Action, pub icon: String, pub label: String,
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct SideRow { pub icon: String, pub label: String, pub value: String, pub selected: bool, pub on: bool, pub color: Option<Rgb>, pub danger: bool }
+
+/// The line that makes a tag or a folder of what is typed: „Sport“ anlegen.
+pub(crate) fn new_row(label: String, selected: bool) -> SideRow {
+    SideRow { icon: "plus".into(), label, selected, ..Default::default() }
+}
 
 pub(crate) fn tag_row(tag: Option<&journal_core::storage::Tag>, current: Option<&str>, selected: bool, none: &str) -> SideRow {
     SideRow {
@@ -754,6 +761,17 @@ impl DayPane {
         tag_indices(&tags, &self.side_text).into_iter().map(|index| index.map(|i| tags[i].clone())).collect()
     }
 
+    /// What is typed names no tag: after the tags, a line makes it.
+    fn new_tag(&self, cx: &Ctx) -> Option<String> { crate::tag_edit::creatable(&Self::tags(cx), &self.side_text) }
+
+    /// The tag of that name is made and the snapshot learns it.
+    fn make_tag(cx: &mut Ctx, name: &str) -> Result<journal_core::storage::Tag, String> {
+        let Some(store) = cx.store.as_deref_mut() else { return Err(texts(cx.language).read_only.into()) };
+        let tag = crate::tag_edit::create(store, name)?;
+        if let Some(snapshot) = cx.snapshot.as_deref_mut() { snapshot.reload(store)?; }
+        Ok(tag)
+    }
+
     /// The panel's text changed (the tag filter, the icon search, the description).
     pub fn side_edited(&mut self, text: &str) {
         self.side_text = text.to_string();
@@ -809,7 +827,7 @@ impl DayPane {
                 }
             }
             SideView::Tags => {
-                let count = self.tag_choices(cx).len();
+                let count = self.tag_choices(cx).len() + usize::from(self.new_tag(cx).is_some());
                 match key {
                     K::Up | K::BackTab => self.set_pick(pick(-1, count)),
                     K::Down | K::Tab => self.set_pick(pick(1, count)),
@@ -906,7 +924,16 @@ impl DayPane {
                 None => Out::default(),
             },
             SideView::Tags => {
-                let Some(choice) = self.tag_choices(cx).get(index).cloned() else { return Out::default() };
+                let choices = self.tag_choices(cx);
+                if index == choices.len() {
+                    let Some(name) = self.new_tag(cx) else { return Out::default() };
+                    let made = Self::make_tag(cx, &name).and_then(|tag| { let tag_id = tag.id.clone(); self.change(cx, |day, tags| ops::set_tag(day, tags, &id, Some(tag_id)))?; Ok(tag.id) });
+                    return match made {
+                        Ok(tag) => { let out = self.report(Ok(())); self.side = None; Out { edit_tag: Some(tag), ..out } }
+                        Err(error) => self.report(Err(error)),
+                    };
+                }
+                let Some(choice) = choices.get(index).cloned() else { return Out::default() };
                 let tag = choice.map(|t| t.id);
                 self.change(cx, |day, tags| ops::set_tag(day, tags, &id, tag))
             }
@@ -994,6 +1021,10 @@ impl DayPane {
                 panel.kind = 1; panel.heading = dt.tag.into(); panel.heading_icon = "tag"; panel.text = self.side_text.clone(); panel.placeholder = dt.tag_search.into();
                 panel.rows = self.tag_choices(cx).into_iter().enumerate().map(|(i, tag)|
                     tag_row(tag.as_ref(), entry.tag.as_deref(), side.pick == i, ft.no_tag)).collect();
+                if let Some(name) = self.new_tag(cx) {
+                    let selected = side.pick == panel.rows.len();
+                    panel.rows.push(new_row(crate::texts::tags::make_tag(&name, cx.language), selected));
+                }
             }
             SideView::Reminders => {
                 panel.kind = 3; panel.heading = dt.reminder.into(); panel.heading_icon = "bell";

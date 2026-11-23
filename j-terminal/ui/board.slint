@@ -6,6 +6,7 @@ import { KeyBindings } from "key-bindings.slint";
 import { BoardUi, InkDocument } from "board-model.slint";
 import { BoardSurface } from "board-surface.slint";
 import { ActionPopover } from "actions.slint";
+import { TagEditorUi } from "tag-editor.slint";
 export { InkShape, InkDocument, BoardUi, BoardTile, BoardThread, BoardGroup, BoardHit, BoardBox, BoardTool } from "board-model.slint";
 
 component Control inherits Rectangle {
@@ -16,7 +17,7 @@ component Control inherits Rectangle {
     border-radius: Theme.block-radius;
     background: area.has-hover ? Theme.hover : transparent;
     text := Text { text:root.label; color:Theme.text; font-size:Theme.row-size; horizontal-alignment:center; vertical-alignment:center; }
-    area := TouchArea { clicked => {root.invoke();} }
+    area := TouchArea { mouse-cursor: MouseCursor.default; clicked => {root.invoke();} }
 }
 
 export component BoardView inherits Rectangle {
@@ -33,7 +34,7 @@ export component BoardView inherits Rectangle {
     property <int> focus-request:BoardUi.focus-request;
     changed focus-request => { root.take-focus(); }
     public function take-focus() {
-        if BoardUi.menu-open || BoardUi.prompt != "" { return; }
+        if BoardUi.menu-open || BoardUi.prompt != "" || TagEditorUi.open { return; }
         if BoardUi.editor == 1 { if BoardUi.title-focus { title-input.focus(); } else {body-input.focus();} }
         else {focus.focus();}
     }
@@ -53,7 +54,7 @@ export component BoardView inherits Rectangle {
             background:max-touch.has-hover ? Theme.hover : transparent;border-radius:Theme.block-radius;
             accessible-role:button;accessible-label:BoardUi.maximize-label;
             BoardGlyph {name:BoardUi.maximized ? "minimize" : "maximize";width:Theme.label-icon-size;height:self.width;tint:Theme.text;}
-            max-touch := TouchArea {mouse-cursor:pointer;clicked=>{BoardUi.command("maximize");}}
+            max-touch := TouchArea {mouse-cursor:default;clicked=>{BoardUi.command("maximize");}}
         }
     }
     ink-tools := InkTools {
@@ -157,10 +158,13 @@ export component BoardView inherits Rectangle {
         x:parent.width - self.width - Theme.gap;y:root.height - root.footer - self.height - Theme.calendar-gap;
     }
     if (BoardUi.menu-open && BoardUi.ink-picker=="") || BoardUi.prompt!="": ActionPopover {
-        x:parent.width - self.width - Theme.gap;
-        y:root.height - root.footer - self.height - Theme.calendar-gap;
-        width:min(Theme.popover-width, parent.width - 2*Theme.gap);
-        height:min(self.preferred-height,Theme.popover-max-height,root.available);
+        // At the mouse after a right click (kept inside the window), else at the right over the footer.
+        x:BoardUi.menu-compact ? max(Theme.gap,min(BoardUi.menu-x,parent.width - self.width - Theme.gap)) : parent.width - self.width - Theme.gap;
+        y:BoardUi.menu-compact ? max(root.header,min(BoardUi.menu-y,root.height - root.footer - self.height - Theme.calendar-gap))
+            : root.height - root.footer - self.height - Theme.calendar-gap;
+        width:min(BoardUi.menu-compact ? Theme.popover-compact-width : Theme.popover-width, parent.width - 2*Theme.gap);
+        height:min(self.preferred-height,BoardUi.menu-compact ? Theme.popover-compact-max-height : Theme.popover-max-height,root.available);
+        compact:BoardUi.menu-compact;
         menu-open:BoardUi.menu-open && !BoardUi.tag-open; menu-title:BoardUi.menu-title;
         menu-rows:BoardUi.options; menu-pick:BoardUi.option-index;
         menu-placeholder:BoardUi.menu-search; menu-empty:BoardUi.menu-empty;

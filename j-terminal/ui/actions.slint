@@ -18,14 +18,15 @@ component PopoverSearch inherits Rectangle {
     in property <bool> menu;
     // ←/→ belong to the list (the icon grid), not to the text.
     in property <bool> sideways;
+    // Above the list (the compact card): the dividing line below it.
+    in property <bool> on-top;
     callback edited(string);
     callback hand-on(string, int);
     pure function mods(shift: bool, control: bool, alt: bool) -> int { return (shift ? 1 : 0) + (control ? 2 : 0) + (alt ? 4 : 0); }
     changed focus-request => { if root.visible { input.focus(); } }
     public function reset() { input.text = ""; }
     public function grab() { input.focus(); }
-    height: Theme.popover-search-height;
-    Rectangle { y: 0px; height: Theme.border-width; background: Theme.divider; }
+    Rectangle { y: root.on-top ? parent.height - Theme.border-width : 0px; height: Theme.border-width; background: Theme.divider; }
     Image {
         x: Theme.popover-inset + Theme.popover-padding;
         y: (parent.height - self.height) / 2; width: Theme.label-icon-size; height: self.width;
@@ -113,6 +114,10 @@ export component ActionPopover inherits Rectangle {
     callback side-clock(bool, int);
     callback day-key(string, int);
 
+    // Opened by a right click: smaller lines, the search on top, no keys.
+    in property <bool> compact;
+    private property <length> line-height: root.compact ? Theme.compact-row-height : Theme.side-row-height;
+    private property <length> search-height: root.compact ? Theme.compact-search-height : Theme.popover-search-height;
     in property <bool> menu-can-back;
     in property <int> search-reset;
     changed search-reset => { search.reset(); if root.searching { search.grab(); } }
@@ -132,8 +137,11 @@ export component ActionPopover inherits Rectangle {
     TouchArea {}
 
     content := VerticalLayout {
-        // The heading: what the actions are about, or the picker's name (a click: back to the actions).
-        if !root.app-menu: Rectangle {
+        // Room for the search when it is on top.
+        if root.compact && root.searching: Rectangle { height: root.search-height; }
+        // The heading: what the actions are about, or the picker's name (a click: back to the actions). The compact
+        // card shows it only where it leads back.
+        if !root.app-menu && (!root.compact || root.side-open || root.menu-can-back): Rectangle {
             height: Theme.section-height + Theme.popover-padding;
             HorizontalLayout {
                 padding-left: Theme.popover-inset + Theme.popover-padding; padding-right: Theme.popover-inset; padding-top: Theme.popover-padding;
@@ -154,7 +162,7 @@ export component ActionPopover inherits Rectangle {
             }
             back-touch := TouchArea {
                 enabled: root.side-open || root.menu-can-back;
-                mouse-cursor: pointer; clicked => { root.side-back(); }
+                mouse-cursor: default; clicked => { root.side-back(); }
             }
         }
         // ----- The actions -----
@@ -162,21 +170,21 @@ export component ActionPopover inherits Rectangle {
             // The chosen line stays in view (its place comes from Rust: the sections make the lines uneven).
             property <length> pick-top: root.menu-pick >= 0 && root.menu-pick < root.menu-rows.length ? root.menu-rows[root.menu-pick].top : 0px;
             property <length> list-limit: root.menu-rows.length > Theme.action-visible-rows
-                ? root.menu-rows[Theme.action-visible-rows].top + Theme.side-row-height / 2
+                ? root.menu-rows[Theme.action-visible-rows].top + root.line-height / 2
                 : menu-lines.preferred-height;
             function reveal() {
-                self.content-y = min(0px, max(min(self.content-y, -self.pick-top), self.height - self.pick-top - Theme.side-row-height - Theme.popover-padding));
+                self.content-y = min(0px, max(min(self.content-y, -self.pick-top), self.height - self.pick-top - root.line-height - Theme.popover-padding));
             }
             changed pick-top => { self.reveal(); }
             changed height => { self.reveal(); }
-            min-height: Theme.side-row-height;
+            min-height: root.line-height;
             preferred-height: self.list-limit;
             max-height: self.list-limit;
             vertical-stretch: 1;
             content-height: menu-lines.preferred-height;
             menu-lines := VerticalLayout {
                 padding-left: Theme.popover-padding; padding-right: Theme.popover-padding; padding-bottom: Theme.popover-padding;
-                padding-top: root.app-menu ? Theme.popover-padding : 0px;
+                padding-top: root.app-menu || root.compact ? Theme.popover-padding : 0px;
                 width: parent.width; height: self.preferred-height;
                 spacing: Theme.choice-spacing;
                 for row[i] in root.menu-rows: VerticalLayout {
@@ -193,9 +201,9 @@ export component ActionPopover inherits Rectangle {
                         }
                     }
                     Rectangle {
-                        height: Theme.side-row-height;
+                        height: root.line-height;
                         border-radius: Theme.list-radius;
-                        background: Theme.row-fill(i == root.menu-pick, menu-touch.has-hover, menu-touch.pressed);
+                        background: Theme.row-fill(i == root.menu-pick, menu-touch.has-hover, menu-touch.pressed); animate background { duration: Theme.hover-time; }
                         accessible-role: list-item; accessible-label: row.label; accessible-item-selected: i == root.menu-pick;
                         accessible-action-default => { root.menu-choose(i); }
                         HorizontalLayout {
@@ -213,13 +221,13 @@ export component ActionPopover inherits Rectangle {
                                 overflow: elide; max-width: Theme.side-value-width;
                             }
                             if row.on && row.value == "": Rectangle { width: Theme.tag-dot - 2px; height: self.width; y: (parent.height - self.height) / 2; border-radius: self.width / 2; background: Theme.strong; }
-                            KeyCaps { caps: row.caps; lit: i == root.menu-pick; }
+                            if !root.compact: KeyCaps { caps: row.caps; lit: i == root.menu-pick; }
                         }
-                        menu-touch := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.menu-choose(i); } }
+                        menu-touch := TouchArea { mouse-cursor: MouseCursor.default; clicked => { root.menu-choose(i); } }
                     }
                 }
                 if root.menu-rows.length == 0: Text {
-                    height: Theme.side-row-height; vertical-alignment: center;
+                    height: root.line-height; vertical-alignment: center;
                     text: root.menu-empty; color: Theme.placeholder; font-size: Theme.row-size;
                 }
             }
@@ -227,14 +235,14 @@ export component ActionPopover inherits Rectangle {
         // ----- The pickers -----
         // Tags, reminders and deletion scopes.
         if root.side-open && (root.side-kind == 1 || root.side-kind == 3 || root.side-kind == 7): side-list := Flickable {
-            min-height: Theme.side-row-height;
+            min-height: root.line-height;
             preferred-height: side-lines.preferred-height;
             vertical-stretch: 1;
             property <int> focused-row: root.side-focus-index;
             changed focused-row => {
                 if self.focused-row >= 0 {
-                    let top = self.focused-row * (Theme.side-row-height + Theme.choice-spacing);
-                    self.content-y = min(0px, max(min(self.content-y, -top), self.height - top - Theme.side-row-height));
+                    let top = self.focused-row * (root.line-height + Theme.choice-spacing);
+                    self.content-y = min(0px, max(min(self.content-y, -top), self.height - top - root.line-height));
                 }
             }
             content-height: side-lines.preferred-height;
@@ -243,9 +251,9 @@ export component ActionPopover inherits Rectangle {
                 width: parent.width; height: self.preferred-height;
                 spacing: Theme.choice-spacing;
                 for line[i] in root.side-rows: Rectangle {
-                    height: Theme.side-row-height;
+                    height: root.line-height;
                     border-radius: Theme.list-radius;
-                    background: Theme.row-fill(line.selected, line-touch.has-hover, line-touch.pressed);
+                    background: Theme.row-fill(line.selected, line-touch.has-hover, line-touch.pressed); animate background { duration: Theme.hover-time; }
                     accessible-role: list-item; accessible-label: line.label; accessible-item-selected: line.selected;
                     accessible-action-default => { root.side-choose(i); }
                     HorizontalLayout {
@@ -257,7 +265,7 @@ export component ActionPopover inherits Rectangle {
                         if line.value != "": Text { text: line.value; color: Theme.muted; font-size: Theme.small-size; vertical-alignment: center; overflow: elide; max-width: Theme.side-value-width; }
                         if line.on: Text { text: "✓"; color: Theme.strong; font-size: Theme.row-size; vertical-alignment: center; }
                     }
-                    line-touch := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.side-choose(i); } }
+                    line-touch := TouchArea { mouse-cursor: MouseCursor.default; clicked => { root.side-choose(i); } }
                 }
             }
         }
@@ -275,10 +283,10 @@ export component ActionPopover inherits Rectangle {
                 y: Math.floor(i / Theme.side-icon-columns) * Theme.side-icon-cell;
                 width: Theme.side-icon-cell - Theme.calendar-gap; height: Theme.side-icon-cell - Theme.calendar-gap;
                 border-radius: Theme.block-radius;
-                background: Theme.row-fill(line.selected, icon-touch.has-hover, icon-touch.pressed);
+                background: Theme.row-fill(line.selected, icon-touch.has-hover, icon-touch.pressed); animate background { duration: Theme.hover-time; }
                 border-width: line.on ? Theme.border-width : 0px; border-color: Theme.field-focus;
                 Image { width: Theme.icon-size; height: Theme.icon-size; x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2; source: line.icon; colorize: line.selected || line.on ? Theme.strong : Theme.muted; }
-                icon-touch := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.side-choose(i); } }
+                icon-touch := TouchArea { mouse-cursor: MouseCursor.default; clicked => { root.side-choose(i); } }
             }
         }
         // The clock: big hours and minutes; the wheel or ↑/↓ change the part with the arrows.
@@ -289,7 +297,7 @@ export component ActionPopover inherits Rectangle {
                 background: !root.side-clock-on-minutes ? Theme.row-selection : Theme.field-background; border-radius: Theme.block-radius;
                 border-width: Theme.border-width; border-color: !root.side-clock-on-minutes ? Theme.field-focus : Theme.edge;
                 side-hours := Text { text: root.side-clock-hours; font-family: Theme.write-font; font-size: Theme.clock-size; color: Theme.strong; horizontal-alignment: center; vertical-alignment: center; }
-                TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.side-clock(false, 0); } scroll-event(event) => { root.side-clock(false, event.delta-y > 0 ? 1 : -1); accept } }
+                TouchArea { mouse-cursor: MouseCursor.default; clicked => { root.side-clock(false, 0); } scroll-event(event) => { root.side-clock(false, event.delta-y > 0 ? 1 : -1); accept } }
             }
             Text { text: ":"; font-family: Theme.write-font; font-size: Theme.clock-size; color: Theme.muted; vertical-alignment: center; }
             Rectangle {
@@ -297,7 +305,7 @@ export component ActionPopover inherits Rectangle {
                 background: root.side-clock-on-minutes ? Theme.row-selection : Theme.field-background; border-radius: Theme.block-radius;
                 border-width: Theme.border-width; border-color: root.side-clock-on-minutes ? Theme.field-focus : Theme.edge;
                 side-minutes := Text { text: root.side-clock-minutes; font-family: Theme.write-font; font-size: Theme.clock-size; color: Theme.strong; horizontal-alignment: center; vertical-alignment: center; }
-                TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.side-clock(true, 0); } scroll-event(event) => { root.side-clock(true, event.delta-y > 0 ? 1 : -1); accept } }
+                TouchArea { mouse-cursor: MouseCursor.default; clicked => { root.side-clock(true, 0); } scroll-event(event) => { root.side-clock(true, event.delta-y > 0 ? 1 : -1); accept } }
             }
         }
         // The month to plan on: the entry's own day quiet, today marked, the chosen day(s) in the accent.
@@ -305,10 +313,10 @@ export component ActionPopover inherits Rectangle {
             padding-left: Theme.popover-inset + Theme.popover-padding; padding-right: Theme.popover-inset + Theme.popover-padding;
             spacing: Theme.gap; height: Theme.side-row-height;
             Image { width: Theme.label-icon-size; height: Theme.label-icon-size; y: (parent.height - self.height) / 2; source: root.icon-back; colorize: Theme.muted;
-                TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.side-month(-1); } } }
+                TouchArea { mouse-cursor: MouseCursor.default; clicked => { root.side-month(-1); } } }
             Text { text: root.side-month-title; color: Theme.strong; font-size: Theme.row-size; font-weight: Theme.weight-medium; horizontal-alignment: center; vertical-alignment: center; horizontal-stretch: 1; }
             Image { width: Theme.label-icon-size; height: Theme.label-icon-size; y: (parent.height - self.height) / 2; source: root.icon-forward; colorize: Theme.muted;
-                TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.side-month(1); } } }
+                TouchArea { mouse-cursor: MouseCursor.default; clicked => { root.side-month(1); } } }
         }
         if root.side-open && root.side-kind == 5: Rectangle {
             height: Theme.side-cell * 7;
@@ -327,7 +335,7 @@ export component ActionPopover inherits Rectangle {
                     text: cell.label; font-family: Theme.write-font; font-size: Theme.row-size; horizontal-alignment: center; vertical-alignment: center;
                     color: cell.picked ? Theme.ground : cell.own || cell.disabled || !cell.in-month ? Theme.placeholder : cell.today ? Theme.accent : Theme.text;
                 }
-                cell-touch := TouchArea { enabled: !cell.disabled; mouse-cursor: MouseCursor.pointer; clicked => { root.side-day(i); } }
+                cell-touch := TouchArea { enabled: !cell.disabled; mouse-cursor: MouseCursor.default; clicked => { root.side-day(i); } }
             }
         }
         // The clock's and the month's confirming line.
@@ -342,17 +350,20 @@ export component ActionPopover inherits Rectangle {
                     Text { text: root.side-confirm-text; color: Theme.strong; font-size: Theme.row-size; vertical-alignment: center; horizontal-stretch: 1; }
                     KeyCaps { caps: ["↵"]; }
                 }
-                take-touch := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.side-confirm(); } }
+                take-touch := TouchArea { mouse-cursor: MouseCursor.default; clicked => { root.side-confirm(); } }
             }
         }
         if root.side-open && root.side-kind == 8: HorizontalLayout {
             padding:Theme.popover-padding;spacing:Theme.gap;height:Theme.popover-search-height;
             TextInput {text:root.side-text;single-line:true;color:Theme.strong;
-                horizontal-stretch:1;vertical-alignment:center;init=>{self.focus();}
+                horizontal-stretch:1;vertical-alignment:center;init=>{self.focus();self.select-all();}
+                // A following question (a link's title after its address) starts from its own value.
+                property <int> reset:root.search-reset;
+                changed reset=>{self.text=root.side-text;self.select-all();}
                 edited=>{root.side-edited(self.text);}accepted=>{root.side-confirm();}}
             Rectangle {width:Theme.side-row-height;border-radius:Theme.list-radius;background:Theme.row-selection;
                 Text {text:"↵";color:Theme.strong;horizontal-alignment:center;vertical-alignment:center;}
-                TouchArea {clicked=>{root.side-confirm();}}}
+                TouchArea {mouse-cursor:default;clicked=>{root.side-confirm();}}}
         }
         // The description: written in place; Esc keeps it.
         if root.side-open && root.side-kind == 6: Rectangle {
@@ -375,17 +386,20 @@ export component ActionPopover inherits Rectangle {
                 }
             }
         }
-        // The search: of the actions, or of the tags and icons. One field that stays (and keeps the keyboard) while
-        // the card goes from the actions into a picker and back; it starts empty each time.
-        search := PopoverSearch {
-            visible: root.searching;
-            height: root.searching ? Theme.popover-search-height : 0px;
-            placeholder: root.menu-open ? root.menu-placeholder : root.side-placeholder;
-            menu: root.menu-open; sideways: !root.menu-open && root.side-kind == 2;
-            focus-request: root.focus-request;
-            edited(text) => { if root.menu-open { root.menu-edited(text); } else { root.side-edited(text); } }
-            hand-on(text, mods) => { if root.menu-open { root.menu-key(text, mods); } else { root.day-key(text, mods); } }
-        }
+        // Room for the search at the bottom.
+        Rectangle { height: !root.compact && root.searching ? root.search-height : 0px; }
+    }
+    // The search: of the actions, or of the tags and icons. One field that stays (and keeps the keyboard) while
+    // the card goes from the actions into a picker and back; it starts empty each time. On top in the compact card.
+    search := PopoverSearch {
+        x: 0px; width: root.width; y: root.compact ? 0px : root.height - self.height;
+        visible: root.searching; on-top: root.compact;
+        height: root.searching ? root.search-height : 0px;
+        placeholder: root.menu-open ? root.menu-placeholder : root.side-placeholder;
+        menu: root.menu-open; sideways: !root.menu-open && root.side-kind == 2;
+        focus-request: root.focus-request;
+        edited(text) => { if root.menu-open { root.menu-edited(text); } else { root.side-edited(text); } }
+        hand-on(text, mods) => { if root.menu-open { root.menu-key(text, mods); } else { root.day-key(text, mods); } }
     }
     if root.menu-open && root.app-menu: FocusScope {
         width: 0px; height: 0px;

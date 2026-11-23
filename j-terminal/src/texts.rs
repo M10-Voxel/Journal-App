@@ -4,6 +4,8 @@
 pub mod settings;
 pub mod search;
 pub mod board;
+pub mod templates;
+pub mod tags;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Language { De, En }

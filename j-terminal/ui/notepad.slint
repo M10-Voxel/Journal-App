@@ -44,7 +44,7 @@ component NotepadButton inherits Rectangle {
     }
     hit := TouchArea {
         enabled: root.enabled;
-        mouse-cursor: MouseCursor.pointer;
+        mouse-cursor: MouseCursor.default;
         clicked => { root.clicked(); }
     }
 }
@@ -68,7 +68,7 @@ export component NotepadAction inherits Rectangle {
         colorize: root.highlighted || hit.has-hover ? Theme.accent : Theme.muted;
     }
     hit := TouchArea {
-        mouse-cursor: MouseCursor.pointer;
+        mouse-cursor: MouseCursor.default;
         clicked => { root.clicked(); }
     }
 }
@@ -211,7 +211,7 @@ export component NotepadEditor inherits VerticalLayout {
                 accessible-label: root.panel == 1 ? root.labels.exit : root.labels.back;
                 accessible-action-default => { if root.viewer-open { root.close-viewer(); } else { root.finish(false); } }
                 Image { width: Theme.label-icon-size; height: self.width; x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2; source: root.back-icon; colorize: Theme.text; }
-                back-touch := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { if root.viewer-open { root.close-viewer(); } else { root.finish(false); } } }
+                back-touch := TouchArea { mouse-cursor: MouseCursor.default; clicked => { if root.viewer-open { root.close-viewer(); } else { root.finish(false); } } }
             }
             VerticalLayout {
                 alignment: center;
@@ -409,7 +409,7 @@ export component NotepadEditor inherits VerticalLayout {
                                     source: root.check-icon; colorize: Theme.ground;
                                 }
                             }
-                            TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { preview-keys.cursor = i; root.check(block.offset); } }
+                            TouchArea { mouse-cursor: MouseCursor.default; clicked => { preview-keys.cursor = i; root.check(block.offset); } }
                         }
                         StyledText {
                             horizontal-stretch: 1;
@@ -439,7 +439,7 @@ export component NotepadEditor inherits VerticalLayout {
                         width: parent.width; height: parent.height;
                         source: attachment.thumbnail; image-fit: contain; image-rendering: smooth;
                     }
-                    TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.view-attachment(attachment.key); } }
+                    TouchArea { mouse-cursor: MouseCursor.default; clicked => { root.view-attachment(attachment.key); } }
                 }
             }
         }
@@ -544,7 +544,7 @@ export component NotepadEditor inherits VerticalLayout {
                         text: name; color: (i == 1) == root.on-day ? Theme.accent : Theme.muted;
                         font-size: Theme.row-size; horizontal-alignment: center; vertical-alignment: center;
                     }
-                    option-hit := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.scope(i == 1); } }
+                    option-hit := TouchArea { mouse-cursor: MouseCursor.default; clicked => { root.scope(i == 1); } }
                 }
             }
             if root.choices.length == 0: Text { text: root.panel-empty; font-size: Theme.row-size; color: Theme.muted; }
@@ -596,7 +596,7 @@ export component NotepadEditor inherits VerticalLayout {
                         Text { text: item.title; color: Theme.strong; font-size: Theme.row-size; vertical-alignment: center; horizontal-stretch: 1; overflow: elide; }
                         if item.detail != "": Text { text: item.detail; color: Theme.muted; font-size: Theme.small-size; vertical-alignment: center; overflow: elide; max-width: Theme.side-value-width; }
                     }
-                    item-hit := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.choose(item.key); } }
+                    item-hit := TouchArea { mouse-cursor: MouseCursor.default; clicked => { root.choose(item.key); } }
                     }
                     }
                 }

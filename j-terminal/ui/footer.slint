@@ -22,7 +22,8 @@ export component KeyCaps inherits HorizontalLayout {
         y: (parent.height - self.height) / 2;
         border-radius: Theme.keycap-radius;
         border-width: Theme.border-width;
-        border-color: root.lit ? Theme.field-focus : Theme.keycap-border;
+        background: root.lit ? Theme.keycap-lit-background : Theme.keycap-background;
+        border-color: Theme.keycap-border;
         if cap == "↵" || cap == "⇧": Image {
             width: Theme.keycap-size; height: self.width; x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2;
             source: cap == "↵" ? KeyIcons.enter : KeyIcons.shift; colorize: root.lit ? Theme.strong : Theme.keycap-text;
@@ -67,7 +68,7 @@ export component Footer inherits Rectangle {
             alignment: start;
             Rectangle {
                 width: Theme.footer-menu-size; height: self.width; y: (parent.height - self.height) / 2;
-                background: Theme.row-fill(root.menu-open, menu-touch.has-hover, menu-touch.pressed);
+                background: Theme.row-fill(root.menu-open, menu-touch.has-hover, menu-touch.pressed); animate background { duration: Theme.hover-time; }
                 border-radius: Theme.block-radius;
                 accessible-role: button; accessible-label: root.menu-label;
                 accessible-action-default => { root.menu(); }
@@ -83,7 +84,7 @@ export component Footer inherits Rectangle {
                     width: Theme.footer-icon-size * 0.65; height: Theme.footer-menu-stroke;
                     border-radius: self.height / 2; background: root.menu-open || menu-touch.has-hover ? Theme.strong : Theme.muted;
                 }
-                menu-touch := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.menu(); } }
+                menu-touch := TouchArea { mouse-cursor: MouseCursor.default; clicked => { root.menu(); } }
             }
             if root.showing-toast: Image {
                 width: Theme.footer-icon-size; height: Theme.footer-icon-size; y: (parent.height - self.height) / 2;
@@ -104,10 +105,10 @@ export component Footer inherits Rectangle {
             if i > 0: Rectangle { width: Theme.border-width; height: Theme.keycap-height - 4px; y: (parent.height - self.height) / 2; background: Theme.divider; }
             Rectangle {
                 width: hint-row.preferred-width;
-                height: Theme.footer-height - Theme.gap;
+                height: Theme.footer-hint-height;
                 y: (parent.height - self.height) / 2;
                 border-radius: Theme.block-radius;
-                background: Theme.row-fill(hint.action == 1 && root.actions-open, hint-touch.has-hover, hint-touch.pressed);
+                background: Theme.row-fill(hint.action == 1 && root.actions-open, hint-touch.has-hover, hint-touch.pressed); animate background { duration: Theme.hover-time; }
                 accessible-role: button; accessible-label: hint.label;
                 accessible-action-default => { root.action(hint.action); }
                 hint-row := HorizontalLayout {
@@ -115,7 +116,7 @@ export component Footer inherits Rectangle {
                     Text { text: hint.label; color: hint.action == 0 || root.actions-open ? Theme.strong : Theme.muted; font-size: Theme.footer-size; font-weight: hint.action == 0 ? Theme.weight-medium : Theme.weight-normal; vertical-alignment: center; }
                     KeyCaps { caps: hint.caps; lit: hint.action == 1 && root.actions-open; }
                 }
-                hint-touch := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.action(hint.action); } }
+                hint-touch := TouchArea { mouse-cursor: MouseCursor.default; clicked => { root.action(hint.action); } }
             }
         }
     }

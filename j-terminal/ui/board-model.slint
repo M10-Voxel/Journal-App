@@ -50,6 +50,11 @@ export global BoardUi {
     in-out property <string> tag-context;
     in-out property <[SideRow]> tag-rows;
     in-out property <bool> menu-open;
+    // A right click opens the actions as a small card at the mouse (search on top, no keys); the place is the
+    // view's coordinate of the click.
+    in-out property <bool> menu-compact;
+    in-out property <length> menu-x;
+    in-out property <length> menu-y;
     in-out property <string> menu-title;
     in-out property <string> menu-search;
     in-out property <string> menu-empty;

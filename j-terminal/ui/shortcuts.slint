@@ -328,7 +328,7 @@ export component SettingsWindow inherits Window {
                                 text: cat.name; color: Theme.settings-text; font-weight: Theme.settings-label-weight;
                                 vertical-alignment: center; overflow: elide;
                             }
-                            cat-hit := TouchArea { mouse-cursor: pointer; clicked => { root.keyboard-focus = false; root.visit(i); } }
+                            cat-hit := TouchArea { mouse-cursor: default; clicked => { root.keyboard-focus = false; root.visit(i); } }
                         }
                     }
                 }
@@ -430,7 +430,7 @@ export component SettingsWindow inherits Window {
                             viewbox-width: 16; viewbox-height: 16; commands: "M 2.5 8 L 6.5 12 L 13.5 4";
                             stroke: Theme.settings-text; stroke-width: Theme.footer-menu-stroke;
                         }
-                        choice-hit := TouchArea { mouse-cursor: pointer; clicked => { root.choose(i); } }
+                        choice-hit := TouchArea { mouse-cursor: default; clicked => { root.choose(i); } }
                     }
                 }
             }

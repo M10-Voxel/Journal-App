@@ -38,6 +38,9 @@ export component Calendar inherits Rectangle {
     callback hover(bool, length, length);
     // The wheel: x, how far, Strg, Shift.
     callback wheel(length, length, bool, bool);
+    // Dragging the edge between the day column and the hours: where the hours should begin; released: done.
+    callback resize-labels(length);
+    callback resize-labels-done();
     clip: true;
     background: Theme.cal-background;
     property <length> label-x: Theme.cal-pad + Theme.cal-lanes * Theme.cal-lane-width;
@@ -203,6 +206,18 @@ export component Calendar inherits Rectangle {
             root.hover(false, 0px, 0px);
             root.wheel(self.mouse-x, event.delta-y != 0px ? event.delta-y : event.delta-x, event.modifiers.control, event.modifiers.shift);
             accept
+        }
+    }
+    // The edge between the day column and the hours: drag it to make the column wider or narrower.
+    grip := TouchArea {
+        x: root.time-x - Theme.cal-resize-grip / 2; width: Theme.cal-resize-grip;
+        y: 0px; height: root.height;
+        mouse-cursor: MouseCursor.col-resize;
+        moved => { if self.pressed { root.resize-labels(self.x + self.mouse-x); } }
+        changed pressed => { if !self.pressed { root.resize-labels-done(); } }
+        Rectangle {
+            x: (parent.width - self.width) / 2; width: Theme.cal-week-line-width;
+            background: grip.pressed || grip.has-hover ? Theme.edge : transparent;
         }
     }
 }

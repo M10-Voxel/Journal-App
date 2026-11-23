@@ -36,14 +36,14 @@ export component CaptionButton inherits Rectangle {
     private property <bool> arrow: root.action == CaptionAction.back || root.action == CaptionAction.forward;
     width: root.arrow ? Theme.settings-history-width : Theme.settings-chrome-width;
     height: Theme.settings-caption-height;
-    background: root.available && hit.has-hover ? Theme.settings-key-hover : transparent;
+    background: root.available && !root.arrow && hit.has-hover ? Theme.settings-key-hover : transparent;
     accessible-role: button; accessible-label: root.label; accessible-enabled: root.available;
     accessible-action-default => { if root.available { root.activated(); } }
     if root.arrow: Image {
         width: Theme.settings-chrome-symbol; height: self.width;
         x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2;
         source: root.action == CaptionAction.back ? JournalIcons.left-icon : JournalIcons.right-icon;
-        colorize: root.available ? Theme.settings-text : Theme.settings-disabled;
+        colorize: !root.available ? Theme.settings-disabled : hit.has-hover ? Theme.settings-text : Theme.settings-secondary-text;
     }
     if root.action == CaptionAction.minimize: Rectangle {
         width: Theme.settings-action-icon-size; height: Theme.border-width;
@@ -109,7 +109,7 @@ export component SettingsOption inherits Rectangle {
     accessible-checkable: root.toggle;
     accessible-checked: root.toggle && data.index == 1;
     accessible-action-default => { if data.control != RowControl.fixed { root.activate(); } }
-    hit := TouchArea { enabled: data.control != RowControl.fixed; mouse-cursor: pointer; clicked => { root.activate(); } }
+    hit := TouchArea { enabled: data.control != RowControl.fixed; mouse-cursor: default; clicked => { root.activate(); } }
 
     if root.featured: Rectangle {
         x: Theme.gap; y: (parent.height - self.height) / 2;
@@ -155,7 +155,7 @@ export component SettingsOption inherits Rectangle {
                 x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2;
                 width: Theme.settings-action-icon-size; height: self.width; source: JournalIcons.undo-icon; colorize: Theme.settings-text;
             }
-            reset-hit := TouchArea { mouse-cursor: pointer; clicked => { root.reset(); } }
+            reset-hit := TouchArea { mouse-cursor: default; clicked => { root.reset(); } }
         }
         if root.featured: Rectangle {
             x: value-box.reset-width; width: parent.width - self.x;

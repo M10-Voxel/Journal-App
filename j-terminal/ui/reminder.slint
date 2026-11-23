@@ -27,7 +27,7 @@ component ReminderLink inherits Rectangle {
         vertical-alignment: center;
     }
     area := TouchArea {
-        mouse-cursor: pointer;
+        mouse-cursor: default;
         clicked => { root.clicked(); }
         scroll-event(event) => {
             if event.delta-y > 0 { root.wheel(1); return accept; }
@@ -74,7 +74,7 @@ export component ReminderWindow inherits Window {
                         wrap: word-wrap;
                     }
                     title-area := TouchArea {
-                        mouse-cursor: card.info ? MouseCursor.default : MouseCursor.pointer;
+                        mouse-cursor: card.info ? MouseCursor.default : MouseCursor.default;
                         clicked => { if card.info { root.dismiss(index); } else { root.open(index); } }
                     }
                 }

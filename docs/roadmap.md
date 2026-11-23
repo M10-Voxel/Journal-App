@@ -159,6 +159,18 @@ Offene Aufgaben. Erledigtes mit `[x]` markieren. Vollständiger Plan: `docs/plan
   - Karten unten rechts (`ui/reminder.slint`): ohne Fokus, mit Ton, nur mit der Maus. Titel öffnet den Tag, dazu „Erledigt“, „n Min. später“ (Mausrad ±1 Min., Standard 10) und „Ausblenden“.
   - 5 neue Tests (Texte, Mausrad, Kartenliste, fällig/einmal/Schlummern/erledigt gegen Test-Datenbank, Sperrerkennung). Nativ geprüft mit Test-Journal: Karten, Mausrad 10→13, Ausblenden, Erledigt, Öffnen des Tages, Vordergrundfenster bleibt.
 
+- [x] **Formular, Pinnwand-Kontextmenü und Vorlagen** – 23.11.2026, noch nicht committet.
+  - Neuer Eintrag: Erinnerung und Symbol stehen immer im Formular, nicht nur über Strg+K bzw. Alt+R/I. Beim Bearbeiten bleibt es wie bisher.
+  - Pinnwand: Rechtsklick öffnet die Aktionen als kleinere Karte direkt am Mauszeiger, im Fenster gehalten. Die Suche steht oben, es gibt keine Tastenkürzel, Zeilen und Breite sind kompakter (`popover-compact-*`, `compact-*` im Theme). Strg+K, Strg+N und „Anpinnen“ öffnen weiter die gewohnte Karte unten rechts.
+  - Vorlagen: `/Vorlage Name` legt sie an oder bearbeitet sie, `#Name` öffnet einen Eintrag daraus. Lücken `...` im Titel werden mit Tab angesprungen. Details in `docs/plan.md`, Abschnitt 0.
+  - 7 neue Tests (Lücken, Speichern/Laden/Ersetzen/Löschen, Vorlagenablauf im Formular, Tab durch Lücken, sichtbare Erinnerung/Symbol) und Prüfungen des kompakten Menüs im Slint-Pinnwandtest. 190 Tests grün. Native Sichtprüfung steht noch aus.
+
+- [x] **Fett, Tags und Ordner anlegen** – 23.11.2026, noch nicht committet.
+  - `**fett**` im Notizblock: IBM Plex Sans hatte keinen 700er-Schnitt, und 500/600 meldeten sich als eigene Familien („… Medium“, „… SemiBold“). Bold fiel deshalb auf Regular zurück. Neu ist `IBMPlexSans-700.ttf` (aus `@fontsource/ibm-plex-sans`, Latin, wie die anderen). In 500/600 ist der Familienname auf „IBM Plex Sans“ gekürzt. Halbfette Überschriften erscheinen dadurch jetzt wirklich halbfett.
+  - Tags anlegen: In jeder Tag-Auswahl (Tagesansicht, Formular, Notizblock, Pinnwand) erscheint für einen unbekannten Namen „Tag „Name“ anlegen“. Der Tag entsteht mit der nächsten freien Farbe der Journal-Swatches und wird zugewiesen. Danach öffnet der Tag-Editor (`tag_edit.rs`, `tag_editor_ui.rs`, `ui/tag-editor.slint`) mit Name, Farbwähler wie in der Journal-App (Sättigung/Helligkeit-Feld, Farbton-Leiste, Swatches, Hex) und Symbolsuche. Tab wechselt die Teile, Pfeile bewegen (Shift: Farbton), Enter speichert, Esc lässt den Tag so.
+  - Ordner anlegen: Im Notizblock und auf der Pinnwand erscheint in der Ordner-Auswahl „Ordner „Name“ anlegen“. Der Ordner wird oben eingeordnet (`board:folder:{id}` mit `parent: null` und nächster `order`, wie in der App), mit Undo-Schritt.
+  - 8 neue Tests: Farben/HSV/Hex, Editor-Tasten, Anlegen und Ändern in der Test-Datenbank sowie die Anlage-Wege in Formular, Notizblock und Tagesansicht. Der Slint-Pinnwandtest legt einen Tag an und wählt Farbe und Symbol per Tastatur. 199 Tests grün.
+
 ## Offene Fragen
 - keine (Timer: entschieden am 19.11.2026, gemeinsam in der Datenbank)
 

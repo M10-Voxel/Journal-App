@@ -27,13 +27,15 @@ pub struct Preferences {
     pub weekends: bool,
     pub now_line: bool,
     pub edit_notes: bool,
+    /// The calendar's day column, dragged wider or narrower with the mouse (None: the theme's width).
+    pub calendar_label_width: Option<u16>,
 }
 
 impl Default for Preferences {
     fn default() -> Self {
         Self { start_view: StartView::Day, center_window: false, return_today: true,
             language: DisplayLanguage::Journal, keycaps: true, parse_titles: true,
-            week_numbers: true, weekends: true, now_line: true, edit_notes: false }
+            week_numbers: true, weekends: true, now_line: true, edit_notes: false, calendar_label_width: None }
     }
 }
 
@@ -204,6 +206,7 @@ mod tests {
             assert!(prefs.change(option.key, limit).is_none());
             assert_eq!(prefs, previous);
         }
+        prefs.calendar_label_width = Some(210);
         write_json(&path, &prefs).unwrap();
         assert_eq!(Preferences::load(Some(&path)).unwrap(), prefs);
         fs::remove_file(path).unwrap();

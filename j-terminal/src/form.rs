@@ -225,6 +225,10 @@ pub enum Context {
 pub struct Effect {
     /// The input gets this text, all selected.
     pub text: Option<String>,
+    /// Then only this part of it is selected (byte offsets): a gap of a template's title.
+    pub select: Option<(usize, usize)>,
+    /// A tag was just made in a picker: the tag editor opens on it.
+    pub edit_tag: Option<String>,
     pub hide: bool,
     /// Created: show it briefly, then hide.
     pub hide_soon: bool,
@@ -288,6 +292,8 @@ pub struct SearchRow {
 enum CommandAction {
     Board(crate::board::Period), BoardHelp, Filter(String, usize), Card(uuid::Uuid, bool), Entry, Notepad, Hit(NaiveDate, String), Day(NaiveDate),
     PickDay, Today, Undo, Redo, Rating, Activities,
+    /// `#Name`: a new entry from the template. `/Vorlage Name`: the template is written (made or changed).
+    Template(String), TemplateEdit(String), TemplateHelp,
 }
 
 pub struct NotepadChoice {
@@ -372,6 +378,15 @@ pub struct Form {
     cal_selected: BTreeSet<NaiveDate>,
     /// The day view as something to work in: its cursor, the line being written, the panel at the left.
     pub pane: DayPane,
+    /// The templates (`#Name`), and the name of the one being written in the form (`/Vorlage Name`).
+    pub templates: crate::templates::Templates,
+    template: Option<String>,
+    /// Where the gap of the title chosen last begins (Tab goes on to the gap after it).
+    gap_at: Option<usize>,
+    /// A tag made in a picker that only hands back a choice (the notepad): the window opens the tag editor on it.
+    tag_edit: Option<String>,
+    /// The form was filled from a template: its title stays as written (its words are not read as a day or a tag).
+    from_template: bool,
 }
 
 /// The options of a field, open after Enter.
@@ -411,6 +426,11 @@ enum MarkDrag {
 fn now() -> (NaiveDate, u32) {
     let now = Local::now();
     (now.date_naive(), now.hour() * 60 + now.minute())
+}
+
+/// A template's type ("calendar", "event", "task", "note"; anything else a task).
+fn type_of(kind: &str) -> Type {
+    match kind { "calendar" => Type::Calendar, "event" => Type::Event, "note" => Type::Note, _ => Type::Task }
 }
 
 fn ranges(days: &BTreeSet<NaiveDate>) -> Vec<(NaiveDate, NaiveDate)> {
@@ -499,7 +519,8 @@ impl Form {
             pick: 0, editor: Editor::default(), menu: None, tried: false, last_saved: None, status: None, flash: None,
             metrics: Metrics::default(), options: None, options_backup: Values::default(), cal_top: repeat::shift(today, -1), cal_offset: 0.0, cal_target: None,
             cal_open: BTreeSet::from([today]), cal_clicked: None, mark: None, mark_layout: None, shown_layout: Layout::default(), shown_entries: Vec::new(), shown_metrics: Metrics::default(),
-            board_scopes: None, fixed_clock: true, clock_ms: 0, kind_chosen: false, entry_open: false, hits: Vec::new(), editing: None, search: String::new(), search_cursor: 0, command_selected: 0, notepad: None, suspended_notes: Vec::new(), zoom_days: 1.0, zoom_hours: 1.0, pan: 0.0, view_day: None, cal_selected: BTreeSet::new(), pane: DayPane::default() }
+            board_scopes: None, fixed_clock: true, clock_ms: 0, kind_chosen: false, entry_open: false, hits: Vec::new(), editing: None, search: String::new(), search_cursor: 0, command_selected: 0, notepad: None, suspended_notes: Vec::new(), zoom_days: 1.0, zoom_hours: 1.0, pan: 0.0, view_day: None, cal_selected: BTreeSet::new(), pane: DayPane::default(),
+            templates: Default::default(), template: None, gap_at: None, from_template: false, tag_edit: None }
     }
 
     fn t(&self) -> &'static Texts { texts(self.language) }
@@ -532,7 +553,7 @@ impl Form {
             self.view_day = None;
         }
         self.pane.reset();
-        if !self.dirty() { self.entry_open = self.preferences.start_view == crate::settings::StartView::Entry; }
+        if !self.dirty() { self.template = None; self.from_template = false; self.entry_open = self.preferences.start_view == crate::settings::StartView::Entry; }
         let effect = self.enter_row(TITLE);
         Effect { focus: Some(if self.entry_open { Pane::Entry } else { Pane::Search }), ..effect }
     }
@@ -562,7 +583,7 @@ impl Form {
         self.status = None;
         self.flash = None;
         self.hits.clear();
-        if !text.trim().is_empty() && !text.trim_start().starts_with('/') {
+        if !text.trim().is_empty() && !text.trim_start().starts_with(['/', '#']) {
             match self.find_entries(text, cursor) {
                 Ok(hits) => self.hits = hits,
                 Err(error) => self.status = Some((error, true)),
@@ -578,7 +599,10 @@ impl Form {
 
     fn commands(&self) -> Vec<Command> {
         let query = self.search.trim();
+        if let Some(name) = query.strip_prefix('#') { return self.template_commands(name); }
         if !query.starts_with('/') { return self.hits.clone(); }
+        // `/Vorlage ` with its space already lists the templates there are.
+        if let Some(commands) = self.template_command(&self.search.trim_start()[1..]) { return commands; }
         let query = parse::fold(&query[1..]);
         let notepad = notepad_texts(self.language);
         let actions = crate::texts::action_texts(self.language);
@@ -599,6 +623,11 @@ impl Form {
         let mut commands: Vec<_> = matching.into_iter()
             .map(|(name, _, detail, icon, action)| Command { name, detail: detail.into(), look: SearchRow { icon, ..Default::default() }, action }).collect();
         let en = self.language == Language::En;
+        if crate::texts::templates::COMMAND_WORDS.iter().any(|word| word.starts_with(&query)) {
+            let tt = usize::from(en);
+            commands.push(Command { name: format!("{} ", crate::texts::templates::COMMAND[tt]), detail: crate::texts::templates::COMMAND_DETAIL[tt].into(),
+                look: SearchRow { icon: "copy-plus", ..Default::default() }, action: CommandAction::TemplateHelp });
+        }
         if let Some(enabled) = &self.board_scopes {
             for period in crate::board::Period::ALL {
                 if enabled.contains(&period) && [Language::De, Language::En].iter().any(|lang| parse::fold(&period.command(*lang)[1..]).starts_with(&query)) {
@@ -637,6 +666,13 @@ impl Form {
                 Effect { search: Some(String::new()), focus: Some(Pane::Day), ..Effect::default() }
             }
             Some(CommandAction::Entry) => self.open_entry(),
+            Some(CommandAction::Template(name)) => self.open_template(&name),
+            Some(CommandAction::TemplateEdit(name)) => self.write_template(&name),
+            Some(CommandAction::TemplateHelp) => {
+                let name = format!("{} ", crate::texts::templates::COMMAND[usize::from(self.language == Language::En)]);
+                self.search_edited(&name);
+                Effect { search: Some(name.clone()), search_cursor: Some(name.len()), focus: Some(Pane::Search), ..Effect::default() }
+            }
             Some(CommandAction::Board(period)) => {
                 self.search_edited("");
                 Effect {board:Some(period),search:Some(String::new()),..Effect::default()}
@@ -663,8 +699,12 @@ impl Form {
                 Effect { search: Some(String::new()), ..effect }
             }
             None => {
+                let l = usize::from(self.language == Language::En);
                 if self.search.trim().starts_with('/') {
                     self.status = Some((format!("{} {}", self.ft().cmd_unknown, self.search.trim()), true));
+                } else if self.search.trim().starts_with('#') {
+                    let text = if self.templates.list.is_empty() { crate::texts::templates::NONE_YET[l] } else { crate::texts::templates::NONE[l] };
+                    self.status = Some((text.into(), true));
                 }
                 Effect::default()
             }
@@ -714,6 +754,9 @@ impl Form {
     fn close_entry(&mut self) -> Effect {
         self.entry_open = false;
         self.editing = None;
+        self.template = None;
+        self.gap_at = None;
+        self.from_template = false;
         self.v = Values::default();
         self.kind_chosen = false;
         self.tried = false;
@@ -721,6 +764,152 @@ impl Form {
         self.cal_close();
         let effect = self.enter_row(TITLE);
         Effect { focus: Some(Pane::Search), ..effect }
+    }
+
+    // ----- Templates (`#Name`, `/Vorlage Name`) -----
+
+    /// `#…`: the templates whose name matches, each opening a new entry from it.
+    fn template_commands(&self, name: &str) -> Vec<Command> {
+        let l = usize::from(self.language == Language::En);
+        let mut out: Vec<Command> = self.templates.matching(name).into_iter().map(|t| {
+            let icon = t.icon.as_deref().and_then(|own| icons::all().iter().find(|(id, _)| *id == own).map(|(id, _)| *id))
+                .unwrap_or(["journal-calendar", "journal-event", "journal-task", "journal-note"][type_of(&t.kind).index()]);
+            let detail = if t.title.trim().is_empty() { crate::texts::templates::OPEN[l].to_string() } else { t.title.clone() };
+            Command { name: format!("#{}", t.name), detail, look: SearchRow { icon, ..Default::default() }, action: CommandAction::Template(t.name.clone()) }
+        }).collect();
+        if let Some(first) = out.first_mut() { first.look.heading = crate::texts::templates::HEADING[l].into(); }
+        out
+    }
+
+    /// `/Vorlage Name`: the template of that name is written (made, or changed when it is there). `None`: it is not
+    /// this command (or it has no name yet: then it is listed with the others).
+    fn template_command(&self, query: &str) -> Option<Vec<Command>> {
+        let (word, name) = query.split_once(char::is_whitespace)?;
+        let word = parse::fold(word);
+        if !crate::texts::templates::COMMAND_WORDS.iter().any(|known| *known == word) { return None; }
+        let l = usize::from(self.language == Language::En);
+        let command = crate::texts::templates::COMMAND[l];
+        let name = crate::templates::clean_name(name);
+        let mut out = Vec::new();
+        if !name.is_empty() {
+            let known = self.templates.find(&name);
+            let detail = if known.is_some() { crate::texts::templates::CHANGE[l] } else { crate::texts::templates::MAKE[l] };
+            let name = known.map_or(name.clone(), |t| t.name.clone());
+            out.push(Command { name: format!("{command} {name}"), detail: detail.into(), look: SearchRow { icon: "copy-plus", ..Default::default() }, action: CommandAction::TemplateEdit(name) });
+        }
+        // The templates there are, to change one.
+        let typed = self.templates.find(&name).map(|t| t.name.clone());
+        for t in self.templates.matching(&name) {
+            if Some(&t.name) == typed.as_ref() { continue; }
+            out.push(Command { name: format!("{command} {}", t.name), detail: crate::texts::templates::CHANGE[l].into(), look: SearchRow { icon: "pencil", ..Default::default() }, action: CommandAction::TemplateEdit(t.name.clone()) });
+        }
+        if let Some(first) = out.first_mut() { first.look.heading = crate::texts::templates::HEADING[l].into(); }
+        Some(out)
+    }
+
+    /// The form's values from a template, for an entry on `day`.
+    fn values_of(t: &crate::templates::Template, day: NaiveDate) -> Values {
+        Values {
+            typ: type_of(&t.kind), title: t.title.clone(), start: t.start, end: t.start.and(t.end),
+            rule: t.repeat.as_ref().map(|rule| repeat::with_start(rule, day)), tag: t.tag.clone(),
+            description: t.description.clone(), priority: t.priority, reminder: t.reminder, icon: t.icon.clone(),
+            ..Values::default()
+        }
+    }
+
+    /// The form as a template of this name.
+    fn template_of(&self, name: &str) -> crate::templates::Template {
+        let v = &self.v;
+        crate::templates::Template {
+            name: name.to_string(), kind: ["calendar", "event", "task", "note"][v.typ.index()].into(), title: v.title.trim().to_string(),
+            start: v.start, end: v.start.and(v.end), repeat: v.rule.clone(), tag: v.tag.clone(), description: v.description.trim().to_string(),
+            priority: v.priority, reminder: v.reminder, icon: v.icon.clone(),
+        }
+    }
+
+    /// `#Name`: a new entry from the template on the day shown, its first gap selected.
+    fn open_template(&mut self, name: &str) -> Effect {
+        let Some(t) = self.templates.find(name).cloned() else { return Effect::default() };
+        let day = self.day_shown();
+        self.v = Self::values_of(&t, day);
+        if day != self.today { self.v.days = BTreeSet::from([day]); }
+        self.editing = None;
+        self.template = None;
+        self.from_template = true;
+        self.kind_chosen = true;
+        self.tried = false;
+        self.options = None;
+        self.entry_open = true;
+        self.search.clear();
+        self.hits.clear();
+        self.status = None;
+        let effect = self.enter_row(TITLE);
+        let select = self.select_gap(None);
+        Effect { search: Some(String::new()), focus: Some(Pane::Entry), select, ..effect }
+    }
+
+    /// `/Vorlage Name`: the form opens for the template (with what it has when it is there), without a day.
+    fn write_template(&mut self, name: &str) -> Effect {
+        let name = crate::templates::clean_name(name);
+        if name.is_empty() { return Effect::default(); }
+        if self.dirty() { self.status = Some((self.ft().finish_entry_first.into(), true)); return Effect::default(); }
+        let known = self.templates.find(&name).cloned();
+        self.v = known.as_ref().map_or_else(Values::default, |t| Self::values_of(t, self.today));
+        self.template = Some(known.map_or(name, |t| t.name));
+        self.from_template = false;
+        self.editing = None;
+        self.kind_chosen = true;
+        self.tried = false;
+        self.options = None;
+        self.entry_open = true;
+        self.search.clear();
+        self.hits.clear();
+        self.status = None;
+        let effect = self.enter_row(TITLE);
+        Effect { search: Some(String::new()), focus: Some(Pane::Entry), ..effect }
+    }
+
+    /// The template being written is kept, and the form closes.
+    fn save_template(&mut self, name: &str) -> Effect {
+        let l = usize::from(self.language == Language::En);
+        let template = self.template_of(name);
+        match self.templates.put(template) {
+            Ok(()) => {
+                let effect = self.close_entry();
+                self.flash = Some(crate::texts::templates::SAVED[l].into());
+                effect
+            }
+            Err(error) => { self.status = Some((format!("{} {error}", crate::texts::templates::WRITE_FAILED[l]), true)); Effect::default() }
+        }
+    }
+
+    fn delete_template(&mut self) -> Effect {
+        let l = usize::from(self.language == Language::En);
+        let Some(name) = self.template.clone() else { return Effect::default() };
+        match self.templates.remove(&name) {
+            Ok(_) => {
+                let effect = self.close_entry();
+                self.flash = Some(crate::texts::templates::DELETED[l].into());
+                effect
+            }
+            Err(error) => { self.status = Some((format!("{} {error}", crate::texts::templates::WRITE_FAILED[l]), true)); Effect { focus: Some(Pane::Entry), ..Effect::default() } }
+        }
+    }
+
+    /// An entry from a template repeats from its own first day: when the day is changed, the repetition follows it.
+    fn follow_template_day(&mut self) {
+        if !self.from_template { return; }
+        let first = self.v.days.iter().next().copied().unwrap_or(self.today);
+        if let Some(rule) = &self.v.rule {
+            if rule.start != first { self.v.rule = Some(repeat::with_start(rule, first)); }
+        }
+    }
+
+    /// The title's next gap after the one chosen last (none: the first) is selected.
+    fn select_gap(&mut self, after: Option<usize>) -> Option<(usize, usize)> {
+        let gap = crate::templates::next_gap(&self.buffer, after)?;
+        self.gap_at = Some(gap.start);
+        Some((gap.start, gap.end))
     }
 
     // ----- Text of the fields -----
@@ -798,17 +987,20 @@ impl Form {
         }
     }
 
-    /// A field the keyboard can reach: the end only after a start, the description, reminder and icon only while they
-    /// hold something or are being set (Strg+K, Alt+B/R/I). Important is the title's flag (Alt+P), not a line.
+    /// A field the keyboard can reach: the end only after a start, the description only while it holds something or is
+    /// being written (Strg+K, Alt+B). Reminder and icon are always there for a new entry; for one being changed only
+    /// while they hold something or are being set (Alt+R/I). Important is the title's flag (Alt+P), not a line.
     fn visible(&self, field: Field) -> bool {
         let active = self.field() == field;
+        let new = self.editing.is_none();
         match field {
-            Field::Plan => active || !self.v.plan_days.is_empty() || self.editing.is_some() && self.v.typ != Type::Note,
+            Field::Day => self.template.is_none(),
+            Field::Plan => self.template.is_none() && (active || !self.v.plan_days.is_empty() || self.editing.is_some() && self.v.typ != Type::Note),
             Field::End => self.v.start.is_some(),
             Field::More | Field::Priority => false,
             Field::Description => active || !self.v.description.is_empty(),
-            Field::Reminder => active || self.v.reminder.is_some(),
-            Field::Icon => active || self.v.icon.is_some(),
+            Field::Reminder => new || active || self.v.reminder.is_some(),
+            Field::Icon => new || active || self.v.icon.is_some(),
             _ => true,
         }
     }
@@ -818,6 +1010,7 @@ impl Form {
     fn enter_row(&mut self, index: usize) -> Effect {
         self.active = index;
         self.backup = self.v.clone();
+        self.gap_at = None;
         self.row_error = None;
         self.query.clear();
         self.flash = None;
@@ -835,7 +1028,7 @@ impl Form {
     /// Finishes the active field: a problem in it keeps it open; a quick title hands its day, time and tag to theirs.
     fn commit(&mut self) -> Result<(), String> {
         if let Some(error) = &self.row_error { return Err(error.clone()); }
-        if self.field() == Field::Title && self.editing.is_none() && self.preferences.parse_titles { self.extract_title(); }
+        if self.field() == Field::Title && self.editing.is_none() && self.template.is_none() && !self.from_template && self.preferences.parse_titles { self.extract_title(); }
         Ok(())
     }
 
@@ -958,6 +1151,8 @@ impl Form {
                 self.query = text.to_string();
                 if trimmed.is_empty() { self.v.tag = None; self.pick = 0; return Ok(()); }
                 let options = self.tag_options();
+                // With the choices open, the line that makes it is there (Enter on it); typed straight into the field it stays an error.
+                if options.len() == 1 && self.new_tag().is_some() && self.options.is_some() { self.pick = 1; return Ok(()); }
                 self.pick = 1;
                 self.v.tag = Some(options.get(1).and_then(|(id, _, _)| id.clone()).ok_or_else(|| ft.bad_tag.to_string())?);
             }
@@ -977,6 +1172,29 @@ impl Form {
             Field::Kind | Field::More | Field::Priority => {}
         }
         Ok(())
+    }
+
+    /// What is typed in the tag field names no tag: the line after the tags makes it.
+    fn new_tag(&self) -> Option<String> {
+        crate::tag_edit::creatable(self.snapshot.as_ref().map_or(&[][..], |s| &s.tags[..]), &self.query)
+    }
+
+    /// The tag typed is made; the warm data learns it.
+    fn make_tag(&mut self) -> Result<String, String> {
+        let name = self.new_tag().ok_or_else(|| self.ft().bad_tag.to_string())?;
+        let read_only = self.t().read_only;
+        let journal = self.journal.as_mut().ok_or_else(|| read_only.to_string())?;
+        let tag = crate::tag_edit::create(&mut journal.store, &name)?;
+        if let Some(snapshot) = &mut self.snapshot { snapshot.reload(&journal.store)?; }
+        Ok(tag.id)
+    }
+
+    /// A tag made where no effect goes back (the notepad's picker): the tag editor is to open on it.
+    pub fn take_tag_edit(&mut self) -> Option<String> { self.tag_edit.take() }
+
+    /// The tags changed elsewhere (the tag editor): the warm data reads them again.
+    pub fn reload_tags(&mut self) {
+        if let (Some(journal), Some(snapshot)) = (&self.journal, &mut self.snapshot) { let _ = snapshot.reload(&journal.store); }
     }
 
     /// The tag choices: none first, then the tags whose name has the query in it (starting with it first).
@@ -1111,17 +1329,23 @@ impl Form {
                 Ok(tags) => tags,
                 Err(error) => { self.notepad_error(notepad::SaveError::Store(error.to_string())); return Vec::new(); }
             };
+            let new = crate::tag_edit::creatable(&tags, query).map(|name| NotepadChoice {
+                key: format!("new-tag:{name}"), group: String::new(), title: crate::texts::tags::make_tag(&name, self.language), detail: String::new(), color: None,
+            });
             let query = query.to_lowercase();
             return std::iter::once(NotepadChoice { key: String::new(), group: String::new(), title: labels.no_tag.to_owned(), detail: String::new(), color: None })
                 .chain(tags.into_iter().filter(|tag| tag.name.to_lowercase().contains(&query)).map(|tag| NotepadChoice {
                     key: tag.id, group: String::new(), title: tag.name, detail: String::new(), color: calendar::parse_color(&tag.color),
-                })).collect();
+                })).chain(new).collect();
         }
         if draft.panel == 4 {
             let folders = match notebook::folders(&journal.store) {
                 Ok(folders) => folders,
                 Err(error) => { self.notepad_error(error); return Vec::new(); }
             };
+            let new = notebook::new_folder_name(&folders, query).map(|name| NotepadChoice {
+                key: format!("new-folder:{name}"), group: String::new(), title: crate::texts::tags::make_folder(&name, self.language), detail: String::new(), color: None,
+            });
             let query = query.to_lowercase();
             let current = draft.card.folder.as_deref().unwrap_or_default();
             return std::iter::once((String::new(), labels.unfiled.to_owned())).chain(folders)
@@ -1129,7 +1353,7 @@ impl Form {
                 .map(|(key, title)| NotepadChoice {
                     detail: if key == current { labels.current_folder.to_owned() } else { String::new() },
                     key, title, group: String::new(), color: None,
-                }).collect();
+                }).chain(new).collect();
         }
         let items = match draft.panel {
             1 => notebook::notes(&journal.store, query, draft.notes_on_day.then_some(draft.date)),
@@ -1162,6 +1386,20 @@ impl Form {
 
     /// Selecting a card reads its latest state. Selecting an attachment can open it outside the editor.
     pub fn pick_notepad(&mut self, key: &str) -> Option<notebook::Target> {
+        // A tag or folder typed in its picker is made first, then chosen like the others.
+        let made = if let Some(name) = key.strip_prefix("new-tag:") {
+            let journal = self.journal.as_mut()?;
+            crate::tag_edit::create(&mut journal.store, name).map(|tag| { self.tag_edit = Some(tag.id.clone()); tag.id })
+        } else if let Some(name) = key.strip_prefix("new-folder:") {
+            let journal = self.journal.as_mut()?;
+            notebook::create_folder(&mut journal.store, name).map_err(|error| format!("{error:?}"))
+        } else { Ok(key.to_string()) };
+        let chosen = match made {
+            Ok(key) => key,
+            Err(error) => { self.notepad_error(notepad::SaveError::Store(error)); return None; }
+        };
+        self.reload_tags();
+        let key = chosen.as_str();
         let (draft, journal) = self.notepad.as_mut().zip(self.journal.as_ref())?;
         if matches!(draft.panel, 2 | 4) {
             let save_folder = draft.panel == 4 && !draft.editing;
@@ -1363,6 +1601,8 @@ impl Form {
             Key::Priority => { self.v.priority = !self.v.priority; if self.field() == Field::Priority { self.backup.priority = self.v.priority; } return Effect::default(); }
             Key::Extra(field) => { self.options = None; return self.open_extra(field); }
             Key::Close => return self.close_entry(),
+            // Alt+H: back to today (the day view and the calendar); what is being written stays.
+            Key::Home if mods.alt => { self.show_today(); return Effect::default(); }
             Key::Enter if mods.ctrl || mods.shift => {
                 self.options = None;
                 return self.save(mods.shift);
@@ -1385,6 +1625,10 @@ impl Form {
             Key::Down if mods.alt => self.open_options(self.field()),
             Key::Up => self.move_line(-1),
             Key::Down => self.move_line(1),
+            Key::Tab if !mods.shift && self.field() == Field::Title && self.gap_at.is_some() => match self.select_gap(self.gap_at) {
+                Some(select) => Effect { select: Some(select), ..Effect::default() },
+                None => self.move_field(1),
+            },
             Key::Tab => self.move_field(if mods.shift { -1 } else { 1 }),
             Key::Enter => match self.field() {
                 Field::Plan | Field::Day | Field::Start | Field::End | Field::Repeat | Field::Tag | Field::Icon | Field::Reminder => self.open_options(self.field()),
@@ -1531,6 +1775,10 @@ impl Form {
                 let columns: i32 = match self.field() { Field::Icon => ICON_COLUMNS, Field::Reminder => 4, _ => 1 };
                 let step = match key { Key::Left => -1, Key::Right => 1, Key::Up => -columns, Key::Down => columns, _ => 0 };
                 match key {
+                    Key::Enter if self.field() == Field::Tag && self.pick == self.tag_options().len() && self.new_tag().is_some() => match self.make_tag() {
+                        Ok(id) => { self.v.tag = Some(id.clone()); self.query.clear(); Effect { edit_tag: Some(id), ..self.take_options(1) } }
+                        Err(error) => { self.status = Some((error, true)); Effect::default() }
+                    },
                     Key::Enter => self.take_options(1),
                     Key::Tab => self.take_options(if mods.shift { -1 } else { 1 }),
                     Key::Escape => self.cancel_options(),
@@ -1653,7 +1901,7 @@ impl Form {
     }
 
     fn choice_count(&self) -> usize {
-        match self.field() { Field::Tag => self.tag_options().len(), Field::Icon => self.icon_results().len(), Field::Reminder => REMINDERS.len(), _ => 0 }
+        match self.field() { Field::Tag => self.tag_options().len() + usize::from(self.new_tag().is_some()), Field::Icon => self.icon_results().len(), Field::Reminder => REMINDERS.len(), _ => 0 }
     }
 
     /// The choice `index` under the active line is taken (`None`: none). Typed filters stay.
@@ -1662,6 +1910,8 @@ impl Form {
         match self.field() {
             Field::Tag => {
                 let options = self.tag_options();
+                // The line that makes the tag typed: chosen, it waits for Enter.
+                if index == Some(options.len()) && self.new_tag().is_some() { self.pick = options.len(); return Effect::default(); }
                 self.pick = index.unwrap_or(0).min(options.len() - 1);
                 self.v.tag = options[self.pick].0.clone();
                 if index.is_none() { self.query.clear(); }
@@ -1966,7 +2216,20 @@ impl Form {
     }
 
     /// Back to today (a click on the day view's date, Alt+H).
-    pub fn show_today(&mut self) { self.show_day(self.today) }
+    pub fn show_today(&mut self) {
+        self.show_day(self.today);
+        self.reset_calendar();
+    }
+
+    /// The calendar scrolls back to today, with its default zoom and pan.
+    fn reset_calendar(&mut self) {
+        self.cal_top = repeat::shift(self.today, -1);
+        self.cal_offset = 0.0;
+        self.cal_target = None;
+        self.zoom_days = 1.0;
+        self.zoom_hours = 1.0;
+        self.pan = 0.0;
+    }
 
     /// A reminder card's title was clicked: the day view shows the reminder's day. An entry form with
     /// unsaved changes stays open.
@@ -2002,8 +2265,9 @@ impl Form {
             return Effect { focus: Some(Pane::Menu), ..Effect::default() };
         }
         if let Some(day) = out.go_to { self.show_day(day); let out = self.with_pane(|pane, cx| pane.enter(cx)); return self.pane_effect(out); }
+        let edit_tag = out.edit_tag.clone();
         let focus = if out.to_search { Some(Pane::Search) } else if out.edit.is_some() { Some(Pane::DayEdit) } else if out.side_text.is_some() { Some(Pane::SideText) } else if out.focus { Some(Pane::Day) } else { None };
-        Effect { focus, day_text: out.edit.or(out.side_text), ..Effect::default() }
+        Effect { focus, day_text: out.edit.or(out.side_text), edit_tag, ..Effect::default() }
     }
 
     /// A key while the day view (or its panel, or one of their inputs) has the keyboard.
@@ -2201,7 +2465,7 @@ impl Form {
 
     fn draft(&self) -> Draft {
         let v = &self.v;
-        let mut draft = Draft { kind: Some(v.typ.kind()), text: v.title.trim().to_string(), time: v.start, end: v.start.and(v.end), tag: v.tag.clone(), repeat: v.rule.clone(), ..Draft::default() };
+        let mut draft = Draft { kind: Some(v.typ.kind()), text: crate::templates::without_gaps(&v.title), time: v.start, end: v.start.and(v.end), tag: v.tag.clone(), repeat: v.rule.clone(), ..Draft::default() };
         let parts = ranges(&v.days);
         if parts.iter().all(|(first, last)| first == last) {
             draft.dates = parts.iter().map(|(first, _)| *first).collect();
@@ -2248,6 +2512,7 @@ impl Form {
 
     /// The problem the entry has now, as it is shown: a missing title only once creating was tried.
     fn live_problem(&self) -> Option<Problem> {
+        if self.template.is_some() { return None; }
         self.outcome().1.filter(|problem| *problem != Problem::NoText || self.tried)
     }
 
@@ -2260,6 +2525,8 @@ impl Form {
     fn save(&mut self, stay: bool) -> Effect {
         let t = self.t();
         if let Err(error) = self.commit() { self.status = Some((error, true)); return Effect::default(); }
+        if let Some(name) = self.template.clone() { return self.save_template(&name); }
+        self.follow_template_day();
         self.tried = true;
         let (outcome, problem) = self.outcome();
         if let Some(problem) = problem {
@@ -2282,13 +2549,14 @@ impl Form {
                 if let Some(snapshot) = &mut self.snapshot { let _ = snapshot.reload(&journal.store); }
                 self.last_saved = Some(saved);
                 self.editing = None;
+                self.from_template = false;
                 self.v = Values::default();
                 self.kind_chosen = false;
                 self.tried = false;
                 let effect = self.enter_row(TITLE);
                 self.flash = Some(t.saved.into());
                 if !stay { self.entry_open = false; }
-                Effect { hide_soon: !stay, focus: Some(if stay { Pane::Entry } else { Pane::Search }), ..effect }
+                Effect { focus: Some(if stay { Pane::Entry } else { Pane::Search }), ..effect }
             }
             Err(error) => { self.status = Some((format!("{} {error}", t.save_failed), true)); Effect::default() }
         }
@@ -2307,6 +2575,7 @@ impl Form {
     // ----- What is drawn -----
 
     pub fn view(&mut self) -> View {
+        self.follow_template_day();
         let calendar = self.calendar_view();
         let (day, side) = if self.notepad.is_some() {
             (DayView::default(), None)
@@ -2326,8 +2595,8 @@ impl Form {
             let value = self.shown_value(*f);
             RowView {
                 field: index, line: line_of(*f), cell: f.cell(), multi: f.line() == 2,
-                label: if f.cell() == 0 { ft.labels[f.line()].to_string() } else { String::new() },
-                label_icon: if f.cell() == 0 { Self::line_icon(*f) } else { "" },
+                label: if f.cell() == 0 || *f == Field::Start && !self.visible(Field::Day) { ft.labels[f.line()].to_string() } else { String::new() },
+                label_icon: if f.cell() == 0 || *f == Field::Start && !self.visible(Field::Day) { Self::line_icon(*f) } else { "" },
                 filled: !value.is_empty(), value,
                 hint: self.hint_of(*f).to_string(),
                 error: index == self.active && self.row_error.is_some() || problem_field == Some(*f),
@@ -2364,7 +2633,10 @@ impl Form {
             commands: if self.notepad.is_some() { Vec::new() } else { self.commands() },
             searching: self.searching(),
             command_selected: self.command_selected,
-            search_placeholder: ft.search.to_string(),
+            search_placeholder: match &self.template {
+                Some(name) => { let l = usize::from(self.language == Language::En); format!("{} #{name} · {}", crate::texts::templates::EDITING[l], crate::texts::templates::EDITING_HINT[l]) }
+                None => ft.search.to_string(),
+            },
             status,
             placeholder: self.hint_of(field).to_string(),
             title: self.v.title.clone(),
@@ -2483,6 +2755,18 @@ impl Form {
             }
             items.push(ActionItem::new(ActionId::NotesClose, 0, "x", at.notes_close));
             items.push(ActionItem::new(ActionId::Settings, 1, "settings", at.settings));
+        } else if let (true, Some(name)) = (self.entry_open, &self.template) {
+            let l = usize::from(self.language == Language::En);
+            title = format!("{} #{name}", crate::texts::templates::EDITING[l]);
+            let known = self.templates.find(name).is_some();
+            items.push(ActionItem::new(ActionId::Save, 0, "circle-check", crate::texts::templates::SAVE[l]));
+            items.push(ActionItem::new(ActionId::Priority, 0, "flag", at.priority).on(self.v.priority));
+            items.push(ActionItem::new(ActionId::Repeat, 0, "repeat", self.ft().labels[3]).value(self.shown_value(Field::Repeat)));
+            items.push(ActionItem::new(ActionId::Description, 0, "text-align-start", at.description).value(self.v.description.lines().next().unwrap_or_default().to_string()));
+            items.push(ActionItem::new(ActionId::Reminder, 0, "bell", at.reminder).value(self.shown_value(Field::Reminder)));
+            items.push(ActionItem::new(ActionId::Icon, 0, "image", at.icon).value(self.v.icon.clone().unwrap_or_default()));
+            if known { items.push(ActionItem { danger: true, ..ActionItem::new(ActionId::TemplateDelete, 0, "trash", crate::texts::templates::DELETE[l]) }); }
+            items.push(ActionItem::new(ActionId::Discard, 0, "x", at.discard));
         } else if self.entry_open {
             title = if self.v.title.trim().is_empty() { at.new_entry.to_string() } else { self.v.title.clone() };
             items.push(ActionItem::new(ActionId::Save, 0, "circle-check", if self.editing_entry() { at.notes_save } else { at.save }));
@@ -2573,6 +2857,7 @@ impl Form {
             ActionId::Reminder => self.open_extra(Field::Reminder),
             ActionId::Icon => self.open_extra(Field::Icon),
             ActionId::Discard => self.close_entry(),
+            ActionId::TemplateDelete => self.delete_template(),
             ActionId::NotesNew => self.new_notepad_note(),
             ActionId::NotesEdit | ActionId::NotesPreview => { self.notepad_preview(); Effect { focus: Some(Pane::Notes), ..Effect::default() } }
             ActionId::NotesSave => { self.save_notepad_card(); Effect { focus: Some(Pane::Notes), ..Effect::default() } }
@@ -2600,7 +2885,11 @@ impl Form {
             }
             Some(Options::Repeat | Options::RepeatDate { .. }) => (Panel::Repeat(self.editor.view(self.v.rule.as_ref(), self.language)), String::new()),
             Some(Options::Choices) => match self.field() {
-                Field::Tag => (Panel::Tags(self.tag_options().into_iter().enumerate().map(|(i, (id, name, color))| Choice { label: name, color, icon: self.icon_of(None, id.as_deref()).to_string(), selected: i == self.pick }).collect()), String::new()),
+                Field::Tag => {
+                    let mut choices: Vec<Choice> = self.tag_options().into_iter().enumerate().map(|(i, (id, name, color))| Choice { label: name, color, icon: self.icon_of(None, id.as_deref()).to_string(), selected: i == self.pick }).collect();
+                    if let Some(name) = self.new_tag() { let selected = self.pick == choices.len(); choices.push(Choice { label: crate::texts::tags::make_tag(&name, self.language), color: None, icon: "plus".into(), selected }); }
+                    (Panel::Tags(choices), String::new())
+                }
                 Field::Icon => {
                     let results = self.icon_results();
                     let note = if results.is_empty() { ft.no_icons.to_string() } else { results.get(self.pick).map(|name| name.to_string()).unwrap_or_default() };

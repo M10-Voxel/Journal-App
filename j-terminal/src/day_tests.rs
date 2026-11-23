@@ -134,6 +134,20 @@ fn the_panel_at_the_left_sets_tag_time_reminder_icon_description_and_plans_on_a_
     t.press(K::Enter);
     assert_eq!(t.day("2026-11-19").entries[0].tag.as_deref(), Some(WORK));
     assert!(t.side().is_none(), "Chosen: the card closes (as in Raycast).");
+    // A tag that is not there yet: the line after the tags makes it, and the tag editor is to open on it.
+    t.alt('g');
+    t.pane.side_edited("Garten");
+    let rows = t.side().unwrap().rows;
+    assert_eq!(rows.last().map(|r| r.label.as_str()), Some("Tag „Garten“ anlegen"));
+    for _ in 1..rows.len() { t.press(K::Down); }
+    let out = t.press(K::Enter);
+    let garden = t.day("2026-11-19").entries[0].tag.clone().unwrap();
+    assert_eq!(out.edit_tag.as_deref(), Some(garden.as_str()));
+    t.alt('g');
+    t.pane.side_edited("garten");
+    assert!(!t.side().unwrap().rows.iter().any(|r| r.label.contains("anlegen")), "There already.");
+    t.press(K::Escape);
+    t.press(K::Escape);
     // The time on the clock: digits, Enter.
     t.alt('u');
     for c in "1430".chars() { t.press(K::Char(c)); }

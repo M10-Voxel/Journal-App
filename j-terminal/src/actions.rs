@@ -14,6 +14,8 @@ pub enum Id {
     NewTask, NewEvent, NewNote, Today, Notebook, Undo, Redo, Settings,
     /// The entry form.
     Save, SaveStay, Priority, Repeat, Plan, Description, Reminder, Icon, Discard,
+    /// A template being written (`/Vorlage Name`) is deleted.
+    TemplateDelete,
     /// The notepad.
     NotesNew, NotesEdit, NotesSave, NotesPreview, NotesTag, NotesFolder, NotesAttachments, NotesList, NotesClose,
 }
@@ -56,7 +58,7 @@ impl Id {
             Id::NotesTag => "notes-tag",
             Id::NotesAttachments => "notes-attachments",
             Id::NotesList => "notes-list",
-            Id::Repeat | Id::Plan | Id::Discard | Id::NotesFolder | Id::NotesClose => return None,
+            Id::Repeat | Id::Plan | Id::Discard | Id::TemplateDelete | Id::NotesFolder | Id::NotesClose => return None,
         })
     }
 

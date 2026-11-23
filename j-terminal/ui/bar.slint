@@ -74,9 +74,9 @@ component IconSpot inherits Rectangle {
     out property <bool> hovered: spot-touch.has-hover;
     width: Theme.day-symbol-box; height: Theme.day-symbol-box;
     border-radius: Theme.block-radius;
-    background: Theme.row-fill(false, spot-touch.has-hover, spot-touch.pressed);
+    // Only the icon lights up; no box around it.
     Image { width: root.icon-size; height: root.icon-size; x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2; source: root.icon; colorize: spot-touch.has-hover ? Theme.strong : root.tint; }
-    spot-touch := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.clicked(); } }
+    spot-touch := TouchArea { mouse-cursor: MouseCursor.default; clicked => { root.clicked(); } }
 }
 
 component DayActivity inherits Rectangle {
@@ -95,11 +95,11 @@ component DayActivity inherits Rectangle {
                 width: Theme.day-symbol-size; height: Theme.day-symbol-size; x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2;
                 source: root.data.icon; colorize: root.data.done || root.data.kind == 6 ? (root.data.has-color ? root.data.color : Theme.strong) : Theme.placeholder;
             }
-            tick-touch := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.clicked(root.data.item, 1); } }
+            tick-touch := TouchArea { mouse-cursor: MouseCursor.default; clicked => { root.clicked(root.data.item, 1); } }
         }
         Text {
             text: root.data.label; color: root.data.done || root.data.kind == 6 ? Theme.text : Theme.muted; font-size: Theme.row-size; vertical-alignment: center; overflow: elide; horizontal-stretch: 1;
-            TouchArea { clicked => { root.clicked(root.data.item, 0); } }
+            TouchArea { mouse-cursor: MouseCursor.default; clicked => { root.clicked(root.data.item, 0); } }
         }
         if root.data.detail != "": Text { text: root.data.detail; color: Theme.muted; font-family: Theme.write-font; font-size: Theme.write-size; vertical-alignment: center; }
         if root.data.has-timer: Text { text: root.data.timer-clock; color: root.data.timer-running ? Theme.accent : Theme.muted; font-family: Theme.write-font; font-size: Theme.write-size; vertical-alignment: center; }
@@ -135,6 +135,8 @@ component DayScroll inherits Flickable {
 }
 
 import { BoardView, BoardUi } from "board.slint";
+import { TagEditor, TagEditorUi, TagIcon } from "tag-editor.slint";
+export { TagEditorUi, TagIcon }
 export { ReminderWindow, ReminderCard } from "reminder.slint";
 export { InkShape, InkDocument, BoardUi, BoardTile, BoardThread, BoardGroup, BoardBox, BoardHit, BoardTool, FloatingBoardNote } from "board.slint";
 export component Bar inherits Window {
@@ -214,6 +216,8 @@ export component Bar inherits Window {
     callback calendar-keyboard-preview(int) -> EntryPreview;
     callback day-keyboard-preview() -> EntryPreview;
     callback cal-wheel(length, length, bool, bool);
+    callback cal-resize-labels(length);
+    callback cal-resize-labels-done();
     callback calendar-resized(length, length);
     private property <length> calendar-viewport-width: calendar.width;
     changed calendar-viewport-width => { root.calendar-resized(calendar.width, calendar.height); }
@@ -392,6 +396,7 @@ export component Bar inherits Window {
     public function focus-day() { day-scope.focus(); }
     public function focus-menu() { root.popover-focus += 1; }
     public function select-text() { input.select-all(); }
+    public function select-range(from: int, to: int) { input.set-selection-offsets(from, to); }
     // Where a field of a line lies: "when" has the date, the start and the end side by side.
     pure function cell-x(cell: int) -> length {
         return root.value-x + (cell == 0 ? 0px : cell == 1 ? Theme.when-date-width : Theme.when-date-width + Theme.when-time-width + Theme.when-dash-width);
@@ -503,6 +508,8 @@ export component Bar inherits Window {
         }
         capture-key-pressed(raw-event) => {
             let event = KeyBindings.translate(ShortcutContext.window, raw-event);
+            // The tag editor keeps its keys.
+            if TagEditorUi.open { return reject; }
             if BoardUi.opened && event.text != Key.F1 {
                 if BoardUi.key(raw-event.text,KeyBindings.modifier-mask(raw-event),raw-event.repeat) { return accept; }
                 return reject;
@@ -628,7 +635,7 @@ export component Bar inherits Window {
                             text: "×"; font-size: Theme.search-size; color: query-touch.has-hover ? Theme.strong : Theme.muted;
                             vertical-alignment: center; horizontal-alignment: center;
                         }
-                        query-touch := TouchArea { mouse-cursor: pointer; clicked => { root.toggle-command-query(); } }
+                        query-touch := TouchArea { mouse-cursor: default; clicked => { root.toggle-command-query(); } }
                     }
                     Rectangle {
                         width: day-label.preferred-width + Theme.accessory-inset * 2; height: Theme.accessory-height;
@@ -639,7 +646,7 @@ export component Bar inherits Window {
                             padding-left: Theme.accessory-inset; padding-right: Theme.accessory-inset; spacing: Theme.calendar-gap * 2;
                             Text { text: root.day-relative; color: root.day-is-today ? Theme.accent : Theme.muted; font-size: Theme.row-size; font-weight: Theme.weight-medium; vertical-alignment: center; }
                         }
-                        day-touch := TouchArea { mouse-cursor: root.day-is-today ? MouseCursor.default : MouseCursor.pointer; clicked => { if !root.day-is-today { root.day-today(); } } }
+                        day-touch := TouchArea { mouse-cursor: root.day-is-today ? MouseCursor.default : MouseCursor.default; clicked => { if !root.day-is-today { root.day-today(); } } }
                     }
                     IconSpot { width: Theme.accessory-height; height: self.width; y: (parent.height - self.height) / 2; icon: root.icon-back; clicked => { root.form-key(5, 4); } }
                     IconSpot { width: Theme.accessory-height; height: self.width; y: (parent.height - self.height) / 2; icon: root.icon-forward; clicked => { root.form-key(6, 4); } }
@@ -686,7 +693,7 @@ export component Bar inherits Window {
                         Text { text: root.type-names[root.type-selected]; color: Theme.strong; font-size: Theme.type-size; vertical-alignment: center; }
                         Image { width: Theme.footer-icon-size; height: self.width; y: (parent.height - self.height) / 2; source: root.icon-chevron-down; colorize: Theme.muted; }
                     }
-                    type-touch := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.type-list-open = !root.type-list-open; input.focus(); } }
+                    type-touch := TouchArea { mouse-cursor: MouseCursor.default; clicked => { root.type-list-open = !root.type-list-open; input.focus(); } }
                 }
             }
         }
@@ -714,7 +721,7 @@ export component Bar inherits Window {
                 Rectangle {
                     y: command.header; height: parent.height - self.y;
                     border-radius: Theme.list-radius;
-                    background: Theme.row-fill(index == root.command-selected, hit.has-hover, hit.pressed);
+                    background: Theme.row-fill(index == root.command-selected, hit.has-hover, hit.pressed); animate background { duration: Theme.hover-time; }
                     accessible-role: list-item; accessible-label: command.name; accessible-description: command.detail;
                     accessible-item-selected: index == root.command-selected;
                     accessible-action-default => { root.command-chosen(index); }
@@ -738,7 +745,7 @@ export component Bar inherits Window {
                             max-width: root.form-space / 2.5; overflow: elide; }
                     }
                     hit := TouchArea {
-                        mouse-cursor: pointer;
+                        mouse-cursor: default;
                         changed has-hover => {
                             if self.has-hover && command.preview {
                                 root.hover-preview({ source: 1, index: index, title: command.name, description: command.description,
@@ -773,7 +780,7 @@ export component Bar inherits Window {
                 Rectangle {
                     x: root.cell-x(row.cell); y: Theme.field-vpad;
                     width: root.cell-width(row.cell, row.multi); height: parent.height - Theme.field-vpad * 2;
-                    background: row.field == root.active ? Theme.field-focus-background : field-touch.has-hover ? Theme.hover : Theme.field-background;
+                    background: row.field == root.active ? Theme.field-focus-background : field-touch.has-hover ? Theme.hover : Theme.field-background; animate background { duration: Theme.hover-time; }
                     border-radius: Theme.field-radius;
                     border-width: Theme.border-width;
                     border-color: row.error ? Theme.error : row.field == root.active ? Theme.field-focus : Theme.edge;
@@ -824,7 +831,7 @@ export component Bar inherits Window {
                 spacing: Theme.choice-spacing;
                 for choice in root.choices: Rectangle {
                     height: Theme.choice-height;
-                    background: choice.selected ? Theme.row-selection : tag-touch.has-hover ? Theme.hover : transparent;
+                    background: choice.selected ? Theme.row-selection : tag-touch.has-hover ? Theme.hover : transparent; animate background { duration: Theme.hover-time; }
                     border-radius: Theme.block-radius;
                     HorizontalLayout {
                         padding-left: Theme.gap; spacing: Theme.gap; alignment: start;
@@ -836,7 +843,7 @@ export component Bar inherits Window {
                         if choice.has-icon: Image { source: choice.icon; width: Theme.label-icon-size; height: Theme.label-icon-size; colorize: choice.has-color ? choice.color : Theme.muted; y: (parent.height - self.height) / 2; }
                         Text { text: choice.label; color: choice.selected ? Theme.strong : Theme.text; font-size: Theme.row-size; vertical-alignment: center; }
                     }
-                    tag-touch := TouchArea { clicked => { root.choice-clicked(choice.index); input.focus(); } }
+                    tag-touch := TouchArea { mouse-cursor: MouseCursor.default; clicked => { root.choice-clicked(choice.index); input.focus(); } }
                 }
             }
             // Icons: a grid, the chosen one's name under it.
@@ -846,7 +853,7 @@ export component Bar inherits Window {
                     x: Math.mod(i, Theme.icon-columns) * Theme.icon-cell;
                     y: Math.floor(i / Theme.icon-columns) * Theme.icon-cell;
                     width: Theme.icon-cell - Theme.calendar-gap; height: Theme.icon-cell - Theme.calendar-gap;
-                    background: choice.selected ? Theme.row-selection : icon-touch.has-hover ? Theme.hover : transparent;
+                    background: choice.selected ? Theme.row-selection : icon-touch.has-hover ? Theme.hover : transparent; animate background { duration: Theme.hover-time; }
                     border-radius: Theme.block-radius;
                     border-width: choice.selected ? Theme.border-width : 0px; border-color: Theme.field-focus;
                     Image {
@@ -854,7 +861,7 @@ export component Bar inherits Window {
                         x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2;
                         source: choice.icon; colorize: choice.selected ? Theme.strong : Theme.muted;
                     }
-                    icon-touch := TouchArea { clicked => { root.choice-clicked(choice.index); input.focus(); } }
+                    icon-touch := TouchArea { mouse-cursor: MouseCursor.default; clicked => { root.choice-clicked(choice.index); input.focus(); } }
                 }
             }
             // Reminders: ready-made lengths in a grid; anything else is typed.
@@ -864,11 +871,11 @@ export component Bar inherits Window {
                     x: Math.mod(i, Theme.reminder-columns) * (parent.width / Theme.reminder-columns);
                     y: Math.floor(i / Theme.reminder-columns) * Theme.choice-height;
                     width: parent.width / Theme.reminder-columns - Theme.calendar-gap; height: Theme.choice-height - Theme.calendar-gap;
-                    background: choice.selected ? Theme.chip-selected : reminder-touch.has-hover ? Theme.hover : Theme.recognised;
+                    background: choice.selected ? Theme.chip-selected : reminder-touch.has-hover ? Theme.hover : Theme.recognised; animate background { duration: Theme.hover-time; }
                     border-radius: Theme.block-radius;
                     border-width: choice.selected ? Theme.border-width : 0px; border-color: Theme.field-focus;
                     Text { text: choice.label; color: choice.selected ? Theme.strong : Theme.muted; font-size: Theme.row-size; horizontal-alignment: center; vertical-alignment: center; }
-                    reminder-touch := TouchArea { clicked => { root.choice-clicked(choice.index); input.focus(); } }
+                    reminder-touch := TouchArea { mouse-cursor: MouseCursor.default; clicked => { root.choice-clicked(choice.index); input.focus(); } }
                 }
             }
             // The repetition: labelled lines; one choice of several looks like a segmented switch, days and months
@@ -896,7 +903,7 @@ export component Bar inherits Window {
                                     color: part.selected && part.kind < 2 ? Theme.strong : part.focused || part.kind >= 2 ? Theme.text : Theme.muted;
                                     horizontal-alignment: center; vertical-alignment: center;
                                 }
-                                TouchArea { clicked => { root.sentence-clicked(part.slot, part.value); input.focus(); } }
+                                TouchArea { mouse-cursor: MouseCursor.default; clicked => { root.sentence-clicked(part.slot, part.value); input.focus(); } }
                             }
                             if part.after != "": Text { text: part.after; color: Theme.muted; font-size: Theme.row-size; vertical-alignment: center; }
                         }
@@ -979,6 +986,7 @@ export component Bar inherits Window {
                         x: Theme.padding; width: parent.width - Theme.padding * 2;
                         y: row.top; height: row.tall;
                         enabled: row.kind == 1 && !row.editing;
+                        mouse-cursor: self.enabled ? MouseCursor.default : MouseCursor.default;
                         changed has-hover => {
                             if self.has-hover {
                                 root.hover-preview({ source: 2, index: row.item, title: row.label, description: row.description,
@@ -988,7 +996,7 @@ export component Bar inherits Window {
                         // The line the keyboard is on.
                         if row.kind == 1 || (row.selected && row.kind != 7): Rectangle {
                             x: -Theme.day-select-inset; width: parent.width + Theme.day-select-inset * 2;
-                            background: Theme.row-fill(row.selected, day-row.has-hover, false); border-radius: Theme.list-radius;
+                            background: Theme.row-fill(row.selected, day-row.has-hover, day-row.pressed); border-radius: Theme.list-radius; animate background { duration: Theme.hover-time; }
                         }
                         // The day's title, written in place.
                         if row.kind == 5 && !row.editing: Text {
@@ -1013,7 +1021,7 @@ export component Bar inherits Window {
                                     source: row.icon; colorize: row.trace || row.foreign ? Theme.placeholder : row.has-color ? row.color : Theme.text;
                                 }
                                 symbol-touch := TouchArea {
-                                    mouse-cursor: MouseCursor.pointer;
+                                    mouse-cursor: MouseCursor.default;
                                     clicked => { root.day-click(row.item, 1); }
                                     pointer-event(event) => { if event.button == PointerEventButton.right && event.kind == PointerEventKind.down { root.day-click(row.item, 4); } }
                                 }
@@ -1072,7 +1080,7 @@ export component Bar inherits Window {
                                     visible: row.priority || row.selected || day-row.has-hover;
                                     opacity: row.priority || flag-touch.has-hover ? 1 : 0.6;
                                 }
-                                flag-touch := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.day-click(row.item, 5); } }
+                                flag-touch := TouchArea { mouse-cursor: MouseCursor.default; clicked => { root.day-click(row.item, 5); } }
                             }
                         }
                         // The day's title being written.
@@ -1155,7 +1163,7 @@ export component Bar inherits Window {
                                     text: dial.label; color: dial.selected ? Theme.text : Theme.muted; font-size: Theme.small-size; horizontal-alignment: center; overflow: elide;
                                 }
                                 dial-touch := TouchArea {
-                                    mouse-cursor: MouseCursor.pointer;
+                                    mouse-cursor: MouseCursor.default;
                                     changed pressed => { root.dragging-dial = self.pressed; }
                                     property <bool> adjusted;
                                     moved => { if self.pressed && self.steps != 0 { self.adjusted = true; } }
@@ -1176,7 +1184,7 @@ export component Bar inherits Window {
                                 if dial.value != "–": Image {
                                     x: parent.width - self.width - Theme.calendar-gap; y: Theme.calendar-gap; width: Theme.day-tag-icon-size - 2px; height: self.width;
                                     source: JournalIcons.undo-icon; colorize: Theme.placeholder;
-                                    TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.dial-set(dial.item, 0, true); } }
+                                    TouchArea { mouse-cursor: MouseCursor.default; clicked => { root.dial-set(dial.item, 0, true); } }
                                 }
                             }
                         }
@@ -1258,7 +1266,7 @@ export component Bar inherits Window {
                     if event.text == Key.Delete || event.text == Key.Backspace { root.form-key(12, 0); return accept; }
                     if event.text == Key.PageUp { root.form-key(7, root.mods(event.modifiers.shift, false, false)); return accept; }
                     if event.text == Key.PageDown { root.form-key(8, root.mods(event.modifiers.shift, false, false)); return accept; }
-                    if event.text == Key.Home || (root.cal-focus && (event.text == "h" || event.text == "H")) { root.form-key(9, 0); return accept; }
+                    if event.text == Key.Home || (root.cal-focus && !event.modifiers.alt && (event.text == "h" || event.text == "H")) { root.form-key(9, 0); return accept; }
                     if event.text == " " { root.form-key(10, 0); return accept; }
                     if !event.modifiers.alt && event.text >= "0" && event.text <= "9" { root.form-key(20 + event.text.to-float(), 0); return accept; }
                 }
@@ -1275,6 +1283,8 @@ export component Bar inherits Window {
                     if event.text == "b" || event.text == "B" { root.form-key(31, 4); }
                     if event.text == "r" || event.text == "R" { root.form-key(32, 4); }
                     if event.text == "i" || event.text == "I" { root.form-key(33, 4); }
+                    // Back to today, calendar included.
+                    if event.text == "h" || event.text == "H" { root.form-key(9, 4); }
                     return accept;
                 }
                 if !root.editable { return accept; }
@@ -1301,7 +1311,7 @@ export component Bar inherits Window {
                     Text { text: name; color: Theme.strong; font-size: Theme.row-size; vertical-alignment: center; horizontal-stretch: 1; }
                     KeyCaps { caps: ["Alt", "\{n + 1}"]; }
                 }
-                kind-touch := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.form-key(21 + n, 4); root.type-list-open = false; input.focus(); } }
+                kind-touch := TouchArea { mouse-cursor: MouseCursor.default; clicked => { root.form-key(21 + n, 4); root.type-list-open = false; input.focus(); } }
             }
         }
     }
@@ -1347,6 +1357,8 @@ export component Bar inherits Window {
             }
         }
         wheel(x, delta, ctrl, shift) => { root.cal-wheel(x, delta, ctrl, shift); }
+        resize-labels(x) => { root.cal-resize-labels(x); }
+        resize-labels-done => { root.cal-resize-labels-done(); }
     }
     }
     // Anchor to the visible footer even after the stacked page has scrolled.
@@ -1454,6 +1466,7 @@ export component Bar inherits Window {
         }
     }
     board-page := BoardView {visible: BoardUi.opened;}
+    if TagEditorUi.open: TagEditor { x: 0px; y: 0px; width: root.width; height: root.height; }
     // With acrylic, DWM draws the outline around the backdrop and client together.
     if !root.glass: Rectangle {
         border-radius: Theme.radius;

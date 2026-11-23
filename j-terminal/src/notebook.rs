@@ -199,6 +199,37 @@ pub fn folders(store: &Store) -> Result<Vec<(String, String)>, SaveError> {
     }).collect())
 }
 
+/// A folder of that name could be made from what is typed in a folder picker: not empty, at most 120 characters, and no
+/// folder at the top is called so already.
+pub fn new_folder_name(folders: &[(String, String)], query: &str) -> Option<String> {
+    let name = query.trim();
+    let taken = folders.iter().any(|(_, path)| path.to_lowercase() == name.to_lowercase());
+    (!name.is_empty() && name.chars().count() <= 120 && !taken).then(|| name.to_string())
+}
+
+/// A new folder at the top, after the others there (as the app makes it: `board:folder:{id}`, id, name, parent, order).
+pub fn create_folder(store: &mut Store, name: &str) -> Result<String, SaveError> {
+    let name = name.trim();
+    if name.is_empty() || name.chars().count() > 120 { return Err(SaveError::Store("folder name".into())); }
+    let tx = store.conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let order = {
+        let mut statement = tx.prepare_cached("SELECT value FROM settings WHERE key >= 'board:folder:' AND key < 'board:folder;'")?;
+        let rows = statement.query_map([], |row| row.get::<_, String>(0))?;
+        let mut highest = -1i64;
+        for row in rows {
+            let folder: Value = serde_json::from_str(&row?).map_err(|error| SaveError::Store(error.to_string()))?;
+            if folder["parent"].is_null() { highest = highest.max(folder["order"].as_i64().unwrap_or_default()); }
+        }
+        highest + 1
+    };
+    let id = Uuid::new_v4().to_string();
+    history::begin(&tx)?;
+    tx.execute("INSERT INTO settings(key,value) VALUES(?1,?2)",
+        rusqlite::params![format!("board:folder:{id}"), json!({ "id": id, "name": name, "parent": null, "order": order }).to_string()])?;
+    tx.commit()?;
+    Ok(id)
+}
+
 pub fn notes(store: &Store, query: &str, day: Option<NaiveDate>) -> Result<Vec<Item>, SaveError> {
     let words: Vec<_> = query.split_whitespace().map(str::to_lowercase).collect();
     let day = day.map(|date| date.to_string());

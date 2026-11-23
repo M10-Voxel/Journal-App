@@ -8,6 +8,9 @@
 import "../assets/fonts/IBMPlexSans-400.ttf";
 import "../assets/fonts/IBMPlexSans-500.ttf";
 import "../assets/fonts/IBMPlexSans-600.ttf";
+// Bold (700) for Markdown's **bold**. All four files carry the family name "IBM Plex Sans" (500 and 600 were renamed from
+// "… Medium"/"… SemiBold"), so a weight picks its own cut instead of falling back to Regular.
+import "../assets/fonts/IBMPlexSans-700.ttf";
 import "../assets/fonts/Lilex-400.ttf";
 import "../assets/fonts/Lilex-500.ttf";
 import "../assets/fonts/Lilex-700.ttf";
@@ -41,7 +44,7 @@ export global Theme {
     out property <color> now: #ff5f57;
     out property <color> saturday: #8fb8f0;
     out property <color> sunday: #e58a8a;
-    out property <string> board-title-font: "IBM Plex Sans SemiBold";
+    out property <string> board-title-font: "IBM Plex Sans";
     out property <color> board-yellow: #e9d98c;
     out property <color> board-green: #b7d6a4;
     out property <color> board-blue: #a9c8e6;
@@ -75,12 +78,16 @@ export global Theme {
     out property <length> board-body-top: 48px;
     out property <length> board-paragraph-gap: 28px;
     out property <length> board-note-height: 164px;
+    // A web link on the board: the page's picture and description on the index card.
+    out property <length> board-link-gap: 8px;
+    out property <length> board-link-picture-radius: 2px;
+    out property <float> board-link-picture-ratio: 0.5625; // at most 16:9
     // What the parts are made of.
     out property <color> recognised: #ffffff0a;    // a choice not chosen
     out property <color> row-selection: #ffffff1a; // the active line
     out property <color> row-selection-strong: #ffffff24;
     out property <color> row-pressed: #ffffff35;
-    out property <color> menu-scrim: #08080a24;
+    out property <color> menu-scrim: transparent;  // the window stays as bright as it is behind an open menu
     public pure function row-fill(selected: bool, hovered: bool, pressed: bool) -> color {
         return pressed ? self.row-pressed : selected ? self.row-selection : hovered ? self.hover : transparent;
     }
@@ -97,8 +104,13 @@ export global Theme {
     out property <color> popover-shadow: #00000099;
     out property <length> popover-shadow-blur: 24px;
     // Key caps: an outline, the key's name small inside.
-    out property <color> keycap-border: #ffffff38;
-    out property <color> keycap-text: #c8c8c8;
+    // Filled as Raycast's: a light grey cap with a faint edge.
+    out property <color> keycap-background: #ffffff17;
+    out property <color> keycap-lit-background: #ffffff2e;
+    out property <color> keycap-border: #ffffff0f;
+    out property <color> keycap-text: #d4d4d4;
+    // Hover and selection fade instead of jumping.
+    out property <duration> hover-time: 90ms;
 
     // ── Type ──
     out property <string> ui-font: "IBM Plex Sans";
@@ -150,6 +162,7 @@ export global Theme {
 
     // ── The footer under the left half ──
     out property <length> footer-height: 40px;
+    out property <length> footer-hint-height: 24px; // the flat box of a footer key hint, as in Raycast
     out property <length> footer-size: 12px;
     out property <length> footer-date-size: 11px;
     out property <length> footer-icon-size: 14px;
@@ -267,8 +280,8 @@ export global Theme {
     // A line that is no text keeps the input at this width: a narrower one loses the keyboard focus.
     out property <length> idle-input-width: 40px;
     // "When": the date, the start and the end side by side.
-    out property <length> when-date-width: 206px;
-    out property <length> when-time-width: 58px;
+    out property <length> when-date-width: 172px;
+    out property <length> when-time-width: 100px;  // wide enough for "ganztägig"
     out property <length> when-dash-width: 14px;
     out property <length> label-icon-size: 16px;
     out property <length> more-radius: 8px;
@@ -360,12 +373,30 @@ export global Theme {
     out property <duration> preview-crossing-time: 180ms;
     out property <length> app-menu-width: 180px;
     out property <length> popover-max-height: 390px;
-    out property <length> popover-radius: 10px;
+    out property <length> popover-radius: 12px;
     out property <length> popover-padding: 6px;
     out property <length> popover-inset: 8px;
     out property <length> popover-search-height: 38px;
     out property <int> action-visible-rows: 6;
     out property <length> side-row-height: 36px;
+    // The same card opened by a right click on the board: at the mouse, smaller, the search on top, no keys.
+    out property <length> popover-compact-width: 240px;
+    out property <length> popover-compact-max-height: 320px;
+    out property <length> compact-row-height: 28px;
+    out property <length> compact-search-height: 32px;
+    // The tag editor (a tag just made): the Journal app's colour picker and an icon grid, in a card over the window.
+    out property <length> tag-editor-width: 360px;
+    out property <length> tag-editor-padding: 14px;
+    out property <color> tag-editor-backdrop: #00000080;
+    out property <length> tag-field-height: 130px;
+    out property <length> tag-hue-height: 12px;
+    out property <length> tag-swatch: 22px;
+    out property <length> tag-knob: 14px;
+    out property <length> tag-knob-ring: 2px;
+    out property <color> tag-knob-light: #ffffff;
+    out property <color> tag-knob-shadow: #00000099;
+    out property <color> tag-field-dark: #000000;
+    out property <int> tag-icon-rows: 3;
     out property <length> side-value-width: 110px;
     out property <int> side-icon-columns: 7;
     out property <length> side-icon-cell: 44px;
@@ -385,6 +416,10 @@ export global Theme {
     out property <length> cal-lane-text-size: 11px;
     out property <length> cal-lane-text-top: 4px;
     out property <length> cal-label-width: 132px;
+    // The day column can be dragged between these widths at its right edge.
+    out property <length> cal-label-min-width: 90px;
+    out property <length> cal-label-max-width: 360px;
+    out property <length> cal-resize-grip: 8px;
     out property <length> cal-date-width: 50px;
     out property <length> cal-week-width: 40px;
     out property <length> cal-date-height: 20px;

@@ -30,6 +30,7 @@ url = "2.5"
 image = { version = "0.25", default-features = false, features = ["avif", "jpeg", "png", "webp"] }
 avif-decode = { version = "3.0", default-features = false }
 avif-parse = "2.1"
+ureq = "3"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.56"

@@ -147,6 +147,8 @@ pub struct Board {
     pub menu: Vec<(String, String)>,
     pub menu_at: usize,
     pub prompt: Option<String>,
+    /// A web link being pinned: its address, while its title is asked for.
+    pub link_draft: Option<String>,
     pub message: String,
     pub version: i64,
     pub restore: Option<(i32, i32, f32, f32)>,
@@ -166,6 +168,10 @@ pub struct Board {
     pub tags: Vec<journal_core::storage::Tag>,
     pub menu_query: String,
     pub visible_choices: Vec<usize>,
+    /// The line after the tags or folders that makes what is typed (`new-tag:Name`, `new-folder:Name`).
+    pub new_choice: Option<String>,
+    /// A tag was just made: the tag editor opens on it.
+    pub edit_tag: Option<String>,
 }
 impl Board {
     pub fn open(store: &Store, period: Period, date: NaiveDate) -> Result<Self, String> {
@@ -182,6 +188,7 @@ impl Board {
             menu: vec![],
             menu_at: 0,
             prompt: None,
+            link_draft: None,
             message: String::new(),
             version: -1,
             restore: None,
@@ -201,6 +208,8 @@ impl Board {
             tags: Vec::new(),
             menu_query: String::new(),
             visible_choices: Vec::new(),
+            new_choice: None,
+            edit_tag: None,
         };
         b.ensure_selected();
         Ok(b)

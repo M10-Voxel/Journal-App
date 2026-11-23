@@ -20,6 +20,10 @@ mod notebook;
 mod note_markdown;
 mod mail_preview;
 mod note_images;
+mod link_preview;
+mod templates;
+mod tag_edit;
+mod tag_editor_ui;
 mod repeat_sentence;
 mod save;
 mod snapshot;
@@ -71,6 +75,8 @@ struct NotepadMedia {
 }
 
 struct App {
+    /// The tag editor, while open (a tag just made in a picker).
+    tag_editor: Option<tag_edit::Editor>,
     floating_notes:std::collections::HashMap<String,FloatingBoardNote>,
     board: Option<board::Board>,
     board_images: std::collections::HashMap<String, slint::Image>,
@@ -118,6 +124,11 @@ thread_local! {
     static PICKING_IMAGE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
+/// The file dialog closed. Keep ignoring focus loss a moment longer: Windows reports it only after the dialog is gone.
+fn picking_done() {
+    slint::Timer::single_shot(Duration::from_millis(400), || PICKING_IMAGE.with(|picking| picking.set(false)));
+}
+
 fn choose_notepad_image() {
     #[cfg(windows)]
     slint::Timer::single_shot(Duration::ZERO, || {
@@ -133,7 +144,7 @@ fn choose_notepad_image() {
         let dialog = || rfd::FileDialog::new().set_title(labels.image)
             .add_filter(labels.image, &["png", "jpeg", "jpg", "webp"]);
         let file = bar.window().with_winit_window(|window| dialog().set_parent(window).pick_file()).flatten();
-        PICKING_IMAGE.with(|picking| picking.set(false));
+        picking_done();
         let Some(path) = file else { return; };
         with_app(|app| { app.state.notepad_image_loading(true); app.draw(); });
         std::thread::spawn(move || {
@@ -1091,8 +1102,11 @@ impl App {
             Some(form::Pane::DayEdit) | None => {}
         }
         if let Some(cursor) = effect.search_cursor { self.bar.invoke_place_search_cursor(cursor as i32); }
+        // A gap of a template's title: only it is selected, so typing fills it.
+        if let Some((from, to)) = effect.select { self.bar.invoke_select_range(from as i32, to as i32); }
         if let Some(id) = effect.attachment { if let Some(target) = self.state.notepad_target(&id.to_string()) { self.show_notepad_target(target); } }
         if let Some(period)=effect.board {self.open_board(period);}
+        if let Some(id) = effect.edit_tag { self.open_tag_editor(&id); }
         if effect.settings { self.show_settings(); }
         if effect.hide { let _ = self.bar.hide(); }
         if effect.hide_soon {
@@ -1103,6 +1117,12 @@ impl App {
             let _ = slint::quit_event_loop();
         }
     }
+}
+
+/// The day column's width within the theme's bounds.
+fn clamp_label_width(bar: &Bar, width: f32) -> f32 {
+    let theme = bar.global::<Theme>();
+    width.clamp(theme.get_cal_label_min_width(), theme.get_cal_label_max_width())
 }
 
 /// The calendar's sizes as the theme has them.
@@ -1432,6 +1452,7 @@ fn connect_settings(settings: &SettingsWindow) {
 
 fn connect(bar: &Bar) {
     board_ui::connect(bar);
+    tag_editor_ui::connect(bar);
     bar.global::<KeyBindings>().on_resolve(route_key);
     bar.on_open_settings(|| with_app(App::show_settings));
     let weak = bar.as_weak();
@@ -1473,6 +1494,26 @@ fn connect(bar: &Bar) {
         let Some(row) = app.bar.get_day_rows().iter().find(|row| row.kind == 1 && row.selected && !row.editing) else { return EntryPreview::default() };
         EntryPreview { source: 2, index: row.item, title: row.label, description: row.description,
             x: app.bar.get_form_space(), y: app.bar.global::<Theme>().get_line_height() }
+    }));
+    let weak = bar.as_weak();
+    bar.on_cal_resize_labels(move |x| {
+        let Some(bar) = weak.upgrade() else { return };
+        with_app(|app| {
+            let m = &app.state.metrics;
+            let width = clamp_label_width(&bar, x - m.pad - m.lanes as f32 * m.lane_w).round();
+            if width == m.label_w { return; }
+            app.state.metrics.label_w = width;
+            let calendar = app.state.calendar_view();
+            app.draw_calendar(calendar);
+        });
+    });
+    bar.on_cal_resize_labels_done(|| with_app(|app| {
+        let width = app.state.metrics.label_w as u16;
+        if app.state.preferences.calendar_label_width == Some(width) { return; }
+        app.state.preferences.calendar_label_width = Some(width);
+        if let Some(path) = &app.preferences_path {
+            if let Err(error) = settings::write_json(path, &app.state.preferences) { eprintln!("J-TerminaL: {error}"); }
+        }
     }));
     bar.on_cal_wheel(|x, delta, ctrl, shift| with_app(|app| { app.state.cal_wheel(x, delta, ctrl, shift); app.draw(); }));
     bar.on_day_today(|| with_app(|app| { app.state.show_today(); app.draw(); }));
@@ -1621,6 +1662,7 @@ fn connect(bar: &Bar) {
         let target = app.state.pick_notepad(&key);
         if let Some(target) = target { app.show_notepad_target(target); }
         app.draw();
+        if let Some(id) = app.state.take_tag_edit() { app.open_tag_editor(&id); }
     }));
     bar.on_notepad_view_attachment(|key| with_app(|app| {
         if let Some(target) = app.state.notepad_target(&key) { app.show_notepad_target(target); }
@@ -1827,6 +1869,8 @@ fn main() {
         }
         if matches!(event, WindowEvent::Focused(false)) && !PICKING_IMAGE.with(|picking| picking.get()) {
             slint::Timer::single_shot(Duration::ZERO, || with_app(|app| {
+                // A file dialog hands the focus back late: its focus loss arrives after the dialog closed.
+                if PICKING_IMAGE.with(|picking| picking.get()) || app.bar.window().with_winit_window(|w| w.has_focus()) == Some(true) { return; }
                 if !app.board.as_ref().is_some_and(|b|b.editor==2) {let _ = app.bar.hide();}
             }));
         }
@@ -1840,8 +1884,14 @@ fn main() {
     let show_now = !args.background || active_hotkey.is_none();
     let mut state = form::Form::new(opened.ok(), language);
     state.preferences = preferences;
+    // The templates (`#Name`) beside J-TerminaL's settings; without a folder they live only while it runs.
+    state.templates = templates::Templates::load(data.as_ref().map(|directory| directory.join("j-terminal-templates.json"))).unwrap_or_else(|error| {
+        eprintln!("J-TerminaL: {}: {error}", texts::templates::HEADING[usize::from(language == texts::Language::En)]);
+        templates::Templates::default()
+    });
     state.metrics = metrics(&bar);
-    APP.with(|app| *app.borrow_mut() = Some(App { floating_notes:Default::default(),board:None, board_images:Default::default(), notepad_media: NotepadMedia::default(), notepad_list_query: Default::default(),
+    if let Some(width) = preferences.calendar_label_width { state.metrics.label_w = clamp_label_width(&bar, width as f32); }
+    APP.with(|app| *app.borrow_mut() = Some(App { tag_editor: None, floating_notes:Default::default(),board:None, board_images:Default::default(), notepad_media: NotepadMedia::default(), notepad_list_query: Default::default(),
         bar, settings: None, settings_navigation: Default::default(), preferences_path, journal_language, restore_launcher: false, state, notice,
         hide_timer: slint::Timer::default(), bindings, hotkeys, active_hotkey, day_items: Vec::new(), side_cells: Vec::new(), tick: slint::Timer::default() }));
     with_app(|app| { app.refresh_board_scopes(); app.draw(); });
@@ -1977,7 +2027,7 @@ mod tests {
         connect(&bar);
         let mut state = form::Form::at(Some(journal), texts::Language::De, repeat::d("2026-11-18"), 800);
         state.metrics = metrics(&bar);
-        APP.with(|slot| *slot.borrow_mut() = Some(App { floating_notes:Default::default(),board:None, board_images:Default::default(), notepad_media: NotepadMedia::default(), notepad_list_query: Default::default(),
+        APP.with(|slot| *slot.borrow_mut() = Some(App { tag_editor: None, floating_notes:Default::default(),board:None, board_images:Default::default(), notepad_media: NotepadMedia::default(), notepad_list_query: Default::default(),
             bar: bar.clone_strong(), settings: None, settings_navigation: Default::default(), preferences_path: None,
             journal_language: texts::Language::De, restore_launcher: false, state, notice: None, hide_timer: slint::Timer::default(),
             bindings: shortcuts::Bindings::default(), hotkeys: None, active_hotkey: None, day_items: Vec::new(), side_cells: Vec::new(), tick: slint::Timer::default() }));
@@ -2101,6 +2151,9 @@ mod tests {
             bar.window().dispatch_event(WindowEvent::PointerReleased{position:on_card,button:Button::Right});
             i_slint_backend_testing::mock_elapsed_time(Duration::from_millis(5));
             assert!(board.get_menu_open());
+            assert!(board.get_menu_compact(),"A right click opens the small card at the mouse");
+            assert!(board.get_menu_x()>0.);
+            assert!((0..board.get_options().row_count()).all(|i|board.get_options().row_data(i).unwrap().caps.row_count()==0),"Without keys");
             capture(&bar,"board-actions");
             type_text(&bar,"Papierfarbe");
             assert_eq!(board.get_options().row_count(),1);
@@ -2120,7 +2173,7 @@ mod tests {
             assert!(work.has_icon && work.has_color);
             assert_eq!(work.color,slint::Color::from_rgb_u8(0x56,0x9e,0xff));
             type_text(&bar,"rbeit");
-            assert_eq!(board.get_tag_rows().row_count(),1);
+            assert_eq!(board.get_tag_rows().row_count(),2,"Arbeit, and the line that makes a tag of what is typed");
             send_key_combo(&bar,[K::Return]);
             board.invoke_tool(0,"tag".into());
             send_key_combo(&bar,[K::DownArrow]);
@@ -2128,6 +2181,34 @@ mod tests {
             assert!(board.get_tag_rows().row_data(1).unwrap().selected);
             capture(&bar,"board-tags");
             send_key_combo(&bar,[K::Escape]);
+            // A tag typed that is not there: its line makes it, and the tag editor opens on it.
+            board.invoke_tool(0,"tag".into());
+            type_text(&bar,"Garten");
+            let last=board.get_tag_rows().row_count()-1;
+            assert_eq!(board.get_tag_rows().row_data(last).unwrap().label,"Tag „Garten“ anlegen");
+            for _ in 0..last { send_key_combo(&bar,[K::DownArrow]); }
+            send_key_combo(&bar,[K::Return]);
+            let editor=bar.global::<TagEditorUi>();
+            assert!(editor.get_open(),"The editor opens on the new tag");
+            assert_eq!(editor.get_name(),"Garten");
+            // Tab: the colour field; ↑ brighter (it is already as bright as it goes), Shift+→ another hue.
+            send_key_combo(&bar,[K::Tab]);
+            assert_eq!(editor.get_part(),1);
+            send_key_combo(&bar,[K::Tab]);
+            send_key_combo(&bar,[K::RightArrow]);
+            send_key_combo(&bar,[K::RightArrow]);
+            send_key_combo(&bar,[K::Tab]);send_key_combo(&bar,[K::Tab]);
+            assert_eq!(editor.get_part(),4);
+            type_text(&bar,"flower");
+            send_key_combo(&bar,[K::RightArrow]);
+            capture(&bar,"tag-editor");
+            let chosen_color=editor.get_hex().to_string();
+            let chosen_icon=editor.get_icon_name().to_string();
+            send_key_combo(&bar,[K::Return]);
+            assert!(!editor.get_open());
+            let garden=with_app_value(|a|a.state.journal.as_ref().unwrap().store.tags().unwrap().into_iter().find(|t|t.name=="Garten").unwrap());
+            assert_eq!((garden.color,garden.icon.unwrap_or_default()),(chosen_color,chosen_icon));
+            assert_eq!(with_app_value(|a|a.board.as_ref().unwrap().selected_card().unwrap()["tag"].as_str().map(str::to_string)),Some(garden.id));
             board.invoke_tool(0,"reset-size".into());
             assert!(board.get_tiles().row_data(0).unwrap().auto_height);
             assert_eq!(board.get_tiles().row_data(0).unwrap().w,232.);
@@ -2354,11 +2435,43 @@ mod tests {
         bar.window().dispatch_event(BoardEvent::PointerPressed{position,button:BoardButton::Right});
         bar.window().dispatch_event(BoardEvent::PointerReleased{position,button:BoardButton::Right});
         assert_eq!(board.get_menu_title(),"Anpinnen");
+        assert!(board.get_menu_compact());
         send_key_combo(&bar,[K::Return]);
         let pinned=board.invoke_box_at(board.get_selected());
         assert!((pinned.x-wx).abs()<0.1 && (pinned.y-wy).abs()<0.1);
+        assert!(!board.get_menu_compact(),"Closed, the card forgets the mouse");
+        // From the keyboard the actions open at their usual place, with their keys.
+        key_with_modifiers(&bar,&[K::Control],"n");
+        assert!(board.get_menu_open() && !board.get_menu_compact());
+        // A web link: its address, then its own title; the page's preview fills in the rest and the title can change later.
+        board.invoke_command("dismiss".into());board.invoke_command("reset-view".into());
+        board.invoke_command("link".into());
+        type_text(&bar,"example.org/seite");send_key_combo(&bar,[K::Return]);
+        assert_eq!(board.get_prompt(),"Titel des Links (leer: Titel der Seite)");
+        assert_eq!(board.get_value(),"","The title starts empty.");
+        type_text(&bar,"Mein Link");send_key_combo(&bar,[K::Return]);
+        assert_eq!(board.get_prompt(),"");
+        let link_id=with_app_value(|a|a.board.as_ref().unwrap().selected.clone());
+        let picture={
+            use base64::Engine;
+            let mut png=Vec::new();
+            image::RgbaImage::from_pixel(32,18,image::Rgba([200,40,60,255])).write_to(&mut std::io::Cursor::new(&mut png),image::ImageFormat::Png).unwrap();
+            format!("data:image/png;base64,{}",base64::engine::general_purpose::STANDARD.encode(png))
+        };
+        with_app(|a|{a.apply_link_preview(&link_id,"https://example.org/seite",link_preview::Preview{
+            title:"Der Titel der Seite".into(),description:"Eine Beschreibung der Seite, etwas länger, damit sie umbricht.".into(),
+            site:"YouTube".into(),author:"Ein Kanal".into(),image:picture,accent:"#ff0000".into()}).unwrap();a.draw_board();});
+        let link_tile=||board.get_tiles().iter().find(|t|t.id==link_id.as_str()).unwrap();
+        assert_eq!(link_tile().title,"Mein Link","The title the user gave stays.");
+        assert_eq!(link_tile().detail,"YouTube · Ein Kanal");
+        assert!(link_tile().picture.size().width>0 && link_tile().auto_height && link_tile().rows.row_count()==1);
+        capture(&bar,"board-link");
+        board.invoke_command("rename".into());assert_eq!(board.get_value(),"Mein Link");
+        key_with_modifiers(&bar,&[K::Control],"a");type_text(&bar,"Umbenannt");send_key_combo(&bar,[K::Return]);
+        assert_eq!(link_tile().title,"Umbenannt");
         std::fs::write(&scope_file,b"[]").unwrap();with_app(App::tick_board);assert!(!board.get_opened());
-        with_app(|app|{app.state.journal=previous;app.preferences_path=None;app.refresh_board_scopes();app.draw();});
+        // Back to the first journal: its warm data again (the tag editor read the board's journal).
+        with_app(|app|{app.state.journal=previous;app.state.reload_tags();app.preferences_path=None;app.refresh_board_scopes();app.draw();});
         std::fs::remove_dir_all(board_dir).unwrap();bar.invoke_focus_line();
         // At first only the search bar: `/Entry` opens the form.
         assert!(!bar.get_entry_open());
@@ -2630,6 +2743,8 @@ mod tests {
         send_key_combo(&bar, [K::Return]);
         ctrl("v");
         assert!(bar.get_notepad_body().ends_with("let test = 42;\n"), "The code action copies only the contents of the block.");
+        // Bold reads bold in the reader (the capture below shows it).
+        type_text(&bar, "Normal **fett** normal");
         // The footer's main action saves (as Strg+Enter).
         assert_eq!(bar.get_footer_hints().row_data(0).unwrap().label.as_str(), "Speichern");
         bar.invoke_footer_action(0);
@@ -3080,7 +3195,7 @@ mod tests {
         assert!(!value(F::Tag).is_empty());
         capture(&bar, "tags");
         send_key_combo(&bar, [K::Return]);
-        assert_eq!(bar.get_active(), F::Tag.index() as i32, "The tag is the last line while nothing more is set.");
+        assert_eq!(bar.get_active(), F::Reminder.index() as i32, "After the tag the reminder: a new entry always shows it.");
         // Alt+B: the description gets its line.
         let alt = |bar: &Bar, text: &str| {
             bar.window().dispatch_event(slint::platform::WindowEvent::KeyPressed { text: char::from(K::Alt).into() });

@@ -140,7 +140,7 @@ fn planning_space_fills_and_clears_week_jumps_and_shift_ranges() {
 fn search_edit_and_plan_retain_the_entry_and_detect_a_stale_edit() {
     let mut t = test();
     type_in(&mut t.form, "Projekt \\Arbeit");
-    assert!(t.form.key(Key::Enter, CTRL).hide_soon);
+    assert!(!t.form.key(Key::Enter, CTRL).hide_soon);
     let id = day(&t, "2026-11-18")[0].id.clone();
     t.form.search_edited("Projekt @Note ");
     assert!(t.form.commands().is_empty());
@@ -150,7 +150,7 @@ fn search_edit_and_plan_retain_the_entry_and_detect_a_stale_edit() {
     type_in(&mut t.form, "Projekt morgen");
     go(&mut t.form, Field::Plan);
     type_in(&mut t.form, "19.11.2026, 21.11.2026");
-    assert!(t.form.key(Key::Enter, CTRL).hide_soon);
+    assert!(!t.form.key(Key::Enter, CTRL).hide_soon);
     let source = day(&t, "2026-11-18");
     assert_eq!(source.len(), 1);
     assert_eq!(source[0].id, id);
@@ -182,7 +182,7 @@ fn planning_a_new_task_with_the_month_picker_can_be_cancelled_and_saved() {
     t.form.pick_month_date(d("2026-11-21"));
     assert_eq!(t.form.month_panel().unwrap().cells.iter().filter(|c| c.picked).count(), 2);
     t.form.key(Key::Enter, NONE);
-    assert!(t.form.key(Key::Enter, CTRL).hide_soon);
+    assert!(!t.form.key(Key::Enter, CTRL).hide_soon);
     assert_eq!(day(&t, "2026-11-19")[0].origin.as_deref(), Some("2026-11-18"));
     assert_eq!(day(&t, "2026-11-21")[0].text, "Einkaufen");
 }
@@ -191,7 +191,7 @@ fn planning_a_new_task_with_the_month_picker_can_be_cancelled_and_saved() {
 fn editing_a_series_occurrence_preserves_its_day_status_and_series() {
     let mut t = test();
     type_in(&mut t.form, "Sport jeden Mo bis 7.12.");
-    assert!(t.form.key(Key::Enter, CTRL).hide_soon);
+    assert!(!t.form.key(Key::Enter, CTRL).hide_soon);
     let store = &mut t.form.journal.as_mut().unwrap().store;
     let mut occurrence = store.load("2026-11-30").unwrap();
     occurrence.entries[0].done = true;
@@ -201,7 +201,7 @@ fn editing_a_series_occurrence_preserves_its_day_status_and_series() {
     let index = t.form.commands().iter().position(|hit| matches!(&hit.action, CommandAction::Hit(date, _) if *date == d("2026-11-30"))).unwrap();
     t.form.choose_command(index);
     type_in(&mut t.form, "Training");
-    assert!(t.form.key(Key::Enter, CTRL).hide_soon);
+    assert!(!t.form.key(Key::Enter, CTRL).hide_soon);
     let after = day(&t, "2026-11-30").remove(0);
     assert_eq!(after.text, "Training");
     assert!(after.done && after.plan.is_none());
@@ -487,7 +487,7 @@ fn enter_moves_on_from_a_field_without_options_and_strg_enter_creates() {
     assert_eq!(t.form.field(), Field::Day);
     assert!(!effect.hide && !effect.hide_soon);
     assert!(day(&t, "2026-11-18").is_empty(), "Enter never creates an entry.");
-    assert!(t.form.key(Key::Enter, CTRL).hide_soon, "Strg+Enter creates and closes.");
+    assert!(!t.form.key(Key::Enter, CTRL).hide_soon, "Strg+Enter creates and keeps the window open.");
     let entries = day(&t, "2026-11-18");
     assert_eq!((entries[0].kind.as_str(), entries[0].text.as_str(), entries[0].show_in_journal), ("task", "Einkaufen", true));
 }
@@ -496,12 +496,13 @@ fn enter_moves_on_from_a_field_without_options_and_strg_enter_creates() {
 fn tab_always_goes_to_the_next_field() {
     let mut t = test();
     let mut seen = vec![t.form.field()];
-    for _ in 0..6 { t.form.key(Key::Tab, NONE); seen.push(t.form.field()); }
-    assert_eq!(seen, [Field::Title, Field::Day, Field::Start, Field::Repeat, Field::Tag, Field::Tag, Field::Tag], "No end without a start; the tag is the last while nothing more is set.");
+    for _ in 0..7 { t.form.key(Key::Tab, NONE); seen.push(t.form.field()); }
+    assert_eq!(seen, [Field::Title, Field::Day, Field::Start, Field::Repeat, Field::Tag, Field::Reminder, Field::Icon, Field::Icon],
+        "No end without a start; a new entry always shows its reminder and icon, the icon is the last.");
     t.form.key(Key::Tab, SHIFT);
-    assert_eq!(t.form.field(), Field::Repeat, "Also from the repetition, Tab goes on (Shift+Tab back).");
+    assert_eq!(t.form.field(), Field::Reminder, "Shift+Tab goes back.");
     t.form.key(Key::Tab, NONE);
-    assert_eq!(t.form.field(), Field::Tag);
+    assert_eq!(t.form.field(), Field::Icon);
 }
 
 #[test]
@@ -792,10 +793,10 @@ fn tags_are_chosen_in_their_options_with_their_colours() {
     t.form.key(Key::Enter, NONE);
     type_in(&mut t.form, "ar");
     let Panel::Tags(choices) = t.form.view().panel else { panic!() };
-    assert_eq!(choices.len(), 2, "Typing filters.");
+    assert_eq!(choices.len(), 3, "Typing filters; no tag is called so: the last line makes one.");
     t.form.choice_click(1);
     t.form.key(Key::Enter, NONE);
-    assert_eq!((t.form.field(), value(&mut t.form, Field::Tag)), (Field::Tag, "Arbeit".to_string()), "Enter takes it; the tag is the last line while nothing more is set.");
+    assert_eq!((t.form.field(), value(&mut t.form, Field::Tag)), (Field::Reminder, "Arbeit".to_string()), "Enter takes it and goes on to the reminder.");
     go(&mut t.form, Field::Tag);
     type_in(&mut t.form, "xyz");
     assert!(row(&mut t.form, Field::Tag).error);
@@ -1151,4 +1152,186 @@ fn the_day_view_reads_days_beyond_the_warm_stretch_and_works_without_a_journal()
     let view = alone.view();
     assert_eq!((view.day.heading.as_str(), view.day.relative.as_str()), ("Wednesday, November 18, 2026", "Today"));
     assert_eq!(view.day.rows[2].kind, day_view::RowKind::Empty);
+}
+
+#[test]
+fn a_new_entry_shows_its_reminder_and_icon_at_once() {
+    let mut t = test();
+    let fields: Vec<usize> = t.form.view().rows.iter().map(|r| r.field).collect();
+    assert!(fields.contains(&Field::Reminder.index()) && fields.contains(&Field::Icon.index()), "Reminder and icon without Strg+K.");
+    assert!(!fields.contains(&Field::Description.index()), "The description still waits for Alt+B.");
+}
+
+#[test]
+fn a_template_is_written_with_its_command_and_opened_with_its_name() {
+    let mut t = test();
+    t.form.close_entry();
+    t.form.search_edited("/vorlage Geburtstag");
+    let commands = t.form.commands();
+    assert_eq!((commands[0].name.as_str(), commands[0].detail.as_str()), ("/Vorlage Geburtstag", "Neue Vorlage anlegen"));
+    t.form.key(Key::Enter, NONE);
+    let view = t.form.view();
+    assert!(view.entry_open);
+    assert!(view.search_placeholder.contains("#Geburtstag"), "The search bar names the template.");
+    assert!(!view.rows.iter().any(|r| r.field == Field::Day.index()), "A template has no day.");
+    assert_eq!(row(&mut t.form, Field::Start).label, "Wann");
+    type_in(&mut t.form, "... hat Geburtstag");
+    t.form.set_type(Type::Event);
+    t.form.v.icon = Some("cake".into());
+    t.form.v.reminder = Some(1440);
+    t.form.v.rule = Some(Rule::new(d("2026-11-18"), crate::repeat::Unit::Year, 1));
+    let effect = t.form.key(Key::Enter, CTRL);
+    assert_eq!(effect.focus, Some(Pane::Search));
+    assert!(!t.form.view().entry_open);
+    assert!(day(&t, "2026-11-18").is_empty(), "A template is no entry.");
+    assert_eq!(t.form.templates.find("geburtstag").unwrap().title, "... hat Geburtstag");
+
+    // `#` finds it and opens a new entry on the day shown, its gap selected.
+    t.form.show_day(d("2026-11-25"));
+    t.form.search_edited("#geb");
+    let commands = t.form.commands();
+    assert_eq!((commands[0].name.as_str(), commands[0].detail.as_str()), ("#Geburtstag", "... hat Geburtstag"));
+    let effect = t.form.key(Key::Enter, NONE);
+    assert_eq!((t.form.field(), effect.select), (Field::Title, Some((0, 3))), "Typing fills the gap.");
+    assert!(t.form.view().rows.iter().any(|r| r.field == Field::Day.index()));
+    type_in(&mut t.form, "Anna hat Geburtstag");
+    t.form.key(Key::Tab, NONE);
+    assert_eq!(t.form.field(), Field::Day, "No gap left: Tab goes on.");
+    t.form.key(Key::Enter, CTRL);
+    let entries = day(&t, "2026-11-25");
+    assert_eq!((entries[0].kind.as_str(), entries[0].text.as_str(), entries[0].icon.as_deref(), entries[0].reminder_before),
+        ("event", "Anna hat Geburtstag", Some("cake"), 1440));
+    assert!(entries[0].repeat.is_some(), "Every year from the day it was made on.");
+
+    // `/Vorlage ` lists it to change; Strg+K deletes it there.
+    t.form.search_edited("/vorlage ");
+    let commands = t.form.commands();
+    assert_eq!((commands[0].name.as_str(), commands[0].detail.as_str()), ("/Vorlage Geburtstag", "Vorlage bearbeiten"));
+    t.form.key(Key::Enter, NONE);
+    assert_eq!(t.form.title(), "... hat Geburtstag");
+    t.form.run(ActionId::TemplateDelete, None);
+    assert!(t.form.templates.find("Geburtstag").is_none());
+    t.form.search_edited("#");
+    assert!(t.form.commands().is_empty());
+    t.form.key(Key::Enter, NONE);
+    assert!(t.form.view().status.unwrap().0.contains("/Vorlage"), "With none there, it says how to make one.");
+}
+
+#[test]
+fn tab_goes_through_the_gaps_of_a_template_title_and_open_ones_fall_out() {
+    let mut t = test();
+    t.form.close_entry();
+    t.form.templates.put(crate::templates::Template { name: "Vorlesung".into(), kind: "calendar".into(), title: "Vorlesung ... bei ... Uni".into(),
+        start: Some(600), end: Some(690), ..Default::default() }).unwrap();
+    t.form.search_edited("#Vorlesung");
+    let effect = t.form.key(Key::Enter, NONE);
+    assert_eq!(effect.select, Some((10, 13)));
+    type_in(&mut t.form, "Vorlesung Analysis bei ... Uni");
+    let effect = t.form.key(Key::Tab, NONE);
+    assert_eq!((t.form.field(), effect.select), (Field::Title, Some((23, 26))), "Tab: the next gap.");
+    t.form.key(Key::Tab, NONE);
+    assert_eq!(t.form.field(), Field::Day, "After the last gap Tab goes on.");
+    t.form.key(Key::Enter, CTRL);
+    let entries = day(&t, "2026-11-18");
+    assert_eq!((entries[0].text.as_str(), entries[0].time.as_deref(), entries[0].end.as_deref()), ("Vorlesung Analysis bei Uni", Some("10:00"), Some("11:30")));
+}
+#[test]
+fn an_entry_from_a_template_repeats_from_the_day_chosen_not_the_day_it_was_made() {
+    let mut t = test();
+    t.form.close_entry();
+    t.form.templates.put(crate::templates::Template { name: "Geburtstag".into(), kind: "event".into(), title: "... hat Geburtstag".into(),
+        repeat: Some(Rule::new(d("2026-11-18"), crate::repeat::Unit::Year, 1)), ..Default::default() }).unwrap();
+    t.form.search_edited("#Geburtstag");
+    t.form.key(Key::Enter, NONE);
+    type_in(&mut t.form, "Anna hat Geburtstag");
+    t.form.key(Key::Tab, NONE);
+    type_in(&mut t.form, "03.03.2027");
+    t.form.key(Key::Enter, CTRL);
+    let entries = day(&t, "2027-03-03");
+    assert_eq!(entries[0].text, "Anna hat Geburtstag");
+    assert!(entries[0].repeat.is_some());
+    assert!(day(&t, "2027-11-18").is_empty(), "Not on the day the template was made.");
+    assert_eq!(day(&t, "2028-03-03")[0].text, "Anna hat Geburtstag", "Every year on that day.");
+    // An earlier day than the template's too.
+    t.form.search_edited("#Geburtstag");
+    t.form.key(Key::Enter, NONE);
+    type_in(&mut t.form, "Ben hat Geburtstag");
+    t.form.key(Key::Tab, NONE);
+    type_in(&mut t.form, "10.11.2026");
+    t.form.key(Key::Enter, CTRL);
+    assert_eq!(day(&t, "2026-11-10")[0].text, "Ben hat Geburtstag");
+    assert_eq!(day(&t, "2027-11-10")[0].text, "Ben hat Geburtstag");
+}
+#[test]
+fn alt_h_returns_to_today_and_resets_the_calendar_also_in_the_form() {
+    let mut t = test();
+    t.form.show_day(d("2026-12-24"));
+    t.form.cal_top = d("2027-03-01");
+    t.form.cal_offset = 7.0;
+    t.form.zoom_days = 2.0;
+    type_in(&mut t.form, "Bleibt");
+    t.form.key(Key::Home, ALT);
+    assert_eq!(t.form.day_shown(), d("2026-11-18"));
+    assert_eq!((t.form.cal_top, t.form.cal_offset, t.form.zoom_days), (d("2026-11-17"), 0.0, 1.0));
+    assert_eq!(t.form.title(), "Bleibt", "What is being written stays.");
+    // From the search bar too.
+    t.form.close_entry();
+    t.form.show_day(d("2026-12-24"));
+    t.form.cal_top = d("2027-03-01");
+    t.form.search_edited("");
+    t.form.key(Key::Home, ALT);
+    assert_eq!((t.form.day_shown(), t.form.cal_top), (d("2026-11-18"), d("2026-11-17")));
+}
+#[test]
+fn a_tag_typed_in_the_form_is_made_and_the_tag_editor_opens_on_it() {
+    let mut t = test();
+    go(&mut t.form, Field::Tag);
+    t.form.key(Key::Enter, NONE);
+    type_in(&mut t.form, "Sport");
+    let Panel::Tags(choices) = t.form.view().panel else { panic!() };
+    assert_eq!((choices.len(), choices[1].label.as_str(), choices[1].selected), (2, "Tag „Sport“ anlegen", true));
+    assert!(t.form.view().status.is_none(), "No error: the tag can be made.");
+    let effect = t.form.key(Key::Enter, NONE);
+    let tags = t.form.journal.as_ref().unwrap().store.tags().unwrap();
+    let sport = tags.iter().find(|tag| tag.name == "Sport").unwrap();
+    assert_eq!((effect.edit_tag.as_deref(), t.form.v.tag.as_deref()), (Some(sport.id.as_str()), Some(sport.id.as_str())));
+    assert_eq!(sport.color, crate::tag_edit::next_color(&tags[..2]));
+    assert_eq!(value(&mut t.form, Field::Tag), "Sport");
+    // A name there already makes nothing.
+    go(&mut t.form, Field::Tag);
+    t.form.key(Key::Enter, NONE);
+    type_in(&mut t.form, "arbeit");
+    let Panel::Tags(choices) = t.form.view().panel else { panic!() };
+    assert!(!choices.iter().any(|c| c.label.contains("anlegen")));
+}
+
+#[test]
+fn the_notepad_makes_a_tag_and_a_folder_from_what_is_typed() {
+    let mut t = test();
+    t.form.close_entry();
+    t.form.search_edited("/Notizblock");
+    t.form.key(Key::Enter, NONE);
+    t.form.new_notepad_note();
+    t.form.edit_notepad(false, "Planung");
+    t.form.notepad_panel(2);
+    let last = t.form.notepad_choices("Garten").pop().unwrap();
+    assert_eq!((last.key.as_str(), last.title.as_str()), ("new-tag:Garten", "Tag „Garten“ anlegen"));
+    t.form.pick_notepad(&last.key);
+    let tags = t.form.journal.as_ref().unwrap().store.tags().unwrap();
+    let garden = tags.iter().find(|tag| tag.name == "Garten").unwrap().id.clone();
+    assert_eq!(t.form.notepad().unwrap().card.tag.as_deref(), Some(garden.as_str()));
+    assert_eq!(t.form.take_tag_edit(), Some(garden));
+    assert_eq!(t.form.take_tag_edit(), None);
+    t.form.notepad_panel(4);
+    let last = t.form.notepad_choices("Projekte").pop().unwrap();
+    assert_eq!((last.key.as_str(), last.title.as_str()), ("new-folder:Projekte", "Ordner „Projekte“ anlegen"));
+    t.form.pick_notepad(&last.key);
+    let folders = notebook::folders(&t.form.journal.as_ref().unwrap().store).unwrap();
+    assert_eq!(folders.iter().map(|(_, path)| path.as_str()).collect::<Vec<_>>(), ["Projekte"]);
+    assert_eq!(t.form.notepad().unwrap().card.folder.as_deref(), Some(folders[0].0.as_str()));
+    t.form.notepad_panel(4);
+    assert!(!t.form.notepad_choices("projekte").iter().any(|c| c.key.starts_with("new-folder:")), "There already.");
+    let folder: serde_json::Value = serde_json::from_str(&t.form.journal.as_ref().unwrap().store.conn.query_row(
+        "SELECT value FROM settings WHERE key=?1", [format!("board:folder:{}", folders[0].0)], |r| r.get::<_, String>(0)).unwrap()).unwrap();
+    assert_eq!((folder["parent"].clone(), folder["order"].clone()), (serde_json::Value::Null, serde_json::json!(0)), "As the app makes it.");
 }

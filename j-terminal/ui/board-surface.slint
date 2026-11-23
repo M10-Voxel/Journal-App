@@ -43,6 +43,9 @@ component Paper inherits Rectangle {
     in property <bool> active;
     property <BoardBox> box:BoardUi.project(BoardUi.box-at(index));
     x:box.x*1px;y:box.y*1px;width:box.w*1px;height:box.h*1px;
+    property <bool> link:card.kind=="link";
+    property <length> link-picture:link && card.picture.width>0
+        ? (self.width - 2*BoardUi.scaled(Theme.board-body-inset)) * min(Theme.board-link-picture-ratio, card.picture.height / card.picture.width) : 0px;
     background:card.paper;border-radius:BoardUi.scaled(Theme.board-paper-radius);
     drop-shadow-color:Theme.board-shadow;drop-shadow-blur:BoardUi.scaled(Theme.gap);drop-shadow-offset-y:BoardUi.scaled(Theme.calendar-gap);
     border-width:card.source || (BoardUi.keyboard-focus && card.selected) ? BoardUi.scaled(Theme.focus-ring) : 0px;
@@ -67,10 +70,14 @@ component Paper inherits Rectangle {
             x:0px;y:0px;width:parent.width;height:parent.height;
             source:root.card.picture;image-fit:root.card.kind=="note" ? fill : contain;
         }
-        if root.card.kind=="link" && root.card.picture.width>0: Image {
-            width:parent.width;height:parent.height/2;y:0px;source:root.card.picture;image-fit:contain;}
+        // A web link: the page's picture on top, its description under it.
+        if root.link && root.card.picture.width>0: Rectangle {
+            y:0px;width:parent.width;height:root.link-picture;
+            border-radius:BoardUi.scaled(Theme.board-link-picture-radius);clip:true;
+            Image {width:parent.width;height:parent.height;source:root.card.picture;image-fit:cover;}
+        }
         lines := VerticalLayout {
-            x:0px;y:root.card.kind=="link" && root.card.picture.width>0 ? parent.height/2 : 0px;visible:!root.card.has-picture;width:parent.width;height:self.preferred-height;
+            x:0px;y:root.link-picture>0 ? root.link-picture + BoardUi.scaled(Theme.board-link-gap) : 0px;visible:!root.card.has-picture;width:parent.width;height:self.preferred-height;
             alignment:start;spacing:BoardUi.scaled(Theme.board-paragraph-gap);
             for block in root.card.rows: HorizontalLayout {
                 padding-left:block.indent * BoardUi.scaled(Theme.board-paper-inset);spacing:BoardUi.scaled(Theme.calendar-gap);
@@ -91,7 +98,10 @@ component Paper inherits Rectangle {
         width:parent.width - 2*self.x;height:BoardUi.scaled(Theme.board-title-height);text:card.detail;
         color:Theme.board-paper-ink;opacity:0.72;overflow:elide;font-size:BoardUi.scaled(Theme.small-size);vertical-alignment:center;
     }
-    property <float> natural: max(Theme.board-note-height, Theme.board-body-top + lines.preferred-height / BoardUi.zoom + Theme.board-paper-inset*2)/1px;
+    property <float> natural: link
+        ? (Theme.board-body-top + Theme.board-paper-inset + (card.detail!="" ? Theme.board-title-height : 0px)
+            + (link-picture>0 ? (link-picture + BoardUi.scaled(Theme.board-link-gap)) / BoardUi.zoom : 0px) + lines.preferred-height / BoardUi.zoom)/1px
+        : max(Theme.board-note-height, Theme.board-body-top + lines.preferred-height / BoardUi.zoom + Theme.board-paper-inset*2)/1px;
     changed natural => { if root.card.auto-height { BoardUi.measured(root.index,self.natural); } }
     init => { if root.card.auto-height { BoardUi.measured(root.index,self.natural); } }
     if active || (BoardUi.operation=="resize" && BoardUi.drag-index==index): Path {
@@ -183,6 +193,7 @@ export component BoardSurface inherits Rectangle {
                 let hit=BoardUi.hit(root.wx(x),root.wy(y));BoardUi.keyboard-focus=false;
                 if e.button==PointerEventButton.right {
                     BoardUi.cancel-gesture();
+                    BoardUi.menu-compact=true;BoardUi.menu-x=root.x+self.x+self.mouse-x;BoardUi.menu-y=root.y+self.y+self.mouse-y;
                     if hit.operation=="edge" {BoardUi.edge(BoardUi.tiles[hit.index].id,BoardUi.tiles[hit.other].id);}
                     else if hit.index>=0 {BoardUi.tool(hit.index,"card-actions");}
                     else {BoardUi.surface-menu(root.wx(x),root.wy(y));}
@@ -236,7 +247,7 @@ export component BoardSurface inherits Rectangle {
             Rectangle {x:parent.width - self.width;width:BoardUi.scaled(Theme.board-tool-size);height:self.width;
                 background:Theme.board-ground;border-radius:BoardUi.scaled(Theme.board-paper-radius);
                 BoardGlyph {x:BoardUi.scaled(Theme.calendar-gap);y:self.x;width:parent.width - 2*self.x;height:self.width;name:"trash";tint:Theme.muted;}
-                TouchArea {mouse-cursor:MouseCursor.pointer;clicked=>{BoardUi.tool(group.members[0],"delete-group");}}
+                TouchArea {mouse-cursor:MouseCursor.default;clicked=>{BoardUi.tool(group.members[0],"delete-group");}}
             }
         }
         if root.active>=0 && root.active<BoardUi.tiles.length: HorizontalLayout {
@@ -253,7 +264,7 @@ export component BoardSurface inherits Rectangle {
                     visible:tool.command!="paper-next";}
                 if tool.command=="paper-next": Rectangle {width:BoardUi.scaled(Theme.row-size);height:self.width;x:BoardUi.scaled(Theme.calendar-gap);y:(parent.height - self.height)/2;
                     border-radius:self.width/2;background:@linear-gradient(135deg,Theme.board-pink,Theme.board-blue,Theme.board-green,Theme.board-yellow);}
-                tap := TouchArea {mouse-cursor:MouseCursor.pointer;clicked=>{BoardUi.tool(root.active,tool.command);}}
+                tap := TouchArea {mouse-cursor:MouseCursor.default;clicked=>{BoardUi.tool(root.active,tool.command);}}
             }
         }
     }

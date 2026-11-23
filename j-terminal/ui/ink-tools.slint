@@ -29,7 +29,7 @@ export component InkTools inherits Rectangle {
                 border-width:tool.command=="color" ? Theme.border-width : 0px;border-color:Theme.muted;
             }
             touch := TouchArea {
-                mouse-cursor:pointer;clicked=>{BoardUi.command(tool.command);}
+                mouse-cursor:default;clicked=>{BoardUi.command(tool.command);}
                 changed has-hover=>{if self.has-hover {root.hovered=tool.label;} else if root.hovered==tool.label {root.hovered="";}}
             }
         }
@@ -51,7 +51,7 @@ export component InkPicker inherits Rectangle {
         x:Theme.popover-padding;y:0px;width:parent.width - 2*self.x;height:Theme.row-height;spacing:Theme.gap;
         Rectangle {width:Theme.label-icon-size;
             BoardGlyph {name:"chevron-left";width:parent.width;height:self.width;tint:Theme.muted;}
-            TouchArea {mouse-cursor:pointer;clicked=>{BoardUi.menu-back();}}}
+            TouchArea {mouse-cursor:default;clicked=>{BoardUi.menu-back();}}}
         Text {text:BoardUi.menu-title;vertical-alignment:center;color:Theme.text;font-size:Theme.section-size;horizontal-stretch:1;}
         Text {text:colors && (root.hover>=0 ? root.hover : BoardUi.option-index)<root.custom ?
             BoardUi.options[root.hover>=0 ? root.hover : BoardUi.option-index].label : "";
@@ -74,7 +74,7 @@ export component InkPicker inherits Rectangle {
             y:custom ? 0px : parent.height/2;width:parent.width;height:custom ? parent.height : parent.height/2;
             horizontal-alignment:center;vertical-alignment:center;font-size:Theme.small-size;color:row.on ? Theme.accent : Theme.text;text:row.label;
         }
-        touch := TouchArea {mouse-cursor:pointer;clicked=>{BoardUi.choose(i);}
+        touch := TouchArea {mouse-cursor:default;clicked=>{BoardUi.choose(i);}
             changed has-hover=>{if self.has-hover {root.hover=i;} else if root.hover==i {root.hover=-1;}}}
     }
 }

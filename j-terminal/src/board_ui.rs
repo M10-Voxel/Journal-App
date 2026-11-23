@@ -385,18 +385,13 @@ impl App {
             let live = selected && b.editor == 1;
             let title = if live { &b.title } else { text(c, "title") };
             let body = if live { b.body.as_str() } else { text(c, "text") };
-            let picture = if c["kind"] == "link" && !text(c, "image").is_empty() {
-                use std::hash::{DefaultHasher, Hash, Hasher};
-                let mut hash = DefaultHasher::new();
-                text(c, "image").hash(&mut hash);
-                self.board_images
-                    .entry(format!("link:{}:{}", p.id, hash.finish()))
-                    .or_insert_with(|| {
-                        note_images::inline(text(c, "image"), 360)
-                            .map(|im| note_images::to_slint(&im))
-                            .unwrap_or_default()
-                    })
-                    .clone()
+            let is_link = c["kind"] == "link";
+            // A link pinned elsewhere (or before previews) gets its preview once per run.
+            if is_link && c.get("site").is_none() && !LINK_ASKED.with_borrow(|asked| asked.contains(&p.id)) {
+                if let Some(url) = notebook::web_address(text(c, "url")) { fetch_link_preview(p.id.clone(), url); }
+            }
+            let picture = if is_link {
+                link_picture(text(c, "image"))
             } else if c["kind"] == "image" {
                 let key = format!("{}:{}", text(c, "id"), text(c, "asset"));
                 self.board_images
@@ -435,8 +430,7 @@ impl App {
                 title: title.into(),
                 rows: model(markdown_rows(body)),
                 kind: text(c, "kind").into(),
-                auto_height: c["kind"] == "note"
-                    && c["mode"] != "ink"
+                auto_height: (is_link || (c["kind"] == "note" && c["mode"] != "ink"))
                     && c["boards"][b.key()]["h"].as_f64().or(c["h"].as_f64()).unwrap_or(0.) <= 0.,
                 group: *membership.get(&p.id).unwrap_or(&-1),
                 pin: match text(c, "kind") {
@@ -446,6 +440,9 @@ impl App {
                 },
                 detail: if c["kind"] == "image" {
                     format!("AVIF · {} KB", c["size"].as_u64().unwrap_or(0).div_ceil(1024)).into()
+                } else if is_link && !text(c, "site").is_empty() {
+                    // Where the link leads, as the page names it: the site and (for videos) the channel.
+                    [text(c, "site"), text(c, "author")].iter().filter(|s| !s.is_empty()).copied().collect::<Vec<_>>().join(" · ").into()
                 } else {
                     text(c, "url").into()
                 },
@@ -527,6 +524,7 @@ impl App {
             b.menu_page.clear();
             b.menu_history.clear();
             b.pin_at = None;
+            self.bar.global::<BoardUi>().set_menu_compact(false);
         }
         b.menu_query.clear();
         let changed = before != (b.editor, b.menu_page.clone(), b.prompt.clone());
@@ -544,6 +542,9 @@ impl App {
         }
         if reveal {
             ui.invoke_viewport("reveal".into());
+        }
+        if let Some(id) = self.board.as_mut().and_then(|b| b.edit_tag.take()) {
+            self.open_tag_editor(&id);
         }
     }
     fn board_menu_back(&mut self) {
@@ -570,6 +571,9 @@ impl App {
             .into(),
         );
         ui.set_menu_open(!b.menu_page.is_empty() && b.prompt.is_none());
+        // The right click's card: smaller lines and no keys.
+        let compact = ui.get_menu_compact();
+        let line = if compact { theme.get_compact_row_height() } else { theme.get_side_row_height() };
         if picking_tag {
             let current = b
                 .selected_card()
@@ -590,6 +594,13 @@ impl App {
                 })
                 .collect();
             b.visible_choices = choices.into_iter().map(|i| i.map_or(0, |n| n + 1)).collect();
+            let mut rows: Vec<_> = rows;
+            b.new_choice = crate::tag_edit::creatable(&b.tags, &b.menu_query).map(|name| {
+                let selected = b.menu_at == rows.len();
+                rows.push(picker_row(&self.bar, &day::new_row(texts::tags::make_tag(&name, lang), selected), theme.get_label_icon_size()));
+                b.visible_choices.push(b.menu.len());
+                format!("new-tag:{name}")
+            });
             ui.set_tag_rows(model(rows));
             ui.set_tag_context(b.selected_card().map(|c| name(c, lang)).unwrap_or_default().into());
             ui.set_options(Default::default());
@@ -602,12 +613,18 @@ impl App {
                 .filter(|(_, (_, title))| title.to_lowercase().contains(words.trim()))
                 .map(|(i, _)| i)
                 .collect();
+            let folders: Vec<(String, String)> = b.menu.iter().skip(1).map(|(_, name)| (String::new(), name.clone())).collect();
+            b.new_choice = (b.menu_page == "folder").then(|| notebook::new_folder_name(&folders, &b.menu_query)).flatten().map(|name| format!("new-folder:{name}"));
+            if b.new_choice.is_some() { b.visible_choices.push(b.menu.len()); }
             let rows = b
                 .visible_choices
                 .iter()
                 .enumerate()
                 .map(|(i, &source)| {
-                    let (cmd, name) = &b.menu[source];
+                    let new_line = b.new_choice.as_deref().and_then(|c| c.strip_prefix("new-folder:"))
+                        .map(|name| ("new-folder".to_string(), texts::tags::make_folder(name, lang)));
+                    let (cmd, name) = b.menu.get(source).cloned().or(new_line).unwrap_or_default();
+                    let (cmd, name) = (&cmd, &name);
                     let key = cmd.split(':').next().unwrap_or(cmd);
                     let icon = match key {
                         "note" | "write" => "notebook-pen",
@@ -623,6 +640,7 @@ impl App {
                         "link" | "tie" => "link",
                         "tag" => "tag",
                         "folder" => "folder",
+                        "new-folder" | "new-tag" => "plus",
                         "detach" => "pin",
                         "assign" | "assign-group" => "list-filter",
                         "delete" | "delete-group" | "confirm" => "trash",
@@ -660,7 +678,7 @@ impl App {
                         _ => None,
                     };
                     MenuRow {
-                        top: i as f32 * (theme.get_side_row_height() + theme.get_choice_spacing()),
+                        top: i as f32 * (line + theme.get_choice_spacing()),
                         label: name.as_str().into(),
                         on: match key {
                             "recent" => b.ink.prefs.color.eq_ignore_ascii_case(&cmd[7..]),
@@ -670,7 +688,7 @@ impl App {
                         value: if key == "width" { cmd[6..].into() } else { "".into() },
                         has_icon: true,
                         icon: icon_image(icon, theme.get_label_icon_size(), self.bar.window().scale_factor()),
-                        caps: strings(shortcuts::caps(keys)),
+                        caps: if compact { Default::default() } else { strings(shortcuts::caps(keys)) },
                         danger: matches!(key, "delete" | "delete-group" | "confirm" | "unpin"),
                         has_color: color.is_some(),
                         color: color.unwrap_or_default(),
@@ -961,7 +979,9 @@ impl App {
             "actions" | "card-actions" if !c.is_null() => {
                 b.menu = labels(&["open", "tie"]);
                 if c["kind"] == "link" {
-                    b.menu.extend(labels(&["copy-url"]));
+                    b.menu.extend(labels(&["rename", "copy-url", "refresh-preview"]));
+                } else if c["kind"] == "image" {
+                    b.menu.extend(labels(&["rename"]));
                 }
                 if members(&c, "links").next().is_some()
                     || b.cards
@@ -1124,9 +1144,12 @@ impl App {
                     b.editor = 0;
                 }
             }
-            "link" | "group-name" | "custom-color" | "custom-size" | "spacing" => {
+            "refresh-preview" if c["kind"] == "link" => fetch_link_preview(select.clone(), text(&c, "url").to_string()),
+            "link" | "rename" | "group-name" | "custom-color" | "custom-size" | "spacing" => {
+                if cmd == "link" { b.link_draft = None; }
                 self.bar.global::<BoardUi>().set_value(match cmd {
                     "group-name" => text(&c, "groupName").into(),
+                    "rename" => text(&c, "title").into(),
                     "custom-size" => b.ink.prefs.size.to_string().into(),
                     "custom-color" => b.ink.prefs.color.clone().into(),
                     "spacing" => c["inkPaper"]["step"].as_i64().unwrap_or(20).to_string().into(),
@@ -1137,10 +1160,29 @@ impl App {
             "submit" => {
                 let Some(prompt) = b.prompt.clone() else { return Ok(()) };
                 match prompt.as_str() {
+                    // First the address, then its title on a second line of its own.
                     "link" => {
                         let url = notebook::web_address(&value).ok_or(label("invalid", l))?;
+                        b.link_draft = Some(url);
+                        self.bar.global::<BoardUi>().set_value("".into());
+                        b.prompt = Some("link-title".into());
+                        return Ok(());
+                    }
+                    "link-title" => {
+                        let Some(url) = b.link_draft.take() else { return Ok(()) };
                         b.create(store, "link", &url)?;
+                        let title = value.trim();
+                        if !title.is_empty() {
+                            b.field(store, "title", json!(title))?;
+                        }
                         b.editor = 0;
+                        fetch_link_preview(b.selected.clone(), url);
+                    }
+                    "rename" => {
+                        let title = value.trim();
+                        if !title.is_empty() && title != text(&c, "title") {
+                            b.field(store, "title", json!(title))?;
+                        }
                     }
                     "group-name" => {
                         let ids = b.group(&select);
@@ -1250,6 +1292,16 @@ impl App {
                     b.menu.extend(labels(&["reverse"]));
                 }
             }
+            _ if cmd.starts_with("new-tag:") => {
+                let tag = crate::tag_edit::create(store, &cmd[8..])?;
+                b.tags = store.tags().map_err(|e| e.to_string())?;
+                b.field(store, "tag", json!(tag.id))?;
+                b.edit_tag = Some(tag.id);
+            }
+            _ if cmd.starts_with("new-folder:") => {
+                let id = notebook::create_folder(store, &cmd[11..]).map_err(|e| format!("{e:?}"))?;
+                b.field(store, "folder", json!(id))?;
+            }
             _ if cmd.starts_with("tag:") || cmd.starts_with("folder:") => {
                 let (k, v) = cmd.split_once(':').unwrap();
                 b.field(store, k, if v.is_empty() { Value::Null } else { json!(v) })?;
@@ -1353,8 +1405,9 @@ impl App {
                 self.board_menu_back();
             } else if enter {
                 if let Some(&i) = b.visible_choices.get(b.menu_at) {
-                    let cmd = b.menu[i].0.clone();
-                    self.run_board(&cmd);
+                    if let Some(cmd) = b.menu.get(i).map(|r| r.0.clone()).or_else(|| b.new_choice.clone()) {
+                        self.run_board(&cmd);
+                    }
                 }
             } else if matches!(b.menu_page.as_str(), "color" | "size")
                 && matches!(
@@ -1423,6 +1476,10 @@ impl App {
                 if !repeat {
                     if cmd == "new-menu" {
                         b.pin_at = None;
+                    }
+                    // From the keyboard the actions open in their usual place.
+                    if matches!(cmd, "actions" | "new-menu") {
+                        self.bar.global::<BoardUi>().set_menu_compact(false);
                     }
                     self.run_board(cmd);
                 }
@@ -1679,6 +1736,7 @@ pub fn connect(bar: &Bar) {
                 if let Some(b) = &mut a.board {
                     b.pin_at = None;
                 }
+                a.bar.global::<BoardUi>().set_menu_compact(false);
             }
             if s == "back" && a.board.as_ref().is_some_and(|b| !b.menu.is_empty()) {
                 a.run_board("dismiss");
@@ -1693,8 +1751,7 @@ pub fn connect(bar: &Bar) {
             if let Some(cmd) = a
                 .board
                 .as_ref()
-                .and_then(|b| b.visible_choices.get(i as usize).and_then(|row| b.menu.get(*row)))
-                .map(|r| r.0.clone())
+                .and_then(|b| b.visible_choices.get(i as usize).and_then(|row| b.menu.get(*row).map(|r| r.0.clone()).or_else(|| b.new_choice.clone())))
             {
                 a.run_board(&cmd);
             }
@@ -1791,7 +1848,7 @@ fn choose_image(position: Option<(f32, f32)>) {
                     .pick_file()
             })
             .flatten();
-        PICKING_IMAGE.with(|p| p.set(false));
+        super::picking_done();
         let Some(path) = path else { return };
         std::thread::spawn(move || {
             let image = notebook::Attachment::image(&path);
@@ -1817,4 +1874,86 @@ fn choose_image(position: Option<(f32, f32)>) {
             });
         });
     });
+}
+
+// ----- Web link previews -----
+
+thread_local! {
+    /// Pictures of link previews by address; None while one loads or when it failed. Kept while the app runs.
+    static LINK_PICTURES: std::cell::RefCell<HashMap<String, Option<slint::Image>>> = Default::default();
+    /// Cards whose preview was already asked for in this run, so a page without one is not asked again and again.
+    static LINK_ASKED: std::cell::RefCell<BTreeSet<String>> = Default::default();
+}
+
+/// Width of a preview picture's longer side, in pixels.
+const LINK_PICTURE_SIZE: u32 = 640;
+
+/// Loads the page's preview off the UI thread and writes it into the card.
+fn fetch_link_preview(id: String, url: String) {
+    LINK_ASKED.with_borrow_mut(|asked| asked.insert(id.clone()));
+    // Tests never reach the internet.
+    if cfg!(test) { return; }
+    std::thread::spawn(move || {
+        let result = crate::link_preview::fetch(&url);
+        let _ = slint::invoke_from_event_loop(move || with_app(|a| {
+            match result {
+                Ok(preview) => {
+                    if let Err(e) = a.apply_link_preview(&id, &url, preview) { a.board_error(e); }
+                }
+                Err(e) => eprintln!("J-TerminaL: link preview {url}: {e}"),
+            }
+            a.draw_board();
+        }));
+    });
+}
+
+/// The preview picture of a link card: from the cache, or loading in the background (then drawn again).
+fn link_picture(address: &str) -> slint::Image {
+    if address.starts_with("data:") {
+        return note_images::inline(address, LINK_PICTURE_SIZE).map(|im| note_images::to_slint(&im)).unwrap_or_default();
+    }
+    if cfg!(test) || !(address.starts_with("https://") || address.starts_with("http://")) { return Default::default(); }
+    if let Some(known) = LINK_PICTURES.with_borrow(|pictures| pictures.get(address).cloned()) {
+        return known.unwrap_or_default();
+    }
+    LINK_PICTURES.with_borrow_mut(|pictures| pictures.insert(address.to_string(), None));
+    let address = address.to_string();
+    std::thread::spawn(move || {
+        let picture = crate::link_preview::image(&address, LINK_PICTURE_SIZE);
+        let _ = slint::invoke_from_event_loop(move || {
+            let Some(picture) = picture else { return };
+            LINK_PICTURES.with_borrow_mut(|pictures| pictures.insert(address, Some(note_images::to_slint(&picture))));
+            with_app(|a| a.draw_board());
+        });
+    });
+    Default::default()
+}
+
+impl App {
+    /// Writes a fetched preview into the card (and its synced copies). A title the user gave stays.
+    pub(super) fn apply_link_preview(&mut self, id: &str, url: &str, preview: crate::link_preview::Preview) -> Result<(), String> {
+        let Some(j) = &mut self.state.journal else { return Ok(()) };
+        let cards = db::cards(&j.store.conn)?;
+        let Some(card) = cards.iter().find(|c| c["id"] == id) else { return Ok(()) };
+        if text(card, "url") != url { return Ok(()); }
+        let mut next = card.clone();
+        let current = text(card, "title");
+        if (current.is_empty() || current == url) && !preview.title.is_empty() {
+            next["title"] = json!(preview.title);
+        }
+        next["pageTitle"] = json!(preview.title);
+        next["text"] = json!(preview.description);
+        next["site"] = json!(preview.site);
+        next["author"] = json!(preview.author);
+        next["accent"] = json!(preview.accent);
+        if preview.image.is_empty() {
+            if let Some(o) = next.as_object_mut() { o.remove("image"); }
+        } else {
+            next["image"] = json!(preview.image);
+        }
+        if next == *card { return Ok(()); }
+        db::edit(&mut j.store, &[(card.clone(), next)])?;
+        if let Some(b) = &mut self.board { b.cards = db::cards(&j.store.conn)?; }
+        Ok(())
+    }
 }
