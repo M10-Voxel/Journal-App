@@ -117,6 +117,18 @@ const ReminderPopup = lazy(() => import('./components/ReminderToasts').then(modu
 const MailImportToast = lazy(() => import('./components/MailImportToast').then(module => ({ default: module.MailImportToast })));
 
 const windowLabel = getCurrentWindow().label;
+if (windowLabel === 'main') {
+  // One window mirrors local settings for other clients of this vault, including on first launch after an upgrade.
+  void Promise.all([import('./tagKinds'), import('@tauri-apps/api/core')]).then(([tags, api]) => {
+    let writing = Promise.resolve();
+    const publish = () => {
+      const order = [...tags.kindOrder()];
+      writing = writing.then(() => api.invoke<void>('set_tag_kind_order', { order })).catch(console.error);
+    };
+    tags.subscribeKindOrder(publish);
+    publish();
+  });
+}
 if (windowLabel === 'reminder') document.documentElement.classList.add('is-popup');
 // A window of Nebula's desk pulled out of the journal draws its own frame on a transparent window.
 if (isDesktopWidgetLabel(windowLabel)) document.documentElement.classList.add('is-desktop-widget');
