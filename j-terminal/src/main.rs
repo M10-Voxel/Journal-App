@@ -24,6 +24,7 @@ mod link_preview;
 mod templates;
 mod tag_edit;
 mod tag_editor_ui;
+mod notes_list;
 mod repeat_sentence;
 mod save;
 mod snapshot;
@@ -678,7 +679,7 @@ impl App {
         let (row_h, spacing, heading) = (theme.get_side_row_height(), theme.get_choice_spacing(), theme.get_border_width() + theme.get_section_height());
         let mut y = 0.0;
         let rows: Vec<MenuRow> = menu.items.iter().enumerate().map(|(i, item)| {
-            let section = if item.section != previous { if item.section == 0 { first } else { at.section_general } } else { "" };
+            let section = if item.section != previous { match item.section { 0 => first, 2 => texts::tags::delete_entry(self.state.language), _ => at.section_general } } else { "" };
             previous = item.section;
             let extra = if !section.is_empty() && i > 0 { heading } else { 0.0 };
             let top = y + extra;
@@ -714,7 +715,8 @@ impl App {
         let primary = if view.searching {
             view.commands.get(view.command_selected).map(|row| (row.primary_label(language), strings(["↵".to_string()])))
         } else { Some(match view.context {
-            C::Day => (at.new_task, keys("day-task")),
+            // In the day view the types to make are icons of their own (below).
+            C::Day => return self.footer_icons(view, Vec::new(), at, keys("day-actions")),
             C::DayLine => (at.edit, strings(["↵".to_string()])),
             C::Entry if self.state.editing_entry() => (at.notes_save, keys("form-save")),
             C::Entry => (at.create, keys("form-save")),
@@ -729,8 +731,24 @@ impl App {
         if let Some((label, caps)) = primary {
             hints.push(FooterHint { label: label.into(), caps: if self.state.preferences.keycaps { caps } else { Default::default() }, action: 0 });
         }
-        hints.push(FooterHint { label: at.actions.into(), caps: if self.state.preferences.keycaps { keys("day-actions") } else { Default::default() }, action: 1 });
+        let actions = keys("day-actions");
+        self.footer_icons(view, hints, at, actions);
+    }
+
+    /// The actions hint after `hints`, and in the day view the icons that make an event, a task or a note.
+    fn footer_icons(&mut self, view: &form::View, mut hints: Vec<FooterHint>, at: &texts::ActionTexts, actions: slint::ModelRc<slint::SharedString>) {
+        use form::Context as C;
+        if matches!(view.context, C::Day) && hints.is_empty() {
+            self.bar.set_footer_date(!view.searching);
+            self.bar.set_footer_menu_label(at.menu.into());
+            self.bar.set_footer_label(view.day.heading.clone().into());
+        }
+        hints.push(FooterHint { label: at.actions.into(), caps: if self.state.preferences.keycaps { actions } else { Default::default() }, action: 1 });
         self.bar.set_footer_hints(std::rc::Rc::new(slint::VecModel::from(hints)).into());
+        let day = matches!(view.context, C::Day | C::DayLine) && !view.searching;
+        let (size, scale) = (self.bar.global::<Theme>().get_footer_icon_size(), self.bar.window().scale_factor());
+        let icons: Vec<slint::Image> = if day { ["journal-event", "journal-task", "journal-note"].iter().map(|name| journal_image(&self.bar, name, size, scale)).collect() } else { Vec::new() };
+        self.bar.set_footer_create_icons(std::rc::Rc::new(slint::VecModel::from(icons)).into());
     }
 
     fn draw_notepad(&mut self) {
@@ -911,15 +929,25 @@ impl App {
     }
 
     fn draw_notepad_choices(&mut self) {
+        // An action of the list set its input (cleared, or a folder's name to change).
+        if let Some(query) = self.state.take_notes_query() { self.bar.set_notepad_query(query.into()); }
+        let (size, scale) = (self.bar.global::<Theme>().get_label_icon_size(), self.bar.window().scale_factor());
         let rows: Vec<_> = self.state.notepad_choices(&self.bar.get_notepad_query()).into_iter().map(|row| {
             let thumbnail = self.notepad_media.thumbnails.get(&row.key).and_then(Option::as_ref);
             NotepadChoiceRow {
                 key: row.key.into(), title: row.title.into(), detail: row.detail.into(), has_color: row.color.is_some(),
                 color: row.color.map_or_else(slint::Color::default, |[r, g, b]| slint::Color::from_rgb_u8(r, g, b)),
                 group: row.group.into(), has_image: thumbnail.is_some(), thumbnail: thumbnail.cloned().unwrap_or_default(),
+                depth: row.depth as i32, folder: row.folder, open: row.open, selected: row.selected,
+                has_icon: !row.icon.is_empty(), icon: if row.icon.is_empty() { Default::default() } else { icon_image(row.icon, size, scale) },
             }
         }).collect();
         self.bar.set_notepad_choices(std::rc::Rc::new(slint::VecModel::from(rows)).into());
+        self.bar.set_notepad_list_mode(self.state.notes_list_mode());
+        if let Some((placeholder, empty)) = self.state.notes_list_hint() {
+            self.bar.set_notepad_panel_placeholder(placeholder.into());
+            self.bar.set_notepad_panel_empty(empty.into());
+        }
     }
 
     fn draw_calendar(&self, calendar: form::CalendarView) {
@@ -1566,6 +1594,7 @@ fn connect(bar: &Bar) {
         app.effect(effect);
     }));
     bar.on_menu_choose(|index| with_app(|app| { let effect = app.state.menu_choose(index.max(0) as usize); app.effect(effect); }));
+    bar.on_footer_create(|kind| with_app(|app| { let effect = app.state.create_in_day(kind.max(0) as usize); app.effect(effect); }));
     bar.on_footer_action(|which| with_app(|app| {
         app.hide_timer.stop();
         let effect = if which == 1 { app.state.toggle_menu() } else { app.state.footer_primary() };
@@ -1658,6 +1687,21 @@ fn connect(bar: &Bar) {
         app.draw();
     }));
     bar.on_notepad_filter(|_| with_app(|app| app.draw_notepad_choices()));
+    bar.on_notepad_list_key(|key| with_app(|app| {
+        let out = app.state.notes_list_key(&key);
+        if out.close { let effect = app.state.finish_notepad(false); return app.effect(effect); }
+        if let Some(query) = out.query { app.bar.set_notepad_query(query.into()); }
+        if let Some(target) = out.target { app.show_notepad_target(target); }
+        app.effect(out.effect);
+        app.draw_notepad_choices();
+    }));
+    bar.on_notepad_list_menu(|key| with_app(|app| { let effect = app.state.notes_list_menu(&key); app.effect(effect); }));
+    bar.on_notepad_list_drop(|key, index| with_app(|app| {
+        let out = app.state.notes_list_drop(&key, index.max(0) as usize);
+        if let Some(query) = out.query { app.bar.set_notepad_query(query.into()); }
+        app.effect(out.effect);
+        app.draw_notepad_choices();
+    }));
     bar.on_notepad_choose(|key| with_app(|app| {
         let target = app.state.pick_notepad(&key);
         if let Some(target) = target { app.show_notepad_target(target); }
@@ -2766,6 +2810,31 @@ mod tests {
         send_key_combo(&bar, [K::Escape]);
         assert_eq!(bar.get_notepad_panel(), 1);
         capture(&bar, "notebook-list");
+        // All notes as a tree: the arrows walk it, Strg+K on a folder makes a subfolder.
+        assert_eq!(bar.get_notepad_list_mode(), 0);
+        let row = |i: usize| bar.get_notepad_choices().row_data(i).unwrap();
+        assert!(row(0).folder && row(0).selected, "The tree starts on its first folder.");
+        send_key_combo(&bar, [K::DownArrow]);
+        assert!(row(1).selected && !row(0).selected, "↓ moves the cursor.");
+        send_key_combo(&bar, [K::UpArrow]);
+        ctrl("k");
+        type_text(&bar, "Unterordner");
+        send_key_combo(&bar, [K::Return]);
+        assert_eq!(bar.get_notepad_list_mode(), 3);
+        type_text(&bar, "Archiv");
+        send_key_combo(&bar, [K::Return]);
+        assert_eq!((row(1).title.as_str(), row(1).depth, row(1).selected), ("Archiv", 1, true));
+        assert_eq!(bar.get_notepad_query().as_str(), "");
+        capture(&bar, "notebook-tree");
+        // Dragged with the mouse: the note onto "Archiv" goes into it.
+        {
+            use slint::platform::{PointerEventButton as Button, WindowEvent};
+            let at = |y: f32| slint::LogicalPosition::new(150., y);
+            bar.window().dispatch_event(WindowEvent::PointerPressed { position: at(232.), button: Button::Left });
+            for y in [228., 220., 212., 204.] { bar.window().dispatch_event(WindowEvent::PointerMoved { position: at(y) }); }
+            bar.window().dispatch_event(WindowEvent::PointerReleased { position: at(204.), button: Button::Left });
+        }
+        assert_eq!((row(2).title.as_str(), row(2).depth), ("Neue Notiz", 2), "In Archiv now.");
         type_text(&bar, "Neue");
         send_key_combo(&bar, [K::Return]);
         assert!(bar.get_notepad_preview() && !bar.get_notepad_editing());

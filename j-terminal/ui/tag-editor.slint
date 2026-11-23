@@ -57,7 +57,7 @@ component EditorInput inherits Rectangle {
     callback edited(string);
     callback focused();
     public function grab() { input.focus(); input.select-all(); }
-    height: Theme.popover-search-height;
+    height: Theme.compact-search-height;
     background: Theme.field-background; border-radius: Theme.field-radius;
     border-width: Theme.border-width; border-color: root.active ? Theme.field-focus : Theme.edge;
     changed reset => { input.text = root.text; }
@@ -81,10 +81,14 @@ component EditorInput inherits Rectangle {
     }
 }
 
+// The same card as the actions (Strg+K): as wide and at most as high, in the same place (over the footer at the right of
+// the pane), the same heading, the same scrim behind it.
 export component TagEditor inherits Rectangle {
-    // The window behind is quiet; a click there leaves the tag as it is.
-    background: Theme.tag-editor-backdrop;
-    TouchArea { clicked => { TagEditorUi.key(Key.Escape, false); } }
+    // Where the actions' card would stand: its right edge and the line above the footer.
+    in property <length> anchor-right: root.width;
+    in property <length> anchor-bottom: root.height;
+    background: Theme.menu-scrim;
+    TouchArea { clicked => { TagEditorUi.key(Key.Escape, false); } scroll-event(event) => { accept } }
     property <int> part: TagEditorUi.part;
     changed part => { root.take-focus(); }
     property <bool> shown: TagEditorUi.open;
@@ -97,12 +101,13 @@ export component TagEditor inherits Rectangle {
         else { keys.focus(); }
     }
     card := Rectangle {
-        width: min(Theme.tag-editor-width, root.width - 2 * Theme.gap);
-        height: min(layout.preferred-height, root.height - 2 * Theme.gap);
-        x: (root.width - self.width) / 2; y: (root.height - self.height) / 2;
+        width: min(Theme.popover-width, root.anchor-right - Theme.gap * 2);
+        height: min(layout.preferred-height, Theme.popover-max-height, root.height - Theme.gap * 2);
+        x: root.anchor-right - self.width - Theme.gap;
+        y: clamp(root.anchor-bottom - self.height - Theme.calendar-gap, Theme.gap, root.height - self.height - Theme.gap);
         background: Theme.popover-background; border-radius: Theme.popover-radius;
         border-width: Theme.border-width; border-color: Theme.popover-border;
-        drop-shadow-blur: Theme.popover-shadow-blur; drop-shadow-color: Theme.popover-shadow;
+        drop-shadow-blur: Theme.popover-shadow-blur; drop-shadow-color: Theme.popover-shadow; drop-shadow-offset-y: Theme.block-radius;
         clip: true;
         TouchArea {}
         keys := FocusScope {
@@ -116,19 +121,20 @@ export component TagEditor inherits Rectangle {
             }
         }
         layout := VerticalLayout {
-            padding: Theme.tag-editor-padding; spacing: Theme.gap;
+            padding-left: Theme.popover-padding + Theme.popover-inset; padding-right: Theme.popover-padding + Theme.popover-inset;
+            padding-bottom: Theme.popover-padding + Theme.popover-inset; spacing: Theme.tag-editor-spacing;
+            // The heading, as the actions': what the card is about.
             HorizontalLayout {
-                spacing: Theme.gap;
-                Rectangle { width: Theme.tag-dot * 1.5; height: self.width; y: (parent.height - self.height) / 2; border-radius: self.width / 2; background: TagEditorUi.color; }
-                Text { text: TagEditorUi.heading; color: Theme.strong; font-size: Theme.row-size; font-weight: Theme.weight-semibold; vertical-alignment: center; horizontal-stretch: 1; }
+                height: Theme.section-height + Theme.popover-padding; padding-top: Theme.popover-padding; spacing: Theme.gap;
+                Rectangle { width: Theme.tag-dot; height: self.width; y: (parent.height - self.height) / 2; border-radius: self.width / 2; background: TagEditorUi.color; }
+                Text { text: TagEditorUi.heading; color: Theme.muted; font-size: Theme.section-size; font-weight: Theme.weight-medium; vertical-alignment: center; horizontal-stretch: 1; overflow: elide; }
+                Text { text: TagEditorUi.icon-name; color: Theme.placeholder; font-size: Theme.section-size; vertical-alignment: center; overflow: elide; max-width: Theme.side-value-width; }
             }
-            Text { text: TagEditorUi.name-label; color: Theme.muted; font-size: Theme.section-size; }
             name-input := EditorInput {
                 text: TagEditorUi.name; placeholder: TagEditorUi.name-label; active: TagEditorUi.part == 0; reset: TagEditorUi.reset;
                 edited(text) => { TagEditorUi.name-edited(text); }
                 focused => { if TagEditorUi.part != 0 { TagEditorUi.focus-part(0); } }
             }
-            Text { text: TagEditorUi.color-label; color: Theme.muted; font-size: Theme.section-size; }
             // Saturation from left to right, brightness from bottom to top, in the hue chosen.
             field := Rectangle {
                 height: Theme.tag-field-height; border-radius: Theme.block-radius; clip: true;
@@ -155,7 +161,7 @@ export component TagEditor inherits Rectangle {
             }
             // The app's swatches.
             HorizontalLayout {
-                spacing: Theme.calendar-gap; alignment: space-between;
+                alignment: space-between;
                 for swatch[i] in TagEditorUi.swatches: Rectangle {
                     width: Theme.tag-swatch; height: self.width; border-radius: self.width / 2; background: swatch;
                     border-width: TagEditorUi.swatch == i ? Theme.tag-knob-ring : 0px;
@@ -163,32 +169,33 @@ export component TagEditor inherits Rectangle {
                     TouchArea { mouse-cursor: pointer; clicked => { TagEditorUi.pick-swatch(i); } }
                 }
             }
-            hex-input := EditorInput {
-                text: TagEditorUi.hex; placeholder: "#rrggbb"; active: TagEditorUi.part == 3; reset: TagEditorUi.reset;
-                edited(text) => { TagEditorUi.hex-edited(text); }
-                focused => { if TagEditorUi.part != 3 { TagEditorUi.focus-part(3); } }
-            }
+            // The hex code and the icon search side by side.
             HorizontalLayout {
                 spacing: Theme.gap;
-                Text { text: TagEditorUi.icon-label; color: Theme.muted; font-size: Theme.section-size; vertical-alignment: center; }
-                Text { text: TagEditorUi.icon-name; color: Theme.text; font-size: Theme.small-size; vertical-alignment: center; horizontal-alignment: right; horizontal-stretch: 1; overflow: elide; }
-            }
-            icon-input := EditorInput {
-                text: ""; placeholder: TagEditorUi.icon-placeholder; active: TagEditorUi.part == 4; arrows-up-down: true; reset: TagEditorUi.reset;
-                edited(text) => { TagEditorUi.query-edited(text); }
-                focused => { if TagEditorUi.part != 4 { TagEditorUi.focus-part(4); } }
+                hex-input := EditorInput {
+                    width: Theme.tag-hex-width;
+                    text: TagEditorUi.hex; placeholder: "#rrggbb"; active: TagEditorUi.part == 3; reset: TagEditorUi.reset;
+                    edited(text) => { TagEditorUi.hex-edited(text); }
+                    focused => { if TagEditorUi.part != 3 { TagEditorUi.focus-part(3); } }
+                }
+                icon-input := EditorInput {
+                    horizontal-stretch: 1;
+                    text: ""; placeholder: TagEditorUi.icon-placeholder; active: TagEditorUi.part == 4; arrows-up-down: true; reset: TagEditorUi.reset;
+                    edited(text) => { TagEditorUi.query-edited(text); }
+                    focused => { if TagEditorUi.part != 4 { TagEditorUi.focus-part(4); } }
+                }
             }
             icon-grid := Flickable {
-                height: min(Theme.tag-icon-rows * Theme.side-icon-cell, Math.ceil(TagEditorUi.icons.length / Theme.side-icon-columns) * Theme.side-icon-cell);
-                content-height: Math.ceil(TagEditorUi.icons.length / Theme.side-icon-columns) * Theme.side-icon-cell;
-                property <length> grid-x: (self.width - Theme.side-icon-columns * Theme.side-icon-cell) / 2;
+                height: min(Theme.tag-icon-rows * Theme.tag-icon-cell, Math.ceil(TagEditorUi.icons.length / Theme.side-icon-columns) * Theme.tag-icon-cell);
+                content-height: Math.ceil(TagEditorUi.icons.length / Theme.side-icon-columns) * Theme.tag-icon-cell;
+                property <length> grid-x: (self.width - Theme.side-icon-columns * Theme.tag-icon-cell) / 2;
                 // The chosen icon's line stays in view.
-                property <length> pick-top: Math.floor(TagEditorUi.icon-pick / Theme.side-icon-columns) * Theme.side-icon-cell;
-                changed pick-top => { self.content-y = min(0px, max(min(self.content-y, -self.pick-top), self.height - self.pick-top - Theme.side-icon-cell)); }
+                property <length> pick-top: Math.floor(TagEditorUi.icon-pick / Theme.side-icon-columns) * Theme.tag-icon-cell;
+                changed pick-top => { self.content-y = min(0px, max(min(self.content-y, -self.pick-top), self.height - self.pick-top - Theme.tag-icon-cell)); }
                 for line[i] in TagEditorUi.icons: Rectangle {
-                    x: parent.grid-x + Math.mod(i, Theme.side-icon-columns) * Theme.side-icon-cell;
-                    y: Math.floor(i / Theme.side-icon-columns) * Theme.side-icon-cell;
-                    width: Theme.side-icon-cell - Theme.calendar-gap; height: self.width;
+                    x: parent.grid-x + Math.mod(i, Theme.side-icon-columns) * Theme.tag-icon-cell;
+                    y: Math.floor(i / Theme.side-icon-columns) * Theme.tag-icon-cell;
+                    width: Theme.tag-icon-cell - Theme.calendar-gap; height: self.width;
                     border-radius: Theme.block-radius;
                     background: Theme.row-fill(line.selected, touch.has-hover, touch.pressed);
                     border-width: line.selected && TagEditorUi.part == 4 ? Theme.border-width : 0px; border-color: Theme.field-focus;

@@ -286,6 +286,12 @@ export component Bar inherits Window {
     callback notepad-new-note;
     pure callback notepad-continue-list(string, int, int) -> NotepadIndent;
     callback notepad-choose(string);
+    in property <[image]> footer-create-icons;
+    callback footer-create(int);
+    in property <int> notepad-list-mode;
+    callback notepad-list-key(string);
+    callback notepad-list-menu(string);
+    callback notepad-list-drop(string, int);
     callback notepad-link(string);
     callback notepad-image;
     callback notepad-check(int);
@@ -960,6 +966,10 @@ export component Bar inherits Window {
             continue-list(text, anchor, cursor) => { root.notepad-continue-list(text, anchor, cursor) }
             filter(text) => { root.notepad-filter(text); }
             choose(key) => { root.notepad-choose(key); }
+            list-mode: root.notepad-list-mode;
+            list-key(key) => { root.notepad-list-key(key); }
+            list-menu(key) => { root.notepad-list-menu(key); }
+            list-drop(key, index) => { root.notepad-list-drop(key, index); }
             add-link(url) => { root.notepad-link(url); }
             add-image => { root.notepad-image(); }
             check(offset) => { root.notepad-check(offset); }
@@ -1205,6 +1215,8 @@ export component Bar inherits Window {
             menu => { root.app-menu-clicked(); }
             toast: root.notice; toast-is-error: root.notice-is-error;
             hints: root.footer-hints;
+            create-icons: root.footer-create-icons;
+            create(kind) => { root.footer-create(kind); }
             success-icon: root.icon-success; error-icon: root.icon-error;
             action(which) => { root.footer-action(which); }
         }
@@ -1283,6 +1295,8 @@ export component Bar inherits Window {
                     if event.text == "b" || event.text == "B" { root.form-key(31, 4); }
                     if event.text == "r" || event.text == "R" { root.form-key(32, 4); }
                     if event.text == "i" || event.text == "I" { root.form-key(33, 4); }
+                    // Deleting the entry open (asking which of a series), as in the day view.
+                    if event.text == Key.Delete { root.form-key(12, 4); }
                     // Back to today, calendar included.
                     if event.text == "h" || event.text == "H" { root.form-key(9, 4); }
                     return accept;
@@ -1466,7 +1480,12 @@ export component Bar inherits Window {
         }
     }
     board-page := BoardView {visible: BoardUi.opened;}
-    if TagEditorUi.open: TagEditor { x: 0px; y: 0px; width: root.width; height: root.height; }
+    if TagEditorUi.open: TagEditor {
+        x: 0px; y: 0px; width: root.width; height: root.height;
+        // Where the actions' card stands: over the footer, at the right of the form (on the board: of the window).
+        anchor-right: BoardUi.opened ? root.width : root.form-space;
+        anchor-bottom: BoardUi.opened ? root.height - Theme.footer-height : root.pane-height + page-scroll.content-y - Theme.footer-height;
+    }
     // With acrylic, DWM draws the outline around the backdrop and client together.
     if !root.glass: Rectangle {
         border-radius: Theme.radius;

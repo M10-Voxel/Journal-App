@@ -1,7 +1,8 @@
 import { KeyBindings, ShortcutContext } from "key-bindings.slint";
 import { Theme } from "theme.slint";
 
-export struct NotepadChoiceRow { key: string, title: string, detail: string, has-color: bool, color: color, group: string, has-image: bool, thumbnail: image }
+// `depth`, `folder`, `open`, `selected` and `icon` belong to the list of notes (a tree of folders and notes, its cursor in Rust).
+export struct NotepadChoiceRow { key: string, title: string, detail: string, has-color: bool, color: color, group: string, has-image: bool, thumbnail: image, depth: int, folder: bool, open: bool, selected: bool, has-icon: bool, icon: image }
 export struct NotepadMarkdownRow { text: styled-text, heading: int, indent: int, marker: string, offset: int, checked: bool, urls: [string], is-code: bool, code: string, language: string }
 export struct NotepadIndent { text: string, anchor: int, cursor: int }
 export struct NotepadImage { key: string, title: string, thumbnail: image }
@@ -86,6 +87,8 @@ export component NotepadEditor inherits VerticalLayout {
     in property <int> panel;
     in property <bool> preview;
     in property <[NotepadChoiceRow]> choices;
+    // The list of notes: 0 the tree, 1 found notes, 2 where to move something, 3 a folder's name is typed.
+    in property <int> list-mode;
     in property <[NotepadMarkdownRow]> markdown;
     in property <[NotepadTool]> tools;
     in property <string> panel-placeholder;
@@ -114,6 +117,11 @@ export component NotepadEditor inherits VerticalLayout {
     callback new-note;
     pure callback continue-list(string, int, int) -> NotepadIndent;
     callback choose(string);
+    // The list of notes: its keys (up, down, left, right, home, end, enter, escape), a right click on a line, a line
+    // dragged onto another (by its index).
+    callback list-key(string);
+    callback list-menu(string);
+    callback list-drop(string, int);
     callback add-link(string);
     callback add-image;
     callback check(int);
@@ -175,6 +183,8 @@ export component NotepadEditor inherits VerticalLayout {
             return accept;
         }
         if root.panel == 0 && !root.editing && event.text == Key.F2 { root.tool(3); return accept; }
+        // Deleting (the note open, or the line of the list), asked first as everywhere.
+        if event.modifiers.alt && !event.modifiers.control && event.text == Key.Delete { root.list-key("delete"); return accept; }
         if root.panel == 1 && event.text == Key.Tab &&
             !event.modifiers.control && !event.modifiers.alt && !event.modifiers.shift {
             if !event.repeat { root.scope(!root.on-day); }
@@ -502,6 +512,20 @@ export component NotepadEditor inherits VerticalLayout {
                         edited => { menu-list.cursor = 0; root.filter(self.text); }
                         key-pressed(raw-event) => {
                             let event = KeyBindings.translate(ShortcutContext.notes, raw-event);
+                            // The list of notes: its keys go to Rust (the cursor, folders opening, moving, naming).
+                            if root.panel == 1 && !event.modifiers.control && !event.modifiers.alt {
+                                if event.text == Key.UpArrow { root.list-key("up"); return accept; }
+                                if event.text == Key.DownArrow { root.list-key("down"); return accept; }
+                                if event.text == Key.Return { root.list-key("enter"); return accept; }
+                                if event.text == Key.Escape && root.list-mode >= 2 { root.list-key("escape"); return accept; }
+                                if event.text == Key.Delete && self.text == "" && root.list-mode < 2 { root.list-key("delete"); return accept; }
+                                if self.text == "" && root.list-mode == 0 {
+                                    if event.text == Key.LeftArrow { root.list-key("left"); return accept; }
+                                    if event.text == Key.RightArrow { root.list-key("right"); return accept; }
+                                    if event.text == Key.Home { root.list-key("home"); return accept; }
+                                    if event.text == Key.End { root.list-key("end"); return accept; }
+                                }
+                            }
                             if event.text == Key.Return && !event.modifiers.control {
                                 if root.panel == 3 && root.editing && self.text != "" { root.add-link(self.text); }
                                 else if menu-list.cursor < root.choices.length { root.choose(root.choices[menu-list.cursor].key); }
@@ -532,7 +556,7 @@ export component NotepadEditor inherits VerticalLayout {
                     clicked => { root.add-image(); }
                 }
             }
-            if root.panel == 1: HorizontalLayout {
+            if root.panel == 1 && root.list-mode < 2: HorizontalLayout {
                 spacing: Theme.gap;
                 alignment: start;
                 for name[i] in [root.all-notes, root.day-notes]: Rectangle {
@@ -553,12 +577,14 @@ export component NotepadEditor inherits VerticalLayout {
                 content-width: self.width;
                 content-height: menu-rows.preferred-height;
                 property <int> cursor: 0;
+                // A line dragged in the tree: where it would go.
+                property <int> drop-at: -1;
                 menu-rows := VerticalLayout {
                     x: 0px; y: 0px; width: parent.width; height: self.preferred-height;
                     for item[i] in root.choices: Rectangle {
                     height: (item.group == "" ? 0px : Theme.choice-height)
                         + (item.has-image ? Theme.notepad-thumb-height : Theme.choice-height);
-                    property <bool> selected: i == menu-list.cursor;
+                    property <bool> selected: root.panel == 1 ? item.selected : i == menu-list.cursor;
                     changed selected => {
                         if self.selected {
                             let top = self.y;
@@ -578,7 +604,8 @@ export component NotepadEditor inherits VerticalLayout {
                     y: item.group == "" ? 0px : Theme.choice-height;
                     height: parent.height - self.y;
                     border-radius: Theme.block-radius;
-                    background: i == menu-list.cursor ? Theme.row-selection : item-hit.has-hover ? Theme.hover : transparent;
+                    background: parent.selected ? Theme.row-selection : item-hit.has-hover ? Theme.hover : transparent;
+                    border-width: menu-list.drop-at == i && root.panel == 1 ? Theme.border-width : 0px; border-color: Theme.field-focus;
                     if item.has-image: Image {
                         x: Theme.gap; y: Theme.choice-spacing;
                         width: parent.height - Theme.gap; height: parent.height - 2 * Theme.choice-spacing;
@@ -587,7 +614,11 @@ export component NotepadEditor inherits VerticalLayout {
                     HorizontalLayout {
                         x: item.has-image ? parent.height + Theme.gap : 0px;
                         width: parent.width - self.x;
-                        padding-left: Theme.gap; padding-right: Theme.gap; spacing: Theme.gap;
+                        padding-left: Theme.gap + item.depth * Theme.notepad-tree-indent; padding-right: Theme.gap; spacing: Theme.gap;
+                        if item.has-icon: Image {
+                            width: Theme.label-icon-size; height: self.width; y: (parent.height - self.height) / 2;
+                            source: item.icon; colorize: item.folder ? Theme.text : Theme.muted;
+                        }
                         if item.has-color: Rectangle {
                             width: Theme.tag-dot; height: Theme.tag-dot;
                             y: (parent.height - self.height) / 2;
@@ -596,7 +627,29 @@ export component NotepadEditor inherits VerticalLayout {
                         Text { text: item.title; color: Theme.strong; font-size: Theme.row-size; vertical-alignment: center; horizontal-stretch: 1; overflow: elide; }
                         if item.detail != "": Text { text: item.detail; color: Theme.muted; font-size: Theme.small-size; vertical-alignment: center; overflow: elide; max-width: Theme.side-value-width; }
                     }
-                    item-hit := TouchArea { mouse-cursor: MouseCursor.default; clicked => { root.choose(item.key); } }
+                    // A click chooses (a folder opens or closes); a right click shows the line's actions; dragged in the
+                    // tree, a line goes into the folder it is dropped on.
+                    item-hit := TouchArea {
+                        mouse-cursor: MouseCursor.default;
+                        property <length> start-y;
+                        property <bool> dragged;
+                        pointer-event(event) => {
+                            if event.button == PointerEventButton.right && event.kind == PointerEventKind.down && root.panel == 1 { root.list-menu(item.key); }
+                            if event.button == PointerEventButton.left && event.kind == PointerEventKind.down { self.start-y = self.mouse-y; self.dragged = false; }
+                            if event.button == PointerEventButton.left && event.kind == PointerEventKind.up && self.dragged {
+                                let target = menu-list.drop-at;
+                                menu-list.drop-at = -1;
+                                if target >= 0 && target != i { root.list-drop(item.key, target); }
+                            }
+                        }
+                        moved => {
+                            if self.pressed && root.panel == 1 && root.list-mode == 0 && abs(self.mouse-y - self.start-y) > Theme.notepad-drag-distance {
+                                self.dragged = true;
+                                menu-list.drop-at = max(0, min(root.choices.length - 1, i + floor(self.mouse-y / self.height)));
+                            }
+                        }
+                        clicked => { if !self.dragged { root.choose(item.key); } }
+                    }
                     }
                     }
                 }

@@ -9,6 +9,8 @@
 //!   Everything shows in the calendar at once.
 //! * `Shift+Enter` creates the entry and keeps the window, `Strg+Enter` creates it and closes.
 mod search;
+mod notes;
+
 use std::collections::BTreeSet;
 use chrono::{Local, NaiveDate, Timelike};
 use crate::calendar::{self, Item, Layout, Metrics};
@@ -296,12 +298,19 @@ enum CommandAction {
     Template(String), TemplateEdit(String), TemplateHelp,
 }
 
+#[derive(Default)]
 pub struct NotepadChoice {
     pub key: String,
     pub group: String,
     pub title: String,
     pub detail: String,
     pub color: Option<calendar::Rgb>,
+    /// The list of notes as a tree: how deep the line is, whether it is a folder (open or not), the cursor, its icon.
+    pub depth: usize,
+    pub folder: bool,
+    pub open: bool,
+    pub selected: bool,
+    pub icon: &'static str,
 }
 
 pub struct Form {
@@ -385,6 +394,10 @@ pub struct Form {
     gap_at: Option<usize>,
     /// A tag made in a picker that only hands back a choice (the notepad): the window opens the tag editor on it.
     tag_edit: Option<String>,
+    /// The notepad's list: its cursor, folders closed, what is moved or named; what is typed in it; text it is to get.
+    pub(crate) notes_list: crate::notes_list::List,
+    notes_query: String,
+    notes_query_set: Option<String>,
     /// The form was filled from a template: its title stays as written (its words are not read as a day or a tag).
     from_template: bool,
 }
@@ -520,7 +533,7 @@ impl Form {
             metrics: Metrics::default(), options: None, options_backup: Values::default(), cal_top: repeat::shift(today, -1), cal_offset: 0.0, cal_target: None,
             cal_open: BTreeSet::from([today]), cal_clicked: None, mark: None, mark_layout: None, shown_layout: Layout::default(), shown_entries: Vec::new(), shown_metrics: Metrics::default(),
             board_scopes: None, fixed_clock: true, clock_ms: 0, kind_chosen: false, entry_open: false, hits: Vec::new(), editing: None, search: String::new(), search_cursor: 0, command_selected: 0, notepad: None, suspended_notes: Vec::new(), zoom_days: 1.0, zoom_hours: 1.0, pan: 0.0, view_day: None, cal_selected: BTreeSet::new(), pane: DayPane::default(),
-            templates: Default::default(), template: None, gap_at: None, from_template: false, tag_edit: None }
+            templates: Default::default(), template: None, gap_at: None, from_template: false, tag_edit: None, notes_list: Default::default(), notes_query: String::new(), notes_query_set: None }
     }
 
     fn t(&self) -> &'static Texts { texts(self.language) }
@@ -1322,6 +1335,7 @@ impl Form {
     }
 
     pub fn notepad_choices(&mut self, query: &str) -> Vec<NotepadChoice> {
+        if self.notepad.as_ref().is_some_and(|draft| draft.panel == 1) { return self.notes_rows(query); }
         let Some((draft, journal)) = self.notepad.as_ref().zip(self.journal.as_ref()) else { return Vec::new(); };
         let labels = notepad_texts(self.language);
         if draft.panel == 2 {
@@ -1330,12 +1344,12 @@ impl Form {
                 Err(error) => { self.notepad_error(notepad::SaveError::Store(error.to_string())); return Vec::new(); }
             };
             let new = crate::tag_edit::creatable(&tags, query).map(|name| NotepadChoice {
-                key: format!("new-tag:{name}"), group: String::new(), title: crate::texts::tags::make_tag(&name, self.language), detail: String::new(), color: None,
+                key: format!("new-tag:{name}"), group: String::new(), title: crate::texts::tags::make_tag(&name, self.language), detail: String::new(), color: None, ..NotepadChoice::default()
             });
             let query = query.to_lowercase();
-            return std::iter::once(NotepadChoice { key: String::new(), group: String::new(), title: labels.no_tag.to_owned(), detail: String::new(), color: None })
+            return std::iter::once(NotepadChoice { key: String::new(), group: String::new(), title: labels.no_tag.to_owned(), detail: String::new(), color: None, ..NotepadChoice::default() })
                 .chain(tags.into_iter().filter(|tag| tag.name.to_lowercase().contains(&query)).map(|tag| NotepadChoice {
-                    key: tag.id, group: String::new(), title: tag.name, detail: String::new(), color: calendar::parse_color(&tag.color),
+                    key: tag.id, group: String::new(), title: tag.name, detail: String::new(), color: calendar::parse_color(&tag.color), ..NotepadChoice::default()
                 })).chain(new).collect();
         }
         if draft.panel == 4 {
@@ -1344,7 +1358,7 @@ impl Form {
                 Err(error) => { self.notepad_error(error); return Vec::new(); }
             };
             let new = notebook::new_folder_name(&folders, query).map(|name| NotepadChoice {
-                key: format!("new-folder:{name}"), group: String::new(), title: crate::texts::tags::make_folder(&name, self.language), detail: String::new(), color: None,
+                key: format!("new-folder:{name}"), group: String::new(), title: crate::texts::tags::make_folder(&name, self.language), detail: String::new(), color: None, ..NotepadChoice::default()
             });
             let query = query.to_lowercase();
             let current = draft.card.folder.as_deref().unwrap_or_default();
@@ -1352,7 +1366,7 @@ impl Form {
                 .filter(|(_, title)| title.to_lowercase().contains(&query))
                 .map(|(key, title)| NotepadChoice {
                     detail: if key == current { labels.current_folder.to_owned() } else { String::new() },
-                    key, title, group: String::new(), color: None,
+                    key, title, group: String::new(), color: None, ..NotepadChoice::default()
                 }).chain(new).collect();
         }
         let items = match draft.panel {
@@ -1376,7 +1390,7 @@ impl Form {
                     }
                     NotepadChoice {
                         key: item.id.to_string(), group, title: if item.title.is_empty() { labels.untitled.to_owned() } else { item.title },
-                        detail: item.detail, color: None,
+                        detail: item.detail, color: None, ..NotepadChoice::default()
                     }
                 }).collect()
             }
@@ -1386,13 +1400,16 @@ impl Form {
 
     /// Selecting a card reads its latest state. Selecting an attachment can open it outside the editor.
     pub fn pick_notepad(&mut self, key: &str) -> Option<notebook::Target> {
+        if self.notepad.as_ref().is_some_and(|draft| draft.panel == 1) {
+            if let Some(out) = self.notes_click(key) { if out.query.is_some() { self.notes_query_set = out.query; } return out.target; }
+        }
         // A tag or folder typed in its picker is made first, then chosen like the others.
         let made = if let Some(name) = key.strip_prefix("new-tag:") {
             let journal = self.journal.as_mut()?;
             crate::tag_edit::create(&mut journal.store, name).map(|tag| { self.tag_edit = Some(tag.id.clone()); tag.id })
         } else if let Some(name) = key.strip_prefix("new-folder:") {
             let journal = self.journal.as_mut()?;
-            notebook::create_folder(&mut journal.store, name).map_err(|error| format!("{error:?}"))
+            notebook::create_folder(&mut journal.store, name, None).map_err(|error| format!("{error:?}"))
         } else { Ok(key.to_string()) };
         let chosen = match made {
             Ok(key) => key,
@@ -1551,6 +1568,7 @@ impl Form {
             browser.panel = 1;
             self.notepad = Some(browser);
         }
+        self.notes_list.mode = crate::notes_list::Mode::Browse;
         self.status = None;
     }
 
@@ -1601,6 +1619,8 @@ impl Form {
             Key::Priority => { self.v.priority = !self.v.priority; if self.field() == Field::Priority { self.backup.priority = self.v.priority; } return Effect::default(); }
             Key::Extra(field) => { self.options = None; return self.open_extra(field); }
             Key::Close => return self.close_entry(),
+            // The delete key of the day view (Alt+Entf): the entry open, with the choice of its series.
+            Key::Delete if mods.alt && self.editing_entry() => return self.run(ActionId::EntryDelete, None),
             // Alt+H: back to today (the day view and the calendar); what is being written stays.
             Key::Home if mods.alt => { self.show_today(); return Effect::default(); }
             Key::Enter if mods.ctrl || mods.shift => {
@@ -2667,14 +2687,14 @@ impl Form {
     pub fn toggle_menu(&mut self) -> Effect {
         if self.month_picker_open() { return self.key(Key::Escape, Mods::default()); }
         if self.menu.is_some() || self.pane.side.is_some() { return self.close_menu(); }
+        // What is being written in the day view is written first; the actions are then about that entry.
+        if self.pane.edit.is_some() && !self.entry_open && self.notepad.is_none() {
+            let _ = self.with_pane(|pane, cx| pane.key(cx, day_pane::K::Escape, day_pane::Mods::default()));
+        }
         let entry = match (&self.notepad, self.entry_open, &self.pane.cursor) {
             (None, false, Some(crate::day_view::Item::Entry(id))) => Some(id.clone()),
             _ => None,
         };
-        // What is being written in the day view is written first.
-        if self.pane.edit.is_some() && !self.entry_open && self.notepad.is_none() {
-            let _ = self.with_pane(|pane, cx| pane.key(cx, day_pane::K::Escape, day_pane::Mods::default()));
-        }
         self.menu = Some(actions::Menu { entry, ..actions::Menu::default() });
         Effect { focus: Some(Pane::Menu), ..Effect::default() }
     }
@@ -2741,12 +2761,16 @@ impl Form {
             title = if draft.panel == 1 { at.notepad.to_string() } else if draft.title().is_empty() { notepad_texts(self.language).untitled.to_string() } else { draft.title().to_string() };
             if draft.panel == 1 {
                 items.push(ActionItem::new(ActionId::NotesNew, 0, "square-pen", at.notes_new));
+                self.notes_actions(&mut items);
             } else if draft.editing {
                 items.push(ActionItem::new(ActionId::NotesSave, 0, "save", at.notes_save));
                 items.push(ActionItem::new(ActionId::NotesPreview, 0, "eye", at.notes_preview).on(draft.preview));
                 items.push(ActionItem::new(ActionId::NotesTag, 0, "tag", at.notes_tag).value(self.notepad_tag_name().unwrap_or_default()));
             } else {
                 items.push(ActionItem::new(ActionId::NotesEdit, 0, "pencil", at.notes_edit));
+            }
+            if draft.panel != 1 && draft.card.original.is_some() {
+                items.push(ActionItem { danger: true, ..ActionItem::new(ActionId::NoteDelete, 0, "trash", crate::texts::tags::delete_note(self.language)) });
             }
             if draft.panel != 1 {
                 items.push(ActionItem::new(ActionId::NotesFolder, 0, "folder", notepad_texts(self.language).choose_folder));
@@ -2779,6 +2803,11 @@ impl Form {
             items.push(ActionItem::new(ActionId::Description, 0, "text-align-start", at.description).value(self.v.description.lines().next().unwrap_or_default().to_string()));
             items.push(ActionItem::new(ActionId::Reminder, 0, "bell", at.reminder).value(self.shown_value(Field::Reminder)));
             items.push(ActionItem::new(ActionId::Icon, 0, "image", at.icon).value(self.v.icon.clone().unwrap_or_default()));
+            if let Some((date, entry)) = self.editing.clone() {
+                let scopes = self.delete_items(&entry.id, date);
+                if scopes.is_empty() { items.push(ActionItem { danger: true, ..ActionItem::new(ActionId::EntryDelete, 0, "journal-trash", crate::texts::tags::delete_entry(self.language)) }); }
+                items.extend(scopes);
+            }
             items.push(ActionItem::new(ActionId::Discard, 0, "x", at.discard));
             items.push(ActionItem::new(ActionId::Notebook, 1, "notebook-pen", at.notebook));
             items.push(ActionItem::new(ActionId::Settings, 1, "settings", at.settings));
@@ -2786,9 +2815,13 @@ impl Form {
             let entry = menu.entry.as_deref().and_then(|id| self.with_pane(|pane, cx| pane.entry_actions(cx, id)));
             title = match &entry { Some((name, _)) => name.clone(), None => crate::day_view::long_date(self.day_shown(), self.language) };
             for line in entry.map(|(_, lines)| lines).unwrap_or_default() {
+                // Deleting: one line, or one per way when the entry has a series or plans.
+                if line.action == day_pane::Action::Delete {
+                    let scopes = self.delete_items(menu.entry.as_deref().unwrap_or_default(), self.day_shown());
+                    if !scopes.is_empty() { items.extend(scopes); continue; }
+                }
                 items.push(ActionItem { id: ActionId::Entry(line.action), section: 0, icon: line.icon, label: line.label, value: line.value, on: line.on, danger: line.danger, color: line.color });
             }
-            // The entry's own come first; deleting is last of them.
             items.push(ActionItem::new(ActionId::NewTask, 1, "journal-task", at.new_task));
             items.push(ActionItem::new(ActionId::NewEvent, 1, "journal-event", at.new_event));
             items.push(ActionItem::new(ActionId::NewNote, 1, "journal-note", at.new_note));
@@ -2798,6 +2831,10 @@ impl Form {
             items.push(ActionItem::new(ActionId::Redo, 1, "redo-2", at.redo));
             items.push(ActionItem::new(ActionId::Settings, 1, "settings", at.settings));
         }
+        // Deleting is always last, so ↑ from the first line reaches it (the smallest way at the very bottom).
+        let deleting = |id: ActionId| matches!(id, ActionId::Entry(day_pane::Action::Delete) | ActionId::DeleteScope(_) | ActionId::NoteDelete | ActionId::FolderDelete | ActionId::EntryDelete);
+        items.sort_by_key(|item| deleting(item.id));
+        for item in items.iter_mut().filter(|item| deleting(item.id)) { item.section = 2; }
         (title, actions::filter(items, &menu.query))
     }
 
@@ -2817,6 +2854,12 @@ impl Form {
         self.run(item.id, entry)
     }
 
+    /// An icon of the day view's footer: a new event (0), task (1) or note (2) in the day shown.
+    pub fn create_in_day(&mut self, kind: usize) -> Effect {
+        self.menu = None;
+        self.run([ActionId::NewEvent, ActionId::NewTask, ActionId::NewNote][kind.min(2)], None)
+    }
+
     /// The footer's main action (Enter's meaning where the keyboard is).
     pub fn footer_primary(&mut self) -> Effect {
         self.menu = None;
@@ -2829,6 +2872,33 @@ impl Form {
             Context::NotesRead => self.run(ActionId::NotesEdit, None),
             Context::NotesEdit => self.run(ActionId::NotesSave, None),
         }
+    }
+
+    /// The ways to delete the entry `id` of `date` as lines of the actions, when it has more than one: the largest on top,
+    /// "only this one" at the bottom.
+    fn delete_items(&self, id: &str, date: NaiveDate) -> Vec<ActionItem> {
+        let Some(journal) = self.journal.as_ref() else { return Vec::new() };
+        let Ok(scopes) = day_pane::delete_scopes(&journal.store, id, date, self.language) else { return Vec::new() };
+        if scopes.len() < 2 { return Vec::new(); }
+        let mut ranked: Vec<(usize, day_pane::DeleteScope)> = scopes.into_iter().enumerate().collect();
+        ranked.sort_by_key(|(_, scope)| scope.rank);
+        ranked.into_iter().map(|(index, scope)| ActionItem { danger: true,
+            ..ActionItem::new(ActionId::DeleteScope(index as u8), 2, "journal-trash", &crate::texts::tags::delete_scope(&scope.label, self.language)) }).collect()
+    }
+
+    /// One way of deleting, taken from the actions: in the form the entry's day shows first.
+    fn delete_scope(&mut self, index: usize, entry: Option<String>) -> Effect {
+        let (id, date) = match (&self.editing, entry) {
+            (Some((date, open)), _) if self.entry_open => (open.id.clone(), *date),
+            (_, Some(id)) => (id, self.day_shown()),
+            _ => return Effect::default(),
+        };
+        let Some(journal) = self.journal.as_ref() else { return Effect::default() };
+        let Some(scope) = day_pane::delete_scopes(&journal.store, &id, date, self.language).ok().and_then(|scopes| scopes.into_iter().nth(index)) else { return Effect::default() };
+        if self.entry_open { self.close_entry(); }
+        self.show_day(date);
+        let out = self.with_pane(|pane, cx| pane.remove_scope(cx, &id, scope.ids));
+        self.pane_effect(out)
     }
 
     /// Carries out an action (`entry`: the entry of the day view it is about).
@@ -2858,6 +2928,17 @@ impl Form {
             ActionId::Icon => self.open_extra(Field::Icon),
             ActionId::Discard => self.close_entry(),
             ActionId::TemplateDelete => self.delete_template(),
+            ActionId::NoteDelete if self.notepad.as_ref().is_some_and(|draft| draft.panel != 1) => self.delete_open_note(),
+            ActionId::FolderNew | ActionId::FolderSub | ActionId::FolderRename | ActionId::ListMove | ActionId::NotesNewHere | ActionId::NoteDelete | ActionId::FolderDelete => self.run_notes_action(id),
+            // The entry open in the form: its day shows, and the day view deletes it there (asking which of a series).
+            ActionId::DeleteScope(index) => self.delete_scope(index as usize, entry),
+            ActionId::EntryDelete => {
+                let Some((date, entry)) = self.editing.clone() else { return Effect::default() };
+                self.close_entry();
+                self.show_day(date);
+                let out = self.with_pane(|pane, cx| pane.act_on(cx, &entry.id, day_pane::Action::Delete));
+                self.pane_effect(out)
+            }
             ActionId::NotesNew => self.new_notepad_note(),
             ActionId::NotesEdit | ActionId::NotesPreview => { self.notepad_preview(); Effect { focus: Some(Pane::Notes), ..Effect::default() } }
             ActionId::NotesSave => { self.save_notepad_card(); Effect { focus: Some(Pane::Notes), ..Effect::default() } }

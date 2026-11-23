@@ -1017,8 +1017,11 @@ impl App {
                         "group-name",
                         "assign-group",
                         if b.group_move { "single-move" } else { "group-move" },
-                        "delete-group",
                     ]));
+                }
+                // Deleting last, the smallest at the very bottom (↑ from the first line reaches it).
+                if b.group(&select).len() > 1 {
+                    b.menu.extend(labels(&["delete-group"]));
                 }
                 b.menu.extend(labels(&["delete"]));
             }
@@ -1299,7 +1302,7 @@ impl App {
                 b.edit_tag = Some(tag.id);
             }
             _ if cmd.starts_with("new-folder:") => {
-                let id = notebook::create_folder(store, &cmd[11..]).map_err(|e| format!("{e:?}"))?;
+                let id = notebook::create_folder(store, &cmd[11..], None).map_err(|e| format!("{e:?}"))?;
                 b.field(store, "folder", json!(id))?;
             }
             _ if cmd.starts_with("tag:") || cmd.starts_with("folder:") => {

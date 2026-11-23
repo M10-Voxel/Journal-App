@@ -83,7 +83,7 @@ const GROUPS: &[Group] = &[
         binding!("day-move-up", ENTRY_ACTIONS, "Alt+ArrowUp", "Eintrag nach oben verschieben", "Move the entry up"),
         binding!("day-move-down", ENTRY_ACTIONS, "Alt+ArrowDown", "Eintrag nach unten verschieben", "Move the entry down"),
         fixed!("Del / Backspace", "Auswahl löschen oder Wert zurücksetzen", "Delete the selection or reset a value"),
-        binding!("day-remove", ENTRY_ACTIONS, "Alt+Delete", "Ausgewählten Eintrag löschen", "Delete the selected entry"),
+        binding!("day-remove", ENTRY_ACTIONS | FORM | NOTES, "Alt+Delete", "Löschen (Eintrag, Zettel, Ordner; bei Serien mit Auswahl)", "Delete (entry, note, folder; with a choice for series)"),
         fixed!("← / → / 0–9 / Del", "Regler schrittweise ändern, Wert eingeben oder zurücksetzen", "Adjust a dial, type a value or reset"),
         fixed!("Enter", "Aktivitätstimer starten oder pausieren", "Start or pause the activity timer"),
         binding!("day-timer-stop", DAY, "Shift+Enter", "Aktivitätstimer stoppen", "Stop the activity timer"),

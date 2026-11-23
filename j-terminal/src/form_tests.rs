@@ -399,7 +399,9 @@ fn notebook_browses_today_by_nested_folder_and_keeps_the_other_days_in_all() {
     t.form.open_notepad();
     assert!(t.form.notepad().unwrap().notes_on_day);
     t.form.set_notepad_day_filter(false);
-    assert_eq!(t.form.notepad_choices("").len(), 3);
+    let tree = t.form.notepad_choices("");
+    assert_eq!(tree.iter().map(|row| (row.title.as_str(), row.depth, row.folder)).collect::<Vec<_>>(),
+        [("Projekt", 0, true), ("Notizen", 1, true), ("Angepinnt", 2, false), ("Gestern", 1, false), ("Lose", 0, false)], "All notes: the folders as a tree.");
     t.form.set_notepad_day_filter(true);
     let rows = t.form.notepad_choices("");
     assert_eq!(rows.iter().map(|row| (row.title.as_str(), row.group.as_str())).collect::<Vec<_>>(),
@@ -1334,4 +1336,222 @@ fn the_notepad_makes_a_tag_and_a_folder_from_what_is_typed() {
     let folder: serde_json::Value = serde_json::from_str(&t.form.journal.as_ref().unwrap().store.conn.query_row(
         "SELECT value FROM settings WHERE key=?1", [format!("board:folder:{}", folders[0].0)], |r| r.get::<_, String>(0)).unwrap()).unwrap();
     assert_eq!((folder["parent"].clone(), folder["order"].clone()), (serde_json::Value::Null, serde_json::json!(0)), "As the app makes it.");
+}
+#[test]
+fn the_notepad_list_walks_the_tree_makes_folders_and_moves_notes_and_folders() {
+    use serde_json::json;
+    let mut t = test();
+    t.form.close_entry();
+    let note = uuid::Uuid::new_v4();
+    {
+        let store = &t.form.journal.as_ref().unwrap().store;
+        let card = json!({"id": note.to_string(), "kind":"note", "title":"Skript", "dates":[], "created":"2026-11-18", "notebook":true});
+        store.conn.execute("INSERT INTO settings(key,value) VALUES(?1,?2)", rusqlite::params![format!("board:card:{note}"), card.to_string()]).unwrap();
+    }
+    t.form.open_notepad();
+    t.form.set_notepad_day_filter(false);
+    let titles = |t: &mut Test| t.form.notepad_choices("").iter().map(|r| format!("{}{}{}", "  ".repeat(r.depth), r.title, if r.selected { " <" } else { "" })).collect::<Vec<_>>();
+    assert_eq!(titles(&mut t), ["Skript <"]);
+    // Strg+K: a new folder at the top; its name is typed, Enter makes it.
+    t.form.toggle_menu();
+    t.form.run(ActionId::FolderNew, None);
+    assert_eq!(t.form.notes_list_mode(), 3);
+    assert_eq!(t.form.notes_list_hint().unwrap().0, "Neuer Ordner");
+    t.form.notepad_choices("Uni");
+    let out = t.form.notes_list_key("enter");
+    assert_eq!(out.query.as_deref(), Some(""), "The input is cleared.");
+    assert_eq!(titles(&mut t), ["Uni <", "Skript"], "The cursor on the new folder.");
+    // On the folder: a subfolder.
+    t.form.run(ActionId::FolderSub, None);
+    assert_eq!(t.form.notes_list_hint().unwrap().0, "Neuer Ordner in „Uni“");
+    t.form.notepad_choices("Analysis");
+    t.form.notes_list_key("enter");
+    assert_eq!(titles(&mut t), ["Uni", "  Analysis <", "Skript"]);
+    // The note, moved with the actions: the places to go, typed to filter, Enter.
+    t.form.notes_list_key("down");
+    assert_eq!(titles(&mut t)[2], "Skript <", "↓ walks the tree.");
+    t.form.notes_list_menu(&note.to_string());
+    let labels: Vec<String> = t.form.menu_items().1.iter().map(|item| item.label.clone()).collect();
+    assert!(labels.contains(&"Verschieben nach …".to_string()) && labels.contains(&"Neuer Ordner".to_string()), "{labels:?}");
+    assert!(!labels.contains(&"Unterordner anlegen".to_string()), "A note has no subfolders.");
+    t.form.run(ActionId::ListMove, None);
+    assert_eq!(t.form.notes_list_hint().unwrap().0, "„Skript“ verschieben nach …");
+    let places: Vec<String> = t.form.notepad_choices("ana").iter().map(|r| r.title.clone()).collect();
+    assert_eq!(places, ["Uni / Analysis"]);
+    t.form.notes_list_key("enter");
+    assert_eq!(titles(&mut t), ["Uni", "  Analysis", "    Skript <"]);
+    // ← to its folder, ← closes it, → opens it again.
+    t.form.notes_list_key("left");
+    t.form.notes_list_key("left");
+    assert_eq!(titles(&mut t), ["Uni", "  Analysis <"]);
+    t.form.notes_list_key("right");
+    assert_eq!(titles(&mut t).len(), 3);
+    // A folder cannot go into one inside it: Uni dropped on Analysis stays where it is.
+    let rows = t.form.notepad_choices("");
+    t.form.notes_list_drop(&rows[0].key, 1);
+    assert_eq!(titles(&mut t), ["Uni <", "  Analysis", "    Skript"]);
+    // Analysis renamed, then dragged out of Uni onto the note's line… which is inside it: nothing. Its folder out by the actions.
+    t.form.notes_list_menu(&rows[1].key);
+    t.form.run(ActionId::FolderRename, None);
+    assert_eq!(t.form.take_notes_query().as_deref(), Some("Analysis"), "The name to change is in the input.");
+    t.form.notepad_choices("Mathe");
+    t.form.notes_list_key("enter");
+    t.form.run(ActionId::ListMove, None);
+    let places = t.form.notepad_choices("");
+    assert_eq!(places.iter().map(|r| (r.title.as_str(), r.detail.as_str())).collect::<Vec<_>>(), [("Ohne Ordner", ""), ("Uni", "Aktuell")], "Not into itself; where it is now is marked.");
+    t.form.notes_list_key("escape");
+    // The note dragged onto Uni.
+    let rows = t.form.notepad_choices("");
+    let skript = rows.iter().position(|r| r.title == "Skript").unwrap();
+    t.form.notes_list_drop(&rows[skript].key, 0);
+    assert_eq!(titles(&mut t), ["Uni", "  Mathe", "  Skript <"]);
+    let card = notebook::Card::open(&t.form.journal.as_ref().unwrap().store, note).unwrap();
+    let folders = notebook::folder_list(&t.form.journal.as_ref().unwrap().store).unwrap();
+    assert_eq!(card.folder.as_deref(), folders.iter().find(|f| f.name == "Uni").map(|f| f.id.as_str()));
+    assert_eq!(folders.iter().find(|f| f.name == "Mathe").unwrap().parent.as_deref(), card.folder.as_deref());
+    // Enter on a folder closes it; Enter on a note opens it.
+    t.form.notes_list_key("home");
+    t.form.notes_list_key("enter");
+    assert_eq!(titles(&mut t), ["Uni <"]);
+    t.form.notes_list_key("enter");
+    t.form.notes_list_key("down");
+    t.form.notes_list_key("down");
+    t.form.notes_list_key("enter");
+    assert_eq!(t.form.notepad().unwrap().title(), "Skript");
+}
+#[test]
+fn an_entry_opened_in_the_form_is_deleted_with_the_choice_of_its_series() {
+    let mut t = test();
+    type_in(&mut t.form, "Kurs");
+    t.form.v.rule = Some(Rule::new(d("2026-11-18"), crate::repeat::Unit::Week, 1));
+    t.form.key(Key::Enter, CTRL);
+    let id = day(&t, "2026-11-25")[0].id.clone();
+    t.form.edit_hit(d("2026-11-25"), &id);
+    assert!(t.form.editing_entry());
+    t.form.toggle_menu();
+    let labels: Vec<String> = t.form.menu_items().1.iter().map(|item| item.label.clone()).collect();
+    // The ways to delete are the last lines, the smallest at the very bottom: ↑ from the first line reaches it.
+    let deletes: Vec<&str> = labels.iter().map(String::as_str).filter(|label| label.ends_with("löschen")).collect();
+    assert_eq!(deletes.last(), Some(&"Nur diesen löschen"), "{labels:?}");
+    assert!(deletes[0].starts_with("Alle") && labels.ends_with(&deletes.iter().map(|s| s.to_string()).collect::<Vec<_>>()), "{labels:?}");
+    t.form.menu_key(Key::Up);
+    assert_eq!(t.form.menu_view().unwrap().pick, labels.len() - 1);
+    t.form.close_menu();
+    // The delete key (Alt+Entf) still asks which ones.
+    let effect = t.form.key(Key::Delete, ALT);
+    assert!(!t.form.view().entry_open, "The form closes; its day shows.");
+    assert_eq!(t.form.day_shown(), d("2026-11-25"));
+    let side = t.form.view().side.unwrap();
+    let scopes: Vec<String> = side.rows.iter().map(|row| row.label.clone()).collect();
+    assert_eq!((side.kind, scopes.first().map(String::as_str)), (7, Some("Nur diesen")), "{scopes:?}");
+    assert!(scopes.last().unwrap().starts_with("Alle"));
+    assert_eq!(effect.focus, Some(Pane::Day));
+    let all = scopes.len() - 1;
+    t.form.with_pane(|pane, cx| pane.choose(cx, all));
+    for date in ["2026-11-18", "2026-11-25", "2026-12-02"] { assert!(day(&t, date).is_empty(), "{date}"); }
+    // A single entry goes at once.
+    t.form.search_edited("/entry");
+    t.form.key(Key::Enter, NONE);
+    type_in(&mut t.form, "Einmal");
+    t.form.key(Key::Enter, CTRL);
+    let id = day(&t, "2026-11-18")[0].id.clone();
+    t.form.edit_hit(d("2026-11-18"), &id);
+    t.form.run(ActionId::EntryDelete, None);
+    assert!(day(&t, "2026-11-18").is_empty());
+}
+
+#[test]
+fn notes_are_deleted_after_asking_and_folders_hand_their_contents_up() {
+    use serde_json::json;
+    let mut t = test();
+    t.form.close_entry();
+    let (note, other) = (uuid::Uuid::new_v4(), uuid::Uuid::new_v4());
+    let (top, inner) = (uuid::Uuid::new_v4().to_string(), uuid::Uuid::new_v4().to_string());
+    {
+        let store = &t.form.journal.as_ref().unwrap().store;
+        let put = |key: String, value: serde_json::Value| { store.conn.execute("INSERT INTO settings(key,value) VALUES(?1,?2)", rusqlite::params![key, value.to_string()]).unwrap(); };
+        put(format!("board:folder:{top}"), json!({"id": top, "name": "Oben", "parent": null, "order": 0}));
+        put(format!("board:folder:{inner}"), json!({"id": inner, "name": "Innen", "parent": top, "order": 0}));
+        put(format!("board:card:{note}"), json!({"id": note.to_string(), "kind":"note", "title":"Weg", "dates":[], "created":"2026-11-18", "notebook":true, "folder": inner}));
+        put(format!("board:card:{other}"), json!({"id": other.to_string(), "kind":"note", "title":"Bleibt", "dates":[], "created":"2026-11-18", "notebook":true, "folder": top, "links": [note.to_string()]}));
+    }
+    t.form.open_notepad();
+    t.form.set_notepad_day_filter(false);
+    let titles = |t: &mut Test| t.form.notepad_choices("").iter().map(|r| format!("{}{}", "  ".repeat(r.depth), r.title)).collect::<Vec<_>>();
+    assert_eq!(titles(&mut t), ["Oben", "  Innen", "    Weg", "  Bleibt"]);
+    // Entf on a note asks first; Esc keeps it.
+    t.form.notepad_choices("");
+    for _ in 0..2 { t.form.notes_list_key("down"); }
+    t.form.notes_list_key("delete");
+    assert_eq!(t.form.notes_list_hint().unwrap().0, "Zettel endgültig löschen?");
+    assert_eq!(titles(&mut t), ["„Weg“ endgültig löschen (auch von der Pinnwand)", "Abbrechen"]);
+    t.form.notes_list_key("escape");
+    assert_eq!(titles(&mut t).len(), 4);
+    // Strg+K → delete, Enter on the first line.
+    t.form.toggle_menu();
+    assert!(t.form.menu_items().1.iter().any(|item| item.id == ActionId::NoteDelete && item.danger));
+    t.form.run(ActionId::NoteDelete, None);
+    t.form.notes_list_key("enter");
+    assert_eq!(titles(&mut t), ["Oben", "  Innen", "  Bleibt"]);
+    let store = &t.form.journal.as_ref().unwrap().store;
+    assert!(notebook::Card::open(store, note).is_err(), "Gone.");
+    assert_eq!(notebook::Card::open(store, other).unwrap().original.unwrap()["links"], json!([]), "No link to it is left.");
+    // The folder Oben goes: Innen and Bleibt move up.
+    t.form.notes_list_key("home");
+    t.form.toggle_menu();
+    t.form.run(ActionId::FolderDelete, None);
+    assert_eq!(titles(&mut t), ["Innen", "Bleibt"]);
+    assert!(crate::save::step(&mut t.form.journal.as_mut().unwrap().store, false).unwrap(), "Strg+Z brings it back.");
+    assert_eq!(titles(&mut t), ["Oben", "  Innen", "  Bleibt"]);
+}
+
+#[test]
+fn the_note_open_in_the_notepad_can_be_deleted_from_its_actions() {
+    let mut t = test();
+    t.form.close_entry();
+    t.form.search_edited("/Notizblock");
+    t.form.key(Key::Enter, NONE);
+    t.form.new_notepad_note();
+    t.form.edit_notepad(false, "Kurz");
+    t.form.finish_notepad(true);
+    let id = t.form.notepad().unwrap().card.id;
+    t.form.toggle_menu();
+    assert!(t.form.menu_items().1.iter().any(|item| item.id == ActionId::NoteDelete));
+    t.form.run(ActionId::NoteDelete, None);
+    assert_eq!(t.form.notepad().unwrap().panel, 1, "Back to the list, asked there.");
+    t.form.notes_list_key("enter");
+    assert!(notebook::Card::open(&t.form.journal.as_ref().unwrap().store, id).is_err());
+}
+#[test]
+fn the_ways_to_delete_a_series_are_lines_of_the_actions_and_take_effect_at_once() {
+    let mut t = test();
+    type_in(&mut t.form, "Kurs");
+    t.form.v.rule = Some(Rule::new(d("2026-11-18"), crate::repeat::Unit::Week, 1));
+    t.form.key(Key::Enter, CTRL);
+    t.form.close_entry();
+    t.form.show_day(d("2026-11-25"));
+    let id = day(&t, "2026-11-25")[0].id.clone();
+    t.form.pane.cursor = Some(crate::day_view::Item::Entry(id.clone()));
+    t.form.toggle_menu();
+    let items = t.form.menu_items().1;
+    let last = items.last().unwrap();
+    assert_eq!((last.label.as_str(), last.danger, last.section), ("Nur diesen löschen", true, 2));
+    assert!(!items.iter().any(|item| item.id == ActionId::Entry(day_pane::Action::Delete)), "No single line that asks.");
+    let at = items.len() - 1;
+    t.form.menu_choose(at);
+    assert!(day(&t, "2026-11-25").is_empty(), "Only this one, without asking.");
+    assert_eq!((day(&t, "2026-11-18").len(), day(&t, "2026-12-02").len()), (1, 1));
+}
+#[test]
+fn strg_k_while_writing_a_new_entry_writes_it_and_opens_its_actions() {
+    let mut t = test();
+    t.form.close_entry();
+    t.form.create_in_day(1);
+    assert!(t.form.pane.edit.is_some(), "The footer's task icon starts a new task.");
+    t.form.with_pane(|pane, _| pane.edited("Brief schreiben"));
+    t.form.toggle_menu();
+    assert_eq!(day(&t, "2026-11-18")[0].text, "Brief schreiben", "Written without Esc or Enter.");
+    let (title, items) = t.form.menu_items();
+    assert_eq!(title, "Brief schreiben", "The actions are about it.");
+    assert!(items.iter().any(|item| item.id == ActionId::Entry(day_pane::Action::Tag)));
 }

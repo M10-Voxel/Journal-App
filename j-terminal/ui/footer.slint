@@ -47,6 +47,9 @@ export component Footer inherits Rectangle {
     in property <string> toast;
     in property <bool> toast-is-error;
     in property <[FooterHint]> hints;
+    // In the day view: the types to make (event, task, note) as icons only; a click makes one.
+    in property <[image]> create-icons;
+    callback create(int);
     in property <image> success-icon;
     in property <image> error-icon;
     callback action(int);
@@ -100,9 +103,21 @@ export component Footer inherits Rectangle {
                 status-touch := TouchArea {}
             }
         }
+        if root.create-icons.length > 0: HorizontalLayout {
+            spacing: Theme.footer-create-spacing;
+            for icon[i] in root.create-icons: Rectangle {
+                width: Theme.footer-hint-height; height: self.width; y: (parent.height - self.height) / 2;
+                // Only the icon lights up, as the day arrows do.
+                Image {
+                    width: Theme.footer-icon-size; height: self.width; x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2;
+                    source: icon; colorize: create-touch.pressed ? Theme.accent : create-touch.has-hover ? Theme.strong : Theme.muted;
+                }
+                create-touch := TouchArea { mouse-cursor: MouseCursor.default; clicked => { root.create(i); } }
+            }
+        }
         for hint[i] in root.hints: HorizontalLayout {
             spacing: Theme.footer-gap;
-            if i > 0: Rectangle { width: Theme.border-width; height: Theme.keycap-height - 4px; y: (parent.height - self.height) / 2; background: Theme.divider; }
+            if i > 0 || root.create-icons.length > 0: Rectangle { width: Theme.border-width; height: Theme.keycap-height - 4px; y: (parent.height - self.height) / 2; background: Theme.divider; }
             Rectangle {
                 width: hint-row.preferred-width;
                 height: Theme.footer-hint-height;

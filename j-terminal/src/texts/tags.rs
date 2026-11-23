@@ -20,3 +20,36 @@ pub fn icon(language: Language) -> &'static str { ["Symbol", "Icon"][l(language)
 pub fn no_icon(language: Language) -> &'static str { ["Kein Symbol", "No icon"][l(language)] }
 pub fn icon_search(language: Language) -> &'static str { ["Symbol suchen", "Search icons"][l(language)] }
 pub fn bad_name(language: Language) -> &'static str { ["Name fehlt, ist länger als 40 Zeichen oder schon vergeben", "The name is missing, longer than 40 characters or taken"][l(language)] }
+
+// The notepad's list: folders made, named and moved.
+pub fn new_folder(language: Language) -> &'static str { ["Neuer Ordner", "New folder"][l(language)] }
+pub fn subfolder(language: Language) -> &'static str { ["Unterordner anlegen", "New subfolder"][l(language)] }
+pub fn new_note_here(language: Language) -> &'static str { ["Neuer Zettel hier", "New note here"][l(language)] }
+pub fn rename(language: Language) -> &'static str { ["Umbenennen", "Rename"][l(language)] }
+pub fn rename_folder(language: Language) -> &'static str { ["Neuer Name des Ordners", "New name of the folder"][l(language)] }
+pub fn move_item(language: Language) -> &'static str { ["Verschieben nach …", "Move to …"][l(language)] }
+pub fn folder_name_hint(language: Language) -> &'static str { ["Namen tippen, Enter legt ihn an (höchstens 120 Zeichen)", "Type a name, Enter makes it (120 characters at most)"][l(language)] }
+pub fn new_subfolder(parent: &str, language: Language) -> String {
+    if language == Language::En { format!("New folder in “{parent}”") } else { format!("Neuer Ordner in „{parent}“") }
+}
+pub fn move_to(name: &str, language: Language) -> String {
+    if language == Language::En { format!("Move “{name}” to …") } else { format!("„{name}“ verschieben nach …") }
+}
+
+pub fn delete_note(language: Language) -> &'static str { ["Zettel löschen", "Delete note"][l(language)] }
+pub fn delete_folder(language: Language) -> &'static str { ["Ordner löschen (Inhalt rückt nach oben)", "Delete folder (its contents move up)"][l(language)] }
+pub fn delete_entry(language: Language) -> &'static str { ["Löschen", "Delete"][l(language)] }
+pub fn cancel(language: Language) -> &'static str { ["Abbrechen", "Cancel"][l(language)] }
+pub fn confirm_delete(name: &str, language: Language) -> String {
+    if language == Language::En { format!("Delete “{name}” for good (also from the board)") } else { format!("„{name}“ endgültig löschen (auch von der Pinnwand)") }
+}
+pub fn delete_question(language: Language) -> &'static str { ["Zettel endgültig löschen?", "Delete the note for good?"][l(language)] }
+pub fn deleted(language: Language) -> &'static str { ["Gelöscht – Strg+Z holt es zurück", "Deleted – Ctrl+Z brings it back"][l(language)] }
+/// A way to delete as a line of the actions: "Nur diesen löschen", "Delete every Friday".
+pub fn delete_scope(scope: &str, language: Language) -> String {
+    if language == Language::En {
+        let mut chars = scope.chars();
+        let lower = chars.next().map(|c| c.to_lowercase().collect::<String>() + chars.as_str()).unwrap_or_default();
+        format!("Delete {lower}")
+    } else { format!("{scope} löschen") }
+}

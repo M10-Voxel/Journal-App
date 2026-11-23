@@ -16,6 +16,14 @@ pub enum Id {
     Save, SaveStay, Priority, Repeat, Plan, Description, Reminder, Icon, Discard,
     /// A template being written (`/Vorlage Name`) is deleted.
     TemplateDelete,
+    /// The notepad's list: a folder (at the top or inside the one chosen), its name, moving the line chosen, a note in
+    /// the folder chosen.
+    FolderNew, FolderSub, FolderRename, ListMove, NotesNewHere,
+    /// A note (after asking) or a folder (what is in it moves up) is deleted; an entry opened in the form is deleted
+    /// (asking which of its series or plan when there are more).
+    NoteDelete, FolderDelete, EntryDelete,
+    /// One of the ways to delete an entry with a series or plans (the index among `day::delete_scopes`), at once.
+    DeleteScope(u8),
     /// The notepad.
     NotesNew, NotesEdit, NotesSave, NotesPreview, NotesTag, NotesFolder, NotesAttachments, NotesList, NotesClose,
 }
@@ -58,7 +66,8 @@ impl Id {
             Id::NotesTag => "notes-tag",
             Id::NotesAttachments => "notes-attachments",
             Id::NotesList => "notes-list",
-            Id::Repeat | Id::Plan | Id::Discard | Id::TemplateDelete | Id::NotesFolder | Id::NotesClose => return None,
+            Id::NoteDelete | Id::FolderDelete | Id::EntryDelete => "day-remove",
+            Id::Repeat | Id::Plan | Id::Discard | Id::TemplateDelete | Id::FolderNew | Id::FolderSub | Id::FolderRename | Id::ListMove | Id::NotesNewHere | Id::DeleteScope(_) | Id::NotesFolder | Id::NotesClose => return None,
         })
     }
 

@@ -385,18 +385,23 @@ export global Theme {
     out property <length> compact-row-height: 28px;
     out property <length> compact-search-height: 32px;
     // The tag editor (a tag just made): the Journal app's colour picker and an icon grid, in a card over the window.
-    out property <length> tag-editor-width: 360px;
-    out property <length> tag-editor-padding: 14px;
-    out property <color> tag-editor-backdrop: #00000080;
-    out property <length> tag-field-height: 130px;
+    out property <length> tag-editor-spacing: 8px;
+    out property <length> tag-field-height: 96px;
+    out property <length> tag-hex-width: 96px;
+    out property <length> tag-icon-cell: 38px;
     out property <length> tag-hue-height: 12px;
-    out property <length> tag-swatch: 22px;
+    out property <length> tag-swatch: 20px;
     out property <length> tag-knob: 14px;
     out property <length> tag-knob-ring: 2px;
     out property <color> tag-knob-light: #ffffff;
     out property <color> tag-knob-shadow: #00000099;
     out property <color> tag-field-dark: #000000;
-    out property <int> tag-icon-rows: 3;
+    out property <int> tag-icon-rows: 2;
+    // The icons that make an event, a task or a note in the footer of the day view.
+    out property <length> footer-create-spacing: 2px;
+    // The notepad's list as a tree: how far a level goes in, and how far a line moves before it is dragged.
+    out property <length> notepad-tree-indent: 16px;
+    out property <length> notepad-drag-distance: 6px;
     out property <length> side-value-width: 110px;
     out property <int> side-icon-columns: 7;
     out property <length> side-icon-cell: 44px;

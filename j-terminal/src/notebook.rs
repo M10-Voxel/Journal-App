@@ -34,6 +34,8 @@ pub struct Item {
     pub title: String,
     pub detail: String,
     pub folder: Option<Vec<(i64, String)>>,
+    /// The folder the note is in (an unknown one counts as none).
+    pub folder_id: Option<String>,
     pub image: Option<ImageSource>,
 }
 
@@ -207,29 +209,143 @@ pub fn new_folder_name(folders: &[(String, String)], query: &str) -> Option<Stri
     (!name.is_empty() && name.chars().count() <= 120 && !taken).then(|| name.to_string())
 }
 
-/// A new folder at the top, after the others there (as the app makes it: `board:folder:{id}`, id, name, parent, order).
-pub fn create_folder(store: &mut Store, name: &str) -> Result<String, SaveError> {
+/// A folder of the notebook, as the app keeps it: `board:folder:{id}` → `{"id","name","parent","order"}`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Folder { pub id: String, pub name: String, pub parent: Option<String>, pub order: i64 }
+
+fn read_folders(conn: &Connection) -> Result<Vec<(Folder, Value)>, SaveError> {
+    let mut statement = conn.prepare_cached("SELECT value FROM settings WHERE key >= 'board:folder:' AND key < 'board:folder;'")?;
+    let rows = statement.query_map([], |row| row.get::<_, String>(0))?;
+    let mut folders = Vec::new();
+    for row in rows {
+        let value: Value = serde_json::from_str(&row?).map_err(|error| SaveError::Store(error.to_string()))?;
+        let Some(id) = value["id"].as_str() else { continue };
+        folders.push((Folder { id: id.to_owned(), name: text(&value, "name").to_owned(), parent: value["parent"].as_str().map(str::to_owned),
+            order: value["order"].as_i64().unwrap_or_default() }, value));
+    }
+    Ok(folders)
+}
+
+/// All folders, by their order and name.
+pub fn folder_list(store: &Store) -> Result<Vec<Folder>, SaveError> {
+    let mut folders: Vec<Folder> = read_folders(&store.conn)?.into_iter().map(|(folder, _)| folder).collect();
+    folders.sort_by(|a, b| (a.order, a.name.to_lowercase()).cmp(&(b.order, b.name.to_lowercase())));
+    Ok(folders)
+}
+
+/// A folder may go into `parent` when that is none, or neither the folder itself nor one inside it (`canMoveFolder`).
+pub fn can_move_folder(folders: &[Folder], id: &str, parent: Option<&str>) -> bool {
+    let mut at = parent;
+    let mut seen = BTreeSet::new();
+    while let Some(current) = at {
+        if current == id || !seen.insert(current) { return false; }
+        at = folders.iter().find(|f| f.id == current).and_then(|f| f.parent.as_deref());
+    }
+    true
+}
+
+/// After the last folder in `parent` (`nextFolderOrder`).
+fn next_folder_order(folders: &[Folder], parent: Option<&str>) -> i64 {
+    folders.iter().filter(|f| f.parent.as_deref() == parent).map(|f| f.order).max().map_or(0, |order| order + 1)
+}
+
+fn folder_name(name: &str) -> Result<&str, SaveError> {
     let name = name.trim();
     if name.is_empty() || name.chars().count() > 120 { return Err(SaveError::Store("folder name".into())); }
+    Ok(name)
+}
+
+fn write_folder(conn: &Connection, id: &str, value: &Value) -> Result<(), SaveError> {
+    conn.execute("INSERT INTO settings(key,value) VALUES(?1,?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+        rusqlite::params![format!("board:folder:{id}"), value.to_string()])?;
+    Ok(())
+}
+
+/// A new folder in `parent` (none: at the top), after the others there.
+pub fn create_folder(store: &mut Store, name: &str, parent: Option<&str>) -> Result<String, SaveError> {
+    let name = folder_name(name)?;
     let tx = store.conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
-    let order = {
-        let mut statement = tx.prepare_cached("SELECT value FROM settings WHERE key >= 'board:folder:' AND key < 'board:folder;'")?;
-        let rows = statement.query_map([], |row| row.get::<_, String>(0))?;
-        let mut highest = -1i64;
-        for row in rows {
-            let folder: Value = serde_json::from_str(&row?).map_err(|error| SaveError::Store(error.to_string()))?;
-            if folder["parent"].is_null() { highest = highest.max(folder["order"].as_i64().unwrap_or_default()); }
-        }
-        highest + 1
-    };
+    let folders: Vec<Folder> = read_folders(&tx)?.into_iter().map(|(folder, _)| folder).collect();
+    if parent.is_some_and(|parent| !folders.iter().any(|f| f.id == parent)) { return Err(SaveError::Conflict); }
     let id = Uuid::new_v4().to_string();
     history::begin(&tx)?;
-    tx.execute("INSERT INTO settings(key,value) VALUES(?1,?2)",
-        rusqlite::params![format!("board:folder:{id}"), json!({ "id": id, "name": name, "parent": null, "order": order }).to_string()])?;
+    write_folder(&tx, &id, &json!({ "id": id, "name": name, "parent": parent, "order": next_folder_order(&folders, parent) }))?;
     tx.commit()?;
     Ok(id)
 }
 
+/// The folder gets another name.
+pub fn rename_folder(store: &mut Store, id: &str, name: &str) -> Result<(), SaveError> {
+    let name = folder_name(name)?;
+    let tx = store.conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let (_, mut value) = read_folders(&tx)?.into_iter().find(|(f, _)| f.id == id).ok_or(SaveError::Conflict)?;
+    value["name"] = json!(name);
+    history::begin(&tx)?;
+    write_folder(&tx, id, &value)?;
+    tx.commit()?;
+    Ok(())
+}
+
+/// The folder goes into `parent` (none: to the top), after the others there; not into itself or one inside it.
+pub fn move_folder(store: &mut Store, id: &str, parent: Option<&str>) -> Result<bool, SaveError> {
+    let tx = store.conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let all = read_folders(&tx)?;
+    let folders: Vec<Folder> = all.iter().map(|(folder, _)| folder.clone()).collect();
+    let (folder, mut value) = all.into_iter().find(|(f, _)| f.id == id).ok_or(SaveError::Conflict)?;
+    if folder.parent.as_deref() == parent || !can_move_folder(&folders, id, parent) { return Ok(false); }
+    value["parent"] = json!(parent);
+    value["order"] = json!(next_folder_order(&folders, parent));
+    history::begin(&tx)?;
+    write_folder(&tx, id, &value)?;
+    tx.commit()?;
+    Ok(true)
+}
+
+/// The note goes into the folder (none: out of every folder).
+pub fn move_note(store: &mut Store, id: Uuid, folder: Option<&str>) -> Result<bool, SaveError> {
+    let tx = store.conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let mut card = read(&tx, id)?.ok_or(SaveError::Conflict)?;
+    if card["folder"].as_str() == folder { return Ok(false); }
+    card["folder"] = json!(folder);
+    history::begin(&tx)?;
+    write(&tx, &id.to_string(), &card)?;
+    tx.commit()?;
+    Ok(true)
+}
+
+/// The note goes for good, as in the app (also from the board): with the attachments made for it alone; other cards
+/// lose their links to it.
+pub fn remove_note(store: &mut Store, id: Uuid) -> Result<(), SaveError> {
+    let cards = journal_core::board::cards(&store.conn).map_err(SaveError::Store)?;
+    if !cards.iter().any(|card| card["id"] == id.to_string()) { return Err(SaveError::Conflict); }
+    let changes = crate::board::removal(&cards, &BTreeSet::from([id.to_string()]));
+    journal_core::board::edit(store, &changes).map_err(SaveError::Store)
+}
+
+/// The folder goes; what was in it (its folders and notes) moves up to where it was (`remove_folder` of the app).
+pub fn remove_folder(store: &mut Store, id: &str) -> Result<(), SaveError> {
+    let tx = store.conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let all = read_folders(&tx)?;
+    let (folder, _) = all.iter().find(|(f, _)| f.id == id).cloned().ok_or(SaveError::Conflict)?;
+    let folders: Vec<Folder> = all.iter().map(|(f, _)| f.clone()).collect();
+    history::begin(&tx)?;
+    let mut order = next_folder_order(&folders, folder.parent.as_deref());
+    for (child, mut value) in all.into_iter().filter(|(f, _)| f.parent.as_deref() == Some(id)) {
+        value["parent"] = json!(folder.parent);
+        value["order"] = json!(order);
+        order += 1;
+        write_folder(&tx, &child.id, &value)?;
+    }
+    for mut card in self::all(&tx)? {
+        if card["folder"].as_str() != Some(id) { continue; }
+        card["folder"] = json!(folder.parent);
+        let card_id = text(&card, "id").to_owned();
+        write(&tx, &card_id, &card)?;
+    }
+    tx.execute("DELETE FROM settings WHERE key = ?1", [format!("board:folder:{id}")])?;
+    tx.commit()?;
+    Ok(())
+}
 pub fn notes(store: &Store, query: &str, day: Option<NaiveDate>) -> Result<Vec<Item>, SaveError> {
     let words: Vec<_> = query.split_whitespace().map(str::to_lowercase).collect();
     let day = day.map(|date| date.to_string());
@@ -250,8 +366,9 @@ pub fn notes(store: &Store, query: &str, day: Option<NaiveDate>) -> Result<Vec<I
             if !words.iter().all(|word| haystack.contains(word)) { return None; }
         }
         let folder = folders.get(text(&card, "folder")).filter(|path| !path.is_empty()).cloned();
+        let folder_id = folder.as_ref().map(|_| text(&card, "folder").to_owned());
         Some(Item { id: text(&card, "id").parse().ok()?, title: text(&card, "title").to_owned(),
-            detail: text(&card, "created").to_owned(), folder, image: None })
+            detail: text(&card, "created").to_owned(), folder, folder_id, image: None })
     }).collect();
     items.sort_by(|a, b| a.folder.cmp(&b.folder));
     Ok(items)
@@ -280,7 +397,7 @@ impl Card {
                 if let Some(card) = read(&store.conn, id)? {
                     if card["kind"] == "link" || card["kind"] == "image" {
                         listed.push(Item { id, title: text(&card, "title").to_owned(), detail: text(&card, "url").to_owned(),
-                            folder: None, image: stored_image(&card, vault) });
+                            folder: None, folder_id: None, image: stored_image(&card, vault) });
                     }
                 }
             }
@@ -290,6 +407,7 @@ impl Card {
             title: item.title.clone(),
             detail: match &item.content { AttachmentContent::Link(url) => url.clone(), AttachmentContent::Image(_) => String::new() },
             folder: None,
+            folder_id: None,
             image: match &item.content { AttachmentContent::Image(bytes) => Some(ImageSource::Bytes(bytes.clone())), _ => None },
         }));
         Ok(listed)

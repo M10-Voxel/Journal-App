@@ -171,6 +171,26 @@ Offene Aufgaben. Erledigtes mit `[x]` markieren. Vollständiger Plan: `docs/plan
   - Ordner anlegen: Im Notizblock und auf der Pinnwand erscheint in der Ordner-Auswahl „Ordner „Name“ anlegen“. Der Ordner wird oben eingeordnet (`board:folder:{id}` mit `parent: null` und nächster `order`, wie in der App), mit Undo-Schritt.
   - 8 neue Tests: Farben/HSV/Hex, Editor-Tasten, Anlegen und Ändern in der Test-Datenbank sowie die Anlage-Wege in Formular, Notizblock und Tagesansicht. Der Slint-Pinnwandtest legt einen Tag an und wählt Farbe und Symbol per Tastatur. 199 Tests grün.
 
+- [x] **Notizblock: Ordnerbaum, Unterordner, Verschieben** – 23.11.2026, noch nicht committet.
+  - „Alle Zettel“ zeigt einen Baum wie in der App: Ordner mit Unterordnern und Zetteln, danach die Zettel ohne Ordner (`notes_list.rs`, `form/notes.rs`). Der Cursor liegt in Rust. ↑/↓ bewegen ihn, Pos1/Ende springen. → öffnet einen Ordner oder geht hinein, ← schließt ihn oder springt zum übergeordneten Ordner. Enter öffnet und schließt Ordner bzw. öffnet einen Zettel. Suche und „An diesem Tag“ zeigen wie bisher die gefundenen Zettel, jetzt ebenfalls mit Pfeilen.
+  - Strg+K oder Rechtsklick auf eine Zeile: „Neuer Ordner“, auf einem Ordner zusätzlich „Neuer Zettel hier“, „Unterordner anlegen“, „Umbenennen“ und „Verschieben nach …“, auf einem Zettel „Verschieben nach …“. Namen werden im Suchfeld getippt, Enter legt an, Esc bricht ab. „Verschieben nach …“ listet „Ohne Ordner“ und alle Ordnerpfade (filterbar, der aktuelle markiert, ein Ordner nicht in sich selbst).
+  - Ziehen mit der Maus: Eine Zeile auf einen Ordner gezogen landet darin, auf einen Zettel gezogen in dessen Ordner.
+  - Speicherformat wie in der App (`board:folder:{id}` mit `parent`/`order`, Karte `folder`), jede Änderung ein Undo-Schritt (`notebook::create_folder/rename_folder/move_folder/move_note`).
+  - Neue Tests für Baum, Pfeile, Unterordner, Umbenennen, Verschieben per Aktion und Ziehen sowie Zyklusschutz. Der Slint-Test prüft Pfeile, Strg+K → Unterordner und Ziehen mit der Maus. 203 Tests grün.
+
+- [x] **Löschen überall, Tag-Editor in der Strg+K-Box** – 23.11.2026, noch nicht committet.
+  - Einträge: Ein im Formular geöffneter Eintrag (aus Kalender oder Suche) hat in Strg+K „Löschen“. Die Tagesansicht springt auf seinen Tag und fragt bei Serien und Planungen wie in der App nach dem Umfang: „Nur diesen“, „Auch die folgenden“, „Jeden Dienstag“, „Alle N“. In der Tagesansicht gab es das schon (Entf bzw. Strg+K → „Löschen“ ganz unten).
+  - Zettel: In der Liste mit Entf oder über Strg+K/Rechtsklick „Zettel löschen“, im geöffneten Zettel über Strg+K. Vorher kommt eine Rückfrage wie in der App. Gelöscht wird wie auf der Pinnwand (`board::removal`), also mit den nur für den Zettel angelegten Anhängen und ohne verbleibende Verweise.
+  - Ordner: Entf oder „Ordner löschen (Inhalt rückt nach oben)“ wie in der App, ohne Rückfrage. Unterordner und Zettel wandern eine Ebene höher. Alles lässt sich mit Strg+Z zurückholen.
+  - Der Tag-Editor steht jetzt in derselben Karte wie Strg+K: gleiche Breite und Höchsthöhe, gleiche Stelle über dem Fußbereich, gleicher Kopf und Hintergrund. Hex und Symbolsuche stehen nebeneinander, das Symbolraster ist zweizeilig.
+  - 3 neue Tests (Eintrag aus dem Formular mit Serien-Umfang, Zettel/Ordner löschen mit Rückfrage, Undo und Linkbereinigung, geöffneten Zettel löschen). 206 Tests grün.
+
+- [x] **Löschen ganz unten, gestaffelt** – 23.11.2026, noch nicht committet.
+  - In allen Strg+K-Listen (Tagesansicht, Formular, Notizblock) steht Löschen als eigener Abschnitt ganz unten. ↑ von der ersten Zeile springt direkt dorthin. Auf der Pinnwand steht „Gruppe löschen“ direkt über „Karte löschen“.
+  - Bei Serien und Planungen stehen die Umfänge als eigene Zeilen, die sofort löschen. Von unten nach oben steigernd: „Nur diesen löschen“, „Jeden Dienstag löschen“, „Auch die folgenden löschen“, „Alle N löschen“ (`day::delete_scopes`, Rang).
+  - Das Kürzel „Löschen“ (Standard Alt+Entf, in F1 änderbar) gilt jetzt auch im Formular und im Notizblock. Es fragt wie bisher nach dem Umfang bzw. bei Zetteln nach Bestätigung.
+  - Neuer Test: Löschzeilen der Tagesansicht wirken direkt. Der Formular-Test prüft Reihenfolge, den ↑-Sprung und das Kürzel. 207 Tests grün.
+
 ## Offene Fragen
 - keine (Timer: entschieden am 19.11.2026, gemeinsam in der Datenbank)
 

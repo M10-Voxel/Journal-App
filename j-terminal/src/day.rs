@@ -120,8 +120,10 @@ pub enum SideView {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DeleteScope {
-    label: String,
-    ids: Vec<String>,
+    pub label: String,
+    pub ids: Vec<String>,
+    /// How much it takes, for the actions (bottom up): 3 only this one, 2 every same weekday, 1 the following, 0 all.
+    pub rank: u8,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -428,16 +430,30 @@ impl DayPane {
     fn delete(&mut self, cx: &mut Ctx, id: &str) -> Out {
         if Self::entry(cx, id).is_none() { self.message = Some((day_texts(cx.language).foreign.into(), false)); return Out { focus: true, ..Out::default() }; }
         let Some(store) = cx.store.as_deref() else { return self.report(Err(texts(cx.language).read_only.into())); };
-        let group = match store.linked(id) {
-            Ok(group) => group,
-            Err(error) => return self.report(Err(error.to_string())),
+        let mut scopes = match delete_scopes(store, id, cx.date, cx.language) {
+            Ok(scopes) => scopes,
+            Err(error) => return self.report(Err(error)),
         };
-        let Some(index) = group.iter().position(|entry| entry.id == id) else { return Out::default(); };
-        let en = cx.language == Language::En;
-        let mut scopes = vec![DeleteScope { label: if en { "Only this one" } else { "Nur diesen" }.into(), ids: vec![id.into()] }];
-        let mut add = |label: String, others: Vec<String>| {
+        if scopes.len() > 1 { return self.open_side(cx, id, SideView::Delete(scopes)); }
+        if scopes.is_empty() { return Out::default(); }
+        self.remove_entries(cx, id, scopes.remove(0).ids)
+    }
+
+    /// One of the ways to delete (listed in the actions) is taken at once.
+    pub fn remove_scope(&mut self, cx: &mut Ctx, id: &str, ids: Vec<String>) -> Out { self.remove_entries(cx, id, ids) }
+}
+
+/// The ways to delete an entry of `date` with what it is linked with (its series, its plans), as the app offers them:
+/// only this one, also the following, every same weekday, all. One way only when it stands alone.
+pub fn delete_scopes(store: &Store, id: &str, date: NaiveDate, language: Language) -> Result<Vec<DeleteScope>, String> {
+    {
+        let group = store.linked(id).map_err(|error| error.to_string())?;
+        let Some(index) = group.iter().position(|entry| entry.id == id) else { return Ok(Vec::new()); };
+        let en = language == Language::En;
+        let mut scopes = vec![DeleteScope { label: if en { "Only this one" } else { "Nur diesen" }.into(), ids: vec![id.into()], rank: 3 }];
+        let mut add = |label: String, others: Vec<String>, rank: u8| {
             let ids = std::iter::once(id.to_owned()).chain(others).collect();
-            scopes.push(DeleteScope { label, ids });
+            scopes.push(DeleteScope { label, ids, rank });
         };
         let following = group.len() - index - 1;
         if following > 0 {
@@ -447,23 +463,25 @@ impl DayPane {
                 (true, _) => format!("Also the next {following}"),
                 (false, _) => format!("Auch die {following} folgenden"),
             };
-            add(label, group[index + 1..].iter().map(|entry| entry.id.clone()).collect());
+            add(label, group[index + 1..].iter().map(|entry| entry.id.clone()).collect(), 1);
         }
-        let weekday = repeat::weekday_of(cx.date);
+        let weekday = repeat::weekday_of(date);
         let occurrences: Vec<_> = group.iter().filter(|entry| entry.id != id && !entry.trace).collect();
         let same: Vec<_> = occurrences.iter().filter(|entry| entry.date.parse::<NaiveDate>().is_ok_and(|date| repeat::weekday_of(date) == weekday))
             .map(|entry| entry.id.clone()).collect();
         if !same.is_empty() && same.len() < occurrences.len() {
-            let name = day_texts(cx.language).weekdays[weekday as usize];
-            add(if en { format!("Every {name}") } else { format!("Jeden {name}") }, same);
+            let name = day_texts(language).weekdays[weekday as usize];
+            add(if en { format!("Every {name}") } else { format!("Jeden {name}") }, same, 2);
         }
         if index > 0 {
             let total = group.len();
-            add(if en { format!("All {total}") } else { format!("Alle {total}") }, group.iter().filter(|entry| entry.id != id).map(|entry| entry.id.clone()).collect());
+            add(if en { format!("All {total}") } else { format!("Alle {total}") }, group.iter().filter(|entry| entry.id != id).map(|entry| entry.id.clone()).collect(), 0);
         }
-        if scopes.len() > 1 { return self.open_side(cx, id, SideView::Delete(scopes)); }
-        self.remove_entries(cx, id, scopes.remove(0).ids)
+        Ok(scopes)
     }
+}
+
+impl DayPane {
 
     fn remove_entries(&mut self, cx: &mut Ctx, id: &str, ids: Vec<String>) -> Out {
         // The chosen line goes to the next one (or the one before).

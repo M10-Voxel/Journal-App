@@ -786,8 +786,17 @@ impl Board {
         } else {
             BTreeSet::from([self.selected.clone()])
         };
+        let changes = removal(&self.cards, &ids);
+        self.apply(store, changes)
+    }
+}
+
+/// What removing the cards `ids` changes, as the app does it: the cards go, with the notebook attachments made for them
+/// alone (no day, on no board, linked only to them); other cards lose their links to what went.
+pub fn removal(cards: &[Value], ids: &BTreeSet<String>) -> Vec<(Value, Value)> {
+    {
         let mut remove = ids.clone();
-        for c in &self.cards {
+        for c in cards {
             if c["kind"] != "note"
                 && c["notebook"] == true
                 && members(c, "dates").next().is_none()
@@ -795,7 +804,7 @@ impl Board {
                     .as_object()
                     .is_some_and(|v| v.values().any(Value::is_object))
                 && members(c, "links").all(|id| ids.contains(id))
-                && self.cards.iter().any(|n| {
+                && cards.iter().any(|n| {
                     ids.contains(text(n, "id"))
                         && n["kind"] == "note"
                         && members(n, "links").any(|id| id == text(c, "id"))
@@ -804,8 +813,7 @@ impl Board {
                 remove.insert(text(c, "id").into());
             }
         }
-        let changes = self
-            .cards
+        cards
             .iter()
             .filter_map(|c| {
                 if remove.contains(text(c, "id")) {
@@ -819,8 +827,7 @@ impl Board {
                 }
                 (n != *c).then(|| (c.clone(), n))
             })
-            .collect();
-        self.apply(store, changes)
+            .collect()
     }
 }
 
