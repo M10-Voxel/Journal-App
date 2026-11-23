@@ -15,7 +15,7 @@ on:
 permissions:
   contents: read
 env:
-  RELEASE_CORE: 583d1dbfcc478ec221905bc4e5dda57bcecbfb11
+  RELEASE_CORE: 7265fe768c4527fbd7791c887f78d4c201ad4fd5
 jobs:
   package:
     if: github.ref == 'refs/heads/J-TerminaL' || github.event_name == 'push'

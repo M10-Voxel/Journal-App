@@ -1968,6 +1968,22 @@ impl Form {
     /// Back to today (a click on the day view's date, Alt+H).
     pub fn show_today(&mut self) { self.show_day(self.today) }
 
+    /// A reminder card's title was clicked: the day view shows the reminder's day. An entry form with
+    /// unsaved changes stays open.
+    pub fn reveal_day(&mut self, day: NaiveDate) {
+        if !self.dirty() { self.entry_open = false; }
+        self.show_day(day);
+    }
+
+    /// "Erledigt" on a reminder card: the task is done, as with the app's reminder (`change_linked`).
+    pub fn finish_task(&mut self, id: &str) -> Result<(), String> {
+        let Some(journal) = self.journal.as_mut() else { return Ok(()) };
+        let dates = journal.store.change_linked(&[journal_core::storage::LinkedChange { id: id.to_string(), action: "done".into() }]).map_err(|e| e.to_string())?;
+        let dates: Vec<NaiveDate> = dates.iter().filter_map(|date| date.parse().ok()).collect();
+        if let Some(snapshot) = self.snapshot.as_mut() { snapshot.reload_days(&journal.store, &dates)?; }
+        Ok(())
+    }
+
     /// Runs `f` with the day view and what it needs (the store, the warm data, the day shown, the clock).
     pub fn with_pane<T>(&mut self, f: impl FnOnce(&mut DayPane, &mut day_pane::Ctx) -> T) -> T {
         let date = self.day_shown();

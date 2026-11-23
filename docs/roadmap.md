@@ -128,6 +128,7 @@ Offene Aufgaben. Erledigtes mit `[x]` markieren. Vollständiger Plan: `docs/plan
 - [x] Den grauen Rand über beiden Fensterhälften zeichnen und beim Aktualisieren der Kontur das Neuzeichnen der Windows-Titelleiste vermeiden.
 - [x] Deckenden Fensterkopf beim Wiederöffnen verwenden. Nativer Test mit kontrastierendem Hintergrund und drei Öffnungsvorgängen.
 - [x] Die Rahmenlinie nach innen versetzen und den Verlauf an allen vier Eckbögen im Rendertest prüfen.
+- [x] Mit Acrylic Hintergrund und Fensterinhalt durch Windows gemeinsam abrunden und die Kontur dunkelgrau zeichnen. Der native Wiederöffnungstest prüft alle vier Ecken und die Randfarbe vor einem kontrastierenden Hintergrund.
 - [x] **Tagesansicht bedienbar, Seitenfenster links, gemeinsame Timer** – 19.11.2026, noch nicht committet (beide Branches).
   - Einträge „nur im Kalender“ erscheinen nur im Kalender.
   - Arbeiten wie auf der Tagesseite der App (`day.rs`, `day_ops.rs`): Titel des Tages, Einträge schreiben (Enter, Alt+A/E/N, Enter → nächster), erledigt/abgebrochen/wichtig, Typ, morgen, planen auf einen oder mehrere Tage (Spur bleibt), Uhrzeit mit gleicher Dauer, Erinnerung, Tag, Symbol, Beschreibung, verschieben, löschen. Gleiche Kürzel wie die App. Jede Änderung liest den Tag frisch und speichert über `journal-core` (Revision, Kopien, Historie).
@@ -153,6 +154,10 @@ Offene Aufgaben. Erledigtes mit `[x]` markieren. Vollständiger Plan: `docs/plan
   - [x] „Made with Slint“-Logo in den generierten Release-Notizen.
   - [x] Eigenständiger Erststart mit gemeinsamem Journalformat, Pinnwänden und Ausweichkürzel bei Systemkonflikten.
   - [x] GitHub-Release [J-TerminaL 0.1.0](https://github.com/M10-Voxel/Journal-App/releases/tag/j-terminal-v0.1.0) mit Setup und portabler EXE veröffentlicht. Windows-Build, Tests, Installation, Erststart und Deinstallation auf dem Runner bestanden.
+- [x] **Erinnerungen auch ohne Journal-App** – 23.11.2026, J-TerminaL 0.2.0 (Datenkern Windows `7265fe7`).
+  - `reminder.rs` prüft jede Minute `Store::due_reminders`, solange die Journal-App nicht läuft (Sperre `de.journal.local-sim`). Dank `reminder_log` kommt jede Erinnerung nur einmal.
+  - Karten unten rechts (`ui/reminder.slint`): ohne Fokus, mit Ton, nur mit der Maus. Titel öffnet den Tag, dazu „Erledigt“, „n Min. später“ (Mausrad ±1 Min., Standard 10) und „Ausblenden“.
+  - 5 neue Tests (Texte, Mausrad, Kartenliste, fällig/einmal/Schlummern/erledigt gegen Test-Datenbank, Sperrerkennung). Nativ geprüft mit Test-Journal: Karten, Mausrad 10→13, Ausblenden, Erledigt, Öffnen des Tages, Vordergrundfenster bleibt.
 
 ## Offene Fragen
 - keine (Timer: entschieden am 19.11.2026, gemeinsam in der Datenbank)

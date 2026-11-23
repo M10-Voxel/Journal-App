@@ -22,7 +22,7 @@ export global Theme {
     out property <color> raised: #ffffff0d;        // a card on the surface
     out property <color> hover: #ffffff0d;
     out property <color> selected: #ffffff1a;
-    out property <color> border: #ffffff24;        // the window's outline (where Windows does not draw one)
+    out property <color> border: #38363a;         // the window's outline, shared with DWM's opaque border
     out property <color> edge: #ffffff1a;
     out property <color> divider: #ffffff14;
     out property <color> text: #e4e4e4;
@@ -158,6 +158,14 @@ export global Theme {
     out property <length> footer-menu-stroke: 1.5px;
     out property <length> footer-menu-line-gap: 2px;
     out property <duration> toast-duration: 3s;
+    // The reminder cards at the bottom right of the screen (reminder.slint).
+    out property <length> reminder-width: 360px;
+    out property <length> reminder-margin: 12px;   // from the edges of the work area
+    out property <length> reminder-padding: 8px;   // the window around its cards
+    out property <length> reminder-inset: 12px;    // inside a card
+    out property <length> reminder-gap: 4px;       // between a card's lines
+    out property <length> reminder-link-gap: 16px; // between the clickable words
+    out property <length> reminder-link-height: 22px;
     out property <length> keycap-height: 18px;
     out property <length> keycap-min-width: 18px;
     out property <length> keycap-radius: 4px;

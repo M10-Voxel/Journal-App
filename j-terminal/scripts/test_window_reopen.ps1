@@ -38,14 +38,16 @@ $backdrop.Controls.Add($white)
 $backdrop.Show()
 $backdrop.Activate()
 
+function Read-PixelLight($dc, [int]$x, [int]$y) {
+    $rgb = [ReopenScreen]::GetPixel($dc, $x, $y)
+    if ($rgb -eq [uint32]::MaxValue) { throw "Desktop pixel unavailable at ($x,$y)" }
+    return $rgb -band 255
+}
+
 function Read-Light($dc, [int]$x, [int]$y) {
     # Average five vertical pixels to smooth the acrylic grain at this x.
     $sum = 0
-    foreach ($dy in -2..2) {
-        $rgb = [ReopenScreen]::GetPixel($dc, $x, $y + $dy)
-        if ($rgb -eq [uint32]::MaxValue) { throw "Desktop pixel unavailable at ($x,$y)" }
-        $sum += $rgb -band 255
-    }
+    foreach ($dy in -2..2) { $sum += Read-PixelLight $dc $x ($y + $dy) }
     return $sum / 5
 }
 
@@ -92,6 +94,19 @@ try {
             if (![ReopenScreen]::SetWindowPos($backdrop.Handle, $window, 0, 0, 0, 0, 0x13)) { throw 'Could not lower backdrop' }
             [Windows.Forms.Application]::DoEvents()
             Start-Sleep -Milliseconds 650
+            # Sample inside the client rectangle but outside each corner arc.
+            # Allow the system shadow to darken the white side of the test pattern.
+            $inset = [int][math]::Floor($scale)
+            $cornerX = $origin.X + $inset
+            $rightCornerX = $origin.X + $size.R - 1 - $inset
+            foreach ($cornerY in ($origin.Y + $inset), ($origin.Y + $size.B - 1 - $inset)) {
+                $darkCorner = Read-PixelLight $dc $cornerX $cornerY
+                $lightCorner = Read-PixelLight $dc $rightCornerX $cornerY
+                if ($darkCorner -gt $blackRef + 12 -or $lightCorner -lt $whiteRef - 82) {
+                    throw "Backdrop covered at a rounded corner on opening $opening (row $cornerY, left $darkCorner, right $lightCorner)."
+                }
+            }
+            Write-Output "Opening $opening leaves all four corners clear."
             $lo = Read-Light $dc ($edgeX - $far) $sampleY
             $hi = Read-Light $dc ($edgeX + $far) $sampleY
             $left = Read-Light $dc ($edgeX - $near) $sampleY
@@ -102,6 +117,14 @@ try {
                 if ($material -ne 3 -or $left -le $lo + 1 -or $right -ge $hi - 1 -or $hi -gt 100) {
                     throw "Expected dark acrylic with a softened edge, got material $material and luminances $lo, $left, $right, $hi"
                 }
+                # DWM takes an opaque RGB color. Stripping the alpha from a
+                # translucent white stroke would make the visible edge white.
+                $sideBorder = Read-Light $dc $origin.X $sampleY
+                $topBorder = Read-PixelLight $dc ($edgeX - $far) $origin.Y
+                if ($sideBorder -lt 40 -or $sideBorder -gt 75 -or $topBorder -lt 40 -or $topBorder -gt 75) {
+                    throw "Expected a dark window border on opening $opening (left $sideBorder, top $topBorder)."
+                }
+                Write-Output "Opening $opening shows a dark border ($sideBorder, $topBorder)."
                 Write-Output "Opening $opening shows a blurred transition ($lo, $left, $right, $hi)."
             } elseif ($RequireGlass) {
                 throw "Acrylic not visible on opening $opening (material $material, luminances $lo, $left, $right, $hi, foreground $([ReopenScreen]::GetForegroundWindow()), launcher $window)."

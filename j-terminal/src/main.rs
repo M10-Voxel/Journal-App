@@ -26,6 +26,7 @@ mod snapshot;
 mod instance;
 mod journal;
 mod placement;
+mod reminder;
 mod engine;
 mod repeat;
 mod shortcuts;
@@ -1150,6 +1151,17 @@ fn present(bar: &Bar) {
     place_and_focus(bar, centered, 50);
 }
 
+/// The window opens on `date`'s day view (a reminder card's title).
+fn open_day(date: chrono::NaiveDate) {
+    with_bar(present);
+    // After `present`'s own preparation, which may return to today.
+    slint::Timer::single_shot(Duration::ZERO, move || with_app(|app| {
+        if app.board.is_some() { return; }
+        app.state.reveal_day(date);
+        app.draw();
+    }));
+}
+
 fn screen_for_monitor(monitor: slint::winit_030::winit::monitor::MonitorHandle) -> placement::Screen {
     let (position, size) = (monitor.position(), monitor.size());
     placement::Screen { left: position.x, top: position.y, width: size.width as i32, height: size.height as i32, scale: monitor.scale_factor() }
@@ -1191,10 +1203,7 @@ fn place_and_focus(bar: &Bar, centered: bool, tries: u32) {
     });
     if placed.is_some() {
         #[cfg(windows)]
-        {
-            round_window(bar);
-            set_launcher_backdrop(bar);
-        }
+        configure_launcher_frame(bar);
         if bar.global::<BoardUi>().get_opened(){board_ui::focus_board(bar);}else{bar.invoke_focus_line();}
     } else if tries > 0 {
         slint::Timer::single_shot(std::time::Duration::from_millis(5), move || with_bar(|bar| place_and_focus(bar, centered, tries - 1)));
@@ -1213,17 +1222,27 @@ fn transparency_enabled() -> bool {
     contrast.dwFlags & HCF_HIGHCONTRASTON == 0 && transparency.unwrap_or(1) != 0
 }
 
-/// Let the compositor blur behind the launcher. Only expose it through Slint's
-/// surface after Windows has accepted both the material and the glass frame.
+/// Let DWM clip its acrylic and the client to the same rounded outline.
 #[cfg(windows)]
-fn set_launcher_backdrop(bar: &Bar) {
+fn configure_launcher_frame(bar: &Bar) {
     use slint::winit_030::winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
-    use windows_sys::Win32::{Graphics::Dwm::*, UI::Controls::MARGINS};
+    use windows_sys::Win32::{
+        Graphics::{Dwm::*, Gdi::SetWindowRgn},
+        UI::{Controls::MARGINS, Shell::SetWindowSubclass, WindowsAndMessaging::*},
+    };
 
     let glass = bar.window().with_winit_window(|window| {
         let Ok(handle) = window.window_handle() else { return false };
         let RawWindowHandle::Win32(handle) = handle.as_raw() else { return false };
         let hwnd = handle.hwnd.get() as _;
+        unsafe {
+            SetWindowSubclass(hwnd, Some(launcher_frame), 2, 0);
+            let style = GetWindowLongW(hwnd, GWL_STYLE) as u32;
+            if style & WS_CAPTION != 0 {
+                SetWindowLongW(hwnd, GWL_STYLE, (style & !WS_CAPTION) as i32);
+                SetWindowPos(hwnd, std::ptr::null_mut(), 0, 0, 0, 0, SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+            }
+        }
         let attribute = |name, value: i32| unsafe {
             DwmSetWindowAttribute(hwnd, name as u32, (&value as *const i32).cast(), size_of::<i32>() as u32) >= 0
         };
@@ -1234,15 +1253,25 @@ fn set_launcher_backdrop(bar: &Bar) {
             if bar.get_glass() && attribute(DWMWA_SYSTEMBACKDROP_TYPE, DWMSBT_NONE) {
                 unsafe { DwmFlush() };
             }
-            if !attribute(DWMWA_SYSTEMBACKDROP_TYPE, DWMSBT_TRANSIENTWINDOW) { return false; }
             let frame = MARGINS { cxLeftWidth: -1, ..Default::default() };
-            if unsafe { DwmExtendFrameIntoClientArea(hwnd, &frame) } >= 0 { return true; }
+            // A custom window region prevents DWM from rounding the system backdrop.
+            if attribute(DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND)
+                && unsafe { SetWindowRgn(hwnd, std::ptr::null_mut(), 1) } != 0
+                && attribute(DWMWA_SYSTEMBACKDROP_TYPE, DWMSBT_TRANSIENTWINDOW)
+                && unsafe { DwmExtendFrameIntoClientArea(hwnd, &frame) } >= 0
+            {
+                let border = bar.global::<Theme>().get_border();
+                let color_ref = i32::from(border.red()) | (i32::from(border.green()) << 8) | (i32::from(border.blue()) << 16);
+                attribute(DWMWA_BORDER_COLOR, color_ref);
+                return true;
+            }
         }
         attribute(DWMWA_SYSTEMBACKDROP_TYPE, DWMSBT_NONE);
         unsafe { DwmExtendFrameIntoClientArea(hwnd, &MARGINS::default()) };
         false
     });
     bar.set_glass(glass == Some(true));
+    round_window(bar);
 }
 
 // The launcher owns its full client area. Keep winit's focus handling, but
@@ -1258,7 +1287,7 @@ unsafe extern "system" fn launcher_frame(hwnd: windows_sys::Win32::Foundation::H
         WM_NCPAINT => return 0,
         WM_SETTINGCHANGE | WM_DWMCOMPOSITIONCHANGED => {
             slint::Timer::single_shot(Duration::ZERO, || with_bar(|bar| {
-                if bar.window().is_visible() { set_launcher_backdrop(bar); }
+                if bar.window().is_visible() { configure_launcher_frame(bar); }
             }));
         }
         WM_NCDESTROY => { RemoveWindowSubclass(hwnd, Some(launcher_frame), id); }
@@ -1271,8 +1300,8 @@ unsafe extern "system" fn launcher_frame(hwnd: windows_sys::Win32::Foundation::H
 fn round_window(bar: &Bar) {
     use slint::winit_030::winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
     use windows_sys::Win32::Graphics::Gdi::{DeleteObject, InvalidateRect, SetWindowRgn};
-    use windows_sys::Win32::UI::{Shell::SetWindowSubclass, WindowsAndMessaging::*};
 
+    if bar.get_glass() { return; }
     bar.window().with_winit_window(|window| {
         let Ok(handle) = window.window_handle() else { return };
         let RawWindowHandle::Win32(handle) = handle.as_raw() else { return };
@@ -1284,14 +1313,6 @@ fn round_window(bar: &Bar) {
             // Windows takes ownership when SetWindowRgn succeeds.
             if !region.is_null() {
                 let hwnd = handle.hwnd.get() as _;
-                // Winit normally hides WS_CAPTION through WM_NCCALCSIZE. With a
-                // custom region Windows can still paint that caption on activation.
-                SetWindowSubclass(hwnd, Some(launcher_frame), 2, 0);
-                let style = GetWindowLongW(hwnd, GWL_STYLE) as u32;
-                if style & WS_CAPTION != 0 {
-                    SetWindowLongW(hwnd, GWL_STYLE, (style & !WS_CAPTION) as i32);
-                    SetWindowPos(hwnd, std::ptr::null_mut(), 0, 0, 0, 0, SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
-                }
                 // A non-client repaint can draw the Win32 caption across the Slint header.
                 if SetWindowRgn(hwnd, region, 0) == 0 {
                     DeleteObject(region);
@@ -1702,6 +1723,13 @@ fn main() {
                 let attributes = attributes.with_transparent(false);
                 if CREATING_LAUNCHER.with(|creating| creating.get()) {
                     attributes.with_skip_taskbar(true).with_decorations(false)
+                } else if reminder::CREATING.with(|creating| creating.get()) {
+                    // The reminder cards: above everything, without a taskbar entry and without taking the keyboard.
+                    use slint::winit_030::winit::platform::windows::CornerPreference;
+                    attributes.with_skip_taskbar(true).with_decorations(false).with_undecorated_shadow(true)
+                        .with_corner_preference(CornerPreference::Round).with_active(false)
+                        .with_window_level(slint::winit_030::winit::window::WindowLevel::AlwaysOnTop)
+                        .with_theme(Some(slint::winit_030::winit::window::Theme::Dark))
                 } else {
                     use slint::winit_030::winit::platform::windows::CornerPreference;
                     attributes.with_decorations(false).with_undecorated_shadow(true)
@@ -1822,6 +1850,8 @@ fn main() {
         if app.board.as_ref().is_some_and(|b|b.changed.is_some()) || app.bar.window().is_visible() { app.tick_board(); }
         if app.board.is_none() && app.bar.window().is_visible() && !app.bar.get_dragging_dial() && !app.state.entry_shown() && app.state.notepad().is_none() && app.state.timers_running() { app.draw(); }
     })));
+    // Reminders come from here while the Journal app does not run; a test journal's always (it is not the app's).
+    reminder::start(instance::socket(args.data.as_deref()) == instance::NAME);
     if show_now { with_bar(present); }
     if let Err(e) = slint::run_event_loop_until_quit() { eprintln!("J-TerminaL: {e}"); }
 }

@@ -135,6 +135,7 @@ component DayScroll inherits Flickable {
 }
 
 import { BoardView, BoardUi } from "board.slint";
+export { ReminderWindow, ReminderCard } from "reminder.slint";
 export { InkShape, InkDocument, BoardUi, BoardTile, BoardThread, BoardGroup, BoardBox, BoardHit, BoardTool, FloatingBoardNote } from "board.slint";
 export component Bar inherits Window {
     in property <bool> glass;
@@ -539,7 +540,7 @@ export component Bar inherits Window {
     Rectangle {
         visible: !BoardUi.opened;
         background: root.glass ? Theme.background.with-alpha(Theme.surface-alpha) : Theme.background;
-        border-radius: Theme.radius;
+        border-radius: root.glass ? 0px : Theme.radius;
         clip: true;
     page-scroll := Flickable {
     changed content-y => { root.dismiss-preview(); }
@@ -1453,13 +1454,13 @@ export component Bar inherits Window {
         }
     }
     board-page := BoardView {visible: BoardUi.opened;}
-    // The outline where Windows draws none (its own corners and edge replace it where it can).
-    Rectangle {
+    // With acrylic, DWM draws the outline around the backdrop and client together.
+    if !root.glass: Rectangle {
         border-radius: Theme.radius;
         border-color: Theme.background;
         border-width: Theme.frame-inset + Theme.frame-stroke;
     }
-    Rectangle {
+    if !root.glass: Rectangle {
         x: Theme.frame-inset;
         y: Theme.frame-inset;
         width: parent.width - 2 * Theme.frame-inset;

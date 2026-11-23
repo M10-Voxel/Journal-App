@@ -1,0 +1,106 @@
+// The reminders while J-TerminaL is the one to show them (reminder.rs): small cards at the bottom right, above every
+// window, without taking the keyboard. Operated with the mouse only: the title opens the day, the words below a card
+// finish the task, show it again later (the wheel over it changes the minutes) or dismiss the card.
+import { Theme } from "theme.slint";
+
+export struct ReminderCard {
+    title: string,
+    line: string,
+    // "10 Min. später"
+    later: string,
+    task: bool,
+    // A note about further missed reminders: no day of its own.
+    info: bool,
+}
+
+// A word that does something on a click; brighter under the mouse. Not a button: no frame, no fill.
+component ReminderLink inherits Rectangle {
+    in property <string> label;
+    callback clicked();
+    callback wheel(int);
+    width: text.preferred-width;
+    height: Theme.reminder-link-height;
+    text := Text {
+        text: root.label;
+        color: area.has-hover ? Theme.strong : Theme.muted;
+        font-size: Theme.row-size;
+        vertical-alignment: center;
+    }
+    area := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+        scroll-event(event) => {
+            if event.delta-y > 0 { root.wheel(1); return accept; }
+            if event.delta-y < 0 { root.wheel(-1); return accept; }
+            reject
+        }
+    }
+}
+
+export component ReminderWindow inherits Window {
+    in property <[ReminderCard]> cards;
+    in property <string> done-label;
+    in property <string> dismiss-label;
+    callback open(int);
+    callback done(int);
+    callback snooze(int);
+    callback dismiss(int);
+    // The wheel over "n Min. später": +1 or -1 minute.
+    callback wheel(int, int);
+    title: "J-TerminaL";
+    no-frame: true;
+    always-on-top: true;
+    background: Theme.background;
+    default-font-family: Theme.ui-font;
+    width: Theme.reminder-width;
+    height: list.preferred-height;
+    list := VerticalLayout {
+        padding: Theme.reminder-padding;
+        spacing: Theme.reminder-padding;
+        for card[index] in root.cards: Rectangle {
+            background: Theme.raised;
+            border-radius: Theme.block-radius;
+            VerticalLayout {
+                padding: Theme.reminder-inset;
+                spacing: Theme.reminder-gap;
+                Rectangle {
+                    height: title.preferred-height;
+                    title := Text {
+                        width: 100%;
+                        text: card.title;
+                        color: title-area.has-hover && !card.info ? Theme.accent : (card.info ? Theme.text : Theme.strong);
+                        font-size: card.info ? Theme.row-size : Theme.form-size;
+                        font-weight: card.info ? Theme.weight-normal : Theme.weight-medium;
+                        wrap: word-wrap;
+                    }
+                    title-area := TouchArea {
+                        mouse-cursor: card.info ? MouseCursor.default : MouseCursor.pointer;
+                        clicked => { if card.info { root.dismiss(index); } else { root.open(index); } }
+                    }
+                }
+                if !card.info: Text {
+                    text: card.line;
+                    color: Theme.muted;
+                    font-size: Theme.small-size;
+                }
+                HorizontalLayout {
+                    alignment: start;
+                    spacing: Theme.reminder-link-gap;
+                    if card.task: ReminderLink {
+                        label: root.done-label;
+                        clicked => { root.done(index); }
+                    }
+                    if !card.info: ReminderLink {
+                        label: card.later;
+                        clicked => { root.snooze(index); }
+                        wheel(steps) => { root.wheel(index, steps); }
+                    }
+                    ReminderLink {
+                        label: root.dismiss-label;
+                        clicked => { root.dismiss(index); }
+                    }
+                }
+            }
+        }
+    }
+}

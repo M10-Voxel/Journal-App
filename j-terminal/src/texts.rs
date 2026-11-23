@@ -705,6 +705,43 @@ pub fn action_texts(language: Language) -> &'static ActionTexts {
     match language { Language::De => &ACTIONS_DE, Language::En => &ACTIONS_EN }
 }
 
+/// The reminder cards at the bottom right (`reminder.rs`), worded as the Journal app's.
+pub struct ReminderTexts {
+    pub task: &'static str,
+    pub event: &'static str,
+    pub again: &'static str,
+    pub missed: &'static str,
+    pub untitled: &'static str,
+    pub weekdays: [&'static str; 7],
+    pub done: &'static str,
+    /// After the minutes: "10 Min. später".
+    pub later: &'static str,
+    pub dismiss: &'static str,
+    /// `%n` is the number of further missed reminders.
+    pub more_one: &'static str,
+    pub more_many: &'static str,
+}
+
+const REMINDERS_DE: ReminderTexts = ReminderTexts {
+    task: "Aufgabe", event: "Ereignis", again: "erneut", missed: "verpasst", untitled: "Ohne Text",
+    weekdays: ["Mo.", "Di.", "Mi.", "Do.", "Fr.", "Sa.", "So."],
+    done: "Erledigt", later: "Min. später", dismiss: "Ausblenden",
+    more_one: "Noch %n weitere verpasste Erinnerung – im Journal an ihrem Tag.",
+    more_many: "Noch %n weitere verpasste Erinnerungen – im Journal an ihren Tagen.",
+};
+
+const REMINDERS_EN: ReminderTexts = ReminderTexts {
+    task: "Task", event: "Event", again: "again", missed: "missed", untitled: "No text",
+    weekdays: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+    done: "Completed", later: "min later", dismiss: "Dismiss",
+    more_one: "%n more missed reminder – in the journal on its day.",
+    more_many: "%n more missed reminders – in the journal on their days.",
+};
+
+pub fn reminder_texts(language: Language) -> &'static ReminderTexts {
+    match language { Language::De => &REMINDERS_DE, Language::En => &REMINDERS_EN }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
