@@ -1,0 +1,392 @@
+// The analysis (/Auswertung): a week's, month's, quarter's or year's evaluation over the whole window, as the Journal
+// app shows it in its overviews (PeriodNotes.tsx). The chart arrives in the app's SVG units (viewBox 640 × 190) and is
+// only scaled here, so both draw the same graph. src/analysis.rs computes everything; this file only places it.
+import { Theme } from "theme.slint";
+import { BoardGlyph } from "board-ink.slint";
+
+export struct AnalysisLegend { label: string, stat: string, color: color, hidden: bool }
+export struct AnalysisTick { y: float, label: string, grid: string }
+export struct AnalysisLine { color: color, commands: string }
+export struct AnalysisPoint { x: float, y: float, color: color, active: bool }
+export struct AnalysisColumn { x: float, w: float, date: string }
+export struct AnalysisLabel { x: float, text: string }
+export struct AnalysisBar { date: string, value: string, fraction: float, label: string, active: bool }
+export struct AnalysisCell { date: string, column: int, row: int, filled: bool, fill: color, text: string, ink: color, active: bool }
+export struct AnalysisHead { column: int, row: int, text: string }
+// kind: 0 a week's bars, 1 a month's calendar, 2 a quarter's or year's weeks.
+export struct AnalysisCard {
+    name: string, color: color, total: string, days: string, kind: int,
+    bars: [AnalysisBar], cells: [AnalysisCell], heads: [AnalysisHead], columns: int, rows: int,
+    detail: string, hint: bool, palette: [color], track: bool, unit: string,
+}
+
+export global AnalysisUi {
+    in-out property <bool> opened;
+    in-out property <string> eyebrow;
+    in-out property <string> heading;
+    in-out property <[string]> modes;
+    in-out property <int> mode;
+    in-out property <string> ratings-title;
+    in-out property <string> ratings-hint;
+    in-out property <string> activities-title;
+    in-out property <string> activities-hint;
+    in-out property <string> no-activities;
+    in-out property <string> all-hidden;
+    in-out property <string> less;
+    in-out property <string> more;
+    in-out property <string> completed;
+    in-out property <[AnalysisLegend]> legend;
+    in-out property <float> left;
+    in-out property <[AnalysisTick]> ticks;
+    in-out property <[AnalysisLine]> lines;
+    in-out property <[AnalysisPoint]> points;
+    in-out property <[AnalysisColumn]> columns;
+    in-out property <[AnalysisLabel]> labels;
+    in-out property <string> guide;
+    in-out property <string> detail;
+    in-out property <bool> hint;
+    in-out property <bool> empty;
+    in-out property <[AnalysisCard]> cards;
+    in-out property <int> focus-request;
+    // "back", "prev", "next", "mode:N", "toggle:N" (a line of the chart).
+    callback command(string);
+    // The day the mouse points at ("" when it leaves the chart).
+    callback point(string);
+    callback key(string, int, bool) -> bool;
+}
+
+// A word that does something when clicked (no button chrome; the chosen one is tinted).
+component Word inherits Rectangle {
+    in property <string> label;
+    in property <bool> on;
+    callback invoke();
+    width: text.preferred-width + Theme.padding;
+    height: Theme.row-height;
+    border-radius: Theme.block-radius;
+    background: root.on ? Theme.chip-selected : area.has-hover ? Theme.hover : transparent;
+    text := Text {
+        text: root.label; color: root.on ? Theme.chip-selected-text : Theme.text;
+        font-size: Theme.row-size; horizontal-alignment: center; vertical-alignment: center;
+    }
+    area := TouchArea { mouse-cursor: MouseCursor.default; clicked => { root.invoke(); } }
+}
+
+// The line chart (ValueChart.tsx) at scale `s`: one SVG unit is `s` pixels.
+component Chart inherits Rectangle {
+    in property <float> s;
+    property <length> u: 1px * root.s;
+    width: 640 * root.u;
+    height: 190 * root.u;
+    hover := TouchArea {
+        changed has-hover => { if !self.has-hover { AnalysisUi.point(""); } }
+        for tick in AnalysisUi.ticks: Rectangle {
+            Path {
+                x: 0; y: 0; width: root.width; height: root.height;
+                viewbox-width: 640; viewbox-height: 190;
+                commands: tick.grid; stroke: Theme.divider; stroke-width: Theme.analysis-grid-stroke * root.s;
+            }
+            Text {
+                x: 0; width: (AnalysisUi.left - 10) * root.u; y: tick.y * root.u - self.height / 2;
+                text: tick.label; horizontal-alignment: right; vertical-alignment: center;
+                color: Theme.muted; font-size: Theme.analysis-chart-font * root.s;
+            }
+        }
+        if AnalysisUi.guide != "": Path {
+            x: 0; y: 0; width: root.width; height: root.height;
+            viewbox-width: 640; viewbox-height: 190;
+            commands: AnalysisUi.guide; stroke: Theme.muted; stroke-width: Theme.analysis-grid-stroke * root.s;
+            opacity: Theme.analysis-guide-opacity;
+        }
+        for line in AnalysisUi.lines: Path {
+            x: 0; y: 0; width: root.width; height: root.height;
+            viewbox-width: 640; viewbox-height: 190;
+            commands: line.commands; stroke: line.color; stroke-width: Theme.analysis-chart-stroke * root.s;
+            stroke-line-join: round; stroke-line-cap: round; opacity: Theme.analysis-line-opacity;
+        }
+        for point in AnalysisUi.points: Rectangle {
+            property <float> k: point.active ? Theme.analysis-point-active : 1;
+            width: 7 * root.u * self.k; height: self.width;
+            x: point.x * root.u - self.width / 2; y: point.y * root.u - self.height / 2;
+            border-radius: self.width / 2;
+            background: point.color;
+            border-color: Theme.background; border-width: Theme.analysis-point-stroke * root.s;
+        }
+        for column in AnalysisUi.columns: TouchArea {
+            x: column.x * root.u; width: column.w * root.u; y: 14 * root.u; height: 144 * root.u;
+            mouse-cursor: MouseCursor.pointer;
+            changed has-hover => { if self.has-hover { AnalysisUi.point(column.date); } }
+            clicked => { AnalysisUi.point(column.date); }
+        }
+        for label in AnalysisUi.labels: Text {
+            width: 120 * root.u; x: label.x * root.u - self.width / 2; y: 180 * root.u - self.height / 2;
+            text: label.text; horizontal-alignment: center; vertical-alignment: center;
+            color: Theme.muted; font-size: Theme.analysis-chart-font * root.s;
+        }
+    }
+}
+
+// An activity's card (ActivitySummary.tsx with ActivityHeatmap.tsx and ActivityPalette.tsx).
+component Card inherits Rectangle {
+    in property <AnalysisCard> card;
+    property <length> inner: root.width - 2 * Theme.analysis-card-padding;
+    property <length> body-y: Theme.analysis-card-padding-top + Theme.analysis-card-head;
+    background: Theme.analysis-box;
+    border-color: Theme.divider; border-width: 1px; border-radius: Theme.analysis-box-radius;
+
+    // Name at the left; the time of all days and the days with the activity at the right.
+    HorizontalLayout {
+        x: Theme.analysis-card-padding; y: Theme.analysis-card-padding-top; width: root.inner; height: Theme.analysis-metric-size * 1.4;
+        spacing: Theme.gap;
+        Rectangle {
+            width: Theme.analysis-dot; height: self.width; y: (parent.height - self.height) / 2;
+            border-radius: self.width / 2; background: root.card.color;
+        }
+        Text {
+            text: root.card.name; color: Theme.strong; font-size: Theme.analysis-card-title-size; font-family: Theme.write-font;
+            font-weight: Theme.weight-medium; vertical-alignment: center; overflow: elide; horizontal-stretch: 1;
+        }
+        if root.card.total != "": BoardGlyph {
+            name: "clock"; tint: root.card.color; width: Theme.analysis-card-title-size; height: self.width; y: (parent.height - self.height) / 2;
+        }
+        if root.card.total != "": Text {
+            text: root.card.total; color: root.card.color; font-size: Theme.analysis-metric-size; font-family: Theme.write-font;
+            font-weight: Theme.weight-medium; vertical-alignment: center;
+        }
+    }
+    Text {
+        x: Theme.analysis-card-padding; width: root.inner; y: Theme.analysis-card-padding-top + Theme.analysis-metric-size * 1.4 + Theme.analysis-swatch-gap;
+        text: root.card.days; color: Theme.muted; font-size: Theme.analysis-stat-size; horizontal-alignment: right;
+    }
+
+    // A week: one bar per day.
+    if root.card.kind == 0: Rectangle {
+        property <length> column: root.inner / max(1, root.card.bars.length);
+        x: Theme.analysis-card-padding; y: root.body-y + Theme.analysis-bars-top; width: root.inner;
+        height: 2 * Theme.analysis-bar-text + 2 * Theme.analysis-bar-gap + Theme.analysis-bar-track;
+        for bar[i] in root.card.bars: Rectangle {
+            x: i * parent.column; width: parent.column; height: parent.height;
+            property <length> track: min(Theme.analysis-bar-max, self.width - Theme.analysis-bar-gap);
+            Text {
+                y: 0; height: Theme.analysis-bar-text; text: bar.value; horizontal-alignment: center;
+                color: bar.active ? Theme.strong : Theme.muted; font-size: Theme.analysis-small-size;
+            }
+            Rectangle {
+                x: (parent.width - parent.track) / 2; width: parent.track;
+                y: Theme.analysis-bar-text + Theme.analysis-bar-gap; height: Theme.analysis-bar-track;
+                Rectangle {
+                    y: parent.height - self.height; height: parent.height * bar.fraction;
+                    background: root.card.color; opacity: bar.active || touch.has-hover ? 1 : Theme.analysis-bar-opacity;
+                    border-top-left-radius: Theme.analysis-bar-radius; border-top-right-radius: Theme.analysis-bar-radius;
+                }
+                Rectangle { y: parent.height - 1px; height: 1px; background: Theme.divider; }
+            }
+            Text {
+                y: Theme.analysis-bar-text + 2 * Theme.analysis-bar-gap + Theme.analysis-bar-track; height: Theme.analysis-bar-text;
+                text: bar.label; horizontal-alignment: center;
+                color: bar.active ? Theme.strong : Theme.muted; font-size: Theme.analysis-stat-size;
+            }
+            touch := TouchArea {
+                changed has-hover => { if self.has-hover { AnalysisUi.point(bar.date); } }
+                clicked => { AnalysisUi.point(bar.date); }
+            }
+        }
+    }
+    if root.card.kind == 0: Text {
+        x: Theme.analysis-card-padding; width: root.inner;
+        y: root.body-y + Theme.analysis-bars-top + 2 * Theme.analysis-bar-text + 2 * Theme.analysis-bar-gap + Theme.analysis-bar-track;
+        height: Theme.analysis-unit-height; vertical-alignment: center; horizontal-alignment: right;
+        text: root.card.unit; color: Theme.muted; font-size: Theme.analysis-small-size;
+    }
+    if root.card.kind == 0: Text {
+        x: Theme.analysis-card-padding; width: root.inner; height: Theme.analysis-detail-height; vertical-alignment: center;
+        y: root.body-y + Theme.analysis-bars-top + 2 * Theme.analysis-bar-text + 2 * Theme.analysis-bar-gap + Theme.analysis-bar-track + Theme.analysis-unit-height;
+        text: root.card.detail; color: Theme.text; font-size: Theme.analysis-stat-size; overflow: elide;
+    }
+
+    // A month (calendar) or a quarter or year (weeks as columns): the heatmap.
+    if root.card.kind != 0: Rectangle {
+        property <bool> calendar: root.card.kind == 1;
+        property <length> gap: self.calendar ? Theme.analysis-day-gap : Theme.analysis-week-gap;
+        property <length> lead: self.calendar ? 0px : Theme.analysis-weekday-column + self.gap;
+        property <length> top: self.calendar ? 0px : Theme.analysis-month-row + self.gap;
+        property <int> weeks: self.calendar ? 7 : max(1, root.card.columns - 1);
+        property <length> cell-w: (self.width - self.lead - (self.weeks - 1) * self.gap) / self.weeks;
+        property <length> cell-h: self.calendar ? Theme.analysis-day-cell : Theme.analysis-week-cell;
+        x: Theme.analysis-card-padding; y: root.body-y + Theme.analysis-heatmap-top; width: root.inner;
+        height: self.calendar ? root.card.rows * Theme.analysis-day-cell + (root.card.rows - 1) * self.gap
+            : Theme.analysis-month-row + 7 * (Theme.analysis-week-cell + self.gap);
+        for head in root.card.heads: Text {
+            x: parent.calendar ? head.column * (parent.cell-w + parent.gap)
+                : head.row == 0 ? parent.lead + (head.column - 1) * (parent.cell-w + parent.gap) : 0px;
+            y: parent.calendar ? 0px : head.row == 0 ? 0px : parent.top + (head.row - 1) * (parent.cell-h + parent.gap);
+            width: parent.calendar ? parent.cell-w : head.row == 0 ? 6 * (parent.cell-w + parent.gap) : Theme.analysis-weekday-column;
+            height: parent.calendar ? parent.cell-h : head.row == 0 ? Theme.analysis-month-row : parent.cell-h;
+            text: head.text; color: Theme.muted; font-size: Theme.analysis-small-size; vertical-alignment: center;
+            horizontal-alignment: parent.calendar ? center : left; overflow: clip;
+        }
+        for cell in root.card.cells: Rectangle {
+            x: parent.calendar ? cell.column * (parent.cell-w + parent.gap) : parent.lead + (cell.column - 1) * (parent.cell-w + parent.gap);
+            y: parent.calendar ? cell.row * (parent.cell-h + parent.gap) : parent.top + (cell.row - 1) * (parent.cell-h + parent.gap);
+            width: parent.cell-w; height: parent.cell-h;
+            border-radius: Theme.analysis-cell-radius;
+            background: cell.filled ? cell.fill : Theme.raised;
+            border-color: cell.active ? Theme.accent : cell-touch.has-hover ? Theme.text : cell.filled ? transparent : Theme.divider;
+            border-width: cell.active ? Theme.analysis-cell-active : 1px;
+            if parent.calendar: Text {
+                text: cell.text; color: cell.filled ? cell.ink : Theme.muted; font-size: Theme.analysis-small-size;
+                horizontal-alignment: center; vertical-alignment: center;
+            }
+            cell-touch := TouchArea {
+                changed has-hover => { if self.has-hover { AnalysisUi.point(cell.date); } }
+                clicked => { AnalysisUi.point(cell.date); }
+            }
+        }
+    }
+    if root.card.kind != 0: Text {
+        x: Theme.analysis-card-padding; width: root.inner; height: Theme.analysis-heatmap-detail; vertical-alignment: center; wrap: word-wrap;
+        y: root.height - Theme.analysis-card-padding-bottom - Theme.analysis-swatch - Theme.analysis-heatmap-detail;
+        text: root.card.detail; color: root.card.hint ? Theme.muted : Theme.text; font-size: Theme.analysis-stat-size;
+    }
+    // The shades: "Weniger ■■■■■■■ Mehr"; without time tracking only the first, "Erledigt".
+    if root.card.kind != 0: HorizontalLayout {
+        x: Theme.analysis-card-padding; width: root.inner; height: Theme.analysis-swatch;
+        y: root.height - Theme.analysis-card-padding-bottom - Theme.analysis-swatch;
+        alignment: end; spacing: Theme.analysis-swatch-gap;
+        if root.card.track: Text { text: AnalysisUi.less; color: Theme.muted; font-size: Theme.analysis-small-size; vertical-alignment: center; }
+        if root.card.track: Rectangle { width: Theme.analysis-swatch-gap; }
+        for shade[i] in root.card.palette: Rectangle {
+            visible: root.card.track || i == 0;
+            width: root.card.track || i == 0 ? Theme.analysis-swatch : 0px;
+            border-radius: Theme.analysis-cell-radius - 1px; background: shade;
+        }
+        Rectangle { width: Theme.analysis-swatch-gap; }
+        Text { text: root.card.track ? AnalysisUi.more : AnalysisUi.completed; color: Theme.muted; font-size: Theme.analysis-small-size; vertical-alignment: center; }
+    }
+}
+
+export component AnalysisView inherits Rectangle {
+    background: Theme.background;
+    forward-focus: keys;
+    property <int> focus-request: AnalysisUi.focus-request;
+    changed focus-request => { keys.focus(); }
+    init => { keys.focus(); }
+    // The content's width and the chart's scale (the chart's box keeps its SVG proportions up to a height).
+    property <length> content-w: root.width - 2 * Theme.padding;
+    property <float> s: min((root.content-w - 2 * Theme.analysis-box-padding) / 640px, Theme.analysis-chart-max-height / 190px);
+    // Months and quarters lay their cards side by side (at least 300 px each); weeks and years one under the other.
+    property <int> cols: AnalysisUi.mode == 1 || AnalysisUi.mode == 2
+        ? max(1, Math.floor((root.content-w + Theme.analysis-card-gap) / (Theme.analysis-card-min-width + Theme.analysis-card-gap))) : 1;
+    property <length> card-w: (root.content-w - (root.cols - 1) * Theme.analysis-card-gap) / root.cols;
+    property <length> card-h: AnalysisUi.cards.length == 0 ? 0px : root.card-height(AnalysisUi.cards[0]);
+    property <int> card-rows: Math.ceil(AnalysisUi.cards.length / root.cols);
+
+    pure function card-height(card: AnalysisCard) -> length {
+        return Theme.analysis-card-padding-top + Theme.analysis-card-head + Theme.analysis-card-padding-bottom + (
+            card.kind == 0
+                ? Theme.analysis-bars-top + 2 * Theme.analysis-bar-text + 2 * Theme.analysis-bar-gap + Theme.analysis-bar-track + Theme.analysis-unit-height + Theme.analysis-detail-height
+            : card.kind == 1
+                ? Theme.analysis-heatmap-top + card.rows * Theme.analysis-day-cell + (card.rows - 1) * Theme.analysis-day-gap + Theme.analysis-heatmap-detail + Theme.analysis-swatch
+                : Theme.analysis-heatmap-top + Theme.analysis-month-row + 7 * (Theme.analysis-week-cell + Theme.analysis-week-gap) + Theme.analysis-heatmap-detail + Theme.analysis-swatch);
+    }
+    function scroll(by: length) {
+        flick.content-y = max(min(0px, flick.height - flick.content-height), min(0px, flick.content-y - by));
+    }
+
+    // Up/down and the page keys scroll; everything else is AnalysisUi.key's (src/analysis_ui.rs).
+    keys := FocusScope {
+        key-pressed(event) => {
+            if event.modifiers.control || event.modifiers.alt { return reject; }
+            if event.text == Key.UpArrow { root.scroll(-Theme.row-height); return accept; }
+            if event.text == Key.DownArrow { root.scroll(Theme.row-height); return accept; }
+            if event.text == Key.PageUp { root.scroll(-flick.height * 0.9); return accept; }
+            if event.text == Key.PageDown { root.scroll(flick.height * 0.9); return accept; }
+            if event.text == Key.End { root.scroll(flick.content-height); return accept; }
+            reject
+        }
+    }
+
+    // The head: back, the period before, its name, the period after; at the right the four kinds of period.
+    HorizontalLayout {
+        x: Theme.gap; y: 0px; height: Theme.line-height; width: parent.width - 2 * Theme.gap; spacing: Theme.gap;
+        Word { y: (Theme.line-height - self.height) / 2; label: "‹"; invoke => { AnalysisUi.command("back"); } }
+        Word { y: (Theme.line-height - self.height) / 2; label: "←"; invoke => { AnalysisUi.command("prev"); } }
+        VerticalLayout {
+            alignment: center; horizontal-stretch: 0;
+            Text { text: AnalysisUi.eyebrow; color: Theme.muted; font-size: Theme.analysis-eyebrow-size; }
+            Text { text: AnalysisUi.heading; color: Theme.strong; font-size: Theme.analysis-heading-size; font-weight: Theme.weight-semibold; }
+        }
+        Word { y: (Theme.line-height - self.height) / 2; label: "→"; invoke => { AnalysisUi.command("next"); } }
+        Rectangle { horizontal-stretch: 1; }
+        for mode[i] in AnalysisUi.modes: Word {
+            y: (Theme.line-height - self.height) / 2; label: mode; on: i == AnalysisUi.mode;
+            invoke => { AnalysisUi.command("mode:" + i); }
+        }
+    }
+
+    flick := Flickable {
+        x: 0px; y: Theme.line-height; width: root.width; height: root.height - Theme.line-height;
+        content-width: self.width; content-height: body.preferred-height;
+        body := VerticalLayout {
+            width: flick.width;
+            padding-left: Theme.padding; padding-right: Theme.padding; padding-bottom: Theme.padding;
+            spacing: Theme.gap;
+            // Bewertungen: the daily rating and the day values over time.
+            VerticalLayout {
+                height: Theme.analysis-section-height; alignment: center;
+                Text { text: AnalysisUi.ratings-title; color: Theme.strong; font-size: Theme.analysis-section-size; font-weight: Theme.weight-semibold; }
+                Text { text: AnalysisUi.ratings-hint; color: Theme.muted; font-size: Theme.small-size; }
+            }
+            Rectangle {
+                background: Theme.analysis-box; border-color: Theme.divider; border-width: 1px; border-radius: Theme.analysis-box-radius;
+                VerticalLayout {
+                    padding: Theme.analysis-box-padding; spacing: 0px;
+                    HorizontalLayout {
+                        alignment: start; spacing: Theme.analysis-legend-gap; height: Theme.analysis-detail-height;
+                        for item[i] in AnalysisUi.legend: Rectangle {
+                            opacity: item.hidden ? 0.4 : 1;
+                            width: legend-row.preferred-width; height: parent.height;
+                            legend-row := HorizontalLayout {
+                                spacing: Theme.gap * 0.875;
+                                Rectangle {
+                                    width: Theme.analysis-legend-dot; height: self.width; y: (parent.height - self.height) / 2;
+                                    border-radius: self.width / 2; background: item.color;
+                                }
+                                Text { text: item.label; color: Theme.text; font-size: Theme.analysis-legend-size; vertical-alignment: center; }
+                                Text { text: item.stat; color: Theme.muted; font-size: Theme.analysis-stat-size; vertical-alignment: center; }
+                            }
+                            TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { AnalysisUi.command("toggle:" + i); } }
+                        }
+                    }
+                    Text {
+                        height: Theme.analysis-detail-height; vertical-alignment: center; overflow: elide;
+                        text: AnalysisUi.detail; color: AnalysisUi.hint ? Theme.muted : Theme.text; font-size: Theme.analysis-stat-size;
+                    }
+                    if !AnalysisUi.empty: HorizontalLayout {
+                        alignment: center;
+                        Chart { s: root.s; }
+                    }
+                    if AnalysisUi.empty: Text {
+                        height: 190px * root.s; horizontal-alignment: center; vertical-alignment: center;
+                        text: AnalysisUi.all-hidden; color: Theme.muted; font-size: Theme.small-size;
+                    }
+                }
+            }
+            // Aktivitäten im Überblick: the time and the days of each activity.
+            VerticalLayout {
+                height: Theme.analysis-section-height; alignment: center;
+                Text { text: AnalysisUi.activities-title; color: Theme.strong; font-size: Theme.analysis-section-size; font-weight: Theme.weight-semibold; }
+                Text { text: AnalysisUi.activities-hint; color: Theme.muted; font-size: Theme.small-size; }
+            }
+            if AnalysisUi.no-activities != "": Text { text: AnalysisUi.no-activities; color: Theme.muted; font-size: Theme.small-size; }
+            Rectangle {
+                height: root.card-rows == 0 ? 0px : root.card-rows * (root.card-h + Theme.analysis-card-gap) - Theme.analysis-card-gap;
+                for card[i] in AnalysisUi.cards: Card {
+                    card: card;
+                    x: Math.mod(i, root.cols) * (root.card-w + Theme.analysis-card-gap);
+                    y: Math.floor(i / root.cols) * (root.card-h + Theme.analysis-card-gap);
+                    width: root.card-w; height: root.card-h;
+                }
+            }
+        }
+    }
+}

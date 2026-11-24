@@ -2,6 +2,8 @@
 //! The window is made hidden at start, so the shortcut only has to show it (docs/plan.md, section 3).
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod actions;
+mod analysis;
+mod analysis_ui;
 mod autostart;
 mod calendar;
 mod day;
@@ -80,6 +82,8 @@ struct App {
     tag_editor: Option<tag_edit::Editor>,
     floating_notes:std::collections::HashMap<String,FloatingBoardNote>,
     board: Option<board::Board>,
+    /// The analysis over the whole window (`/Auswertung`).
+    analysis: analysis_ui::State,
     board_images: std::collections::HashMap<String, slint::Image>,
     notepad_media: NotepadMedia,
     notepad_list_query: slint::SharedString,
@@ -1139,6 +1143,7 @@ impl App {
         if let Some((from, to)) = effect.select { self.bar.invoke_select_range(from as i32, to as i32); }
         if let Some(id) = effect.attachment { if let Some(target) = self.state.notepad_target(&id.to_string()) { self.show_notepad_target(target); } }
         if let Some(period)=effect.board {self.open_board(period);}
+        if effect.analysis { self.open_analysis(); }
         if let Some(id) = effect.edit_tag { self.open_tag_editor(&id); }
         if effect.settings { self.show_settings(); }
         if effect.hide { let _ = self.bar.hide(); }
@@ -1197,6 +1202,13 @@ fn present(bar: &Bar) {
         app.hide_timer.stop();
         app.restore_launcher = false;
         if app.board.is_some(){app.tick_board();app.draw_board();board_ui::focus_board(&app.bar);}
+        else if app.analysis.open {
+            // Back where it was, with what changed meanwhile.
+            app.state.refresh();
+            app.draw_analysis();
+            let ui = app.bar.global::<AnalysisUi>();
+            ui.set_focus_request(ui.get_focus_request().wrapping_add(1));
+        }
         else{let effect = app.state.shown();app.effect(effect);}
     }));
     release_opening_modifiers(bar.window());
@@ -1211,6 +1223,7 @@ fn open_day(date: chrono::NaiveDate) {
     // After `present`'s own preparation, which may return to today.
     slint::Timer::single_shot(Duration::ZERO, move || with_app(|app| {
         if app.board.is_some() { return; }
+        if app.analysis.open { app.close_analysis(); }
         app.state.reveal_day(date);
         app.draw();
     }));
@@ -1486,6 +1499,7 @@ fn connect_settings(settings: &SettingsWindow) {
 
 fn connect(bar: &Bar) {
     board_ui::connect(bar);
+    analysis_ui::connect(bar);
     tag_editor_ui::connect(bar);
     bar.global::<KeyBindings>().on_resolve(route_key);
     bar.on_open_settings(|| with_app(App::show_settings));
@@ -1941,14 +1955,15 @@ fn main() {
     });
     state.metrics = metrics(&bar);
     if let Some(width) = preferences.calendar_label_width { state.metrics.label_w = clamp_label_width(&bar, width as f32, preferences.week_numbers); }
-    APP.with(|app| *app.borrow_mut() = Some(App { tag_editor: None, floating_notes:Default::default(),board:None, board_images:Default::default(), notepad_media: NotepadMedia::default(), notepad_list_query: Default::default(),
+    APP.with(|app| *app.borrow_mut() = Some(App { tag_editor: None, floating_notes:Default::default(),board:None, analysis: Default::default(), board_images:Default::default(), notepad_media: NotepadMedia::default(), notepad_list_query: Default::default(),
         bar, settings: None, settings_navigation: Default::default(), preferences_path, journal_language, restore_launcher: false, state, notice,
         hide_timer: slint::Timer::default(), bindings, hotkeys, active_hotkey, day_items: Vec::new(), side_cells: Vec::new(), tick: slint::Timer::default() }));
     with_app(|app| { app.refresh_board_scopes(); app.draw(); });
     with_app(|app| app.tick.start(slint::TimerMode::Repeated, Duration::from_secs(1), || with_app(|app| {
         app.refresh_floating();
         if app.board.as_ref().is_some_and(|b|b.changed.is_some()) || app.bar.window().is_visible() { app.tick_board(); }
-        if app.board.is_none() && app.bar.window().is_visible() && !app.bar.get_dragging_dial() && !app.state.entry_shown() && app.state.notepad().is_none() && app.state.timers_running() { app.draw(); }
+        if app.analysis.open && app.bar.window().is_visible() { app.refresh_analysis(); }
+        if app.board.is_none() && !app.analysis.open && app.bar.window().is_visible() && !app.bar.get_dragging_dial() && !app.state.entry_shown() && app.state.notepad().is_none() && app.state.timers_running() { app.draw(); }
     })));
     // Reminders come from here while the Journal app does not run; a test journal's always (it is not the app's).
     reminder::start(instance::socket(args.data.as_deref()) == instance::NAME);
@@ -2068,7 +2083,19 @@ mod tests {
                 "definitions": [{ "id": "run", "name": "Laufen", "color": "#ff9f43", "trackTime": true, "textField": false, "active": true },
                                 { "id": "read", "name": "Lesen", "color": "#76d982", "trackTime": true, "textField": true, "active": true }],
                 "scales": [{ "id": "stress", "name": "Stress", "color": "#e57b7b", "min": 0, "max": 10, "active": true }],
-                "days": { "2026-11-18": { "rating": 7, "scales": { "stress": 3 }, "items": { "read": { "done": false, "minutes": 45 } } } },
+                "days": {
+                    "2026-11-18": { "rating": 7, "scales": { "stress": 3 }, "items": { "read": { "done": false, "minutes": 45 } } },
+                    // Earlier days for the analysis (/Auswertung).
+                    "2026-11-02": { "rating": 5, "scales": { "stress": 6 }, "items": { "run": { "done": true, "minutes": 30 } } },
+                    "2026-11-03": { "rating": 6, "scales": { "stress": 5 }, "items": { "read": { "done": true, "minutes": 20 } } },
+                    "2026-11-05": { "rating": 8, "items": { "run": { "done": true, "minutes": 75 }, "read": { "done": true, "minutes": 60 } } },
+                    "2026-11-09": { "rating": 4, "scales": { "stress": 8 }, "items": { "run": { "done": true, "minutes": 140 } } },
+                    "2026-11-10": { "rating": 6, "scales": { "stress": 4 }, "items": { "read": { "done": true, "minutes": 95 } } },
+                    "2026-11-16": { "rating": 9, "scales": { "stress": 2 }, "items": { "run": { "done": true, "minutes": 50 } } },
+                    "2026-11-17": { "rating": 8, "scales": { "stress": 3 }, "items": { "read": { "done": true, "minutes": 180 } } },
+                    "2026-10-12": { "rating": 3, "scales": { "stress": 9 }, "items": { "run": { "done": true, "minutes": 20 } } },
+                    "2026-10-20": { "rating": 5, "items": { "read": { "done": true, "minutes": 40 } } }
+                },
                 "notes": {}
             }).to_string()).unwrap();
         }
@@ -2077,7 +2104,7 @@ mod tests {
         connect(&bar);
         let mut state = form::Form::at(Some(journal), texts::Language::De, repeat::d("2026-11-18"), 800);
         state.metrics = metrics(&bar);
-        APP.with(|slot| *slot.borrow_mut() = Some(App { tag_editor: None, floating_notes:Default::default(),board:None, board_images:Default::default(), notepad_media: NotepadMedia::default(), notepad_list_query: Default::default(),
+        APP.with(|slot| *slot.borrow_mut() = Some(App { tag_editor: None, floating_notes:Default::default(),board:None, analysis: Default::default(), board_images:Default::default(), notepad_media: NotepadMedia::default(), notepad_list_query: Default::default(),
             bar: bar.clone_strong(), settings: None, settings_navigation: Default::default(), preferences_path: None,
             journal_language: texts::Language::De, restore_launcher: false, state, notice: None, hide_timer: slint::Timer::default(),
             bindings: shortcuts::Bindings::default(), hotkeys: None, active_hotkey: None, day_items: Vec::new(), side_cells: Vec::new(), tick: slint::Timer::default() }));
@@ -2096,6 +2123,52 @@ mod tests {
         bar.show().unwrap();
         with_app(|app| { let effect = app.state.shown(); app.effect(effect); });
         bar.invoke_focus_line();
+
+        // The analysis (/Auswertung) over the whole window: the month around the day shown, then the other periods.
+        type_text(&bar, "/Auswertung");
+        assert_eq!(bar.get_commands().row_data(0).unwrap().name.as_str(), "/Auswertung");
+        send_key_combo(&bar, [K::Return]);
+        let analysis = bar.global::<AnalysisUi>();
+        assert!(analysis.get_opened(), "The command opens the analysis.");
+        assert_eq!((analysis.get_eyebrow().as_str(), analysis.get_heading().as_str(), analysis.get_mode()), ("Monatsübersicht", "November 2026", 1));
+        assert_eq!(analysis.get_legend().row_data(0).unwrap().stat.as_str(), "Ø 6.6 / 10 · 8 Tage");
+        assert_eq!(analysis.get_cards().row_count(), 2);
+        assert_eq!(analysis.get_cards().row_data(0).unwrap().total.as_str(), "4 h 55 min");
+        capture(&bar, "analysis-month");
+        send_key_combo(&bar, [K::PageDown]);
+        capture(&bar, "analysis-month-cards");
+        send_key_combo(&bar, [K::PageUp]);
+        // The mouse on a day of the heatmap, then the keyboard: Alt+→ walks the days.
+        key_with_modifiers(&bar, &[K::Alt], &char::from(K::RightArrow).to_string());
+        assert_eq!(analysis.get_detail().as_str(), "18. Nov.: Tagesbewertung 7, Stress 3", "Alt+→ starts at today.");
+        assert_eq!(analysis.get_cards().row_data(1).unwrap().detail.as_str(), "Mi., 18. Nov. 2026 · 45 min");
+        capture(&bar, "analysis-month-day");
+        send_key_combo(&bar, [K::RightArrow]);
+        assert_eq!(analysis.get_heading().as_str(), "Dezember 2026");
+        send_key_combo(&bar, [K::RightArrow]);
+        assert_eq!(analysis.get_heading().as_str(), "Januar 2027", "November → Dezember → Januar.");
+        send_key_combo(&bar, [K::Home]);
+        assert_eq!(analysis.get_heading().as_str(), "November 2026");
+        send_key_combo(&bar, [K::Tab]);
+        assert_eq!((analysis.get_heading().as_str(), analysis.get_mode()), ("Quartal 4 · 2026", 2));
+        assert_eq!(analysis.get_labels().row_count(), 3, "A quarter's chart: its months.");
+        capture(&bar, "analysis-quarter");
+        send_key_combo(&bar, [K::Tab]);
+        assert_eq!(analysis.get_heading().as_str(), "2026");
+        assert_eq!(analysis.get_cards().row_data(0).unwrap().columns, 54);
+        capture(&bar, "analysis-year");
+        send_key_combo(&bar, [K::End]);
+        capture(&bar, "analysis-year-cards");
+        send_key_combo(&bar, [K::Tab]);
+        assert_eq!(analysis.get_heading().as_str(), "16. Nov. – 22. Nov. 2026");
+        capture(&bar, "analysis-week");
+        send_key_combo(&bar, [K::End]);
+        capture(&bar, "analysis-week-cards");
+        type_text(&bar, "1");
+        assert!(analysis.get_legend().row_data(0).unwrap().hidden, "1 hides the daily rating's line.");
+        type_text(&bar, "1");
+        send_key_combo(&bar, [K::Escape]);
+        assert!(!analysis.get_opened(), "Esc goes back.");
         // Use a separate vault and device projection for the complete board interaction.
         let board_dir=std::env::temp_dir().join(format!("j-terminal-board-ui-{}",uuid::Uuid::new_v4()));
         std::fs::create_dir(&board_dir).unwrap();

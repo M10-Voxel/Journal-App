@@ -7,10 +7,9 @@ Die Angaben zum Terminal stammen aus einer Stichwortsuche im Quellcode, nicht au
 ## Nur in der Journal-App
 
 ### Ansichten und Auswertung
-- Wochen-, Monats-, Quartals- und Jahresansicht. Das Terminal hat nur die Tagesansicht. Die Zeitraum-Pinnwände gibt es dort über Befehle.
+- Wochen-, Monats-, Quartals- und Jahresansicht. Das Terminal hat die Tagesansicht, die Zeitraum-Pinnwände über Befehle und die Auswertung der Zeiträume (`/Auswertung`).
 - Zeitraum-Notiz, Zeitraum-Bewertung, Zeitraum-Werte und Zeitraum-Checkliste.
 - Zeitraum-Einträge (eigene Liste mit Aufgaben und Notizen je Zeitraum).
-- Auswertung: Verlaufsdiagramme (`ValueChart`), Aktivitäts-Heatmap und Aktivitäts-Zusammenfassung.
 - Verwaltung der Aktivitäten und Werte: Definitionen, Skalen, Farbstufen mit Min–Max-Zeit, Palette.
 - Funktionen-Schalter (`FeatureSettings`): Ansichten und ihre Bereiche einzeln ein- und ausschalten.
 
@@ -41,6 +40,7 @@ Die Angaben zum Terminal stammen aus einer Stichwortsuche im Quellcode, nicht au
 - Eigenständige Installation und eigener Release-Ablauf.
 
 ## Teilweise vorhanden
+- **Auswertung:** dieselben Graphen wie in der App (Verlauf, Aktivitäten-Balken, -Kalender und -Heatmap), im Terminal als eigene Ansicht über das ganze Fenster mit wählbarem Zeitraum. Ausgeblendete Reihen merkt sich jedes Programm selbst, und die Einstellung „Funktionen“ der App gilt im Terminal nicht.
 - **Aktivitäten und Timer:** Das Terminal zeigt sie in der Tagesansicht und liest `journal_core::timers`. Laufende Timer liegen laut `day_view.rs` im Browser-Speicher der App. Das Terminal sieht sie nur über den gemeinsamen Datenkern. In der Roadmap ist das eine offene Frage.
 - **Wiederholungen:** Beide Programme haben sie, mit Löschumfang und Rückgängig. Die App rechnet über `ical.js`, das Terminal mit einer eigenen Rust-Umsetzung (`repeat/`). Ob beide in allen Fällen gleich rechnen, ist nicht geprüft.
 - **Pinnwand:** Weitgehend gleich, mit Handschrift, Fäden, Gruppen und Ordnern. Die Abnahme am physischen Stift ist im Terminal offen.

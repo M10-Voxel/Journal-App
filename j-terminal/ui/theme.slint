@@ -483,4 +483,56 @@ export global Theme {
     out property <color> cal-stroke: #8a8a8a;
     out property <color> cal-now: #ff5f57;
     out property <color> cal-caret: #569eff26;
+
+    // ── The analysis (/Auswertung): the app's periodNotes.css, the chart in its SVG units scaled to fit ──
+    out property <length> analysis-chart-max-height: 220px;   // the chart grows with the window up to this height
+    out property <length> analysis-chart-font: 10px;          // .chart-label, in SVG units (scaled with the chart)
+    out property <length> analysis-chart-stroke: 2px;        // .chart-line, in SVG units
+    out property <length> analysis-grid-stroke: 1px;
+    out property <length> analysis-point-stroke: 1.5px;
+    out property <float> analysis-point-active: 1.45;          // .chart-point.is-active
+    out property <float> analysis-line-opacity: 0.85;
+    out property <float> analysis-guide-opacity: 0.6;
+    out property <color> analysis-box: #ffffff06;             // .rating-chart, .activity-summary-card
+    out property <length> analysis-box-radius: 8px;
+    out property <length> analysis-box-padding: 14px;
+    out property <length> analysis-legend-size: 12px;
+    out property <length> analysis-stat-size: 11px;
+    out property <length> analysis-legend-dot: 9px;
+    out property <length> analysis-legend-gap: 18px;
+    out property <length> analysis-detail-height: 24px;
+    out property <length> analysis-heading-size: 21px;
+    out property <length> analysis-eyebrow-size: 11px;
+    out property <length> analysis-section-size: 15px;
+    out property <length> analysis-section-height: 46px;
+    out property <length> analysis-card-min-width: 300px;
+    out property <length> analysis-card-gap: 18px;
+    out property <length> analysis-card-padding: 20px;
+    out property <length> analysis-card-padding-top: 18px;
+    out property <length> analysis-card-padding-bottom: 12px;
+    out property <length> analysis-card-title-size: 14px;
+    out property <length> analysis-card-head: 46px;
+    out property <length> analysis-metric-size: 17px;
+    out property <length> analysis-small-size: 10px;
+    out property <length> analysis-dot: 8px;
+    out property <length> analysis-bars-top: 20px;
+    out property <length> analysis-bar-track: 56px;
+    out property <length> analysis-bar-max: 38px;
+    out property <length> analysis-bar-gap: 6px;
+    out property <length> analysis-bar-text: 15px;
+    out property <length> analysis-bar-radius: 3px;
+    out property <float> analysis-bar-opacity: 0.65;
+    out property <length> analysis-unit-height: 24px;
+    out property <length> analysis-heatmap-top: 20px;
+    out property <length> analysis-day-cell: 26px;            // a month: calendar rows
+    out property <length> analysis-day-gap: 4px;
+    out property <length> analysis-week-cell: 11px;           // a quarter or year: weekday rows
+    out property <length> analysis-week-gap: 3px;
+    out property <length> analysis-weekday-column: 26px;
+    out property <length> analysis-month-row: 18px;
+    out property <length> analysis-cell-radius: 3px;
+    out property <length> analysis-heatmap-detail: 48px;
+    out property <length> analysis-swatch: 12px;
+    out property <length> analysis-swatch-gap: 3px;
+    out property <length> analysis-cell-active: 2px;
 }

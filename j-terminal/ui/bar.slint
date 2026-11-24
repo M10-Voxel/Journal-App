@@ -135,6 +135,8 @@ component DayScroll inherits Flickable {
 }
 
 import { BoardView, BoardUi } from "board.slint";
+import { AnalysisView, AnalysisUi } from "analysis.slint";
+export { AnalysisUi, AnalysisLegend, AnalysisTick, AnalysisLine, AnalysisPoint, AnalysisColumn, AnalysisLabel, AnalysisBar, AnalysisCell, AnalysisHead, AnalysisCard } from "analysis.slint";
 import { TagEditor, TagEditorUi, TagIcon } from "tag-editor.slint";
 export { TagEditorUi, TagIcon }
 export { ReminderWindow, ReminderCard } from "reminder.slint";
@@ -499,7 +501,7 @@ export component Bar inherits Window {
     changed notepad-open => { root.dismiss-preview(); }
     changed menu-open => { root.dismiss-preview(); }
     changed side-open => { root.dismiss-preview(); }
-    title: BoardUi.opened ? BoardUi.heading + " · J-TerminaL" : "J-TerminaL";
+    title: BoardUi.opened ? BoardUi.heading + " · J-TerminaL" : AnalysisUi.opened ? AnalysisUi.heading + " · J-TerminaL" : "J-TerminaL";
     no-frame: true;
     always-on-top: true;
     background: transparent;
@@ -518,6 +520,11 @@ export component Bar inherits Window {
             if TagEditorUi.open { return reject; }
             if BoardUi.opened && event.text != Key.F1 {
                 if BoardUi.key(raw-event.text,KeyBindings.modifier-mask(raw-event),raw-event.repeat) { return accept; }
+                return reject;
+            }
+            // The analysis: its own keys; up, down and the page keys scroll it (its focus scope).
+            if AnalysisUi.opened && event.text != Key.F1 {
+                if AnalysisUi.key(raw-event.text,KeyBindings.modifier-mask(raw-event),raw-event.repeat) { return accept; }
                 return reject;
             }
             if event.text == Key.F3 && !event.modifiers.shift && !event.modifiers.control && !event.modifiers.alt {
@@ -551,7 +558,7 @@ export component Bar inherits Window {
             reject
         }
     Rectangle {
-        visible: !BoardUi.opened;
+        visible: !BoardUi.opened && !AnalysisUi.opened;
         background: root.glass ? Theme.glass-background.with-alpha(Theme.surface-alpha) : Theme.background;
         border-radius: root.glass ? 0px : Theme.radius;
         clip: true;
@@ -1480,6 +1487,12 @@ export component Bar inherits Window {
         }
     }
     board-page := BoardView {visible: BoardUi.opened;}
+    // Made only while it is open (the window stays small in the background).
+    if AnalysisUi.opened: AnalysisView {
+        x: 0px; y: 0px; width: root.width; height: root.height;
+        border-radius: root.glass ? 0px : Theme.radius; clip: true;
+        background: root.glass ? Theme.glass-background.with-alpha(Theme.surface-alpha) : Theme.background;
+    }
     if TagEditorUi.open: TagEditor {
         x: 0px; y: 0px; width: root.width; height: root.height;
         // Where the actions' card stands: over the footer, at the right of the form (on the board: of the window).

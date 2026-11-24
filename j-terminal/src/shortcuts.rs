@@ -157,6 +157,15 @@ const GROUPS: &[Group] = &[
         fixed!("F11", "Zeichenfläche maximieren oder wieder teilen", "Maximize or restore drawing area"),
         fixed!("Esc", "Auswahl, Werkzeugmenü oder Editor verlassen", "Leave selection, tool menu or editor"),
     ] },
+    Group { name: ["Auswertung", "Analysis"], shortcuts: &[
+        fixed!("← / →", "Vorheriger oder nächster Zeitraum", "Previous or next period"),
+        fixed!("Tab / Shift+Tab", "Zwischen Woche, Monat, Quartal und Jahr wechseln", "Switch between week, month, quarter and year"),
+        fixed!("Alt+← / Alt+→", "Tag für Details auswählen", "Select a day for details"),
+        fixed!("Home / Alt+H", "Zum Zeitraum von heute", "Go to the period of today"),
+        fixed!("1–9", "Reihe des Verlaufs ein- oder ausblenden", "Show or hide a line of the chart"),
+        fixed!("↑ / ↓ / Bild↑ / Bild↓ / End", "Blättern", "Scroll"),
+        fixed!("Esc", "Auswertung schließen", "Close the analysis"),
+    ] },
     Group { name: ["Notizblock", "Notebook"], shortcuts: &[
         binding!("notes-list", NOTES, "Ctrl+O", "Zur Zettelliste wechseln", "Go to the note list"),
         binding!("notes-all", NOTES, "Alt+ArrowLeft", "Alle Zettel anzeigen", "Show all notes"),

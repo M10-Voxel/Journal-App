@@ -236,6 +236,8 @@ pub struct Effect {
     pub hide_soon: bool,
     pub quit: bool,
     pub board: Option<crate::board::Period>,
+    /// The analysis (`/Auswertung`) is to open.
+    pub analysis: bool,
     /// The settings window is to open.
     pub settings: bool,
     /// The search bar gets this text.
@@ -293,7 +295,7 @@ pub struct SearchRow {
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum CommandAction {
     Board(crate::board::Period), BoardHelp, Filter(String, usize), Card(uuid::Uuid, bool), Entry, Notepad, Hit(NaiveDate, String), Day(NaiveDate),
-    PickDay, Today, Undo, Redo, Rating, Activities,
+    PickDay, Today, Undo, Redo, Rating, Activities, Analysis,
     /// `#Name`: a new entry from the template. `/Vorlage Name`: the template is written (made or changed).
     Template(String), TemplateEdit(String), TemplateHelp,
 }
@@ -570,6 +572,32 @@ impl Form {
         let effect = self.enter_row(TITLE);
         Effect { focus: Some(if self.entry_open { Pane::Entry } else { Pane::Search }), ..effect }
     }
+    pub fn today(&self) -> NaiveDate { self.today }
+
+    /// Reads the journal again when it changed (or the day did); true when it did.
+    pub fn refresh(&mut self) -> bool {
+        let (today, minutes) = if self.fixed_clock { (self.today, self.now) } else { now() };
+        let changed = match (&self.journal, &mut self.snapshot) {
+            (Some(journal), Some(snapshot)) => snapshot.refresh(&journal.store, today).unwrap_or(false),
+            _ => false,
+        };
+        let new_day = today != self.today;
+        self.today = today;
+        self.now = minutes;
+        changed || new_day
+    }
+
+    /// The analysis of the period around `date` (`/Auswertung`): the shared period data and the calendar's minutes.
+    pub fn analysis(&self, date: NaiveDate, mode: crate::analysis::Mode, cursor: Option<NaiveDate>, hidden: &BTreeSet<String>) -> crate::analysis::View {
+        let empty = crate::day_view::PeriodData::default();
+        let data = self.snapshot.as_ref().map_or(&empty, |snapshot| &snapshot.period);
+        let (start, end) = mode.bounds(date);
+        let tags = crate::analysis::activity_tags(data);
+        let calendar = self.journal.as_ref().filter(|_| !tags.is_empty())
+            .and_then(|journal| journal.store.activity_minutes(&start.to_string(), &end.to_string(), &tags).ok()).unwrap_or_default();
+        crate::analysis::build(&crate::analysis::Input { data, calendar: &calendar, hidden }, date, mode, cursor, self.language)
+    }
+
     pub fn set_clock(&mut self, today: NaiveDate, minutes: u32) {
         self.today = today;
         self.now = minutes;
@@ -630,6 +658,8 @@ impl Form {
             (format!("/{}", actions.redo), ["redo", "wiederherstellen"], actions.redo, "redo-2", CommandAction::Redo),
             (format!("/{}", day.rating), ["rating", "bewertung"], day.rating, "gauge", CommandAction::Rating),
             (format!("/{}", day.activities), ["activities", "aktivitaten"], day.activities, "activity", CommandAction::Activities),
+            (crate::texts::analysis::COMMAND[usize::from(self.language == Language::En)].into(), ["auswertung", "analysis"],
+                crate::texts::analysis::COMMAND_DETAIL[usize::from(self.language == Language::En)], "chart-line", CommandAction::Analysis),
         ];
         let mut matching: Vec<_> = all.into_iter().filter(|(_, names, ..)| names.iter().any(|name| name.starts_with(&query))).collect();
         matching.sort_by_key(|(_, names, ..)| !names.contains(&query.as_str()));
@@ -689,6 +719,10 @@ impl Form {
             Some(CommandAction::Board(period)) => {
                 self.search_edited("");
                 Effect {board:Some(period),search:Some(String::new()),..Effect::default()}
+            }
+            Some(CommandAction::Analysis) => {
+                self.search_edited("");
+                Effect { analysis: true, search: Some(String::new()), ..Effect::default() }
             }
             Some(CommandAction::BoardHelp) => { self.status=Some((crate::board_ui::projection_hint(self.language).into(),false)); Effect::default() }
             Some(CommandAction::Notepad) => self.open_notepad(),

@@ -35,6 +35,11 @@ pub struct ActivityDefinition {
     pub active: Option<bool>,
     #[serde(rename = "calendarTagId")]
     pub calendar_tag_id: Option<String>,
+    /// The minutes the analysis' seven shades run over (`activityRange`).
+    #[serde(rename = "minMinutes")]
+    pub min_minutes: Option<f64>,
+    #[serde(rename = "maxMinutes")]
+    pub max_minutes: Option<f64>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize)]
