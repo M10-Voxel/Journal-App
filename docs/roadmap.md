@@ -129,6 +129,12 @@ Offene Aufgaben. Erledigtes mit `[x]` markieren. Vollständiger Plan: `docs/plan
 - [x] Deckenden Fensterkopf beim Wiederöffnen verwenden. Nativer Test mit kontrastierendem Hintergrund und drei Öffnungsvorgängen.
 - [x] Die Rahmenlinie nach innen versetzen und den Verlauf an allen vier Eckbögen im Rendertest prüfen.
 - [x] Mit Acrylic Hintergrund und Fensterinhalt durch Windows gemeinsam abrunden und die Kontur dunkelgrau zeichnen. Der native Wiederöffnungstest prüft alle vier Ecken und die Randfarbe vor einem kontrastierenden Hintergrund.
+- [x] Acrylic auch hinter dem Kalender zeigen und die Tönung des ganzen Fensters dunkler und fast deckend machen (`glass-background`, `surface-alpha` im Theme).
+- [x] Strg+K auf einem Eintrag nur mit dessen Aktionen (Löschen zuletzt), allgemeine nur über die Suche.
+- [x] Symbolraster: fehlende Namen (`music`, `building-2`) ersetzt, „…“ am Ende lädt alle Symbole.
+- [x] „…“ (alle Symbole) auch im Tag-Editor.
+- [x] Tagesspalte des Kalenders ohne Kalenderwochen bis auf die Datumsbreite schmaler ziehbar.
+- [x] Tag-Liste: Tag mit Alt+Entf oder Strg+K nach Rückfrage löschen. Neue Tags erst mit Enter im Tag-Editor behalten, Esc verwirft sie.
 - [x] **Tagesansicht bedienbar, Seitenfenster links, gemeinsame Timer** – 19.11.2026, noch nicht committet (beide Branches).
   - Einträge „nur im Kalender“ erscheinen nur im Kalender.
   - Arbeiten wie auf der Tagesseite der App (`day.rs`, `day_ops.rs`): Titel des Tages, Einträge schreiben (Enter, Alt+A/E/N, Enter → nächster), erledigt/abgebrochen/wichtig, Typ, morgen, planen auf einen oder mehrere Tage (Spur bleibt), Uhrzeit mit gleicher Dauer, Erinnerung, Tag, Symbol, Beschreibung, verschieben, löschen. Gleiche Kürzel wie die App. Jede Änderung liest den Tag frisch und speichert über `journal-core` (Revision, Kopien, Historie).

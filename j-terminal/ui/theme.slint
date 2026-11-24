@@ -18,8 +18,10 @@ import "../assets/fonts/Lilex-700.ttf";
 export global Theme {
     // ── The palette ──
     out property <color> background: #1c1c1e;      // the surface
-    // How much of the surface covers the blur behind the window (only where Windows draws one).
-    out property <float> surface-alpha: 0.84;
+    // The tint over the blur behind the window (only where Windows draws one): a little darker than the surface and
+    // nearly opaque, so the launcher and the calendar's time grid stay readable even before bright windows.
+    out property <color> glass-background: #161618;
+    out property <float> surface-alpha: 0.9;
     out property <color> ground: #000000;          // text on a light fill
     out property <color> inset: #ffffff08;
     out property <color> raised: #ffffff0d;        // a card on the surface
@@ -423,6 +425,8 @@ export global Theme {
     out property <length> cal-label-width: 132px;
     // The day column can be dragged between these widths at its right edge.
     out property <length> cal-label-min-width: 90px;
+    // Without the calendar weeks the date alone (`cal-date-width`) is the least.
+    out property <length> cal-label-min-width-no-weeks: Theme.cal-date-width;
     out property <length> cal-label-max-width: 360px;
     out property <length> cal-resize-grip: 8px;
     out property <length> cal-date-width: 50px;

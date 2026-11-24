@@ -1299,6 +1299,19 @@ fn a_tag_typed_in_the_form_is_made_and_the_tag_editor_opens_on_it() {
     assert_eq!((effect.edit_tag.as_deref(), t.form.v.tag.as_deref()), (Some(sport.id.as_str()), Some(sport.id.as_str())));
     assert_eq!(sport.color, crate::tag_edit::next_color(&tags[..2]));
     assert_eq!(value(&mut t.form, Field::Tag), "Sport");
+    // Esc in the tag editor does not keep it: the tag goes again and the form has none.
+    let sport_id = sport.id.clone();
+    crate::tag_edit::delete(&mut t.form.journal.as_mut().unwrap().store, &sport_id).unwrap();
+    t.form.forget_tag(&sport_id);
+    t.form.reload_tags();
+    assert!(!t.form.journal.as_ref().unwrap().store.tags().unwrap().iter().any(|tag| tag.id == sport_id));
+    assert_eq!(t.form.v.tag, None);
+    // Made again, as Enter in the editor keeps it.
+    go(&mut t.form, Field::Tag);
+    t.form.key(Key::Enter, NONE);
+    type_in(&mut t.form, "Sport");
+    t.form.key(Key::Enter, NONE);
+    assert!(t.form.journal.as_ref().unwrap().store.tags().unwrap().iter().any(|tag| tag.name == "Sport"));
     // A name there already makes nothing.
     go(&mut t.form, Field::Tag);
     t.form.key(Key::Enter, NONE);

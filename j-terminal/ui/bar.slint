@@ -552,7 +552,7 @@ export component Bar inherits Window {
         }
     Rectangle {
         visible: !BoardUi.opened;
-        background: root.glass ? Theme.background.with-alpha(Theme.surface-alpha) : Theme.background;
+        background: root.glass ? Theme.glass-background.with-alpha(Theme.surface-alpha) : Theme.background;
         border-radius: root.glass ? 0px : Theme.radius;
         clip: true;
     page-scroll := Flickable {
@@ -1337,7 +1337,7 @@ export component Bar inherits Window {
         background: Theme.divider;
     }
     calendar := Calendar {
-        background: root.glass ? Theme.background : Theme.cal-background;
+        background: Theme.cal-background;
         x: root.stacked ? 0px : root.form-space + Theme.border-width;
         y: root.stacked ? root.pane-height + Theme.border-width : 0px;
         width: root.stacked ? root.content-width : root.content-width - self.x;

@@ -1,5 +1,5 @@
 //! The tag editor in the window: opened on a tag just made in a picker (day view, form, notepad, board), drawn from
-//! `tag_edit::Editor`, and kept with Enter.
+//! `tag_edit::Editor`, and kept with Enter; Esc takes the new tag away again.
 use super::*;
 use tag_edit::{Editor, Key as EditKey, Part, SWATCHES};
 
@@ -34,12 +34,16 @@ impl App {
         ui.set_hex(editor.hex.clone().into());
         ui.set_swatches(std::rc::Rc::new(slint::VecModel::from(SWATCHES.iter().map(|s| { let [r, g, b] = calendar::parse_color(s).unwrap_or([0, 0, 0]); slint::Color::from_rgb_u8(r, g, b) }).collect::<Vec<_>>())).into());
         ui.set_swatch(editor.swatch().map_or(-1, |i| i as i32));
-        let icons: Vec<TagIcon> = editor.icons().into_iter().enumerate().map(|(i, icon)| TagIcon {
+        let mut icons: Vec<TagIcon> = editor.icons().into_iter().enumerate().map(|(i, icon)| TagIcon {
             has_icon: icon.is_some(),
             icon: icon.map(|name| icon_image(name, theme.get_icon_size(), scale)).unwrap_or_default(),
             label: icon.unwrap_or_default().into(),
             selected: i == editor.pick,
         }).collect();
+        // „…“ after the common icons: every icon.
+        if editor.more() {
+            icons.push(TagIcon { has_icon: true, icon: icon_image("ellipsis", theme.get_icon_size(), scale), label: texts::day_texts(lang).icon_more.into(), selected: false });
+        }
         ui.set_icons(std::rc::Rc::new(slint::VecModel::from(icons)).into());
         ui.set_icon_pick(editor.pick as i32);
         ui.set_icon_name(editor.icon.clone().unwrap_or_else(|| texts::tags::no_icon(lang).into()).into());
@@ -62,6 +66,16 @@ impl App {
                 self.draw_tag_editor();
             }
         }
+    }
+
+    /// Esc: the tag was only just made in a picker and is not kept, so it goes again (whatever got it keeps no tag).
+    fn discard_tag(&mut self) {
+        let Some(editor) = self.tag_editor.clone() else { return };
+        if let Some(journal) = self.state.journal.as_mut() {
+            if let Err(error) = tag_edit::delete(&mut journal.store, &editor.id) { self.notice = Some(error); }
+        }
+        self.state.forget_tag(&editor.id);
+        self.close_tag_editor();
     }
 
     /// Esc (or kept): the editor closes; the tag shows as it is now wherever it is used.
@@ -96,7 +110,7 @@ pub(super) fn connect(bar: &Bar) {
         use slint::platform::Key as K;
         let is = |k: K| key.as_str() == String::from(char::from(k));
         if is(K::Return) { return a.keep_tag(); }
-        if is(K::Escape) { return a.close_tag_editor(); }
+        if is(K::Escape) { return a.discard_tag(); }
         let key = if is(K::Tab) { if shift { EditKey::BackTab } else { EditKey::Tab } }
             else if is(K::UpArrow) { EditKey::Up } else if is(K::DownArrow) { EditKey::Down }
             else if is(K::LeftArrow) { EditKey::Left } else if is(K::RightArrow) { EditKey::Right } else { return };

@@ -53,3 +53,11 @@ pub fn delete_scope(scope: &str, language: Language) -> String {
         format!("Delete {lower}")
     } else { format!("{scope} löschen") }
 }
+// A tag deleted from a tag list (Alt+Entf or Strg+K on it), after asking.
+pub fn delete_tag_heading(language: Language) -> &'static str { ["Tag löschen?", "Delete the tag?"][l(language)] }
+pub fn confirm_delete_tag(name: &str, language: Language) -> String {
+    if language == Language::En { format!("Delete “{name}” (entries keep no tag)") } else { format!("„{name}“ löschen (Einträge verlieren den Tag)") }
+}
+pub fn tag_deleted(name: &str, language: Language) -> String {
+    if language == Language::En { format!("Tag “{name}” deleted – Ctrl+Z brings it back") } else { format!("Tag „{name}“ gelöscht – Strg+Z holt ihn zurück") }
+}

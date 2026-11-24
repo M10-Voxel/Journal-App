@@ -61,7 +61,7 @@ component PopoverSearch inherits Rectangle {
                 root.hand-on(Key.Escape, 0);
                 return accept;
             }
-            if !root.menu && ((event.modifiers.control && event.text == Key.Delete) || ((event.text == Key.LeftArrow || event.text == Key.RightArrow) && (root.sideways || self.text == ""))) {
+            if !root.menu && (((event.modifiers.control || event.modifiers.alt) && event.text == Key.Delete) || ((event.text == Key.LeftArrow || event.text == Key.RightArrow) && (root.sideways || self.text == ""))) {
                 root.hand-on(event.text, mods);
                 return accept;
             }

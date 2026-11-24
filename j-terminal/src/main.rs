@@ -460,6 +460,11 @@ impl App {
         }
         self.state.preferences = next;
         self.state.language = next.effective_language(self.journal_language);
+        // Weeks shown again: the day column gets back the room for them (the width chosen is kept for when they go).
+        if key == PreferenceKey::WeekNumbers {
+            let chosen = next.calendar_label_width.map_or(self.bar.global::<Theme>().get_cal_label_width(), f32::from);
+            self.state.metrics.label_w = clamp_label_width(&self.bar, chosen, next.week_numbers);
+        }
         self.draw();
         if let Some(window) = &self.settings {
             if key == PreferenceKey::Language { self.draw_settings_labels(window); }
@@ -1147,10 +1152,11 @@ impl App {
     }
 }
 
-/// The day column's width within the theme's bounds.
-fn clamp_label_width(bar: &Bar, width: f32) -> f32 {
+/// The day column's width within the theme's bounds. Without the calendar weeks it may be as narrow as the date.
+fn clamp_label_width(bar: &Bar, width: f32, weeks: bool) -> f32 {
     let theme = bar.global::<Theme>();
-    width.clamp(theme.get_cal_label_min_width(), theme.get_cal_label_max_width())
+    let least = if weeks { theme.get_cal_label_min_width() } else { theme.get_cal_label_min_width_no_weeks() };
+    width.clamp(least, theme.get_cal_label_max_width())
 }
 
 /// The calendar's sizes as the theme has them.
@@ -1158,7 +1164,7 @@ fn metrics(bar: &Bar) -> calendar::Metrics {
     let theme = bar.global::<Theme>();
     calendar::Metrics {
         width: theme.get_calendar_width(), height: theme.get_calendar_height(), pad: theme.get_cal_pad(), head_h: theme.get_cal_head_height(),
-        lanes: theme.get_cal_lanes() as usize, lane_w: theme.get_cal_lane_width(), label_w: theme.get_cal_label_width(),
+        lanes: theme.get_cal_lanes() as usize, lane_w: theme.get_cal_lane_width(), label_w: theme.get_cal_label_width(), date_w: theme.get_cal_date_width(),
         day_h: theme.get_cal_day_height(), thin_h: theme.get_cal_thin_height(), row_h: theme.get_cal_row_height(), month_h: theme.get_cal_month_height(),
         date_h: theme.get_cal_date_height(), chip_h: theme.get_cal_chip_height(), dot: theme.get_cal_dot(), point_w: theme.get_cal_point_width(), point_line_w: theme.get_cal_point_line_width(), zoom: 1.0, pan: 0.0,
     }
@@ -1528,7 +1534,7 @@ fn connect(bar: &Bar) {
         let Some(bar) = weak.upgrade() else { return };
         with_app(|app| {
             let m = &app.state.metrics;
-            let width = clamp_label_width(&bar, x - m.pad - m.lanes as f32 * m.lane_w).round();
+            let width = clamp_label_width(&bar, x - m.pad - m.lanes as f32 * m.lane_w, app.state.preferences.week_numbers).round();
             if width == m.label_w { return; }
             app.state.metrics.label_w = width;
             let calendar = app.state.calendar_view();
@@ -1934,7 +1940,7 @@ fn main() {
         templates::Templates::default()
     });
     state.metrics = metrics(&bar);
-    if let Some(width) = preferences.calendar_label_width { state.metrics.label_w = clamp_label_width(&bar, width as f32); }
+    if let Some(width) = preferences.calendar_label_width { state.metrics.label_w = clamp_label_width(&bar, width as f32, preferences.week_numbers); }
     APP.with(|app| *app.borrow_mut() = Some(App { tag_editor: None, floating_notes:Default::default(),board:None, board_images:Default::default(), notepad_media: NotepadMedia::default(), notepad_list_query: Default::default(),
         bar, settings: None, settings_navigation: Default::default(), preferences_path, journal_language, restore_launcher: false, state, notice,
         hide_timer: slint::Timer::default(), bindings, hotkeys, active_hotkey, day_items: Vec::new(), side_cells: Vec::new(), tick: slint::Timer::default() }));
@@ -2902,7 +2908,8 @@ mod tests {
         assert_eq!(bar.get_content_width(), closed_width, "The actions do not widen the window.");
         assert_eq!(bar.get_menu_title().as_str(), "Brot kaufen");
         let labels = |bar: &Bar| bar.get_menu_rows().iter().map(|row| row.label.to_string()).collect::<Vec<_>>();
-        assert!(labels(&bar).contains(&"Status".to_string()) && labels(&bar).contains(&"Neue Aufgabe".to_string()), "{:?}", labels(&bar));
+        assert!(labels(&bar).contains(&"Status".to_string()) && !labels(&bar).contains(&"Neue Aufgabe".to_string()), "On an entry only its own actions: {:?}", labels(&bar));
+        assert_eq!(labels(&bar).last().map(String::as_str), Some("Löschen"), "Deleting is last.");
         let status = bar.get_menu_rows().iter().find(|row| row.label == "Status").unwrap();
         assert_eq!(status.caps.iter().map(|cap| cap.to_string()).collect::<Vec<_>>(), ["Alt", "D"], "Each action shows its keys.");
         capture(&bar, "actions-entry");

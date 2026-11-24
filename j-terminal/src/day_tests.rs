@@ -324,3 +324,68 @@ fn the_mouse_chooses_writes_and_opens_the_panel() {
     t.pane.cursor = Some(Item::Title);
     assert!(t.press(K::Up).to_search);
 }
+
+#[test]
+fn the_icon_grid_has_every_common_icon_and_ends_in_more_which_shows_all() {
+    for name in COMMON_ICONS { assert!(icons::exists(name), "{name} is drawn."); }
+    let mut t = t();
+    t.alt('a'); t.typed("Bericht"); t.press(K::Escape);
+    t.select("Bericht");
+    t.alt('i');
+    let rows = t.side().unwrap().rows;
+    assert_eq!(rows.len(), COMMON_ICONS.len() + 1);
+    assert_eq!((rows.last().unwrap().icon.as_str(), rows.last().unwrap().label.as_str()), ("ellipsis", "Alle Symbole"));
+    // „…“ by the keys: ↑ from the first cell wraps to it, Enter shows every icon; the keyboard stays there.
+    t.press(K::Left);
+    assert!(t.side().unwrap().rows.last().unwrap().selected);
+    t.press(K::Enter);
+    let rows = t.side().unwrap().rows;
+    assert_eq!(rows.len(), icons::all().len(), "Every icon, the common ones first, none twice.");
+    assert_eq!(rows[0].icon, COMMON_ICONS[0]);
+    assert!(rows[COMMON_ICONS.len()].selected && !rows.iter().any(|r| r.label == "Alle Symbole"));
+    assert!(t.day("2026-11-19").entries[0].icon.is_none(), "„…“ chooses no icon.");
+    // A search shows what it finds, without „…“; opening the grid again starts with the common ones.
+    t.pane.side_edited("tree");
+    assert!(!t.side().unwrap().rows.iter().any(|r| r.label == "Alle Symbole"));
+    t.press(K::Escape); t.press(K::Escape);
+    t.alt('i');
+    assert_eq!(t.side().unwrap().rows.len(), COMMON_ICONS.len() + 1);
+}
+
+#[test]
+fn a_tag_of_the_tag_list_is_deleted_after_asking() {
+    let mut t = t();
+    t.alt('a'); t.typed("Bericht"); t.press(K::Escape);
+    t.select("Bericht");
+    t.alt('g'); t.press(K::Down); t.press(K::Enter);
+    assert_eq!(t.day("2026-11-19").entries[0].tag.as_deref(), Some(WORK));
+    // „Kein Tag“ cannot be deleted.
+    t.alt('g');
+    t.press(K::Up);
+    t.key(K::Delete, ALT);
+    assert_eq!(t.side().unwrap().kind, 1);
+    // Alt+Entf on „Arbeit“ asks; Esc goes back to the list and nothing is deleted.
+    t.press(K::Down);
+    t.key(K::Delete, ALT);
+    let side = t.side().unwrap();
+    assert_eq!((side.kind, side.heading.as_str()), (7, "Tag löschen?"));
+    assert_eq!(side.rows.iter().map(|r| r.label.as_str()).collect::<Vec<_>>(), ["„Arbeit“ löschen (Einträge verlieren den Tag)", "Abbrechen"]);
+    assert!(side.rows[0].danger && side.rows[0].selected);
+    t.press(K::Escape);
+    assert_eq!(t.side().unwrap().kind, 1);
+    assert_eq!(t.store.tags().unwrap().len(), 1);
+    // „Abbrechen“ keeps it too.
+    t.press(K::Down);
+    assert!(t.with(|pane, cx| pane.ask_tag_delete(cx)).is_some(), "Strg+K asks the same.");
+    t.press(K::Down); t.press(K::Enter);
+    assert_eq!((t.side().unwrap().kind, t.store.tags().unwrap().len()), (1, 1));
+    // Confirmed: the tag is gone and the entry keeps no tag; the list stays open.
+    t.press(K::Down);
+    t.key(K::Delete, ALT);
+    let out = t.press(K::Enter);
+    assert!(out.changed);
+    assert!(t.store.tags().unwrap().is_empty());
+    assert_eq!(t.day("2026-11-19").entries[0].tag, None);
+    assert_eq!(t.side().unwrap().kind, 1);
+    assert!(t.snapshot.tags.is_empty(), "The warm data learns it.");
+}

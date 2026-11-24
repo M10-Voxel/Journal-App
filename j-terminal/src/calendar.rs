@@ -19,6 +19,8 @@ pub struct Metrics {
     pub lanes: usize, pub lane_w: f32,
     /// The side beside the lanes: the date and the entries without a time.
     pub label_w: f32,
+    /// The date at the start of the day column (the dots of closed days stay right of it).
+    pub date_w: f32,
     /// A closed day.
     pub day_h: f32,
     /// The thinnest piece of time in a closed day with many rows.
@@ -41,7 +43,7 @@ pub struct Metrics {
 }
 impl Default for Metrics {
     fn default() -> Self {
-        Metrics { width: 900.0, height: 600.0, pad: 6.0, head_h: 22.0, lanes: 3, lane_w: 20.0, label_w: 150.0, day_h: 30.0, thin_h: 5.0, row_h: 36.0, month_h: 24.0, date_h: 20.0, chip_h: 18.0, dot: 12.0, point_w: 140.0, point_line_w: 4.0, zoom: 1.0, pan: 0.0 }
+        Metrics { width: 900.0, height: 600.0, pad: 6.0, head_h: 22.0, lanes: 3, lane_w: 20.0, label_w: 150.0, date_w: 50.0, day_h: 30.0, thin_h: 5.0, row_h: 36.0, month_h: 24.0, date_h: 20.0, chip_h: 18.0, dot: 12.0, point_w: 140.0, point_line_w: 4.0, zoom: 1.0, pan: 0.0 }
     }
 }
 impl Metrics {
@@ -386,7 +388,8 @@ pub fn layout(input: &Input, m: &Metrics) -> Layout {
             let chip = if open {
                 Chip { x: label_x, y: y + m.date_h + n as f32 * m.chip_h, w: m.label_w - m.pad, h: m.chip_h - 2.0, item: *index, title: item.title.clone(), icon: item.icon.clone(), color: item.color, fresh: item.fresh, done: item.done, dot: false }
             } else {
-                let room = ((m.label_w * 0.45) / (m.dot + 3.0)).floor().max(1.0) as usize;
+                // Right of the date only: a narrow column shows fewer dots (or none) rather than covering it.
+                let room = ((m.label_w * 0.45).min(m.label_w - m.date_w - m.pad) / (m.dot + 3.0)).floor().max(0.0) as usize;
                 if n >= room { break; }
                 Chip { x: left - m.pad - (n as f32 + 1.0) * (m.dot + 3.0), y: y + (m.date_h - m.dot) / 2.0, w: m.dot, h: m.dot, item: *index, title: String::new(), icon: item.icon.clone(), color: item.color, fresh: item.fresh, done: item.done, dot: true }
             };
@@ -547,6 +550,14 @@ mod tests {
         let opened = show(&items, &["2026-11-19"]);
         assert!(opened.chips.iter().all(|c| !c.dot && c.title == "x" && c.x + c.w <= Metrics::default().time_x()), "Opened: lines with their titles under the date.");
         assert!(row(&opened, "2026-11-19").h >= Metrics::default().date_h + 2.0 * Metrics::default().chip_h);
+        // A narrow day column (no calendar weeks): the dots never cover the date, and as narrow as the date there are none.
+        for (label_w, dots) in [(90.0, 2), (71.0, 1), (50.0, 0)] {
+            let m = Metrics { label_w, ..Metrics::default() };
+            let narrow = show_with(&items, &[], &m);
+            let shown: Vec<_> = narrow.chips.iter().filter(|c| c.dot).collect();
+            assert_eq!(shown.len(), dots, "{label_w}");
+            assert!(shown.iter().all(|c| c.x >= m.pad + m.lanes as f32 * m.lane_w + m.date_w), "{label_w}");
+        }
     }
 
     #[test]

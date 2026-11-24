@@ -3,7 +3,7 @@
 //! Every tag picker offers „Name“ anlegen when what is typed names no tag. The tag is made at once (the next free colour
 //! of the app's swatches, no icon) and given to the entry, card or note; then the tag editor opens on it: the name, the
 //! colour (a saturation/brightness field, a hue bar, the swatches and the hex code) and the icon. Enter keeps what is
-//! chosen, Esc leaves the tag as it was made.
+//! chosen and only then is the tag kept; Esc deletes it again, so a tag exists only after Enter.
 use journal_core::storage::{Store, Tag};
 use crate::icons;
 
@@ -34,6 +34,12 @@ pub fn create(store: &mut Store, name: &str) -> Result<Tag, String> {
     tags.push(tag.clone());
     store.save_tags(&tags).map_err(|e| e.to_string())?;
     Ok(tag)
+}
+
+/// The tag is removed; entries with it keep no tag (the journal does that), cards and notes show none.
+pub fn delete(store: &mut Store, id: &str) -> Result<(), String> {
+    let tags: Vec<Tag> = store.tags().map_err(|e| e.to_string())?.into_iter().filter(|t| t.id != id).collect();
+    store.save_tags(&tags).map(|_| ()).map_err(|e| e.to_string())
 }
 
 /// The tag's name, colour and icon change; its place in the list stays.
@@ -101,12 +107,17 @@ pub struct Editor {
     pub pick: usize,
     pub part: Part,
     pub error: Option<String>,
+    /// Every icon is shown (after the grid's last cell, „…“), not only the common ones.
+    pub all: bool,
+    /// The icon the tag had when the editor opened: first in the grid when it is not a common one (fixed, so choosing
+    /// another or showing every icon does not shift the grid).
+    pub own: Option<String>,
 }
 
 impl Editor {
     pub fn new(tag: &Tag) -> Self {
         let (hue, saturation, value) = hsv_of(&tag.color);
-        let mut editor = Editor { id: tag.id.clone(), name: tag.name.clone(), hue, saturation, value, hex: tag.color.to_lowercase(), icon: tag.icon.clone(), ..Editor::default() };
+        let mut editor = Editor { id: tag.id.clone(), name: tag.name.clone(), hue, saturation, value, hex: tag.color.to_lowercase(), icon: tag.icon.clone(), own: tag.icon.clone(), ..Editor::default() };
         editor.pick = editor.icon.as_deref().and_then(|icon| editor.icons().iter().position(|i| *i == Some(icon))).unwrap_or(0);
         editor
     }
@@ -115,15 +126,22 @@ impl Editor {
 
     fn colored(&mut self) { self.hex = self.color(); }
 
-    /// No icon, then the common ones (with the tag's own) or what the search finds.
+    /// No icon, then the common ones (with the tag's own; after „…“ every other icon too) or what the search finds.
     pub fn icons(&self) -> Vec<Option<&'static str>> {
         let found: Vec<&'static str> = if self.query.trim().is_empty() {
             let mut common: Vec<&'static str> = crate::form::COMMON_ICONS.iter().copied().filter(|name| icons::exists(name)).collect();
-            if let Some((own, _)) = self.icon.as_deref().and_then(|icon| icons::all().iter().find(|(name, _)| *name == icon)) { if !common.contains(own) { common.insert(0, own); } }
+            if let Some((own, _)) = self.own.as_deref().and_then(|icon| icons::all().iter().find(|(name, _)| *name == icon)) { if !common.contains(own) { common.insert(0, own); } }
+            if self.all {
+                let rest: Vec<&'static str> = icons::all().iter().map(|(name, _)| *name).filter(|name| !common.contains(name)).collect();
+                common.extend(rest);
+            }
             common
         } else { icons::search(&self.query, ICON_ROOM) };
         std::iter::once(None).chain(found.into_iter().map(Some)).collect()
     }
+
+    /// The grid ends in „…“ (every icon), while nothing is searched and not all are shown yet.
+    pub fn more(&self) -> bool { !self.all && self.query.trim().is_empty() }
 
     /// The swatch of the colour now (if it is one).
     pub fn swatch(&self) -> Option<usize> { SWATCHES.iter().position(|s| *s == self.color()) }
@@ -147,7 +165,9 @@ impl Editor {
 
     pub fn set_query(&mut self, query: &str) { self.query = query.to_string(); self.pick = 0; }
 
+    /// An icon of the grid is chosen; „…“ (the cell after the icons) shows every icon and goes on to the first new one.
     pub fn set_icon(&mut self, index: usize) {
+        if self.more() && index == self.icons().len() { self.all = true; }
         if let Some(icon) = self.icons().get(index) { self.icon = icon.map(str::to_string); self.pick = index; self.part = Part::Icons; }
     }
 
@@ -169,7 +189,7 @@ impl Editor {
                 self.set_swatch(next);
             }
             (_, Part::Icons) => {
-                let count = self.icons().len().max(1) as i32;
+                let count = (self.icons().len() + usize::from(self.more())).max(1) as i32;
                 let by: i32 = match key { Key::Left => -1, Key::Right => 1, Key::Up => -(ICON_COLUMNS as i32), _ => ICON_COLUMNS as i32 };
                 let next = (self.pick as i32 + by).clamp(0, count - 1) as usize;
                 self.set_icon(next);
@@ -250,6 +270,32 @@ mod tests {
         assert!(editor.checked(&[tag("Arbeit", "#569eff")], "x").is_err(), "Another tag has the name.");
         editor.set_name("Gitarre");
         assert_eq!(editor.checked(&[], "x"), Ok(("Gitarre".into(), "#123456".into())));
+    }
+
+    #[test]
+    fn the_icon_grid_ends_in_more_which_shows_every_icon() {
+        let mut editor = Editor::new(&tag("Sport", "#ff0000"));
+        let common = editor.icons().len();
+        assert!(editor.more() && common == crate::form::COMMON_ICONS.len() + 1, "No icon, the common ones, then „…“.");
+        // The arrows reach „…“ after the last icon: every icon, the keyboard on the first new one (chosen as arrows choose).
+        editor.focus(Part::Icons);
+        editor.set_icon(common - 1);
+        editor.key(Key::Right, false);
+        assert!(editor.all && !editor.more());
+        assert_eq!(editor.icons().len(), icons::all().len() + 1, "Every icon once, after no icon.");
+        assert_eq!(editor.pick, common);
+        assert_eq!(editor.icon.as_deref(), editor.icons()[common]);
+        // A search finds what it finds, without „…“.
+        // A rare icon of the tag's own stays first, also with every icon shown.
+        let mut rare = Editor::new(&Tag { icon: Some("guitar".into()), ..tag("Musik", "#ff0000") });
+        let before = rare.icons();
+        assert_eq!(before[1], Some("guitar"));
+        rare.set_icon(before.len());
+        assert_eq!(rare.icons()[..before.len()], before[..], "Nothing shifts.");
+        assert_eq!(rare.icons().iter().filter(|i| **i == Some("guitar")).count(), 1);
+        let mut searching = Editor::new(&tag("Musik", "#ff0000"));
+        searching.set_query("guitar");
+        assert!(!searching.more());
     }
 
     #[test]

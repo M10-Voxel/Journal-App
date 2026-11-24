@@ -79,8 +79,8 @@ impl Field {
 pub const REMINDERS: [Option<i64>; 11] = [None, Some(0), Some(5), Some(10), Some(15), Some(30), Some(60), Some(120), Some(1440), Some(2880), Some(10080)];
 /// The icons shown before anything is typed.
 pub const COMMON_ICONS: [&str; 48] = ["calendar", "clock", "bell", "star", "heart", "house", "briefcase", "book-open", "graduation-cap", "stethoscope", "dumbbell", "utensils",
-    "shopping-cart", "car", "plane", "train-front", "bike", "music", "phone", "mail", "users", "user", "gift", "cake", "coffee", "party-popper", "pill", "hospital",
-    "building-2", "map-pin", "flag", "sun", "moon", "cloud", "umbrella", "tree-pine", "dog", "cat", "baby", "wrench", "laptop", "code", "pen", "camera", "film",
+    "shopping-cart", "car", "plane", "train-front", "bike", "headphones", "phone", "mail", "users", "user", "gift", "cake", "coffee", "party-popper", "pill", "hospital",
+    "building", "map-pin", "flag", "sun", "moon", "cloud", "umbrella", "tree-pine", "dog", "cat", "baby", "wrench", "laptop", "code", "pen", "camera", "film",
     "gamepad-2", "trophy", "wallet"];
 const ICON_ROOM: usize = 56;
 /// Icons per line of the grid (as in `ui/theme.slint`).
@@ -1206,6 +1206,12 @@ impl Form {
     pub fn take_tag_edit(&mut self) -> Option<String> { self.tag_edit.take() }
 
     /// The tags changed elsewhere (the tag editor): the warm data reads them again.
+    /// A tag made in a picker was not kept (Esc in the tag editor): the form and the open note no longer have it.
+    pub fn forget_tag(&mut self, id: &str) {
+        if self.v.tag.as_deref() == Some(id) { self.v.tag = None; }
+        if let Some(draft) = &mut self.notepad { if draft.card.tag.as_deref() == Some(id) { draft.card.tag = None; } }
+    }
+
     pub fn reload_tags(&mut self) {
         if let (Some(journal), Some(snapshot)) = (&self.journal, &mut self.snapshot) { let _ = snapshot.reload(&journal.store); }
     }
@@ -2686,6 +2692,8 @@ impl Form {
     /// Strg+K: the actions open (about the chosen entry of the day view, the form or the notepad), or close again.
     pub fn toggle_menu(&mut self) -> Effect {
         if self.month_picker_open() { return self.key(Key::Escape, Mods::default()); }
+        // In the tag list Strg+K asks to delete the tag chosen (as Alt+Entf).
+        if self.menu.is_none() { if let Some(out) = self.with_pane(|pane, cx| pane.ask_tag_delete(cx)) { return self.pane_effect(out); } }
         if self.menu.is_some() || self.pane.side.is_some() { return self.close_menu(); }
         // What is being written in the day view is written first; the actions are then about that entry.
         if self.pane.edit.is_some() && !self.entry_open && self.notepad.is_none() {
@@ -2814,6 +2822,8 @@ impl Form {
         } else {
             let entry = menu.entry.as_deref().and_then(|id| self.with_pane(|pane, cx| pane.entry_actions(cx, id)));
             title = match &entry { Some((name, _)) => name.clone(), None => crate::day_view::long_date(self.day_shown(), self.language) };
+            // On an entry only what concerns it is listed; the day's general actions are found by searching.
+            let general = entry.is_none() || !menu.query.trim().is_empty();
             for line in entry.map(|(_, lines)| lines).unwrap_or_default() {
                 // Deleting: one line, or one per way when the entry has a series or plans.
                 if line.action == day_pane::Action::Delete {
@@ -2822,14 +2832,16 @@ impl Form {
                 }
                 items.push(ActionItem { id: ActionId::Entry(line.action), section: 0, icon: line.icon, label: line.label, value: line.value, on: line.on, danger: line.danger, color: line.color });
             }
-            items.push(ActionItem::new(ActionId::NewTask, 1, "journal-task", at.new_task));
-            items.push(ActionItem::new(ActionId::NewEvent, 1, "journal-event", at.new_event));
-            items.push(ActionItem::new(ActionId::NewNote, 1, "journal-note", at.new_note));
-            if self.day_shown() != self.today { items.push(ActionItem::new(ActionId::Today, 1, "calendar-check", at.today)); }
-            items.push(ActionItem::new(ActionId::Notebook, 1, "notebook-pen", at.notebook));
-            items.push(ActionItem::new(ActionId::Undo, 1, "undo-2", at.undo));
-            items.push(ActionItem::new(ActionId::Redo, 1, "redo-2", at.redo));
-            items.push(ActionItem::new(ActionId::Settings, 1, "settings", at.settings));
+            if general {
+                items.push(ActionItem::new(ActionId::NewTask, 1, "journal-task", at.new_task));
+                items.push(ActionItem::new(ActionId::NewEvent, 1, "journal-event", at.new_event));
+                items.push(ActionItem::new(ActionId::NewNote, 1, "journal-note", at.new_note));
+                if self.day_shown() != self.today { items.push(ActionItem::new(ActionId::Today, 1, "calendar-check", at.today)); }
+                items.push(ActionItem::new(ActionId::Notebook, 1, "notebook-pen", at.notebook));
+                items.push(ActionItem::new(ActionId::Undo, 1, "undo-2", at.undo));
+                items.push(ActionItem::new(ActionId::Redo, 1, "redo-2", at.redo));
+                items.push(ActionItem::new(ActionId::Settings, 1, "settings", at.settings));
+            }
         }
         // Deleting is always last, so ↑ from the first line reaches it (the smallest way at the very bottom).
         let deleting = |id: ActionId| matches!(id, ActionId::Entry(day_pane::Action::Delete) | ActionId::DeleteScope(_) | ActionId::NoteDelete | ActionId::FolderDelete | ActionId::EntryDelete);

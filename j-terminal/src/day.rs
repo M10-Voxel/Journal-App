@@ -116,6 +116,8 @@ pub enum SideView {
     /// The planning month and all confirmed target dates.
     Plan { cursor: PlanCursor, picked: BTreeSet<NaiveDate> },
     Description,
+    /// A tag of the tag list is to be deleted (Alt+Entf or Strg+K on it): its id and name, asked first.
+    TagDelete { tag: String, name: String },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -229,6 +231,8 @@ pub struct DayPane {
     /// Digits typed on a dial or an activity.
     typed: String,
     pub message: Option<(String, bool)>,
+    /// The icon grid shows every icon (after its last cell, „…“, was chosen), not only the common ones.
+    all_icons: bool,
 }
 
 fn now_ms() -> i64 { std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as i64) }
@@ -346,7 +350,9 @@ impl DayPane {
     /// A key while the day view has the keyboard.
     pub fn key(&mut self, cx: &mut Ctx, key: K, mods: Mods) -> Out {
         // The app's shortcuts reach the entry also while its panel is open (a picker of theirs replaces it).
-        if self.side.is_some() && mods.alt && self.edit.is_none() {
+        // Alt+Entf in the tag list deletes a tag (after asking), never the entry.
+        let tag_list = matches!(&self.side, Some(Side { view: SideView::Tags | SideView::TagDelete { .. }, .. }));
+        if self.side.is_some() && mods.alt && self.edit.is_none() && !(tag_list && key == K::Delete) {
             if let Some(Side { view: SideView::Description, entry, .. }) = self.side.clone() { let text = self.side_text.clone(); let r = self.change(cx, |day, _| ops::set_description(day, &entry, &text)); if let Err(error) = r { self.message = Some((error, true)); } }
             self.side = None;
             return self.alt_key(cx, key, mods);
@@ -711,7 +717,7 @@ impl DayPane {
         self.side = Some(Side { entry: id.to_string(), view: view.clone(), pick });
         match view {
             SideView::Description => { self.side_text = entry.description; Out { side_text: Some(self.side_text.clone()), ..Out::default() } }
-            SideView::Icons | SideView::Tags => { self.side_text.clear(); Out { side_text: Some(String::new()), ..Out::default() } }
+            SideView::Icons | SideView::Tags => { self.side_text.clear(); self.all_icons = false; Out { side_text: Some(String::new()), ..Out::default() } }
             _ => Out { focus: true, ..Out::default() },
         }
     }
@@ -796,14 +802,43 @@ impl DayPane {
         if let Some(side) = &mut self.side { if matches!(side.view, SideView::Icons | SideView::Tags) { side.pick = 0; } }
     }
 
+    /// The icons of the grid: the common ones (all of them after „…“, the common ones first) or what the search finds.
     fn icons_found(&self) -> Vec<&'static str> {
-        if self.side_text.trim().is_empty() { COMMON_ICONS.to_vec() } else { icons::search(&self.side_text, 49) }
+        if !self.side_text.trim().is_empty() { return icons::search(&self.side_text, 49); }
+        let mut found = COMMON_ICONS.to_vec();
+        if self.all_icons { found.extend(icons::all().iter().map(|(name, _)| *name).filter(|name| !COMMON_ICONS.contains(name))); }
+        found
+    }
+
+    /// The grid ends in „…“, which shows every icon (only while nothing is searched and not all are shown).
+    fn more_icons(&self) -> bool { !self.all_icons && self.side_text.trim().is_empty() }
+
+    /// The grid's cells: its icons and maybe „…“.
+    fn icon_cells(&self) -> usize { self.icons_found().len() + usize::from(self.more_icons()) }
+
+    /// The tag chosen in the tag list is to be deleted: the panel asks first (Alt+Entf or Strg+K). Not for „Kein Tag“
+    /// or the line that makes one; `None` when the panel is not on such a tag.
+    pub fn ask_tag_delete(&mut self, cx: &Ctx) -> Option<Out> {
+        let side = self.side.as_ref().filter(|side| side.view == SideView::Tags)?;
+        let tag = self.tag_choices(cx).get(side.pick).cloned().flatten()?;
+        let side = self.side.as_mut()?;
+        side.view = SideView::TagDelete { tag: tag.id, name: tag.name };
+        side.pick = 0;
+        Some(Out { focus: true, ..Out::default() })
+    }
+
+    /// Back in the tag list (after deleting or not), its search empty again.
+    fn tags_again(&mut self) -> Out {
+        if let Some(side) = &mut self.side { side.view = SideView::Tags; side.pick = 0; }
+        self.side_text.clear();
+        Out { side_text: Some(String::new()), ..Out::default() }
     }
 
     /// The panel closes (Esc on its actions, a click elsewhere); the keyboard stays on the entry.
     pub fn close_side(&mut self) -> Out { self.side = None; Out { focus: true, ..Out::default() } }
 
     fn back(&mut self) -> Out {
+        if let Some(Side { view: SideView::TagDelete { .. }, .. }) = &self.side { return self.tags_again(); }
         match &mut self.side { Some(side) if side.view != SideView::Actions => { side.view = SideView::Actions; side.pick = 0; Out { focus: true, ..Out::default() } } _ => self.close_side() }
     }
 
@@ -850,9 +885,15 @@ impl DayPane {
                     K::Up | K::BackTab => self.set_pick(pick(-1, count)),
                     K::Down | K::Tab => self.set_pick(pick(1, count)),
                     K::Enter => self.choose(cx, side.pick),
+                    K::Delete if mods.alt => self.ask_tag_delete(cx).unwrap_or_default(),
                     _ => Out::default(),
                 }
             }
+            SideView::TagDelete { .. } => match key {
+                K::Up | K::Down | K::Left | K::Right | K::Tab | K::BackTab => self.set_pick(1 - side.pick.min(1)),
+                K::Enter | K::Space => self.choose(cx, side.pick),
+                _ => Out { focus: true, ..Out::default() },
+            },
             SideView::Reminders => match key {
                 K::Up | K::Left => self.set_pick(pick(-1, REMINDERS.len())),
                 K::Down | K::Right | K::Tab => self.set_pick(pick(1, REMINDERS.len())),
@@ -860,7 +901,7 @@ impl DayPane {
                 _ => Out { focus: true, ..Out::default() },
             },
             SideView::Icons => {
-                let found = self.icons_found().len();
+                let found = self.icon_cells();
                 match key {
                     K::Left => self.set_pick(pick(-1, found)),
                     K::Right => self.set_pick(pick(1, found)),
@@ -937,6 +978,15 @@ impl DayPane {
         let Some(side) = self.side.clone() else { return Out::default() };
         let id = side.entry.clone();
         let r = match side.view {
+            SideView::TagDelete { tag, name } => {
+                if index != 0 { return self.tags_again(); }
+                let Some(store) = cx.store.as_deref_mut() else { self.message = Some((texts(cx.language).read_only.into(), true)); return Out { focus: true, ..Out::default() } };
+                let deleted = crate::tag_edit::delete(store, &tag).and_then(|()| match cx.snapshot.as_deref_mut() { Some(snapshot) => snapshot.reload(store), None => Ok(()) });
+                return match deleted {
+                    Ok(()) => { self.message = Some((crate::texts::tags::tag_deleted(&name, cx.language), false)); Out { changed: true, ..self.tags_again() } }
+                    Err(error) => { self.message = Some((error, true)); Out { focus: true, ..Out::default() } }
+                };
+            }
             SideView::Delete(scopes) => return match scopes.into_iter().nth(index) {
                 Some(scope) => self.remove_entries(cx, &id, scope.ids),
                 None => Out::default(),
@@ -956,7 +1006,17 @@ impl DayPane {
                 self.change(cx, |day, tags| ops::set_tag(day, tags, &id, tag))
             }
             SideView::Reminders => { let before = REMINDERS.get(index).copied().flatten(); self.change(cx, |day, _| ops::set_reminder(day, &id, before)) }
-            SideView::Icons => { let icon = self.icons_found().get(index).map(|s| s.to_string()); self.change(cx, |day, _| ops::set_icon(day, &id, icon)) }
+            SideView::Icons => {
+                let found = self.icons_found();
+                if index >= found.len() {
+                    // „…“: every icon, the keyboard stays on the first new one.
+                    if !self.more_icons() { return Out::default(); }
+                    self.all_icons = true;
+                    return self.set_pick(index);
+                }
+                let icon = found.get(index).map(|s| s.to_string());
+                self.change(cx, |day, _| ops::set_icon(day, &id, icon))
+            }
             SideView::Actions => { let Some(entry) = Self::entry(cx, &id) else { return Out::default() }; let actions = Self::actions(&entry); self.set_pick(index); return match actions.get(index) { Some(action) => self.act(cx, &entry, *action), None => Out::default() } }
             _ => return Out::default(),
         };
@@ -1022,6 +1082,15 @@ impl DayPane {
         let (dt, ft) = (day_texts(cx.language), form_texts(cx.language));
         let mut panel = SidePanel { title: if entry.text.trim().is_empty() { dt.untitled.into() } else { entry.text.clone() }, ..SidePanel::default() };
         match &side.view {
+            SideView::TagDelete { name, .. } => {
+                panel.kind = 7;
+                panel.heading = crate::texts::tags::delete_tag_heading(cx.language).into();
+                panel.heading_icon = "journal-trash";
+                panel.rows = vec![
+                    SideRow { icon: "trash".into(), label: crate::texts::tags::confirm_delete_tag(name, cx.language), selected: side.pick == 0, danger: true, ..SideRow::default() },
+                    SideRow { icon: "x".into(), label: crate::texts::tags::cancel(cx.language).into(), selected: side.pick == 1, ..SideRow::default() },
+                ];
+            }
             SideView::Delete(scopes) => {
                 panel.kind = 7;
                 panel.heading = dt.delete.into();
@@ -1051,6 +1120,7 @@ impl DayPane {
             SideView::Icons => {
                 panel.kind = 2; panel.heading = dt.icon.into(); panel.heading_icon = "image"; panel.text = self.side_text.clone(); panel.placeholder = dt.icon_search.into();
                 panel.rows = self.icons_found().into_iter().enumerate().map(|(i, name)| SideRow { icon: name.into(), label: name.into(), selected: side.pick == i, on: entry.icon.as_deref() == Some(name), ..SideRow::default() }).collect();
+                if self.more_icons() { panel.rows.push(SideRow { icon: "ellipsis".into(), label: dt.icon_more.into(), selected: side.pick == panel.rows.len(), ..SideRow::default() }); }
             }
             SideView::Description => {
                 panel.kind = 6; panel.heading = dt.description.into(); panel.heading_icon = "text-quote"; panel.text = self.side_text.clone(); panel.placeholder = dt.description_placeholder.into();
