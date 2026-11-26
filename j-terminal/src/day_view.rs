@@ -12,6 +12,7 @@ use crate::calendar::{self, Item as CalItem, Rgb};
 use crate::icons;
 use crate::repeat;
 use crate::texts::{day_texts, texts, Language};
+use crate::features::{Features, Module, View};
 
 // ----- The app's period data (only what the day view reads) -----
 
@@ -22,7 +23,25 @@ pub struct PeriodData {
     pub days: HashMap<String, PeriodDay>,
     pub scales: Vec<ScaleDefinition>,
     pub rating: Option<RatingScale>,
+    /// The notes of days and periods, by the period's key (`day:2026-11-18`, `week:2026-11-16` …).
+    #[serde(skip)]
+    pub notes: HashMap<String, String>,
+    /// A week's … year's own rating and values (`periods`), by its key.
+    #[serde(skip)]
+    pub periods: HashMap<String, PeriodValues>,
+    /// A week's … year's own entries (`entries`), by its key, in the app's order (tasks, then notes, by `order`).
+    #[serde(skip)]
+    pub entries: HashMap<String, Vec<PeriodEntry>>,
 }
+
+/// A period's own rating and values (`PeriodValues`).
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(default)]
+pub struct PeriodValues { pub rating: Option<f64>, pub scales: HashMap<String, f64> }
+
+/// A period's own entry (`PeriodEntry`): a task with its tick, or a note.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct PeriodEntry { pub id: String, pub note: bool, pub text: String, pub done: bool, pub order: f64 }
 
 #[derive(Clone, Debug, Default, Deserialize)]
 #[serde(default)]
@@ -93,6 +112,32 @@ impl PeriodData {
             }
         }
         data.rating = value.get("rating").and_then(|v| serde_json::from_value(v.clone()).ok());
+        if let Some(notes) = value.get("notes").and_then(|v| v.as_object()) {
+            data.notes = notes.iter().filter_map(|(key, text)| text.as_str().map(|text| (key.clone(), text.to_string()))).collect();
+        }
+        if let Some(periods) = value.get("periods").and_then(|v| v.as_object()) {
+            for (key, values) in periods {
+                let mut read = PeriodValues { rating: values.get("rating").and_then(|v| v.as_f64()).filter(|v| v.is_finite()), ..PeriodValues::default() };
+                if let Some(scales) = values.get("scales").and_then(|v| v.as_object()) {
+                    read.scales = scales.iter().filter_map(|(id, v)| v.as_f64().filter(|v| v.is_finite()).map(|v| (id.clone(), v))).collect();
+                }
+                data.periods.insert(key.clone(), read);
+            }
+        }
+        if let Some(entries) = value.get("entries").and_then(|v| v.as_object()) {
+            for (key, list) in entries {
+                let Some(list) = list.as_object() else { continue };
+                let mut read: Vec<PeriodEntry> = list.iter().filter(|(id, entry)| !id.is_empty() && entry.is_object()).map(|(id, entry)| PeriodEntry {
+                    id: id.clone(), note: entry.get("kind").and_then(|k| k.as_str()) == Some("note"),
+                    text: entry.get("text").and_then(|t| t.as_str()).unwrap_or_default().to_string(),
+                    done: entry.get("done").and_then(|d| d.as_bool()) == Some(true),
+                    order: entry.get("order").and_then(|o| o.as_f64()).filter(|o| o.is_finite()).unwrap_or(0.0),
+                }).collect();
+                // `periodEntries`: tasks first, then by order, then by id.
+                read.sort_by(|a, b| a.note.cmp(&b.note).then(a.order.total_cmp(&b.order)).then(a.id.cmp(&b.id)));
+                data.entries.insert(key.clone(), read);
+            }
+        }
         data
     }
 }
@@ -123,6 +168,10 @@ pub enum Item {
     Activity(String),
     /// A timer of another day (its key `<date>:<activity>`), shown while it exists.
     Timer(String),
+    /// The note of the day or the period.
+    Note,
+    /// An entry of a week's … year's own list (by id).
+    PeriodEntry(String),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -141,6 +190,8 @@ pub enum RowKind {
     Timer,
     /// A quiet line where a section has nothing.
     Empty,
+    /// The note: a free text over several lines.
+    Note,
 }
 
 /// A dial: the rating or a day value.
@@ -210,6 +261,8 @@ pub struct DayView {
     pub is_today: bool,
     pub title: String,
     pub rows: Vec<Row>,
+    /// The view shown (a day, or a week … year).
+    pub view: View,
 }
 
 impl DayView {
@@ -229,6 +282,8 @@ pub struct Source<'a> {
     pub timers: &'a BTreeMap<String, ActivityTimer>,
     /// Milliseconds since 1970 (for the timers' clocks).
     pub now: i64,
+    /// The calendar time of the activities' tags in the period shown (a week … year's checklist adds it up).
+    pub calendar: &'a crate::analysis::CalendarMinutes,
 }
 
 /// A time of day as the app writes it: "14:00".
@@ -328,8 +383,12 @@ fn symbol(entry: &Entry) -> &'static str {
     kind_icon(&entry.kind)
 }
 
-pub fn build(source: &Source, date: NaiveDate, today: NaiveDate, language: Language) -> DayView {
+/// The left side for `view` around `date`, with the parts `features` show there: a day (its title, entries, values and
+/// checklist, as before) or a week … year (its own entries, rating, values, checklist summed over its days, note, and
+/// lines to its evaluation and board). The note stands right under the title.
+pub fn build(source: &Source, date: NaiveDate, today: NaiveDate, language: Language, view: View, features: &Features) -> DayView {
     let dt = day_texts(language);
+    let has = |module: Module| features.has(view, module);
     let tag = |id: Option<&str>| id.and_then(|id| source.tags.iter().find(|tag| tag.id == id));
     let entry_row = |first: NaiveDate, entry: &Entry, item: &CalItem| {
         let known = tag(entry.tag.as_deref());
@@ -346,63 +405,163 @@ pub fn build(source: &Source, date: NaiveDate, today: NaiveDate, language: Langu
             description: entry.description.clone(),
             ..Row::new(RowKind::Entry, if entry.text.trim().is_empty() { dt.untitled.to_string() } else { entry.text.trim().to_string() }) }
     };
-    let found = entries_on(source, date);
-    let title = source.own.map(|day| day.title.clone()).unwrap_or_default();
-    let mut rows = vec![Row { item: Some(Item::Title), ..Row::new(RowKind::Title, title.clone()) }];
+    let period = source.period;
+    let key = view.period_key(date);
+    let (start, end) = view.bounds(date);
+    let day = view == View::Day;
+    // A day's title is the day's; a week's … year's is kept among the notes under its own key (the app keeps that list
+    // whole and shows only the notes themselves).
+    let title = if day { source.own.map(|day| day.title.clone()).unwrap_or_default() } else { period.notes.get(&title_key(&key)).cloned().unwrap_or_default() };
+    let mut rows = Vec::new();
+    // A period's heading shows which period it is (not chosen by the keyboard).
+    if !day { rows.push(Row::new(RowKind::Title, period_title(date, view, language))); }
+    if has(Module::Title) { rows.push(Row { item: Some(Item::Title), ..Row::new(RowKind::Title, title.clone()) }); }
+
+    // The note: right under the title.
+    if has(Module::Note) {
+        rows.push(Row { item: Some(Item::Note), ..Row::new(RowKind::Note, period.notes.get(&key).cloned().unwrap_or_default()) });
+    }
 
     // Timers of other days keep running: they stand on top, whatever day is shown.
-    for (key, timer) in source.timers.iter() {
-        let Some((day, activity)) = key.split_once(':') else { continue };
-        if day == date.to_string() { continue; }
-        let definition = source.period.definitions.iter().find(|item| item.id == activity);
-        let shown = NaiveDate::parse_from_str(day, "%Y-%m-%d").map(|d| repeat::format_occurrence(d, language)).unwrap_or_else(|_| day.to_string());
-        rows.push(Row { item: Some(Item::Timer(key.clone())), icon: if timer.running() { "timer" } else { "circle-pause" }, detail: shown,
+    for (timer_key, timer) in source.timers.iter() {
+        let Some((timer_day, activity)) = timer_key.split_once(':') else { continue };
+        if day && timer_day == date.to_string() { continue; }
+        if !day && NaiveDate::parse_from_str(timer_day, "%Y-%m-%d").is_ok_and(|d| d >= start && d <= end) && has(Module::Activities) { continue; }
+        let definition = period.definitions.iter().find(|item| item.id == activity);
+        let shown = NaiveDate::parse_from_str(timer_day, "%Y-%m-%d").map(|d| repeat::format_occurrence(d, language)).unwrap_or_else(|_| timer_day.to_string());
+        rows.push(Row { item: Some(Item::Timer(timer_key.clone())), icon: if timer.running() { "timer" } else { "circle-pause" }, detail: shown,
             color: Some(color_or_accent(definition.map_or("", |d| d.color.as_str()))), track: true,
             timer: Some(TimerView { running: timer.running(), clock: timer_clock(timer.elapsed(source.now)) }),
             ..Row::new(RowKind::Timer, definition.map_or(activity.to_string(), |d| d.name.clone())) });
     }
 
-    // The entries in the day's own order (as the app keeps it: by kind, tag and priority), those begun earlier first.
-    rows.push(Row { icon: "journal-journal", detail: found.len().to_string(), ..Row::new(RowKind::Heading, dt.entries) });
-    if found.is_empty() {
-        rows.push(Row::new(RowKind::Empty, dt.nothing));
-    }
-    rows.extend(found.iter().map(|(first, entry, item)| entry_row(*first, entry, item)));
-
-    // The rating and the active day values: one line of dials, each with its span.
-    let period = source.period;
-    let day = period.days.get(&date.to_string());
-    rows.push(Row { icon: "gauge", ..Row::new(RowKind::Heading, dt.values) });
-    let rating = period.rating.as_ref();
-    let dial = |item: Item, label: &str, value: Option<f64>, (min, max): (i64, i64), color: Rgb| {
-        let shown = value.map(|value| value.clamp(min as f64, max as f64));
-        Dial { item, label: label.to_string(), value: shown.map_or_else(|| "–".into(), number), raw: shown.map(|v| v.round() as i64), min, max,
-            fill: shown.map(|value| ((value - min as f64) / (max - min) as f64) as f32), color, selected: false }
-    };
-    let mut dials = vec![dial(Item::Value("rating".into()), dt.rating, day.and_then(|day| day.rating), scale_range(rating.and_then(|r| r.min), rating.and_then(|r| r.max)), color_or_accent(rating.map_or("", |r| r.color.as_str())))];
-    for scale in period.scales.iter().filter(|scale| scale.active != Some(false)) {
-        dials.push(dial(Item::Value(scale.id.clone()), if scale.name.trim().is_empty() { dt.untitled } else { scale.name.trim() }, day.and_then(|day| day.scales.get(&scale.id).copied()), scale_range(scale.min, scale.max), color_or_accent(&scale.color)));
-    }
-    rows.push(Row { dials, ..Row::new(RowKind::Dials, "") });
-
-    // The active activities (and those with a timer here): done (or with time) or not yet, and their timer.
-    let activities: Vec<_> = period.definitions.iter().filter(|activity| activity.active != Some(false) || source.timers.contains_key(&format!("{date}:{}", activity.id))).collect();
-    if !activities.is_empty() {
-        let records: Vec<_> = activities.iter().map(|activity| day.and_then(|day| day.items.get(&activity.id))).collect();
-        let done = records.iter().filter(|record| record.is_some_and(|r| r.done || r.minutes.unwrap_or(0.0) > 0.0)).count();
-        rows.push(Row { icon: "activity", detail: format!("{done} / {}", activities.len()), ..Row::new(RowKind::Heading, dt.activities) });
-        for (activity, record) in activities.iter().zip(records) {
-            let minutes = record.and_then(|r| r.minutes).filter(|m| m.is_finite() && *m > 0.0).map(|m| m.round() as i64);
-            let done = record.is_some_and(|r| r.done) || minutes.is_some();
-            let timer = source.timers.get(&format!("{date}:{}", activity.id)).map(|timer| TimerView { running: timer.running(), clock: timer_clock(timer.elapsed(source.now)) });
-            rows.push(Row { item: Some(Item::Activity(activity.id.clone())), done, icon: if done { "circle-check" } else { "circle" },
-                detail: minutes.map(|m| minutes_text(m, language)).unwrap_or_default(), color: Some(color_or_accent(&activity.color)),
-                track: activity.track_time != Some(false), timer,
-                ..Row::new(RowKind::Activity, if activity.name.trim().is_empty() { dt.untitled } else { activity.name.trim() }) });
+    if has(Module::Entries) {
+        if day {
+            // The entries in the day's own order (as the app keeps it: by kind, tag and priority), those begun earlier first.
+            let found = entries_on(source, date);
+            rows.push(Row { icon: "journal-journal", detail: found.len().to_string(), ..Row::new(RowKind::Heading, dt.entries) });
+            if found.is_empty() { rows.push(Row::new(RowKind::Empty, dt.nothing)); }
+            rows.extend(found.iter().map(|(first, entry, item)| entry_row(*first, entry, item)));
+        } else {
+            // A period's own list: tasks with their tick, then notes (`PeriodEntries.tsx`).
+            let list = period.entries.get(&key).cloned().unwrap_or_default();
+            rows.push(Row { icon: "journal-journal", detail: list.len().to_string(), ..Row::new(RowKind::Heading, dt.entries) });
+            if list.is_empty() { rows.push(Row::new(RowKind::Empty, dt.period_nothing)); }
+            rows.extend(list.into_iter().map(|entry| Row {
+                item: Some(Item::PeriodEntry(entry.id.clone())), done: entry.done,
+                icon: if entry.note { "journal-note" } else if entry.done { "journal-done" } else { "journal-task" },
+                ..Row::new(RowKind::Entry, if entry.text.trim().is_empty() { dt.untitled.to_string() } else { entry.text.trim().to_string() })
+            }));
         }
     }
 
-    DayView { date, heading: long_date(date, language), relative: relative(date, today, language), is_today: date == today, title, rows }
+    // The evaluation and the board are opened from the actions and the commands (`/Auswertung`, `/Pinnwand-…`), not from
+    // lines of the view.
+
+    // The rating and the active values: one line of dials, each with its span. A day's are the day's; a period's are its
+    // own (`periods`), apart from its days.
+    let day_record = period.days.get(&date.to_string());
+    let own = period.periods.get(&key);
+    let rating_value = if day { day_record.and_then(|d| d.rating) } else { own.and_then(|o| o.rating) };
+    let scale_value = |id: &str| if day { day_record.and_then(|d| d.scales.get(id).copied()) } else { own.and_then(|o| o.scales.get(id).copied()) };
+    if has(Module::Rating) || has(Module::Scales) {
+        rows.push(Row { icon: "gauge", ..Row::new(RowKind::Heading, if day || !has(Module::Scales) { dt.values } else { dt.period_values }) });
+        let rating = period.rating.as_ref();
+        let dial = |item: Item, label: &str, value: Option<f64>, (min, max): (i64, i64), color: Rgb| {
+            let shown = value.map(|value| value.clamp(min as f64, max as f64));
+            Dial { item, label: label.to_string(), value: shown.map_or_else(|| "–".into(), number), raw: shown.map(|v| v.round() as i64), min, max,
+                fill: shown.map(|value| ((value - min as f64) / (max - min) as f64) as f32), color, selected: false }
+        };
+        let mut dials = Vec::new();
+        if has(Module::Rating) {
+            dials.push(dial(Item::Value("rating".into()), dt.rating, rating_value, scale_range(rating.and_then(|r| r.min), rating.and_then(|r| r.max)), color_or_accent(rating.map_or("", |r| r.color.as_str()))));
+        }
+        if has(Module::Scales) {
+            for scale in period.scales.iter().filter(|scale| scale.active != Some(false)) {
+                dials.push(dial(Item::Value(scale.id.clone()), if scale.name.trim().is_empty() { dt.untitled } else { scale.name.trim() }, scale_value(&scale.id), scale_range(scale.min, scale.max), color_or_accent(&scale.color)));
+            }
+        }
+        rows.push(Row { dials, ..Row::new(RowKind::Dials, "") });
+    }
+
+    if has(Module::Activities) {
+        if day {
+            // The active activities (and those with a timer here): done (or with time) or not yet, and their timer.
+            let activities: Vec<_> = period.definitions.iter().filter(|activity| activity.active != Some(false) || source.timers.contains_key(&format!("{date}:{}", activity.id))).collect();
+            if !activities.is_empty() {
+                let records: Vec<_> = activities.iter().map(|activity| day_record.and_then(|day| day.items.get(&activity.id))).collect();
+                let done = records.iter().filter(|record| record.is_some_and(|r| r.done || r.minutes.unwrap_or(0.0) > 0.0)).count();
+                rows.push(Row { icon: "activity", detail: format!("{done} / {}", activities.len()), ..Row::new(RowKind::Heading, dt.activities) });
+                for (activity, record) in activities.iter().zip(records) {
+                    let minutes = record.and_then(|r| r.minutes).filter(|m| m.is_finite() && *m > 0.0).map(|m| m.round() as i64);
+                    let done = record.is_some_and(|r| r.done) || minutes.is_some();
+                    let timer = source.timers.get(&format!("{date}:{}", activity.id)).map(|timer| TimerView { running: timer.running(), clock: timer_clock(timer.elapsed(source.now)) });
+                    rows.push(Row { item: Some(Item::Activity(activity.id.clone())), done, icon: if done { "circle-check" } else { "circle" },
+                        detail: minutes.map(|m| minutes_text(m, language)).unwrap_or_default(), color: Some(color_or_accent(&activity.color)),
+                        track: activity.track_time != Some(false), timer,
+                        ..Row::new(RowKind::Activity, if activity.name.trim().is_empty() { dt.untitled } else { activity.name.trim() }) });
+                }
+            }
+        } else {
+            // A period's checklist adds up its days (the calendar time of the activities' tags too); its tick and timer
+            // are today's while today lies in it.
+            let dates = crate::analysis::dates(start, end);
+            let shown = crate::analysis::records(period, source.calendar, &dates);
+            let today_in = today >= start && today <= end;
+            let activities: Vec<_> = period.definitions.iter().filter(|activity| activity.active != Some(false)
+                || dates.iter().any(|d| shown.get(d).is_some_and(|items| items.contains_key(&activity.id)))).collect();
+            if !activities.is_empty() {
+                let mut done_today = 0;
+                let mut lines = Vec::new();
+                for activity in &activities {
+                    let records: Vec<_> = dates.iter().filter_map(|d| shown.get(d).and_then(|items| items.get(&activity.id))).collect();
+                    let minutes: f64 = records.iter().filter_map(|r| r.minutes).filter(|m| m.is_finite() && *m > 0.0).sum();
+                    let days = records.iter().filter(|r| r.done || r.minutes.unwrap_or(0.0) > 0.0).count();
+                    let today_record = shown.get(&today).and_then(|items| items.get(&activity.id));
+                    let done = today_in && today_record.is_some_and(|r| r.done || r.minutes.unwrap_or(0.0) > 0.0);
+                    if done { done_today += 1; }
+                    let timer = if today_in { source.timers.get(&format!("{today}:{}", activity.id)).map(|timer| TimerView { running: timer.running(), clock: timer_clock(timer.elapsed(source.now)) }) } else { None };
+                    let mut detail = dt.period_days.replace("%d", &days.to_string()).replace("%n", &dates.len().to_string());
+                    // Short in the narrow column: "2/7 · 3 Std. 45 Min."
+                    if minutes > 0.0 { detail = format!("{days}/{}", dates.len()); }
+                    if minutes > 0.0 { detail = format!("{detail} · {}", minutes_text(minutes.round() as i64, language)); }
+                    lines.push(Row { item: Some(Item::Activity(activity.id.clone())), done, icon: if done { "circle-check" } else if today_in { "circle" } else { "circle-dot" },
+                        detail, color: Some(color_or_accent(&activity.color)), track: today_in && activity.track_time != Some(false), timer,
+                        ..Row::new(RowKind::Activity, if activity.name.trim().is_empty() { dt.untitled } else { activity.name.trim() }) });
+                }
+                rows.push(Row { icon: "activity", detail: if today_in { format!("{done_today} / {}", activities.len()) } else { String::new() }, ..Row::new(RowKind::Heading, dt.activities) });
+                rows.extend(lines);
+            }
+        }
+    }
+
+    let heading = if day { long_date(date, language) } else { period_title(date, view, language) };
+    let relative = relative_view(date, today, view, language);
+    DayView { date, heading, relative, is_today: if day { date == today } else { today >= start && today <= end }, title, rows, view }
+}
+
+/// Where a week's … year's title is kept: among the notes, `title:<key>`.
+pub fn title_key(key: &str) -> String { format!("title:{key}") }
+
+/// A period's heading: "Wochenübersicht · 16. Nov. – 22. Nov. 2026", as the app's eyebrow and title.
+pub fn period_title(date: NaiveDate, view: View, language: Language) -> String {
+    match view.period() {
+        Some(mode) => format!("{} · {}", crate::texts::analysis::EYEBROWS[usize::from(language == Language::En)][mode.index()], crate::analysis::title(date, mode, language)),
+        None => long_date(date, language),
+    }
+}
+
+/// The distance in the head: "Heute" / "Diese Woche", "in 2 Wochen", "vor 3 Monaten".
+fn relative_view(date: NaiveDate, today: NaiveDate, view: View, language: Language) -> String {
+    if view == View::Day { return relative(date, today, language); }
+    let dt = day_texts(language);
+    let n = view.distance(today, date);
+    let unit = dt.view_units[view.index()];
+    match n {
+        0 => dt.view_this[view.index()].into(),
+        n if n > 0 => dt.in_views.replace("%d", &n.to_string()).replace("%u", if n == 1 { unit.0 } else { unit.1 }),
+        n => dt.views_ago.replace("%d", &(-n).to_string()).replace("%u", if n == -1 { unit.2 } else { unit.3 }),
+    }
 }
 
 /// A value as shown: whole numbers without a point.
@@ -412,6 +571,7 @@ fn number(value: f64) -> String { if value.fract() == 0.0 { format!("{}", value 
 mod tests {
     use super::*;
     use crate::repeat::d;
+    static NO_MINUTES: crate::analysis::CalendarMinutes = std::collections::BTreeMap::new();
 
     fn entry(kind: &str, text: &str, extra: serde_json::Value) -> Entry {
         let mut value = serde_json::json!({ "id": uuid::Uuid::new_v4().to_string(), "kind": kind, "text": text, "done": false, "cancelled": false });
@@ -421,7 +581,7 @@ mod tests {
     fn labels(view: &DayView, kind: RowKind) -> Vec<String> { view.rows.iter().filter(|row| row.kind == kind).map(|row| row.label.clone()).collect() }
     fn dials(view: &DayView) -> Vec<Dial> { view.rows.iter().find(|row| row.kind == RowKind::Dials).map(|row| row.dials.clone()).unwrap_or_default() }
     fn source<'a>(days: &'a BTreeMap<NaiveDate, Vec<Entry>>, tags: &'a [Tag], period: &'a PeriodData, timers: &'a BTreeMap<String, ActivityTimer>) -> Source<'a> {
-        Source { own: None, days, tags, period, timers, now: 0 }
+        Source { own: None, days, tags, period, timers, now: 0, calendar: &NO_MINUTES }
     }
 
     #[test]
@@ -439,7 +599,7 @@ mod tests {
         ]);
         let tags = vec![Tag { id: "health".into(), name: "Gesundheit".into(), color: "#76d982".into(), icon: Some("stethoscope".into()) }];
         let (period, timers) = (PeriodData::default(), BTreeMap::new());
-        let view = build(&source(&days, &tags, &period, &timers), d("2026-11-18"), d("2026-11-18"), Language::De);
+        let view = build(&source(&days, &tags, &period, &timers), d("2026-11-18"), d("2026-11-18"), Language::De, View::Day, &Features::default());
         assert_eq!(view.heading, "Mittwoch, 18. November 2026");
         assert_eq!((view.relative.as_str(), view.is_today), ("Heute", true));
         assert_eq!(view.rows[0].kind, RowKind::Title, "The day's title comes first.");
@@ -463,15 +623,15 @@ mod tests {
         let (period, timers) = (PeriodData::default(), BTreeMap::new());
         let src = source(&days, &[], &period, &timers);
         for day in ["2026-11-23", "2026-11-25", "2026-11-27"] {
-            assert_eq!(labels(&build(&src, d(day), d("2026-11-18"), Language::De), RowKind::Entry), ["Urlaub"], "{day}");
+            assert_eq!(labels(&build(&src, d(day), d("2026-11-18"), Language::De, View::Day, &Features::default()), RowKind::Entry), ["Urlaub"], "{day}");
         }
-        assert!(labels(&build(&src, d("2026-11-28"), d("2026-11-18"), Language::De), RowKind::Entry).is_empty());
-        let wed = build(&src, d("2026-11-25"), d("2026-11-18"), Language::De);
+        assert!(labels(&build(&src, d("2026-11-28"), d("2026-11-18"), Language::De, View::Day, &Features::default()), RowKind::Entry).is_empty());
+        let wed = build(&src, d("2026-11-25"), d("2026-11-18"), Language::De, View::Day, &Features::default());
         let holiday = wed.rows.iter().find(|row| row.label == "Urlaub").unwrap();
         assert_eq!((holiday.detail.as_str(), holiday.foreign), ("Mo 23.11. – Fr 27.11.", true), "Changed on its first day.");
         assert_eq!(wed.relative, "in 7 d");
-        assert_eq!(build(&src, d("2026-11-20"), d("2026-11-18"), Language::De).rows.iter().find(|row| row.label == "Messe").unwrap().detail, "14:00 – Sa 21.11.");
-        let second = build(&src, d("2026-11-21"), d("2026-11-22"), Language::De);
+        assert_eq!(build(&src, d("2026-11-20"), d("2026-11-18"), Language::De, View::Day, &Features::default()).rows.iter().find(|row| row.label == "Messe").unwrap().detail, "14:00 – Sa 21.11.");
+        let second = build(&src, d("2026-11-21"), d("2026-11-22"), Language::De, View::Day, &Features::default());
         assert_eq!(second.rows.iter().find(|row| row.label == "Messe").unwrap().detail, "Fr 20.11. – 16:00");
         assert_eq!(second.relative, "vor 1 d");
     }
@@ -481,7 +641,7 @@ mod tests {
         let days = BTreeMap::new();
         let (period, timers) = (PeriodData::default(), BTreeMap::new());
         let own: Day = serde_json::from_value(serde_json::json!({ "date": "2026-11-18", "title": "Ruhiger Tag", "body": "", "revision": 1, "entries": [] })).unwrap();
-        let view = build(&Source { own: Some(&own), ..source(&days, &[], &period, &timers) }, d("2026-11-18"), d("2026-11-18"), Language::En);
+        let view = build(&Source { own: Some(&own), ..source(&days, &[], &period, &timers) }, d("2026-11-18"), d("2026-11-18"), Language::En, View::Day, &Features::default());
         assert_eq!((view.heading.as_str(), view.title.as_str()), ("Wednesday, November 18, 2026", "Ruhiger Tag"));
         assert_eq!(view.rows[1].label, "Entries");
         assert_eq!(view.rows[2].kind, RowKind::Empty);
@@ -514,7 +674,7 @@ mod tests {
         let days = BTreeMap::new();
         let timer = |started: Option<i64>| ActivityTimer { id: "s".into(), started_at: started, elapsed_ms: 60_000, segments: vec![], tag_id: "t".into() };
         let timers = BTreeMap::from([("2026-11-18:read".to_string(), timer(Some(0))), ("2026-11-15:old".to_string(), timer(None))]);
-        let view = build(&Source { now: 65_000, ..source(&days, &[], &period, &timers) }, d("2026-11-18"), d("2026-11-18"), Language::De);
+        let view = build(&Source { now: 65_000, ..source(&days, &[], &period, &timers) }, d("2026-11-18"), d("2026-11-18"), Language::De, View::Day, &Features::default());
         let shown: Vec<_> = dials(&view).iter().map(|dial| (dial.label.clone(), dial.value.clone(), dial.fill, dial.min, dial.max)).collect();
         assert_eq!(shown, [("Bewertung".into(), "7".into(), Some(0.7), 0, 10), ("Stress".into(), "5".into(), Some(1.0), 1, 5), ("Schlaf".into(), "6".into(), Some(0.6), 0, 10)],
             "Clamped to the span; an invalid span is 0–10; inactive scales hidden.");
@@ -524,7 +684,7 @@ mod tests {
         assert_eq!((other.label.as_str(), other.detail.as_str(), other.item.clone()), ("Alt", "So 15.11.", Some(Item::Timer("2026-11-15:old".into()))));
         assert_eq!(view.rows.iter().find(|row| row.label == "Aktivitäten").unwrap().detail, "2 / 3");
         assert_eq!(view.rows.iter().find(|row| row.label == "Yoga").unwrap().color, Some([0x56, 0x9e, 0xff]), "An unreadable colour falls back to the accent.");
-        let before = build(&source(&days, &[], &period, &BTreeMap::new()), d("2026-11-17"), d("2026-11-18"), Language::De);
+        let before = build(&source(&days, &[], &period, &BTreeMap::new()), d("2026-11-17"), d("2026-11-18"), Language::De, View::Day, &Features::default());
         assert_eq!(dials(&before)[0].value, "3", "Another day: its own values.");
         assert!(before.rows.iter().filter(|row| row.kind == RowKind::Activity).all(|row| !row.done));
         assert!(PeriodData::parse("not json").definitions.is_empty());

@@ -34,6 +34,8 @@ fn color([r, g, b]: calendar::Rgb) -> Color { Color::from_rgb_u8(r, g, b) }
 impl App {
     pub(super) fn open_analysis(&mut self) {
         let date = self.state.day_shown();
+        // From a week … year at the left: the analysis of that period.
+        if let Some(mode) = self.state.view.period() { self.analysis.mode = mode; }
         self.analysis.open = true;
         self.analysis.date = Some(date);
         self.analysis.cursor = None;

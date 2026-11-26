@@ -24,9 +24,37 @@ impl Page {
             Self::Entry => (["Eintragsformular", "Entry form"], ["Passe die Eingabe neuer Journaleinträge an.", "Choose how you enter new journal entries."], "square-pen"),
             Self::Calendar => (["Kalender", "Calendar"], ["Wähle, welche Orientierungshilfen im Kalender erscheinen.", "Choose which guides appear in the calendar."], "calendar-days"),
             Self::Notebook => (["Notizblock", "Notebook"], ["Lege fest, wie du deine Notizen öffnest und bearbeitest.", "Choose how you open and edit notes."], "book-open-text"),
+            Self::Features => (["Funktionen", "Features"], ["Was das Terminal zeigt. Ausgeschaltetes bleibt gespeichert und kommt beim Einschalten zurück.", "What the terminal shows. What is switched off stays saved and comes back when switched on."], "toggle-right"),
             Self::Activities => (["Aktivitäten", "Activities"], ["Deine tägliche Checkliste, wie in der Journal-App.", "Your daily checklist, as in the Journal app."], "activity"),
             Self::Values => (["Tageswerte", "Day values"], ["Tagesbewertung und eigene Werte wie Stress oder Schlaf.", "The daily rating and values of your own such as stress or sleep."], "gauge"),
         }
+    }
+}
+
+// ----- F1 → Funktionen (the app's FeatureSettings) -----
+use crate::features::{Module, View};
+pub const FEATURE_NOTEBOOK: (Text, Text) = (["Notizen", "Notes"], ["Der Notizblock mit allen Zetteln (Strg+N).", "The notebook with all its notes (Ctrl+N)."]);
+pub const VIEW_DETAIL: Text = ["Links neben dem Kalender; Strg+Tab wechselt zwischen den Ansichten.", "At the left beside the calendar; Ctrl+Tab switches between the views."];
+pub const NOTEBOOK_OFF: Text = ["Der Notizblock ist in F1 → Funktionen ausgeschaltet.", "The notebook is switched off in F1 → Features."];
+pub const LAST_VIEW: Text = ["Eine Ansicht bleibt immer an.", "One view always stays on."];
+pub fn view_name(view: View) -> Text {
+    [["Tag", "Day"], ["Woche", "Week"], ["Monat", "Month"], ["Quartal", "Quarter"], ["Jahr", "Year"]][view.index()]
+}
+pub fn view_title(view: View) -> Text {
+    [["Tagesansicht", "Day view"], ["Wochenansicht", "Week view"], ["Monatsansicht", "Month view"], ["Quartalsansicht", "Quarter view"], ["Jahresansicht", "Year view"]][view.index()]
+}
+/// What a part is called in a view, and what it does there (a period's values and checklist differ from a day's).
+pub fn module_text(module: Module, view: View) -> (Text, Text) {
+    let day = view == View::Day;
+    match module {
+        Module::Entries => (["Einträge", "Entries"], if day { ["Aufgaben, Ereignisse und Notizen des Tages", "The day's tasks, events and notes"] } else { ["Eine eigene Liste mit Aufgaben und Notizen für den Zeitraum", "A list of its own with tasks and notes for the period"] }),
+        Module::Note => (["Notiz", "Note"], ["Ein freier Text", "A free text"]),
+        Module::Title => (["Titel", "Title"], if day { ["Ein Name für den Tag", "A name for the day"] } else { ["Ein Name für den Zeitraum, wie beim Tag", "A name for the period, as for a day"] }),
+        Module::Rating => (["Bewertung", "Rating"], if day { ["Wie war der Tag?", "How was the day?"] } else { ["Eine eigene Bewertung des Zeitraums", "A rating of the period itself"] }),
+        Module::Scales => (if day { ["Tageswerte", "Day values"] } else { ["Werte", "Values"] }, if day { ["Eigene Werte wie Stress oder Schlaf", "Values of your own such as stress or sleep"] } else { ["Eigene Werte für den Zeitraum, unabhängig von den Tagen", "Values of your own for the period, apart from its days"] }),
+        Module::Activities => (["Checkliste", "Checklist"], if day { ["Aktivitäten mit Zeit und Timer", "Activities with time and timer"] } else { ["Zählt die Zeit der Tage zusammen; der Haken gilt für heute", "Adds up the days' time; the tick is today's"] }),
+        Module::Evaluation => (["Auswertung", "Evaluation"], ["Verlauf der Tageswerte und Aktivitäten im Überblick", "The course of the day values and the activities at a glance"]),
+        Module::Board => (["Pinnwand", "Pinboard"], if day { ["Zettel, Bilder und Links des Tages", "The day's notes, images and links"] } else { ["Eine eigene Pinnwand; Zettel lassen sich darauf anheften", "A board of its own; notes can be pinned to it"] }),
     }
 }
 

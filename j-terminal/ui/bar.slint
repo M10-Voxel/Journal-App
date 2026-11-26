@@ -52,7 +52,11 @@ export struct DialCell { color: color, raw: int, low: int, high: int, item: int,
 export struct DayRow { top: length, tall: length, column: int, kind: int, item: int, label: string, detail: string, icon: image, has-tag-icon: bool, tag-icon: image, has-color: bool, color: color,
     done: bool, priority: bool, trace: bool, foreign: bool, selected: bool, editing: bool, track: bool, has-timer: bool, timer-running: bool, timer-clock: string,
     // The dials' line: how many side by side, the width of each, the ring's size, the height of a line of them.
-    dial-columns: int, dial-cell: length, dial-size: length, dial-row: length, dials: [DialCell], description: string }
+    dial-columns: int, dial-cell: length, dial-size: length, dial-row: length, dials: [DialCell], description: string,
+    // `plain`: a period's own entry (no flag, no tag). The note (kind 8) and a line that opens something (kind 9).
+    plain: bool,
+    // The note as the last line of the list: it grows over the room left under it.
+    fill: bool }
 
 // A section's heading, as Raycast's: small, grey, its count beside it.
 component DayHeading inherits Rectangle {
@@ -179,7 +183,7 @@ export component Bar inherits Window {
     callback edited(string);
     // Every key the form has a use for: the key's number and the modifiers (1 Shift, 2 Strg, 4 Alt).
     callback form-key(int, int);
-    // Strg+Esc: the window goes at once.
+    // Shift+Esc: the window goes at once.
     callback hide-window();
     // Esc that no field took: back from where the window is (the form, the notepad, the day view, the search).
     callback escape-fallback();
@@ -319,6 +323,13 @@ export component Bar inherits Window {
     in property <string> day-heading;
     in property <string> day-relative;
     in property <bool> day-is-today;
+    // The views on (F1 → Funktionen) and the one shown: the switch beside the search (hover: all of them; the wheel).
+    in property <[string]> views;
+    in property <int> view-index;
+    in property <string> view-switch-label;
+    in property <string> day-note-placeholder;
+    callback view-step(int);
+    callback view-choose(int);
     in property <[DayRow]> day-rows;
     in property <[DayRow]> day-footer-rows;
     in property <length> day-footer-height;
@@ -332,6 +343,7 @@ export component Bar inherits Window {
     in property <image> icon-stop;
     in property <image> icon-close;
     in property <image> icon-back;
+    in property <image> icon-today;
     in property <image> icon-forward;
     in property <image> icon-arrow-back;
     in property <image> icon-flag;
@@ -547,8 +559,8 @@ export component Bar inherits Window {
         }
         capture-key-pressed(raw-event) => {
             let event = KeyBindings.translate(ShortcutContext.window, raw-event);
-            // Strg+Esc hides the window at once, from anywhere (the board and its drawing included).
-            if raw-event.text == Key.Escape && raw-event.modifiers.control && !raw-event.modifiers.alt && !raw-event.modifiers.shift {
+            // Shift+Esc hides the window at once, from anywhere (the board and its drawing included).
+            if raw-event.text == Key.Escape && raw-event.modifiers.shift && !raw-event.modifiers.alt && !raw-event.modifiers.control {
                 if !raw-event.repeat { root.hide-window(); }
                 return accept;
             }
@@ -562,6 +574,11 @@ export component Bar inherits Window {
             if AnalysisUi.opened && event.text != Key.F1 {
                 if AnalysisUi.key(raw-event.text,KeyBindings.modifier-mask(raw-event),raw-event.repeat) { return accept; }
                 return reject;
+            }
+            // Strg+Tab / Strg+Umschalt+Tab: the next or previous view at the left (day, week … year, those on).
+            if (event.text == Key.Tab || event.text == Key.Backtab) && event.modifiers.control && !event.modifiers.alt && !root.entry-open && !root.notepad-open {
+                root.view-step(event.modifiers.shift || event.text == Key.Backtab ? -1 : 1);
+                return accept;
             }
             if event.text == Key.F3 && !event.modifiers.shift && !event.modifiers.control && !event.modifiers.alt {
                 if !event.repeat { root.show-keyboard-preview(); }
@@ -595,7 +612,7 @@ export component Bar inherits Window {
         }
         // Esc that nothing took (the keyboard was on no field, e.g. after a click on an empty spot): back as usual.
         key-pressed(event) => {
-            if event.text == Key.Escape && !event.modifiers.control && !event.modifiers.alt && !TagEditorUi.open {
+            if event.text == Key.Escape && !event.modifiers.control && !event.modifiers.alt && !event.modifiers.shift && !TagEditorUi.open {
                 if !event.repeat { root.escape-fallback(); }
                 return accept;
             }
@@ -676,7 +693,7 @@ export component Bar inherits Window {
                     x: parent.width - Theme.padding + Theme.accessory-gap - self.preferred-width;
                     width: self.preferred-width; height: parent.height;
                     spacing: 0px;
-                    Rectangle {
+                    if root.views.length <= 1 || search.text != "": Rectangle {
                         width: Theme.accessory-height; height: self.width;
                         y: (parent.height - self.height) / 2;
                         accessible-role: button;
@@ -694,16 +711,58 @@ export component Bar inherits Window {
                         }
                         query-touch := TouchArea { mouse-cursor: default; clicked => { root.toggle-command-query(); } }
                     }
+                    // Today: an icon in the accent while today (or the period around it) is shown; elsewhere how far away it
+                    // is ("in 3 d", "vor 2 Wochen"). A click goes back to today.
                     Rectangle {
-                        width: day-label.preferred-width + Theme.accessory-inset * 2; height: Theme.accessory-height;
+                        width: root.day-is-today ? Theme.accessory-height : day-distance.preferred-width + Theme.accessory-inset * 2;
+                        height: Theme.accessory-height;
                         y: (parent.height - self.height) / 2;
                         border-radius: Theme.block-radius;
+                        accessible-role: button; accessible-label: root.day-relative;
                         background: !root.day-is-today ? Theme.row-fill(false, day-touch.has-hover, day-touch.pressed) : transparent;
-                        day-label := HorizontalLayout {
-                            padding-left: Theme.accessory-inset; padding-right: Theme.accessory-inset; spacing: Theme.calendar-gap * 2;
-                            Text { text: root.day-relative; color: root.day-is-today ? Theme.accent : Theme.muted; font-size: Theme.row-size; font-weight: Theme.weight-medium; vertical-alignment: center; }
+                        if root.day-is-today: Image {
+                            width: Theme.label-icon-size; height: self.width; x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2;
+                            source: root.icon-today; colorize: Theme.accent;
                         }
-                        day-touch := TouchArea { mouse-cursor: root.day-is-today ? MouseCursor.default : MouseCursor.default; clicked => { if !root.day-is-today { root.day-today(); } } }
+                        day-distance := Text {
+                            visible: !root.day-is-today;
+                            text: root.day-relative; color: day-touch.has-hover ? Theme.text : Theme.muted;
+                            font-size: Theme.row-size; font-weight: Theme.weight-medium;
+                            horizontal-alignment: center; vertical-alignment: center;
+                        }
+                        day-touch := TouchArea { mouse-cursor: MouseCursor.default; clicked => { if !root.day-is-today { root.day-today(); } } }
+                    }
+                    // The view switch: the view shown; the pointer on it shows all views on (a click takes one), the wheel
+                    // turns them. Only with more than one view on, and while nothing is searched.
+                    if root.views.length > 1 && search.text == "": view-switch := Rectangle {
+                        height: Theme.accessory-height; y: (parent.height - self.height) / 2;
+                        width: view-words.preferred-width;
+                        border-radius: Theme.block-radius;
+                        background: view-touch.has-hover ? Theme.hover : transparent;
+                        accessible-role: button; accessible-label: root.view-switch-label;
+                        view-touch := TouchArea {
+                            mouse-cursor: MouseCursor.default;
+                            scroll-event(event) => { root.view-step(event.delta-y < 0px ? 1 : -1); accept }
+                        }
+                        view-words := HorizontalLayout {
+                            padding-left: Theme.accessory-inset / 2; padding-right: Theme.accessory-inset / 2; spacing: 0px;
+                            for name[i] in root.views: Rectangle {
+                                visible: view-touch.has-hover || i == root.view-index;
+                                width: self.visible ? view-word.preferred-width + Theme.accessory-inset : 0px;
+                                border-radius: Theme.block-radius;
+                                background: i == root.view-index ? Theme.row-selection : view-word-touch.has-hover ? Theme.hover : transparent;
+                                view-word := Text {
+                                    text: name; font-size: Theme.row-size; font-weight: Theme.weight-medium;
+                                    color: i == root.view-index ? Theme.accent : Theme.muted;
+                                    horizontal-alignment: center; vertical-alignment: center;
+                                }
+                                view-word-touch := TouchArea {
+                                    mouse-cursor: MouseCursor.default;
+                                    clicked => { root.view-choose(i); }
+                                    scroll-event(event) => { root.view-step(event.delta-y < 0px ? 1 : -1); accept }
+                                }
+                            }
+                        }
                     }
                     IconSpot { width: Theme.accessory-height; height: self.width; y: (parent.height - self.height) / 2; icon: root.icon-back; clicked => { root.form-key(5, 4); } }
                     IconSpot { width: Theme.accessory-height; height: self.width; y: (parent.height - self.height) / 2; icon: root.icon-forward; clicked => { root.form-key(6, 4); } }
@@ -1033,7 +1092,7 @@ export component Bar inherits Window {
         if !root.entry-open && !root.notepad-open && !root.searching: VerticalLayout {
             vertical-stretch: 1;
             spacing: 0px;
-            DayScroll {
+            day-list := DayScroll {
                 vertical-stretch: 1;
                 changed content-y => { root.day-scroll-offset = self.content-y; root.dismiss-preview(); }
                 init => { root.day-scroll-offset = self.content-y; }
@@ -1046,7 +1105,7 @@ export component Bar inherits Window {
                     height: root.day-list-height;
                     for row in root.day-rows: day-row := TouchArea {
                         x: Theme.padding; width: parent.width - Theme.padding * 2;
-                        y: row.top; height: row.tall;
+                        y: row.top; height: row.fill ? max(row.tall, day-list.height - row.top - Theme.calendar-gap * 2) : row.tall;
                         enabled: row.kind == 1 && !row.editing;
                         mouse-cursor: self.enabled ? MouseCursor.default : MouseCursor.default;
                         changed has-hover => {
@@ -1056,7 +1115,7 @@ export component Bar inherits Window {
                             } else { root.leave-preview(2, row.item); }
                         }
                         // The line the keyboard is on.
-                        if row.kind == 1 || (row.selected && row.kind != 7): Rectangle {
+                        if row.kind == 1 || (row.selected && row.kind != 7 && row.kind != 8): Rectangle {
                             x: -Theme.day-select-inset; width: parent.width + Theme.day-select-inset * 2;
                             background: Theme.row-fill(row.selected, day-row.has-hover, day-row.pressed); border-radius: Theme.list-radius; animate background { duration: Theme.hover-time; }
                         }
@@ -1128,10 +1187,10 @@ export component Bar inherits Window {
                                 text: row.detail; color: row.trace ? Theme.placeholder : Theme.muted; font-family: Theme.write-font; font-size: Theme.day-chip-size;
                                 vertical-alignment: center; opacity: row.done ? Theme.day-done-opacity : 1;
                             }
-                            if row.has-tag-icon && !row.editing: Image { width: Theme.day-tag-icon-size; height: Theme.day-tag-icon-size; y: (parent.height - self.height) / 2; source: row.tag-icon; colorize: row.has-color ? row.color : Theme.muted; }
+                            if row.has-tag-icon && !row.editing && !row.plain: Image { width: Theme.day-tag-icon-size; height: Theme.day-tag-icon-size; y: (parent.height - self.height) / 2; source: row.tag-icon; colorize: row.has-color ? row.color : Theme.muted; }
                             if !row.has-tag-icon && row.has-color && !row.editing: Rectangle { width: Theme.tag-dot; height: Theme.tag-dot; y: (parent.height - self.height) / 2; border-radius: self.width / 2; background: row.color; }
                             // Important: an orange flag; otherwise a faint one while the line is chosen or the pointer is on it.
-                            if !row.editing: Rectangle {
+                            if !row.editing && !row.plain: Rectangle {
                                 width: Theme.day-symbol-box - Theme.gap / 2; height: Theme.day-symbol-box; y: (parent.height - self.height) / 2;
                                 border-radius: Theme.block-radius;
                                 background: flag-touch.has-hover ? Theme.hover : transparent;
@@ -1172,6 +1231,45 @@ export component Bar inherits Window {
                         if row.kind == 3 || row.kind == 6: DayActivity {
                             data: row; icon-play: root.icon-play; icon-pause: root.icon-pause; icon-stop: root.icon-stop;
                             clicked(item, part) => { root.day-click(item, part); }
+                        }
+                        // The note of the day or period: its text over several lines (a click: written in).
+                        // Always a field, also while not written in.
+                        if row.kind == 8 && !row.editing: Rectangle {
+                            y: Theme.day-note-pad / 2; height: parent.height - Theme.day-note-pad;
+                            background: Theme.field-background; border-radius: Theme.field-radius;
+                            border-width: Theme.border-width; border-color: row.selected ? Theme.field-focus : Theme.edge;
+                            clip: true;
+                            Text {
+                                x: Theme.field-inset; y: Theme.day-note-pad / 2; width: parent.width - Theme.field-inset * 2; height: parent.height - Theme.day-note-pad;
+                                text: row.label != "" ? row.label : root.day-note-placeholder;
+                                color: row.label != "" ? Theme.text : Theme.placeholder; font-family: Theme.write-font; font-size: Theme.write-size;
+                                wrap: word-wrap; overflow: elide; vertical-alignment: top;
+                            }
+                            TouchArea { mouse-cursor: MouseCursor.text; clicked => { root.day-click(row.item, 0); } }
+                        }
+                        if row.kind == 8 && row.editing: Rectangle {
+                            y: Theme.day-note-pad / 2; height: parent.height - Theme.day-note-pad;
+                            background: Theme.field-focus-background; border-radius: Theme.field-radius;
+                            border-width: Theme.border-width; border-color: Theme.field-focus;
+                            clip: true;
+                            TextInput {
+                                x: Theme.field-inset; y: Theme.day-note-pad / 2; width: parent.width - Theme.field-inset * 2; height: parent.height - Theme.day-note-pad;
+                                text: root.day-edit-text; single-line: false; wrap: word-wrap;
+                                color: Theme.strong; selection-background-color: Theme.selection; selection-foreground-color: Theme.strong;
+                                font-family: Theme.write-font; font-size: Theme.write-size;
+                                init => { self.focus(); self.set-selection-offsets(self.text.character-count * 4, self.text.character-count * 4); }
+                                edited => { root.day-edited(self.text); }
+                                // Enter makes a new line; Esc or Strg+Enter writes the note down, Tab goes on.
+                                key-pressed(raw-event) => {
+                                    let event = KeyBindings.translate(ShortcutContext.day-edit, raw-event);
+                                    if event.text == Key.Control || event.text == Key.Shift || event.text == Key.Alt || event.text == Key.Meta { return reject; }
+                                    if event.text == Key.Escape || (event.text == Key.Return && event.modifiers.control) || event.text == Key.Tab || event.text == Key.Backtab || event.modifiers.alt {
+                                        root.day-key(event.text, root.mods(event.modifiers.shift, event.modifiers.control, event.modifiers.alt));
+                                        return accept;
+                                    }
+                                    reject
+                                }
+                            }
                         }
                         if row.kind == 4: HorizontalLayout {
                             spacing: Theme.gap; alignment: start;

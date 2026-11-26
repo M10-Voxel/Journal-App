@@ -7,10 +7,6 @@ Die Angaben zum Terminal stammen aus einer Stichwortsuche im Quellcode, nicht au
 ## Nur in der Journal-App
 
 ### Ansichten und Auswertung
-- Wochen-, Monats-, Quartals- und Jahresansicht. Das Terminal hat die Tagesansicht, die Zeitraum-Pinnwände über Befehle und die Auswertung der Zeiträume (`/Auswertung`).
-- Zeitraum-Notiz, Zeitraum-Bewertung, Zeitraum-Werte und Zeitraum-Checkliste.
-- Zeitraum-Einträge (eigene Liste mit Aufgaben und Notizen je Zeitraum).
-- Funktionen-Schalter (`FeatureSettings`): Ansichten und ihre Bereiche einzeln ein- und ausschalten.
 
 ### Daten rein und raus
 - ICS-Import und -Export (`CalendarTransfer`). Im Terminal nicht gefunden.
@@ -39,6 +35,7 @@ Die Angaben zum Terminal stammen aus einer Stichwortsuche im Quellcode, nicht au
 - Eigenständige Installation und eigener Release-Ablauf.
 
 ## Teilweise vorhanden
+- **Ansichten Tag bis Jahr und Funktionen-Schalter:** Beide Programme haben Tag, Woche, Monat, Quartal und Jahr mit Notiz, Bewertung, Werten, Checkliste, eigenen Einträgen, Auswertung und Pinnwand, und beide lassen sie in den Einstellungen einzeln schalten. Die App speichert ihre Schalter in ihrem Browser-Speicher, das Terminal in seinen eigenen Einstellungen. Nur die Pinnwand-Schalter übernimmt das Terminal aus der App (`board-scopes`), bis sie im Terminal geändert werden. Die Auswertung zeigt das Terminal als eigene Ansicht über das ganze Fenster, aus der Zeitraumansicht über die Zeile „Auswertung öffnen“.
 - **Auswertung:** dieselben Graphen wie in der App (Verlauf, Aktivitäten-Balken, -Kalender und -Heatmap), im Terminal als eigene Ansicht über das ganze Fenster mit wählbarem Zeitraum. Ausgeblendete Reihen merkt sich jedes Programm selbst, und die Einstellung „Funktionen“ der App gilt im Terminal nicht.
 - **Aktivitäten und Timer:** Das Terminal zeigt sie in der Tagesansicht und liest `journal_core::timers`. Laufende Timer liegen laut `day_view.rs` im Browser-Speicher der App. Das Terminal sieht sie nur über den gemeinsamen Datenkern. In der Roadmap ist das eine offene Frage.
 - **Wiederholungen:** Beide Programme haben sie, mit Löschumfang und Rückgängig. Die App rechnet über `ical.js`, das Terminal mit einer eigenen Rust-Umsetzung (`repeat/`). Ob beide in allen Fällen gleich rechnen, ist nicht geprüft.

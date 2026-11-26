@@ -17,6 +17,7 @@ use crate::icons;
 use crate::repeat;
 use crate::snapshot::Snapshot;
 use crate::texts::{day_texts, form_texts, texts, Language};
+use crate::features::{Features, Module, View};
 
 /// A key as the day view gets it (from the focus scope or the text inputs).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -46,7 +47,13 @@ pub struct Out {
 
 /// What is written in place.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum EditTarget { Title, Entry(String), New { kind: &'static str, after: Option<String>, tag: Option<String> } }
+pub enum EditTarget {
+    Title, Entry(String), New { kind: &'static str, after: Option<String>, tag: Option<String> },
+    /// The note of the day or the period (over several lines).
+    Note,
+    /// An entry of a week's … year's own list, or a new one of its kind after another.
+    PeriodEntry(String), NewPeriodEntry { note: bool, after: Option<String> },
+}
 
 /// Navigation shared by both planning months. Shift previews a range until Space commits it.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -219,6 +226,9 @@ pub struct Ctx<'a> {
     pub language: Language,
     /// Milliseconds since 1970.
     pub now: i64,
+    /// The view shown (a day, or the week … year around `date`) and what it shows (F1 → Funktionen).
+    pub view: View,
+    pub features: Features,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -250,7 +260,11 @@ impl DayPane {
     /// line where it will stand.
     pub fn view(&self, cx: &Ctx) -> DayView {
         let mut view = self.plain_view(cx);
-        let editing = match &self.edit { Some((EditTarget::Title, _)) => Some(Item::Title), Some((EditTarget::Entry(id), _)) => Some(Item::Entry(id.clone())), _ => None };
+        let editing = match &self.edit {
+            Some((EditTarget::Title, _)) => Some(Item::Title), Some((EditTarget::Entry(id), _)) => Some(Item::Entry(id.clone())),
+            Some((EditTarget::Note, _)) => Some(Item::Note), Some((EditTarget::PeriodEntry(id), _)) => Some(Item::PeriodEntry(id.clone())),
+            _ => None,
+        };
         for row in &mut view.rows {
             row.selected = row.item.is_some() && row.item == self.cursor && self.edit.is_none();
             row.editing = row.item.is_some() && row.item == editing;
@@ -260,21 +274,56 @@ impl DayPane {
             let dt = day_texts(cx.language);
             view.rows.retain(|row| row.kind != RowKind::Empty || row.label != dt.nothing);
             let at = after.as_ref().and_then(|id| view.rows.iter().position(|row| row.item == Some(Item::Entry(id.clone()))))
-                .map(|at| at + 1).or_else(|| view.rows.iter().position(|row| row.kind == RowKind::Heading && row.label == dt.values)).unwrap_or(view.rows.len());
+                .map(|at| at + 1).or_else(|| view.rows.iter().position(|row| row.kind == RowKind::Heading && (row.icon == "gauge" || row.icon == "activity"))).unwrap_or(view.rows.len());
             view.rows.insert(at, day_view::Row { editing: true, icon: day_view::kind_icon(kind), ..day_view::Row::new(RowKind::Entry, "") });
         }
+        // A new entry of a period's own list: after the one it follows, else at the end of the list.
+        if let Some((EditTarget::NewPeriodEntry { note, after }, _)) = &self.edit {
+            let dt = day_texts(cx.language);
+            view.rows.retain(|row| row.kind != RowKind::Empty || row.label != dt.period_nothing);
+            let at = after.as_ref().and_then(|id| view.rows.iter().position(|row| row.item == Some(Item::PeriodEntry(id.clone())))).map(|at| at + 1)
+                .or_else(|| view.rows.iter().rposition(|row| matches!(row.item, Some(Item::PeriodEntry(_)))).map(|at| at + 1))
+                .or_else(|| view.rows.iter().position(|row| row.kind == RowKind::Heading && row.icon == "journal-journal").map(|at| at + 1))
+                .unwrap_or(view.rows.len());
+            view.rows.insert(at, day_view::Row { editing: true, icon: if *note { "journal-note" } else { "journal-task" }, ..day_view::Row::new(RowKind::Entry, "") });
+        }
         view
+    }
+
+    /// The key of the period shown in the period data (`day:2026-11-18`, `week:2026-11-16` …).
+    fn period_key(cx: &Ctx) -> String { cx.view.period_key(cx.date) }
+
+    /// The day a checklist's tick, minutes and timer belong to: the day shown, or today in a period that holds it.
+    fn activity_day(cx: &Ctx) -> Option<String> {
+        if cx.view == View::Day { return Some(cx.date.to_string()); }
+        let (start, end) = cx.view.bounds(cx.date);
+        (cx.today >= start && cx.today <= end).then(|| cx.today.to_string())
+    }
+
+    /// The period's own entry by id.
+    fn period_entry(cx: &Ctx, id: &str) -> Option<day_view::PeriodEntry> {
+        cx.snapshot.as_ref()?.period.entries.get(&Self::period_key(cx))?.iter().find(|entry| entry.id == id).cloned()
     }
 
     fn plain_view(&self, cx: &Ctx) -> DayView {
         let own = Self::load(cx);
         let timers = cx.store.as_ref().and_then(|store| store.activity_timers().ok()).unwrap_or_default();
         let empty = (std::collections::BTreeMap::new(), Vec::new(), day_view::PeriodData::default());
-        let source = match cx.snapshot.as_deref() {
-            Some(snapshot) => day_view::Source { own: own.as_ref(), days: &snapshot.days, tags: &snapshot.tags, period: &snapshot.period, timers: &timers, now: cx.now },
-            None => day_view::Source { own: own.as_ref(), days: &empty.0, tags: &empty.1, period: &empty.2, timers: &timers, now: cx.now },
+        // A week's … year's checklist adds the calendar time of the activities' tags (as the app's `useCalendarMinutes`).
+        let calendar = match (cx.view, cx.snapshot.as_deref(), cx.store.as_deref()) {
+            (View::Day, _, _) => crate::analysis::CalendarMinutes::new(),
+            (view, Some(snapshot), Some(store)) if cx.features.has(view, Module::Activities) => {
+                let tags = crate::analysis::activity_tags(&snapshot.period);
+                let (start, end) = view.bounds(cx.date);
+                if tags.is_empty() { Default::default() } else { store.activity_minutes(&start.to_string(), &end.to_string(), &tags).unwrap_or_default() }
+            }
+            _ => Default::default(),
         };
-        day_view::build(&source, cx.date, cx.today, cx.language)
+        let source = match cx.snapshot.as_deref() {
+            Some(snapshot) => day_view::Source { own: own.as_ref(), days: &snapshot.days, tags: &snapshot.tags, period: &snapshot.period, timers: &timers, now: cx.now, calendar: &calendar },
+            None => day_view::Source { own: own.as_ref(), days: &empty.0, tags: &empty.1, period: &empty.2, timers: &timers, now: cx.now, calendar: &calendar },
+        };
+        day_view::build(&source, cx.date, cx.today, cx.language, cx.view, &cx.features)
     }
 
     fn items(&self, cx: &Ctx) -> Vec<Item> { self.plain_view(cx).items() }
@@ -367,6 +416,13 @@ impl DayPane {
             (K::Down | K::Tab, _) => self.step(cx, 1),
             (K::Escape, _) => { self.cursor = None; self.typed.clear(); Out { to_search: true, ..Out::default() } }
             (K::Enter, Some(Item::Title)) => self.start_edit(cx, EditTarget::Title),
+            // The note: Enter writes in it (Esc or Strg+Enter writes it down); Entf empties it.
+            (K::Enter, Some(Item::Note)) => self.start_edit(cx, EditTarget::Note),
+            (K::Delete, Some(Item::Note)) => { let key = Self::period_key(cx); let r = self.change_period(cx, |data| ops::set_note(data, &key, "")); self.report(r) }
+            // A period's own entry: Enter writes in it, Space ticks a task, Entf removes it.
+            (K::Enter, Some(Item::PeriodEntry(id))) => self.start_edit(cx, EditTarget::PeriodEntry(id)),
+            (K::Space, Some(Item::PeriodEntry(id))) => { let key = Self::period_key(cx); let r = self.change_period(cx, |data| ops::toggle_period_done(data, &key, &id)); self.report(r) }
+            (K::Delete | K::Backspace, Some(Item::PeriodEntry(id))) => self.remove_period_entry(cx, &id),
             (K::Enter, Some(Item::Entry(id))) => match Self::entry(cx, &id) {
                 Some(_) => self.start_edit(cx, EditTarget::Entry(id)),
                 // Begun on an earlier day: it is changed there.
@@ -380,8 +436,9 @@ impl DayPane {
             (K::Char('-'), Some(Item::Value(id))) if self.typed.is_empty() => { self.typed.push('-'); let _ = id; Out { focus: true, ..Out::default() } }
             (K::Delete | K::Backspace, Some(Item::Value(id))) => { self.typed.clear(); self.set_value(cx, &id, None) }
             // An activity: Space ticks, digits and Enter set its minutes, Enter starts or pauses the timer, Shift+Enter stops it.
-            (K::Space, Some(Item::Activity(id))) => { let date = cx.date.to_string(); let r = self.change_period(cx, |data| ops::toggle_activity(data, &date, &id)); self.report(r) }
-            (K::Char(digit @ '0'..='9'), Some(Item::Activity(_))) => { self.typed.push(digit); Out { focus: true, ..Out::default() } }
+            // A period's checklist: its tick and timer are today's (while today lies in it); its time is the days'.
+            (K::Space, Some(Item::Activity(id))) => { let Some(date) = Self::activity_day(cx) else { return Out { focus: true, ..Out::default() } }; let r = self.change_period(cx, |data| ops::toggle_activity(data, &date, &id)); self.report(r) }
+            (K::Char(digit @ '0'..='9'), Some(Item::Activity(_))) if cx.view == View::Day => { self.typed.push(digit); Out { focus: true, ..Out::default() } }
             (K::Enter, Some(Item::Activity(id))) if !self.typed.is_empty() => {
                 let minutes = self.typed.parse::<i64>().ok().map(|m| m.min(1440));
                 self.typed.clear();
@@ -389,8 +446,11 @@ impl DayPane {
                 let r = self.change_period(cx, |data| ops::set_minutes(data, &date, &id, minutes));
                 self.report(r)
             }
-            (K::Delete | K::Backspace, Some(Item::Activity(id))) => { self.typed.clear(); let date = cx.date.to_string(); let r = self.change_period(cx, |data| ops::set_minutes(data, &date, &id, None)); self.report(r) }
-            (K::Enter, Some(Item::Activity(id))) => { let date = cx.date.to_string(); if mods.shift { self.stop_timer(cx, &date, &id) } else { self.toggle_timer(cx, &date, &id) } }
+            (K::Delete | K::Backspace, Some(Item::Activity(id))) if cx.view == View::Day => { self.typed.clear(); let date = cx.date.to_string(); let r = self.change_period(cx, |data| ops::set_minutes(data, &date, &id, None)); self.report(r) }
+            (K::Enter, Some(Item::Activity(id))) => {
+                let Some(date) = Self::activity_day(cx) else { return Out { focus: true, ..Out::default() } };
+                if mods.shift { self.stop_timer(cx, &date, &id) } else { self.toggle_timer(cx, &date, &id) }
+            }
             (K::Enter, Some(Item::Timer(key))) => {
                 let Some((date, id)) = key.split_once(':').map(|(d, i)| (d.to_string(), i.to_string())) else { return Out::default() };
                 if mods.shift { self.stop_timer(cx, &date, &id) } else { self.toggle_timer(cx, &date, &id) }
@@ -402,6 +462,19 @@ impl DayPane {
     /// The app's shortcuts (`Alt+…`), on the chosen entry (new entries anywhere).
     fn alt_key(&mut self, cx: &mut Ctx, key: K, mods: Mods) -> Out {
         let lower = match key { K::Char(c) => Some(c.to_ascii_lowercase()), _ => None };
+        // A week … year: Alt+A a task, Alt+N a note of its own list (when it shows one); Alt+↑/↓ moves one, Alt+Entf removes it.
+        if cx.view != View::Day {
+            if !mods.shift && cx.features.has(cx.view, Module::Entries) && matches!(lower, Some('a' | 'n')) {
+                let after = match &self.cursor { Some(Item::PeriodEntry(id)) => Some(id.clone()), _ => None };
+                return self.start_edit(cx, EditTarget::NewPeriodEntry { note: lower == Some('n'), after });
+            }
+            let Some(Item::PeriodEntry(id)) = self.cursor.clone() else { return Out { focus: true, ..Out::default() } };
+            return match key {
+                K::Up | K::Down => { let by = if key == K::Up { -1 } else { 1 }; let key = Self::period_key(cx); let r = self.change_period(cx, |data| { ops::move_period_entry(data, &key, &id, by); }); self.report(r) }
+                K::Delete => self.remove_period_entry(cx, &id),
+                _ => Out { focus: true, ..Out::default() },
+            };
+        }
         // New entries: after the chosen one.
         if !mods.shift { if let Some(kind) = match lower { Some('a') => Some("task"), Some('e') => Some("event"), Some('n') => Some("note"), _ => None } {
             let after = match &self.cursor { Some(Item::Entry(id)) => Self::entry(cx, id).map(|e| e.id), _ => None };
@@ -522,9 +595,12 @@ impl DayPane {
 
     fn start_edit(&mut self, cx: &Ctx, target: EditTarget) -> Out {
         let text = match &target {
+            EditTarget::Title if cx.view != View::Day => cx.snapshot.as_ref().and_then(|s| s.period.notes.get(&day_view::title_key(&Self::period_key(cx))).cloned()).unwrap_or_default(),
             EditTarget::Title => Self::load(cx).map(|day| day.title).unwrap_or_default(),
             EditTarget::Entry(id) => Self::entry(cx, id).map(|e| e.text).unwrap_or_default(),
-            EditTarget::New { .. } => String::new(),
+            EditTarget::New { .. } | EditTarget::NewPeriodEntry { .. } => String::new(),
+            EditTarget::Note => cx.snapshot.as_ref().and_then(|s| s.period.notes.get(&Self::period_key(cx)).cloned()).unwrap_or_default(),
+            EditTarget::PeriodEntry(id) => Self::period_entry(cx, id).map(|e| e.text).unwrap_or_default(),
         };
         self.edit = Some((target, text.clone()));
         Out { edit: Some(text), ..Out::default() }
@@ -538,6 +614,12 @@ impl DayPane {
         let Some((target, text)) = self.edit.take() else { return Ok(None) };
         let text = text.trim_end().to_string();
         match target {
+            EditTarget::Title if cx.view != View::Day => {
+                let key = day_view::title_key(&Self::period_key(cx));
+                self.change_period(cx, |data| ops::set_note(data, &key, text.trim()))?;
+                self.cursor = Some(Item::Title);
+                Ok(None)
+            }
             EditTarget::Title => { self.change(cx, |day, _| { ops::set_title(day, &text); Ok(()) })?; self.cursor = Some(Item::Title); Ok(None) }
             EditTarget::Entry(id) => {
                 if Self::entry(cx, &id).is_some_and(|e| e.text != text) { self.change(cx, |day, _| ops::set_text(day, &id, &text))?; }
@@ -551,7 +633,53 @@ impl DayPane {
                 self.cursor = Some(Item::Entry(made.clone()));
                 Ok(Some(made))
             }
+            EditTarget::Note => {
+                let key = Self::period_key(cx);
+                self.change_period(cx, |data| ops::set_note(data, &key, &text))?;
+                self.cursor = Some(Item::Note);
+                Ok(None)
+            }
+            EditTarget::PeriodEntry(id) => {
+                let key = Self::period_key(cx);
+                if Self::period_entry(cx, &id).is_some_and(|e| e.text != text) { self.change_period(cx, |data| ops::set_period_text(data, &key, &id, &text))?; }
+                self.cursor = Some(Item::PeriodEntry(id.clone()));
+                Ok(Some(id))
+            }
+            EditTarget::NewPeriodEntry { note, after } => {
+                if text.trim().is_empty() { return Ok(None); }
+                let key = Self::period_key(cx);
+                let mut made = String::new();
+                self.change_period(cx, |data| {
+                    made = ops::add_period_entry(data, &key, note, &text);
+                    // Right after the one it follows (among its kind), as the app's Enter does.
+                    if let Some(after) = &after {
+                        let ids: Vec<String> = data["entries"][&key].as_object().map(|list| {
+                            let mut same: Vec<(f64, String)> = list.iter().filter(|(_, e)| (e["kind"] == "note") == note).map(|(id, e)| (e["order"].as_f64().unwrap_or(0.0), id.clone())).collect();
+                            same.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+                            same.into_iter().map(|(_, id)| id).collect()
+                        }).unwrap_or_default();
+                        if let (Some(from), Some(to)) = (ids.iter().position(|id| *id == made), ids.iter().position(|id| id == after)) {
+                            for _ in (to + 1)..from { ops::move_period_entry(data, &key, &made, -1); }
+                        }
+                    }
+                })?;
+                self.cursor = Some(Item::PeriodEntry(made.clone()));
+                Ok(Some(made))
+            }
         }
+    }
+
+    /// A period's own entry goes; the keyboard stays on the line where it was.
+    fn remove_period_entry(&mut self, cx: &mut Ctx, id: &str) -> Out {
+        let items = self.items(cx);
+        let at = items.iter().position(|item| *item == Item::PeriodEntry(id.to_string()));
+        let key = Self::period_key(cx);
+        let r = self.change_period(cx, |data| ops::remove_period_entry(data, &key, id));
+        if r.is_ok() {
+            let after = self.items(cx);
+            self.cursor = at.and_then(|at| after.get(at).or_else(|| after.get(at.saturating_sub(1)))).cloned();
+        }
+        self.report(r)
     }
 
     fn edit_key(&mut self, cx: &mut Ctx, key: K, mods: Mods) -> Out {
@@ -559,15 +687,27 @@ impl DayPane {
         let empty = self.edit.as_ref().is_some_and(|(_, text)| text.is_empty());
         match key {
             // Backspace in an empty entry removes it (a new one is simply not made).
-            K::Backspace if empty => {
+            K::Backspace if empty && target != EditTarget::Note => {
                 self.edit = None;
-                match target { EditTarget::Entry(id) => { let out = self.delete(cx, &id); return Out { focus: true, ..out } } _ => return Out { focus: true, ..Out::default() } }
+                match target {
+                    EditTarget::Entry(id) => { let out = self.delete(cx, &id); return Out { focus: true, ..out } }
+                    EditTarget::PeriodEntry(id) => { let out = self.remove_period_entry(cx, &id); return Out { focus: true, ..out } }
+                    _ => return Out { focus: true, ..Out::default() },
+                }
             }
+            // The note: Enter makes a new line in it (the input keeps that key); Strg+Enter writes it down.
+            K::Enter if target == EditTarget::Note => { let r = self.commit(cx).map(|_| ()); let out = self.report(r); return Out { focus: true, ..out } }
             K::Escape => { let r = self.commit(cx).map(|_| ()); let out = self.report(r); return Out { focus: true, ..out } }
             K::Enter => {
                 let made = self.commit(cx);
                 return match (made, &target) {
                     // Enter in an entry: a new one below, of its kind and tag (Strg+Enter: without the tag).
+                    // In a period's own list: a new entry of the same kind below (`PeriodEntries.tsx`).
+                    (Ok(Some(id)), EditTarget::PeriodEntry(_) | EditTarget::NewPeriodEntry { .. }) => {
+                        let note = Self::period_entry(cx, &id).is_some_and(|e| e.note);
+                        let out = self.start_edit(cx, EditTarget::NewPeriodEntry { note, after: Some(id) });
+                        Out { changed: true, ..out }
+                    }
                     (Ok(Some(id)), EditTarget::Entry(_) | EditTarget::New { .. }) => {
                         let entry = Self::entry(cx, &id);
                         let kind = match entry.as_ref().map(|e| e.kind.as_str()) { Some("event") => "event", Some("note") => "note", _ => "task" };
@@ -575,7 +715,7 @@ impl DayPane {
                         let out = self.start_edit(cx, EditTarget::New { kind, after: Some(id), tag });
                         Out { changed: true, ..out }
                     }
-                    (Ok(_), EditTarget::Title) => { let out = self.step(cx, 1); Out { changed: true, ..out } }
+                    (Ok(_), EditTarget::Title | EditTarget::Note) => { let out = self.step(cx, 1); Out { changed: true, ..out } }
                     (Ok(None), _) => Out { focus: true, changed: true, ..Out::default() },
                     (Err(error), _) => { self.message = Some((error, true)); Out { focus: true, ..Out::default() } }
                 };
@@ -611,9 +751,17 @@ impl DayPane {
         let Some(dial) = self.dial(cx, id) else { return Out::default() };
         let value = value.map(|v| v.clamp(dial.min, dial.max));
         let date = cx.date.to_string();
+        let key = Self::period_key(cx);
+        let day = cx.view == View::Day;
         let id = id.to_string();
         self.cursor = Some(Item::Value(id.clone()));
-        let r = self.change_period(cx, |data| if id == "rating" { ops::set_rating(data, &date, value) } else { ops::set_scale(data, &date, &id, value) });
+        // A day's values are the day's; a period's are its own (`periods`), apart from its days.
+        let r = self.change_period(cx, |data| match (day, id == "rating") {
+            (true, true) => ops::set_rating(data, &date, value),
+            (true, false) => ops::set_scale(data, &date, &id, value),
+            (false, true) => ops::set_period_rating(data, &key, value),
+            (false, false) => ops::set_period_scale(data, &key, &id, value),
+        });
         self.report(r)
     }
 
@@ -682,7 +830,7 @@ impl DayPane {
 
     pub fn toggle_activity(&mut self, cx: &mut Ctx, id: &str) -> Out {
         self.cursor = Some(Item::Activity(id.to_string()));
-        let date = cx.date.to_string();
+        let Some(date) = Self::activity_day(cx) else { return Out { focus: true, ..Out::default() } };
         let r = self.change_period(cx, |data| ops::toggle_activity(data, &date, id));
         self.report(r)
     }
@@ -702,9 +850,14 @@ impl DayPane {
             // The flag at the right of the line.
             (Item::Entry(id), 5) if Self::entry(cx, &id).is_some() => { let r = self.change(cx, |day, tags| ops::toggle_priority(day, tags, &id)); self.report(r) }
             (Item::Entry(id), _) if Self::entry(cx, &id).is_some() => { self.side = None; self.start_edit(cx, EditTarget::Entry(id)) }
+            (Item::Note, _) => self.start_edit(cx, EditTarget::Note),
+            (Item::PeriodEntry(id), 1) => { let key = Self::period_key(cx); let r = self.change_period(cx, |data| ops::toggle_period_done(data, &key, &id)); self.report(r) }
+            (Item::PeriodEntry(id), 0) => self.start_edit(cx, EditTarget::PeriodEntry(id)),
             (Item::Activity(id), 1) => self.toggle_activity(cx, &id),
-            (Item::Activity(id), 2) => { let date = cx.date.to_string(); self.toggle_timer(cx, &date, &id) }
-            (Item::Activity(id), 3) => { let date = cx.date.to_string(); self.stop_timer(cx, &date, &id) }
+            (Item::Activity(id), 2 | 3) => {
+                let Some(date) = Self::activity_day(cx) else { return Out { focus: true, ..Out::default() } };
+                if part == 3 { self.stop_timer(cx, &date, &id) } else { self.toggle_timer(cx, &date, &id) }
+            }
             (Item::Timer(key), 2 | 3) => {
                 let Some((date, id)) = key.split_once(':').map(|(d, i)| (d.to_string(), i.to_string())) else { return Out::default() };
                 if part == 3 { self.stop_timer(cx, &date, &id) } else { self.toggle_timer(cx, &date, &id) }

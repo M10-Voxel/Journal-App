@@ -302,8 +302,7 @@ fn notebook_defaults_apply_on_open_and_leave_the_current_session_in_control() {
     t.form.close_entry();
     t.form.preferences.edit_notes = true;
     t.form.open_notepad();
-    assert!(t.form.notepad().unwrap().notes_on_day);
-    t.form.set_notepad_day_filter(false);
+    assert!(!t.form.notepad().unwrap().notes_on_day, "The list opens on every note and folder.");
     t.form.new_notepad_note();
     let id = t.form.notepad().unwrap().card.id.to_string();
     t.form.notepad.as_mut().unwrap().edit(false, "Testnotiz");
@@ -356,8 +355,10 @@ fn notepad_writes_a_pinned_card_and_reopens_the_same_note_with_its_tag_and_attac
     let card = read(key.clone());
     assert_eq!(card["kind"], "note");
     assert_eq!(card["notebook"], true);
-    assert_eq!(card["onDay"], true);
-    assert_eq!(card["dates"], serde_json::json!([date]));
+    // In the notebook only, as the app makes it: on no board.
+    assert!(card["onDay"].is_null());
+    assert_eq!(card["dates"], serde_json::json!([]));
+    assert_eq!(card["created"], date.to_string());
     assert_eq!(card["tag"], HEALTH);
     assert_eq!(card["text"], "# Privat\n\n- [ ] Erledigen");
     let journal_day = observer.load("2026-11-19").unwrap();
@@ -370,7 +371,7 @@ fn notepad_writes_a_pinned_card_and_reopens_the_same_note_with_its_tag_and_attac
     t.form.finish_notepad(false);
     t.form.finish_notepad(false);
     t.form.open_notepad();
-    assert!(t.form.notepad().unwrap().notes_on_day);
+    assert!(!t.form.notepad().unwrap().notes_on_day);
     assert_eq!(t.form.notepad_choices("Planung")[0].key, id.to_string());
     t.form.pick_notepad(&id.to_string());
     assert!(t.form.notepad().unwrap().preview && !t.form.notepad().unwrap().editing);
@@ -447,8 +448,7 @@ fn notebook_browses_today_by_nested_folder_and_keeps_the_other_days_in_all() {
             rusqlite::params![format!("board:card:{id}"), card.to_string()]).unwrap();
     }
     t.form.open_notepad();
-    assert!(t.form.notepad().unwrap().notes_on_day);
-    t.form.set_notepad_day_filter(false);
+    assert!(!t.form.notepad().unwrap().notes_on_day, "The list opens on every note and folder.");
     let tree = t.form.notepad_choices("");
     assert_eq!(tree.iter().map(|row| (row.title.as_str(), row.depth, row.folder)).collect::<Vec<_>>(),
         [("Projekt", 0, true), ("Notizen", 1, true), ("Angepinnt", 2, false), ("Gestern", 1, false), ("Lose", 0, false)], "All notes: the folders as a tree.");

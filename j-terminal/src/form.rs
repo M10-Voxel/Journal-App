@@ -387,6 +387,8 @@ pub struct Form {
     pan: f32,
     /// The day the day view shows when it is not today (chosen in the calendar or with Alt+←/→); none follows today.
     view_day: Option<NaiveDate>,
+    /// The view at the left: a day, or the week … year around the day shown (Strg+Tab, the switch beside the search).
+    pub view: crate::features::View,
     /// What the calendar marks as the day view's day.
     cal_selected: BTreeSet<NaiveDate>,
     /// The day view as something to work in: its cursor, the line being written, the panel at the left.
@@ -541,7 +543,7 @@ impl Form {
             pick: 0, editor: Editor::default(), menu: None, tried: false, last_saved: None, status: None, flash: None,
             metrics: Metrics::default(), options: None, options_backup: Values::default(), cal_top: repeat::shift(today, -1), cal_offset: 0.0, cal_target: None,
             cal_open: BTreeSet::from([today]), cal_clicked: None, mark: None, mark_layout: None, shown_layout: Layout::default(), shown_entries: Vec::new(), shown_metrics: Metrics::default(),
-            board_scopes: None, fixed_clock: true, clock_ms: 0, kind_chosen: false, entry_open: false, hits: Vec::new(), editing: None, search: String::new(), search_cursor: 0, command_selected: 0, notepad: None, suspended_notes: Vec::new(), zoom_days: 1.0, zoom_hours: 1.0, pan: 0.0, view_day: None, cal_selected: BTreeSet::new(), pane: DayPane::default(),
+            board_scopes: None, fixed_clock: true, clock_ms: 0, kind_chosen: false, entry_open: false, hits: Vec::new(), editing: None, search: String::new(), search_cursor: 0, command_selected: 0, notepad: None, suspended_notes: Vec::new(), zoom_days: 1.0, zoom_hours: 1.0, pan: 0.0, view_day: None, view: crate::features::View::Day, cal_selected: BTreeSet::new(), pane: DayPane::default(),
             templates: Default::default(), template: None, gap_at: None, from_template: false, tag_edit: None, applying: None, icons_all: false, notes_list: Default::default(), notes_query: String::new(), notes_query_set: None }
     }
 
@@ -721,9 +723,9 @@ impl Form {
             commands.push(Command { name: format!("{} ", crate::texts::templates::COMMAND[tt]), detail: crate::texts::templates::COMMAND_DETAIL[tt].into(),
                 look: SearchRow { icon: "copy-plus", ..Default::default() }, action: CommandAction::TemplateHelp });
         }
-        if let Some(enabled) = &self.board_scopes {
+        if self.board_scopes.is_some() {
             for period in crate::board::Period::ALL {
-                if enabled.contains(&period) && [Language::De, Language::En].iter().any(|lang| parse::fold(&period.command(*lang)[1..]).starts_with(&query)) {
+                if self.preferences.features.has(crate::features::View::ALL[period as usize], crate::features::Module::Board) && [Language::De, Language::En].iter().any(|lang| parse::fold(&period.command(*lang)[1..]).starts_with(&query)) {
                     commands.push(Command { name: period.command(self.language).into(), detail: if en {"Open board"}else{"Pinnwand öffnen"}.into(),look:SearchRow { icon: "panels-top-left", ..Default::default() },action:CommandAction::Board(period) });
                 }
             }
@@ -811,7 +813,7 @@ impl Form {
     fn search_key(&mut self, key: Key, mods: Mods) -> Effect {
         let commands = self.commands();
         match key {
-            Key::Left | Key::Right if mods.alt => { self.show_day(repeat::shift(self.day_shown(), if key == Key::Left { -1 } else { 1 })); Effect::default() }
+            Key::Left | Key::Right if mods.alt => { self.show_day(self.view.step(self.day_shown(), key == Key::Right)); Effect::default() }
             Key::Home if mods.alt => { self.show_today(); Effect::default() }
             Key::Undo => self.undo_last(false),
             Key::Redo => self.undo_last(true),
@@ -1337,6 +1339,10 @@ impl Form {
     pub fn notepad(&self) -> Option<&notepad::Draft> { self.notepad.as_ref() }
 
     pub fn open_notepad(&mut self) -> Effect {
+        if !self.preferences.features.notebook && self.notepad.is_none() {
+            self.status = Some((crate::texts::settings::tr(crate::texts::settings::NOTEBOOK_OFF, self.language).into(), false));
+            return Effect::default();
+        }
         if self.notepad.is_some() {
             self.menu = None;
             return Effect { focus: Some(Pane::Notes), ..Effect::default() };
@@ -1348,7 +1354,8 @@ impl Form {
         let mut draft = notepad::Draft::new_card(self.day_shown());
         draft.panel = 1;
         draft.editing = false;
-        draft.notes_on_day = true;
+        // The list opens on every note and folder (Tab: those of the day).
+        draft.notes_on_day = false;
         self.enter_notepad(draft)
     }
 
@@ -1389,7 +1396,7 @@ impl Form {
     }
 
     pub fn new_notepad_note(&mut self) -> Effect {
-        if self.journal.is_none() { return self.open_notepad(); }
+        if self.journal.is_none() || !self.preferences.features.notebook { return self.open_notepad(); }
         let mut draft = notepad::Draft::new_card(self.day_shown());
         if let Some(current) = self.notepad.take() {
             draft.notes_on_day = current.notes_on_day;
@@ -2347,6 +2354,30 @@ impl Form {
         self.flash = None;
     }
 
+    /// The view at the left steps to the next one on (Strg+Tab; `by` −1: the one before), or goes to `view` itself (the
+    /// switch beside the search). The day shown stays; the view shows the period around it.
+    pub fn step_view(&mut self, by: i32) {
+        let features = self.preferences.features;
+        let mut view = features.available(self.view);
+        for _ in 0..by.unsigned_abs() { view = features.next(view, by > 0); }
+        self.set_view(view);
+    }
+
+    pub fn set_view(&mut self, view: crate::features::View) {
+        let view = self.preferences.features.available(view);
+        if view != self.view { self.pane.reset(); }
+        self.view = view;
+        self.status = None;
+    }
+
+    /// A view switched off in F1: the left side goes to the nearest one on.
+    pub fn keep_view(&mut self) { let view = self.view; self.set_view(view); }
+
+    /// The views on (F1 → Funktionen), in their order, and the one shown.
+    pub fn views(&self) -> (Vec<crate::features::View>, crate::features::View) {
+        (self.preferences.features.views_on(), self.preferences.features.available(self.view))
+    }
+
     /// Back to today (a click on the day view's date, Alt+H).
     pub fn show_today(&mut self) {
         self.show_day(self.today);
@@ -2383,7 +2414,8 @@ impl Form {
     pub fn with_pane<T>(&mut self, f: impl FnOnce(&mut DayPane, &mut day_pane::Ctx) -> T) -> T {
         let date = self.day_shown();
         let now = if self.fixed_clock { self.clock_ms } else { day_pane::Ctx::clock() };
-        let mut cx = day_pane::Ctx { store: self.journal.as_mut().map(|journal| &mut journal.store), snapshot: self.snapshot.as_mut(), date, today: self.today, language: self.language, now };
+        let (view, features) = (self.view, self.preferences.features);
+        let mut cx = day_pane::Ctx { store: self.journal.as_mut().map(|journal| &mut journal.store), snapshot: self.snapshot.as_mut(), date, today: self.today, language: self.language, now, view, features };
         f(&mut self.pane, &mut cx)
     }
 
@@ -2424,7 +2456,7 @@ impl Form {
         // The day: Alt+←/→ and Alt+H as in the search bar (not while writing or in the panel).
         if mods.alt && !busy {
             match key {
-                day_pane::K::Left | day_pane::K::Right => { self.show_day(repeat::shift(self.day_shown(), if key == day_pane::K::Left { -1 } else { 1 })); let out = self.with_pane(|pane, cx| pane.enter(cx)); return self.pane_effect(out); }
+                day_pane::K::Left | day_pane::K::Right => { self.show_day(self.view.step(self.day_shown(), key == day_pane::K::Right)); let out = self.with_pane(|pane, cx| pane.enter(cx)); return self.pane_effect(out); }
                 day_pane::K::Char('h' | 'H') => { self.show_today(); let out = self.with_pane(|pane, cx| pane.enter(cx)); return self.pane_effect(out); }
                 _ => {}
             }
@@ -2582,6 +2614,11 @@ impl Form {
     pub fn calendar_view(&mut self) -> CalendarView {
         // The day view's day, marked while the day view is what the left shows.
         self.cal_selected = self.notepad.as_ref().map(|draft| draft.date).or(self.view_day.filter(|_| !self.entry_open)).into_iter().collect();
+        // A week … year: its days are marked in the calendar.
+        if self.notepad.is_none() && !self.entry_open && self.view != crate::features::View::Day {
+            let (start, end) = self.view.bounds(self.day_shown());
+            self.cal_selected = start.iter_days().take_while(|day| *day <= end).collect();
+        }
         if let (Some(journal), Some(snapshot)) = (&self.journal, &mut self.snapshot) {
             let _ = snapshot.ensure(&journal.store, repeat::shift(self.cal_top, -crate::snapshot::LOOKBACK), repeat::shift(self.cal_top, crate::snapshot::AHEAD));
         }

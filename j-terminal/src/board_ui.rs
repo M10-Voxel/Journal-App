@@ -58,12 +58,18 @@ impl App {
         if scopes == self.state.board_scopes {
             return false;
         }
+        // Until the switches are changed in F1, the boards follow the app's.
+        if let (false, Some(boards)) = (self.state.preferences.features_set, &scopes) {
+            self.state.preferences.features = self.state.preferences.features.with_boards(boards);
+        }
         self.state.board_scopes = scopes;
         true
     }
     pub(super) fn open_board(&mut self, period: Period) {
         self.refresh_board_scopes();
-        if !self.state.board_scopes.as_ref().is_some_and(|s| s.contains(&period)) {
+        // F1 → Funktionen: the view's board switched off.
+        let on = self.state.preferences.features.has(crate::features::View::ALL[period as usize], crate::features::Module::Board);
+        if !on || self.state.board_scopes.is_none() {
             self.notice = Some(label("unavailable", self.state.language).into());
             self.draw();
             return;

@@ -209,9 +209,134 @@ pub fn set_minutes(data: &mut Value, date: &str, activity: &str, minutes: Option
     }
 }
 
+// ----- A day's note and a week's … year's own data (`notes`, `periods`, `entries`, keyed by the period) -----
+
+/// An object member of `data` made an object (and the root too).
+fn object<'a>(data: &'a mut Value, field: &str) -> &'a mut serde_json::Map<String, Value> {
+    if !data.is_object() { *data = json!({}); }
+    let member = data.as_object_mut().unwrap().entry(field).or_insert_with(|| json!({}));
+    if !member.is_object() { *member = json!({}); }
+    member.as_object_mut().unwrap()
+}
+
+/// The note of a day or a period (by its key); an empty one goes.
+pub fn set_note(data: &mut Value, key: &str, text: &str) {
+    let notes = object(data, "notes");
+    if text.trim().is_empty() { notes.remove(key); } else { notes.insert(key.into(), json!(text)); }
+}
+
+/// A period's own rating (`withPeriodValues`); none removes it, empty values go.
+pub fn set_period_rating(data: &mut Value, key: &str, value: Option<i64>) {
+    period_values(data, key, |values| match value { Some(value) => { values.insert("rating".into(), json!(value)); } None => { values.remove("rating"); } });
+}
+
+/// A period's own value of a scale; none removes it.
+pub fn set_period_scale(data: &mut Value, key: &str, scale: &str, value: Option<i64>) {
+    period_values(data, key, |values| {
+        let scales = values.entry("scales").or_insert_with(|| json!({}));
+        if !scales.is_object() { *scales = json!({}); }
+        let scales = scales.as_object_mut().unwrap();
+        match value { Some(value) => { scales.insert(scale.into(), json!(value)); } None => { scales.remove(scale); } }
+        if scales.is_empty() { values.remove("scales"); }
+    });
+}
+
+fn period_values(data: &mut Value, key: &str, change: impl FnOnce(&mut serde_json::Map<String, Value>)) {
+    let periods = object(data, "periods");
+    let values = periods.entry(key).or_insert_with(|| json!({}));
+    if !values.is_object() { *values = json!({}); }
+    change(values.as_object_mut().unwrap());
+    if values.as_object().is_some_and(|values| values.is_empty()) { periods.remove(key); }
+    if periods.is_empty() { data.as_object_mut().unwrap().remove("periods"); }
+}
+
+/// A period's own entries (`withPeriodEntries`); a list left empty goes.
+fn period_entries(data: &mut Value, key: &str, change: impl FnOnce(&mut serde_json::Map<String, Value>)) {
+    let entries = object(data, "entries");
+    let list = entries.entry(key).or_insert_with(|| json!({}));
+    if !list.is_object() { *list = json!({}); }
+    change(list.as_object_mut().unwrap());
+    if list.as_object().is_some_and(|list| list.is_empty()) { entries.remove(key); }
+    if entries.is_empty() { data.as_object_mut().unwrap().remove("entries"); }
+}
+
+/// A new entry of a period: a task or a note at the end of its kind (`PeriodEntries.tsx` `add`). Returns its id.
+pub fn add_period_entry(data: &mut Value, key: &str, note: bool, text: &str) -> String {
+    let id = uuid::Uuid::new_v4().to_string();
+    let kind = if note { "note" } else { "task" };
+    period_entries(data, key, |list| {
+        let order = list.values().filter(|entry| entry["kind"] == kind).filter_map(|entry| entry["order"].as_f64()).fold(-1.0, f64::max) + 1.0;
+        list.insert(id.clone(), json!({ "kind": kind, "text": text, "order": order }));
+    });
+    id
+}
+
+pub fn set_period_text(data: &mut Value, key: &str, id: &str, text: &str) {
+    period_entries(data, key, |list| { if let Some(entry) = list.get_mut(id).and_then(Value::as_object_mut) { entry.insert("text".into(), json!(text)); } });
+}
+
+/// A task's tick on or off (a note has none).
+pub fn toggle_period_done(data: &mut Value, key: &str, id: &str) {
+    period_entries(data, key, |list| {
+        let Some(entry) = list.get_mut(id).and_then(Value::as_object_mut) else { return };
+        if entry.get("kind").and_then(Value::as_str) == Some("note") { return; }
+        if entry.get("done").and_then(Value::as_bool) == Some(true) { entry.remove("done"); } else { entry.insert("done".into(), json!(true)); }
+    });
+}
+
+pub fn remove_period_entry(data: &mut Value, key: &str, id: &str) { period_entries(data, key, |list| { list.remove(id); }); }
+
+/// One place up or down among the entries of its kind (`movePeriodEntry`; their order is numbered anew). False when it
+/// cannot go further.
+pub fn move_period_entry(data: &mut Value, key: &str, id: &str, by: i32) -> bool {
+    let mut moved = false;
+    period_entries(data, key, |list| {
+        let Some(kind) = list.get(id).map(|entry| entry["kind"].as_str().unwrap_or("task").to_string()) else { return };
+        let mut same: Vec<(f64, String)> = list.iter().filter(|(_, entry)| entry["kind"].as_str().unwrap_or("task") == kind)
+            .map(|(other, entry)| (entry["order"].as_f64().unwrap_or(0.0), other.clone())).collect();
+        same.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+        let Some(at) = same.iter().position(|(_, other)| other == id) else { return };
+        let target = at as i32 + by;
+        if target < 0 || target as usize >= same.len() { return; }
+        same.swap(at, target as usize);
+        for (order, (_, other)) in same.iter().enumerate() { if let Some(entry) = list.get_mut(other).and_then(Value::as_object_mut) { entry.insert("order".into(), json!(order)); } }
+        moved = true;
+    });
+    moved
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_periods_own_data_is_written_as_the_app_keeps_it() {
+        let mut data = json!({ "days": {} });
+        set_note(&mut data, "week:2026-11-16", "Gute Woche");
+        assert_eq!(data["notes"]["week:2026-11-16"], "Gute Woche");
+        set_note(&mut data, "week:2026-11-16", "  ");
+        assert!(data["notes"].get("week:2026-11-16").is_none(), "An empty note goes.");
+        set_period_rating(&mut data, "month:2026-11-01", Some(7));
+        set_period_scale(&mut data, "month:2026-11-01", "stress", Some(3));
+        assert_eq!(data["periods"]["month:2026-11-01"], json!({ "rating": 7, "scales": { "stress": 3 } }));
+        set_period_rating(&mut data, "month:2026-11-01", None);
+        set_period_scale(&mut data, "month:2026-11-01", "stress", None);
+        assert!(data.get("periods").is_none(), "Empty values go.");
+        let first = add_period_entry(&mut data, "week:2026-11-16", false, "Steuer");
+        let second = add_period_entry(&mut data, "week:2026-11-16", false, "Bericht");
+        let note = add_period_entry(&mut data, "week:2026-11-16", true, "Idee");
+        assert_eq!((data["entries"]["week:2026-11-16"][&second]["order"].as_f64(), data["entries"]["week:2026-11-16"][&note]["order"].as_f64()), (Some(1.0), Some(0.0)));
+        toggle_period_done(&mut data, "week:2026-11-16", &first);
+        toggle_period_done(&mut data, "week:2026-11-16", &note);
+        assert_eq!((data["entries"]["week:2026-11-16"][&first]["done"].as_bool(), data["entries"]["week:2026-11-16"][&note].get("done")), (Some(true), None));
+        assert!(move_period_entry(&mut data, "week:2026-11-16", &second, -1));
+        assert_eq!(data["entries"]["week:2026-11-16"][&second]["order"].as_f64(), Some(0.0));
+        assert!(!move_period_entry(&mut data, "week:2026-11-16", &second, -1), "Already first of the tasks.");
+        set_period_text(&mut data, "week:2026-11-16", &note, "Neue Idee");
+        assert_eq!(data["entries"]["week:2026-11-16"][&note]["text"], "Neue Idee");
+        for id in [&first, &second, &note] { remove_period_entry(&mut data, "week:2026-11-16", id); }
+        assert!(data.get("entries").is_none(), "A list left empty goes.");
+    }
 
     fn tag(id: &str) -> Tag { Tag { id: id.into(), name: id.into(), color: "#569eff".into(), icon: None } }
     fn day(entries: serde_json::Value) -> Day {

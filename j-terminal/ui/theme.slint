@@ -283,6 +283,11 @@ export global Theme {
     // "When": the date, the start and the end side by side.
     // "Wann": the date takes what the two times and the dash leave of the line (at least this); all in the left part.
     out property <length> when-date-min: 136px;
+    // The note of the day or period in the day view: a line of its text, and the room around it.
+    out property <length> day-note-line: 19px;
+    out property <length> day-note-pad: 8px;
+    out property <int> day-note-lines: 8;  // shown at most (twice that while it is written)
+    out property <int> day-note-min-lines: 5;  // the field is never smaller
     out property <length> when-time-width: 88px;  // wide enough for "ganztägig" and "Zeitpunkt"
     out property <length> when-dash-width: 14px;
     out property <length> label-icon-size: 16px;

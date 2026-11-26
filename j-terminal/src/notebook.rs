@@ -439,8 +439,9 @@ impl Card {
         let mut record = match (&self.original, current) {
             (Some(_), Some(card)) if card["kind"] == "note" => card,
             (None, None) => {
+                // As the app's notebook makes a note (`Notebook.tsx`): in the notebook only, on no board (no `dates`).
                 let card = json!({ "id": id, "kind": "note", "title": "", "text": "", "tag": null, "created": date,
-                    "createdAt": now, "updatedAt": now, "dates": [date], "onDay": true, "notebook": true, "paper": "yellow", "order": order });
+                    "createdAt": now, "updatedAt": now, "dates": [], "notebook": true, "paper": "yellow", "order": order });
                 order = order.saturating_add(1);
                 card
             }

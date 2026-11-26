@@ -48,6 +48,8 @@ export component SettingsWindow inherits Window {
     callback system-menu(length, length);
     callback update-binding(string, string, int) -> string;
     callback set-preference(PreferenceKey, int) -> string;
+    // A switch of F1 → Funktionen by its id (`feature:week:note` …), on or off.
+    callback set-feature(string, bool) -> string;
     callback editable-row(int, int) -> int;
     // The pages of the activities (1) and the day values (2): their own panel instead of rows of options.
     in property <int> period-page;
@@ -121,7 +123,9 @@ export component SettingsWindow inherits Window {
         root.area = SettingsFocus.options;
         root.selected = index;
         root.error = "";
-        if row.control == RowControl.toggle {
+        if row.control == RowControl.toggle && row.preference == PreferenceKey.feature {
+            root.error = root.set-feature(row.id, row.index == 0);
+        } else if row.control == RowControl.toggle {
             root.error = root.set-preference(row.preference, 1 - row.index);
         } else if row.control == RowControl.choice {
             root.choice-index = row.index;

@@ -52,7 +52,7 @@ const GROUPS: &[Group] = &[
         binding!("redo", JOURNAL, "Ctrl+Y", "Wiederherstellen", "Redo"),
         binding!("quit", JOURNAL, "Ctrl+Q", "J-TerminaL beenden", "Quit J-TerminaL"),
         fixed!("Esc", "Zurück, Suche leeren oder Fenster ausblenden", "Go back, clear search or hide the window"),
-        fixed!("Ctrl+Esc", "Fenster sofort ausblenden (überall, auch beim Zeichnen)", "Hide the window at once (anywhere, also while drawing)"),
+        fixed!("Shift+Esc", "Fenster sofort ausblenden (überall, auch beim Zeichnen)", "Hide the window at once (anywhere, also while drawing)"),
     ] },
     Group { name: ["Tagesansicht", "Day view"], shortcuts: &[
         binding!("journal-search", DATE, "Ctrl+F", "Journal durchsuchen", "Search journal"),

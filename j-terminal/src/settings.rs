@@ -45,6 +45,11 @@ pub struct Preferences {
     pub reopen_after: u32,
     pub reopen_minutes: bool,
     pub orientation: Orientation,
+    /// F1 → Funktionen: the notebook and the views with their parts (as the app's, kept here on this device).
+    pub features: crate::features::Features,
+    /// The switches were changed here: from then on they are J-TerminaL's own. Until then the boards follow the app
+    /// (its `board-scopes` file, which tells which views have a board).
+    pub features_set: bool,
 }
 
 impl Default for Preferences {
@@ -52,7 +57,8 @@ impl Default for Preferences {
         Self { start_view: StartView::Day, center_window: false, return_today: true,
             language: DisplayLanguage::Journal, keycaps: true, parse_titles: true,
             week_numbers: true, weekends: true, now_line: true, edit_notes: false, calendar_label_width: None,
-            notepad_width: None, notepad_wide: false, reopen_stay: false, reopen_after: 5, reopen_minutes: true, orientation: Orientation::Auto }
+            notepad_width: None, notepad_wide: false, reopen_stay: false, reopen_after: 5, reopen_minutes: true, orientation: Orientation::Auto,
+            features: crate::features::Features::default(), features_set: false }
     }
 }
 
@@ -60,7 +66,11 @@ impl Preferences {
     pub fn load(path: Option<&Path>) -> io::Result<Self> {
         let Some(path) = path else { return Ok(Self::default()); };
         match fs::read(path) {
-            Ok(data) => Ok(serde_json::from_slice(&data)?),
+            Ok(data) => {
+                let mut read: Self = serde_json::from_slice(&data)?;
+                read.features = read.features.normalized();
+                Ok(read)
+            }
             Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(Self::default()),
             Err(error) => Err(error),
         }
@@ -78,7 +88,7 @@ impl Preferences {
 
     fn index(&self, key: PreferenceKey) -> i32 {
         match key {
-            PreferenceKey::None => 0,
+            PreferenceKey::None | PreferenceKey::Feature => 0,
             PreferenceKey::StartView => self.start_view as i32,
             PreferenceKey::WindowPosition => self.center_window.into(),
             PreferenceKey::ReturnToday => self.return_today.into(),
@@ -115,7 +125,7 @@ impl Preferences {
             K::NoteMode => self.edit_notes = checked,
             K::Reopen => self.reopen_stay = checked,
             K::ReopenUnit => self.reopen_minutes = checked,
-            K::None => return None,
+            K::None | K::Feature => return None,
         }
         Some(())
     }
@@ -134,8 +144,8 @@ pub fn write_json(path: &Path, values: &impl Serialize) -> io::Result<()> {
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub enum Page { #[default] General, Keyboard, Entry, Calendar, Notebook, Activities, Values }
-const PAGES: [Page; 7] = [Page::General, Page::Keyboard, Page::Entry, Page::Calendar, Page::Notebook, Page::Activities, Page::Values];
+pub enum Page { #[default] General, Keyboard, Entry, Calendar, Notebook, Features, Activities, Values }
+const PAGES: [Page; 8] = [Page::General, Page::Keyboard, Page::Entry, Page::Calendar, Page::Notebook, Page::Features, Page::Activities, Page::Values];
 
 impl Page {
     /// The page of the period data it shows (its own panel instead of options).
@@ -216,6 +226,7 @@ pub fn rows(location: &Location, prefs: &Preferences, bindings: &shortcuts::Bind
             first = false;
         }
     }
+    if location.page == Page::Features || searching { rows.extend(feature_rows(&prefs.features, language, &query)); }
     if location.page == Page::Keyboard || searching {
         rows.extend(shortcuts::rows(bindings, language, &location.query).into_iter().map(|row| SettingsRow {
             starts_group: !row.heading.is_empty(), heading: row.heading.into(), id: row.id.into(),
@@ -224,6 +235,59 @@ pub fn rows(location: &Location, prefs: &Preferences, bindings: &shortcuts::Bind
         }));
     }
     rows
+}
+
+/// The switches of F1 → Funktionen: the notebook, then each view with its parts (only while it is on), as the app's
+/// `FeatureSettings`. `query`: only the switches whose words have it (searching all pages).
+fn feature_rows(features: &crate::features::Features, language: Language, query: &str) -> Vec<SettingsRow> {
+    use crate::features::{modules_of, View};
+    let mut rows = Vec::new();
+    let page = tr(Page::Features.copy().0, language);
+    let fits = |words: &str| query.is_empty() || { let haystack = fold(&format!("{page} {words}")); query.split_whitespace().all(|term| haystack.contains(term)) };
+    let push = |rows: &mut Vec<SettingsRow>, id: String, title: &str, detail: &str, on: bool, heading: &str, first: bool| {
+        rows.push(SettingsRow { preference: PreferenceKey::Feature, control: RowControl::Toggle, id: id.into(), starts_group: first,
+            heading: heading.into(), action: title.into(), detail: detail.into(), index: on.into(), ..Default::default() });
+    };
+    let (title, detail) = (tr(copy::FEATURE_NOTEBOOK.0, language), tr(copy::FEATURE_NOTEBOOK.1, language));
+    if fits(&format!("{title} {detail}")) { push(&mut rows, "feature:notebook".into(), title, detail, features.notebook, "", true); }
+    let last = features.views_on().len() == 1;
+    for view in View::ALL {
+        let on = features.is_on(view);
+        let name = tr(copy::view_name(view), language);
+        let (title, detail) = (tr(copy::view_title(view), language), if last && on { tr(copy::LAST_VIEW, language) } else { tr(copy::VIEW_DETAIL, language) });
+        let mut first = true;
+        if fits(&format!("{name} {title} {detail}")) { push(&mut rows, format!("feature:{}", view.key()), title, detail, on, name, true); first = false; }
+        if !on { continue; }
+        for module in modules_of(view) {
+            let (title, detail) = copy::module_text(module, view);
+            let (title, detail) = (tr(title, language), tr(detail, language));
+            if !fits(&format!("{name} {title} {detail}")) { continue; }
+            push(&mut rows, format!("feature:{}:{}", view.key(), module.key()), title, detail, features.has(view, module), if first { name } else { "" }, first);
+            first = false;
+        }
+    }
+    rows
+}
+
+/// A switch of F1 → Funktionen by its id; false when it changes nothing (the last view, a view's last part).
+pub fn change_feature(features: &mut crate::features::Features, id: &str, on: bool) -> bool {
+    use crate::features::{Module, View};
+    let mut parts = id.strip_prefix("feature:").unwrap_or_default().split(':');
+    let next = match (parts.next(), parts.next()) {
+        (Some("notebook"), None) => crate::features::Features { notebook: on, ..*features },
+        (Some(view), module) => {
+            let Some(view) = View::ALL.into_iter().find(|known| known.key() == view) else { return false };
+            match module.map(Module::from_key) {
+                None => features.with_view(view, on),
+                Some(Some(module)) => features.with_module(view, module, on),
+                Some(None) => return false,
+            }
+        }
+        _ => return false,
+    };
+    let changed = next != *features;
+    *features = next;
+    changed
 }
 
 #[cfg(test)]
@@ -257,6 +321,29 @@ mod tests {
         write_json(&path, &prefs).unwrap();
         assert_eq!(Preferences::load(Some(&path)).unwrap(), prefs);
         fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn the_feature_switches_follow_the_apps_rules() {
+        use crate::features::{Module, View};
+        let mut features = crate::features::Features::default();
+        let location = Location { page: Page::Features, query: String::new() };
+        let prefs = Preferences::default();
+        let rows = rows(&location, &prefs, &shortcuts::Bindings::default(), Language::De);
+        let ids: Vec<&str> = rows.iter().map(|row| row.id.as_str()).collect();
+        assert_eq!(ids[..4], ["feature:notebook", "feature:day", "feature:day:title", "feature:day:entries"]);
+        assert!(!ids.contains(&"feature:day:evaluation"), "A day has no evaluation.");
+        assert!(ids.contains(&"feature:year:board"));
+        assert!(change_feature(&mut features, "feature:week:entries", true));
+        assert!(features.has(View::Week, Module::Entries));
+        assert!(change_feature(&mut features, "feature:month", false));
+        assert!(!features.is_on(View::Month));
+        assert!(!change_feature(&mut features, "feature:month:note", false) || !features.is_on(View::Month));
+        assert!(change_feature(&mut features, "feature:notebook", false) && !features.notebook);
+        assert!(!change_feature(&mut features, "feature:unknown", true));
+        // Searching finds them by the view and the part.
+        let found = super::rows(&Location { page: Page::General, query: "Woche Notiz".into() }, &prefs, &shortcuts::Bindings::default(), Language::De);
+        assert!(found.iter().any(|row| row.id == "feature:week:note"));
     }
 
     #[test]

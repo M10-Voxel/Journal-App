@@ -5,6 +5,7 @@ mod actions;
 mod analysis;
 mod analysis_ui;
 mod period_settings;
+mod features;
 mod autostart;
 mod calendar;
 mod day;
@@ -121,7 +122,10 @@ thread_local! {
 }
 
 fn with_bar(f: impl FnOnce(&Bar)) {
-    APP.with(|app| if let Some(app) = app.borrow().as_ref() { f(&app.bar) });
+    // The window's own handle, so the state is free again while `f` runs: showing the window can make Slint call back
+    // at once (a new size of the calendar), and those callbacks need the state.
+    let bar = APP.with(|app| app.borrow().as_ref().map(|app| app.bar.clone_strong()));
+    if let Some(bar) = bar { f(&bar); }
 }
 
 fn with_app(f: impl FnOnce(&mut App)) {
@@ -532,6 +536,24 @@ impl App {
         String::new()
     }
 
+    /// A switch of F1 → Funktionen (`feature:notebook`, `feature:week`, `feature:week:note` …).
+    fn change_feature(&mut self, id: &str, on: bool) -> String {
+        let mut next = self.state.preferences;
+        if !settings::change_feature(&mut next.features, id, on) { return String::new(); }
+        next.features_set = true;
+        if let Some(path) = &self.preferences_path {
+            if let Err(error) = settings::write_json(path, &next) {
+                return format!("{} {error}", texts::settings::tr(texts::settings::WRITE_ERROR, self.state.language));
+            }
+        }
+        self.state.preferences = next;
+        // A view switched off: the left side goes to the nearest one on.
+        self.state.keep_view();
+        self.draw();
+        if let Some(window) = &self.settings { self.draw_settings_rows(window); }
+        String::new()
+    }
+
     fn change_preference(&mut self, key: PreferenceKey, index: i32) -> String {
         let mut next = self.state.preferences;
         if next.change(key, index).is_none() { return String::new(); }
@@ -932,10 +954,8 @@ impl App {
         };
         self.bar.set_notepad_editor_heading(heading.into());
         let displayed_day = stored.and_then(|card| chrono::NaiveDate::parse_from_str(notebook::text(card, "created"), "%Y-%m-%d").ok()).unwrap_or(draft.date);
+        // A new note goes to the notebook only (no longer onto the day's board): just its day.
         let date = day_view::long_date(displayed_day, self.state.language);
-        let date = if draft.panel == 0 && stored.is_none() {
-            format!("{} · {date}", labels.pinned)
-        } else { date };
         let tag = self.state.notepad_tag_name();
         let date = match tag.as_deref() {
             Some(tag) if !draft.editing => format!("{date} · {tag}"),
@@ -1165,8 +1185,8 @@ impl App {
         self.bar.set_day_heading(day.heading.clone().into());
         self.bar.set_day_relative(day.relative.clone().into());
         self.bar.set_day_is_today(day.is_today);
-        self.bar.set_day_title_placeholder(dt.title_placeholder.into());
-        for (name, set) in [("play", Bar::set_icon_play as fn(&Bar, slint::Image)), ("pause", Bar::set_icon_pause), ("square", Bar::set_icon_stop), ("x", Bar::set_icon_close), ("chevron-left", Bar::set_icon_back), ("chevron-right", Bar::set_icon_forward)] {
+        self.bar.set_day_title_placeholder(if day.view == features::View::Day { dt.title_placeholder } else { dt.period_title_placeholder }.into());
+        for (name, set) in [("play", Bar::set_icon_play as fn(&Bar, slint::Image)), ("pause", Bar::set_icon_pause), ("square", Bar::set_icon_stop), ("x", Bar::set_icon_close), ("chevron-left", Bar::set_icon_back), ("chevron-right", Bar::set_icon_forward), ("calendar-check", Bar::set_icon_today)] {
             set(&self.bar, control_image(&self.bar, name, tag_icon, scale));
         }
         let color = |rgb: Option<calendar::Rgb>| rgb.map_or(theme.get_accent(), |[r, g, b]| slint::Color::from_rgb_u8(r, g, b));
@@ -1174,6 +1194,12 @@ impl App {
         let index_of = |item: &Option<day_view::Item>| item.as_ref().and_then(|item| self.day_items.iter().position(|known| known == item)).map_or(-1, |at| at as i32);
         // Where the chosen line is (the list keeps it in view).
         let paired = day.rows.iter().any(|r| r.kind == day_view::RowKind::Activity);
+        let values_shown = day.rows.iter().any(|r| r.kind == day_view::RowKind::Dials);
+        let views = self.state.views();
+        self.bar.set_views(strings(views.0.iter().map(|view| texts::settings::tr(texts::settings::view_name(*view), self.state.language).to_string())));
+        self.bar.set_view_index(views.0.iter().position(|view| *view == views.1).map_or(0, |at| at as i32));
+        self.bar.set_view_switch_label(dt.view_switch.into());
+        self.bar.set_day_note_placeholder(if day.view == features::View::Day { dt.note_day } else { dt.note_period }.into());
         let mut column = 0;
         let mut top = 0.0f32;
         let mut footer = false;
@@ -1186,15 +1212,18 @@ impl App {
         let mut footer_rows = Vec::new();
         for row in &day.rows {
             use day_view::RowKind as K;
-            let kind = match row.kind { K::Heading => 0, K::Entry => 1, K::Activity => 3, K::Empty => 4, K::Title => 5, K::Timer => 6, K::Dials => 7 };
-            if row.kind == K::Heading && row.icon == "gauge" {
+            let kind = match row.kind { K::Heading => 0, K::Entry => 1, K::Activity => 3, K::Empty => 4, K::Title => 5, K::Timer => 6, K::Dials => 7, K::Note => 8 };
+            // The values and the checklist stand at the bottom, side by side when both are shown.
+            if row.kind == K::Heading && (row.icon == "gauge" || row.icon == "activity") && !footer {
                 footer = true;
                 entries_height = top;
+            }
+            if row.kind == K::Heading && row.icon == "gauge" {
                 top = 0.0;
                 column = i32::from(paired);
             }
             if row.kind == K::Heading && row.icon == "activity" {
-                column = 2;
+                column = if values_shown { 2 } else { 0 };
                 top = 0.0;
             }
             let inner = self.bar.get_form_space() - 2.0 * theme.get_padding();
@@ -1209,7 +1238,17 @@ impl App {
             let dial_row = theme.get_dial_row_height() - (theme.get_dial_size() - dial_size);
             let tall = match row.kind {
                 K::Heading => theme.get_day_heading_height(), K::Title => theme.get_day_title_height(),
-                K::Dials => dial_row * dial_count.div_ceil(columns) as f32, _ => theme.get_day_row_height(),
+                K::Dials => dial_row * dial_count.div_ceil(columns) as f32,
+                // The note: as many lines as its text takes (about), more while it is written.
+                // The note: a field of a few lines at least, growing with its text (and over the rest of the room when
+                // nothing comes below it, see `fill`).
+                K::Note => {
+                    let per_line = ((width - 2.0 * theme.get_field_inset()) / (theme.get_write_size() * 0.6)).max(8.0) as usize;
+                    let lines: usize = row.label.split('\n').map(|line| line.chars().count().div_ceil(per_line).max(1)).sum();
+                    let shown = (lines + usize::from(row.editing)).max(theme.get_day_note_min_lines() as usize).min(theme.get_day_note_lines() as usize * 2);
+                    shown as f32 * theme.get_day_note_line() + theme.get_day_note_pad() * 2.0
+                }
+                _ => theme.get_day_row_height(),
             };
             let y = top;
             top += tall;
@@ -1226,6 +1265,8 @@ impl App {
                 timer_running: row.timer.as_ref().is_some_and(|t| t.running), timer_clock: row.timer.as_ref().map(|t| t.clock.clone()).unwrap_or_default().into(),
                 label: row.label.clone().into(), detail: row.detail.clone().into(), description: row.description.trim().into(),
                 dial_columns: columns as i32, dial_cell: cell, dial_size, dial_row,
+                plain: matches!(row.item, Some(day_view::Item::PeriodEntry(_))),
+                fill: false,
                 dials: std::rc::Rc::new(slint::VecModel::from(row.dials.iter().map(|d| DialCell {
                     raw: d.raw.unwrap_or(d.min) as i32, low: d.min as i32, high: d.max as i32, item: index_of(&Some(d.item.clone())), label: d.label.clone().into(), value: d.value.clone().into(), selected: d.selected,
                     color: color(Some(d.color)), image: dial_image(dial_size, thickness * dial_size / dial_px, d.fill, track, rgba(color(Some(d.color))), scale),
@@ -1233,6 +1274,8 @@ impl App {
             };
             if footer { footer_rows.push(model); } else { entries.push(model); }
         }
+        // The note as the last line of the list takes the room left under it.
+        if let Some(last) = entries.last_mut() { last.fill = last.kind == 8; }
         self.bar.set_day_list_height(entries_height);
         self.bar.set_day_footer_height(bottom);
         self.bar.set_day_rows(std::rc::Rc::new(slint::VecModel::from(entries)).into());
@@ -1719,6 +1762,9 @@ fn connect_settings(settings: &SettingsWindow) {
     settings.on_set_preference(|key, index| APP.with(|app| {
         app.borrow_mut().as_mut().map_or_else(Default::default, |app| app.change_preference(key, index).into())
     }));
+    settings.on_set_feature(|id, on| APP.with(|app| {
+        app.borrow_mut().as_mut().map_or_else(Default::default, |app| app.change_feature(&id, on).into())
+    }));
 }
 
 fn connect(bar: &Bar) {
@@ -1734,14 +1780,20 @@ fn connect(bar: &Bar) {
         let fraction = (value - low) as f32 / (high - low).max(1) as f32;
         dial_image(theme.get_dial_size(), theme.get_dial_thickness(), Some(fraction), rgba(theme.get_dial_track()), rgba(color), bar.window().scale_factor())
     });
-    bar.on_calendar_resized(|width, height| with_app(|app| {
-        if height > 0.0 && width > 0.0 && (app.state.metrics.height != height || app.state.metrics.width != width) {
-            app.state.metrics.width = width;
-            app.state.metrics.height = height;
-            let calendar = app.state.calendar_view();
-            app.draw_calendar(calendar);
-        }
-    }));
+    bar.on_calendar_resized(|width, height| {
+        let resize = move |app: &mut App| {
+            if height > 0.0 && width > 0.0 && (app.state.metrics.height != height || app.state.metrics.width != width) {
+                app.state.metrics.width = width;
+                app.state.metrics.height = height;
+                let calendar = app.state.calendar_view();
+                app.draw_calendar(calendar);
+            }
+        };
+        // Slint may report the size while the state is in use (the window being shown or drawn): then right after.
+        if APP.with(|slot| slot.try_borrow_mut().is_err()) {
+            slint::Timer::single_shot(Duration::ZERO, move || with_app(resize));
+        } else { with_app(resize); }
+    });
     bar.on_cal_mouse(|button, kind, x, y, shift| with_app(|app| {
         // Moving without a button only matters while marking.
         if kind == 1 && !app.state.marking() { return; }
@@ -1795,6 +1847,11 @@ fn connect(bar: &Bar) {
     }));
     bar.on_cal_wheel(|x, delta, ctrl, shift| with_app(|app| { app.state.cal_wheel(x, delta, ctrl, shift); app.draw(); }));
     bar.on_day_today(|| with_app(|app| { app.state.show_today(); app.draw(); }));
+    bar.on_view_step(|by| with_app(|app| { app.hide_timer.stop(); app.state.step_view(by); app.draw(); }));
+    bar.on_view_choose(|index| with_app(|app| {
+        let (views, _) = app.state.views();
+        if let Some(view) = views.get(index.max(0) as usize) { app.state.set_view(*view); app.draw(); }
+    }));
     bar.on_release_plan_space(|| with_app(|app| app.state.release_plan_space()));
     bar.on_day_shortcut(|text, mask| APP.with(|slot| {
         let mut slot = slot.borrow_mut();
@@ -2436,16 +2493,16 @@ mod tests {
         type_text(&bar, "1");
         assert!(analysis.get_legend().row_data(0).unwrap().hidden, "1 hides the daily rating's line.");
         type_text(&bar, "1");
-        // Strg+Esc hides the window from anywhere; opened again within the time set it is still here …
+        // Shift+Esc hides the window from anywhere; opened again within the time set it is still here …
         let reopen = || { present(&bar); i_slint_backend_testing::mock_elapsed_time(Duration::from_millis(1)); };
         with_app(|app| { app.state.preferences.reopen_stay = true; app.state.preferences.reopen_minutes = true; app.state.preferences.reopen_after = 5; });
-        key_with_modifiers(&bar, &[K::Control], &char::from(K::Escape).to_string());
-        assert!(!bar.window().is_visible(), "Strg+Esc hides the window.");
+        key_with_modifiers(&bar, &[K::Shift], &char::from(K::Escape).to_string());
+        assert!(!bar.window().is_visible(), "Shift+Esc hides the window.");
         reopen();
         assert!(bar.window().is_visible() && analysis.get_opened(), "Kept where it was.");
         // … with "Zur Startansicht" it opens at the start.
         with_app(|app| app.state.preferences.reopen_stay = false);
-        key_with_modifiers(&bar, &[K::Control], &char::from(K::Escape).to_string());
+        key_with_modifiers(&bar, &[K::Shift], &char::from(K::Escape).to_string());
         reopen();
         assert!(!analysis.get_opened(), "Back at the start view.");
         with_app(|app| app.state.preferences.reopen_stay = false);
@@ -3014,16 +3071,70 @@ mod tests {
             bar.invoke_dial_set(rating.item, 7, false);
             bar.invoke_focus_line();
         }
+        // The views at the left (F1 → Funktionen): Strg+Tab and the switch beside the search turn them.
+        {
+            use features::{Module, View};
+            assert_eq!(bar.get_views().row_count(), 5, "Every view is on at first, as in the app.");
+            key_with_modifiers(&bar, &[K::Control], &char::from(K::Tab).to_string());
+            assert_eq!(with_app_value(|app| app.state.view), View::Week);
+            assert!(bar.get_day_heading().starts_with("Wochenübersicht"), "{}", bar.get_day_heading());
+            assert_eq!(bar.get_view_index(), 1);
+            // A week shows its note and its evaluation (the app's defaults); its own entries once switched on.
+            with_app(|app| { app.state.preferences.features = app.state.preferences.features.with_module(View::Week, Module::Entries, true).with_module(View::Week, Module::Rating, true).with_module(View::Week, Module::Activities, true); app.draw(); });
+            let kinds = || bar.get_day_rows().iter().map(|row| row.kind).collect::<Vec<_>>();
+            assert_eq!(kinds()[..2], [5, 8], "The heading, then the note right under it.");
+            assert!(!kinds().contains(&9), "No lines to open the evaluation or the board: the actions and commands do that.");
+            // Writing in the note, Strg+Enter keeps it; Alt+A a task of the week's own list.
+            send_key_combo(&bar, [K::DownArrow]);
+            send_key_combo(&bar, [K::Return]);
+            assert!(bar.get_day_rows().iter().any(|row| row.kind == 8 && row.editing), "↓ from the search: the note first (a period's heading is not chosen).");
+            bar.invoke_day_edited("Eine ruhige Woche\nmit zwei Zeilen".into());
+            key_with_modifiers(&bar, &[K::Control], &char::from(K::Return).to_string());
+            let data = || with_app_value(|app| serde_json::from_str::<serde_json::Value>(&app.state.journal.as_ref().unwrap().store.period_data().unwrap()).unwrap());
+            assert_eq!(data()["notes"]["week:2026-11-16"], "Eine ruhige Woche\nmit zwei Zeilen");
+            bar.window().dispatch_event(slint::platform::WindowEvent::KeyPressed { text: char::from(K::Alt).into() });
+            type_text(&bar, "a");
+            bar.window().dispatch_event(slint::platform::WindowEvent::KeyReleased { text: char::from(K::Alt).into() });
+            bar.invoke_day_edited("Steuererklärung".into());
+            send_key_combo(&bar, [K::Escape]);
+            let entries = data()["entries"]["week:2026-11-16"].clone();
+            assert_eq!(entries.as_object().map(|list| list.values().map(|e| e["text"].as_str().unwrap_or_default().to_string()).collect::<Vec<_>>()), Some(vec!["Steuererklärung".to_string()]));
+            capture(&bar, "view-week");
+            // A week's own title (F1 → Funktionen → Titel), written in place as a day's.
+            with_app(|app| { app.state.preferences.features = app.state.preferences.features.with_module(View::Week, Module::Title, true); app.draw(); });
+            assert_eq!(kinds()[..3], [5, 5, 8], "The heading, the title, the note.");
+            bar.invoke_day_click(bar.get_day_rows().row_data(1).unwrap().item, 0);
+            bar.invoke_day_edited("Umzugswoche".into());
+            send_key_combo(&bar, [K::Return]);
+            assert_eq!(data()["notes"]["title:week:2026-11-16"], "Umzugswoche");
+            assert_eq!(bar.get_day_rows().row_data(1).unwrap().label.as_str(), "Umzugswoche");
+            assert!(!bar.get_day_is_today() || bar.get_day_relative().as_str() == "Diese Woche");
+            capture(&bar, "view-week-title");
+            // The switch: a click on a view, the wheel on it.
+            bar.invoke_view_choose(2);
+            assert_eq!(with_app_value(|app| app.state.view), View::Month);
+            bar.invoke_view_step(-1);
+            assert_eq!(with_app_value(|app| app.state.view), View::Week);
+            bar.invoke_view_choose(0);
+            assert_eq!(with_app_value(|app| app.state.view), View::Day);
+            // Only the day on: the switch gives way to the slash again.
+            with_app(|app| { let mut f = app.state.preferences.features; for view in [View::Week, View::Month, View::Quarter, View::Year] { f = f.with_view(view, false); } app.state.preferences.features = f; app.draw(); });
+            assert_eq!(bar.get_views().row_count(), 1);
+            key_with_modifiers(&bar, &[K::Control], &char::from(K::Tab).to_string());
+            assert_eq!(with_app_value(|app| app.state.view), View::Day, "Nothing to switch to.");
+            bar.invoke_focus_line();
+        }
         // The inline slash opens exactly the command list that typing '/' opens. A tap
         // on the same spot clears it and returns input to the search field.
         let theme = bar.global::<Theme>();
-        let query_tool = slint::LogicalPosition::new(theme.get_form_width() - theme.get_padding() - 4.0 * theme.get_accessory_height(), theme.get_line_height() / 2.0);
+        let query_tool = slint::LogicalPosition::new(theme.get_form_width() - theme.get_padding() - 3.5 * theme.get_accessory_height(), theme.get_line_height() / 2.0);
         click(&bar, query_tool);
         assert_eq!(bar.get_search_text(), "/");
         assert_eq!(bar.get_commands().row_data(0).unwrap().heading.as_str(), "Befehle");
         capture(&bar, "launcher-commands");
         click(&bar, query_tool);
         assert_eq!(bar.get_search_text(), "");
+        with_app(|app| { app.state.preferences.features = features::Features::default(); app.draw(); });
         type_text(&bar, "xyz-ohne-treffer");
         assert!(bar.get_searching() && bar.get_commands().row_count() == 0);
         assert!(bar.get_footer_hints().iter().all(|hint| hint.action != 0));
@@ -3112,7 +3223,7 @@ mod tests {
         assert!(bar.get_notepad_open());
         assert!(bar.get_notepad_editing() && bar.get_notepad_panel() == 0);
         let ctrl = |text: &str| key_with_modifiers(&bar, &[K::Control], text);
-        assert!(bar.get_notepad_date().starts_with("Tagespinnwand"));
+        assert!(!bar.get_notepad_date().starts_with("Tagespinnwand"), "A new note goes to the notebook only, not onto a board.");
         send_key_combo(&bar, [K::Tab]);
         assert_eq!(bar.get_notepad_body().as_str(), "    ");
         send_key_combo(&bar, [K::Shift, K::Tab]);
@@ -3296,10 +3407,7 @@ mod tests {
         assert!(!bar.get_notepad_open());
         ctrl("n");
         assert!(bar.get_notepad_open() && bar.get_notepad_panel() == 1);
-        assert!(bar.get_notepad_on_day());
-        send_key_combo(&bar, [K::Tab]);
-        assert_eq!(bar.get_notepad_panel(), 1);
-        assert!(!bar.get_notepad_on_day());
+        assert!(!bar.get_notepad_on_day(), "Strg+N: every note and folder.");
         // A long tree: the list follows the cursor (each key builds the rows anew, so they scroll as they appear).
         with_app(|app| {
             let journal = app.state.journal.as_mut().unwrap();
@@ -3335,8 +3443,8 @@ mod tests {
         bar.invoke_cal_mouse(2, 0, 30.0, urlaub, false);
         assert_eq!(day_labels(&bar), ["Urlaub", "Team"], "A multiday entry shows on every day it covers, before the timed ones.");
         capture(&bar, "day-view-holiday");
-        let theme = bar.global::<Theme>();
-        click(&bar, slint::LogicalPosition::new(theme.get_form_width() - 75.0, theme.get_line_height() / 2.0));
+        // The today icon beside the view switch (a click: back to today).
+        bar.invoke_day_today();
         assert!(bar.get_day_is_today());
         let alt = |bar: &Bar, text: &str| {
             bar.window().dispatch_event(slint::platform::WindowEvent::KeyPressed { text: char::from(K::Alt).into() });
@@ -3518,7 +3626,17 @@ mod tests {
         // F1 → Aktivitäten and Tageswerte: the app's settings of the checklist and the day values.
         send_key_combo(&bar, [K::F1]);
         let period_window = settings();
+        // F1 → Funktionen: the views and their parts as switches; a click switches one.
         period_window.invoke_navigate(5);
+        assert_eq!(period_window.get_period_page(), 0);
+        let feature_rows = period_window.get_rows();
+        let week_entries = feature_rows.iter().position(|row| row.id == "feature:week:entries").expect("The week's own entries.");
+        assert_eq!(feature_rows.row_data(week_entries).unwrap().index, 0);
+        capture_window(period_window.window(), "settings-features");
+        with_app(|app| { app.change_feature("feature:week:entries", true); });
+        assert!(with_app_value(|app| app.state.preferences.features.has(features::View::Week, features::Module::Entries) && app.state.preferences.features_set));
+        with_app(|app| { app.change_feature("feature:week:entries", false); });
+        period_window.invoke_navigate(6);
         assert_eq!(period_window.get_period_page(), 1);
         let names = |window: &SettingsWindow| window.get_period_rows().iter().map(|row| row.name.to_string()).collect::<Vec<_>>();
         assert_eq!(names(&period_window), ["Laufen", "Lesen"]);
@@ -3543,7 +3661,7 @@ mod tests {
         period_window.invoke_period_edit(yoga_id.clone().into(), "text".into(), "".into());
         assert!(period_window.get_period_rows().row_data(1).unwrap().text_field);
         capture_window(period_window.window(), "settings-activities");
-        period_window.invoke_navigate(6);
+        period_window.invoke_navigate(7);
         assert_eq!(period_window.get_period_page(), 2);
         assert_eq!(period_window.get_period_rows().row_data(0).unwrap().kind, 2, "The daily rating first.");
         assert_eq!(names(&period_window)[1], "Stress");

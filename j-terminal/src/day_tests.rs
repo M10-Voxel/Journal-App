@@ -4,7 +4,7 @@ use crate::repeat::d;
 
 const WORK: &str = "3f2a6c1e-0000-4000-8000-000000000002";
 
-struct T { store: Store, snapshot: Snapshot, pane: DayPane, date: NaiveDate, now: i64, path: std::path::PathBuf }
+struct T { store: Store, snapshot: Snapshot, pane: DayPane, date: NaiveDate, now: i64, path: std::path::PathBuf, view: View, features: Features }
 impl Drop for T { fn drop(&mut self) { for suffix in ["", "-wal", "-shm"] { let _ = std::fs::remove_file(format!("{}{suffix}", self.path.display())); } } }
 
 fn t() -> T {
@@ -19,11 +19,11 @@ fn t() -> T {
     let snapshot = Snapshot::load(&store, d("2026-11-19")).unwrap();
     // 19.11.2026, 10:00 local time.
     let now = chrono::TimeZone::with_ymd_and_hms(&chrono::Local, 2026, 11, 19, 10, 0, 0).earliest().unwrap().timestamp_millis();
-    T { store, snapshot, pane: DayPane::default(), date: d("2026-11-19"), now, path }
+    T { store, snapshot, pane: DayPane::default(), date: d("2026-11-19"), now, path, view: View::Day, features: Features::default() }
 }
 
 impl T {
-    fn cx(&mut self) -> Ctx<'_> { Ctx { store: Some(&mut self.store), snapshot: Some(&mut self.snapshot), date: self.date, today: d("2026-11-19"), language: Language::De, now: self.now } }
+    fn cx(&mut self) -> Ctx<'_> { Ctx { store: Some(&mut self.store), snapshot: Some(&mut self.snapshot), date: self.date, today: d("2026-11-19"), language: Language::De, now: self.now, view: self.view, features: self.features } }
     fn key(&mut self, key: K, mods: Mods) -> Out { let mut pane = std::mem::take(&mut self.pane); let out = { let mut cx = self.cx(); pane.key(&mut cx, key, mods) }; self.pane = pane; out }
     fn press(&mut self, key: K) -> Out { self.key(key, Mods::default()) }
     fn alt(&mut self, c: char) -> Out { self.key(K::Char(c), ALT) }
@@ -59,7 +59,7 @@ fn writing_new_entries_with_the_apps_shortcuts_and_enter_for_the_next() {
     let draft = t.view();
     let position = draft.rows.iter().position(|row| row.editing).unwrap();
     assert_eq!(draft.rows[position - 1].label, "Einträge");
-    assert_eq!(draft.rows[position + 1].label, "Werte");
+    assert_eq!(draft.rows[position + 1].label, "Werte", "No board line in a day.");
     t.typed("Einkaufen");
     let out = t.press(K::Enter);
     assert_eq!(out.edit, Some(String::new()), "Enter: the next task.");

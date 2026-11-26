@@ -231,4 +231,12 @@ Offene Aufgaben. Erledigtes mit `[x]` markieren. Vollständiger Plan: `docs/plan
   - Das Eintragsformular (neu und bearbeiten) hat jetzt auch „Alle Symbole“ am Ende des Symbolrasters. Enter oder ein Klick zeigt alle, die Pfeiltasten halten darauf an, ohne es auszulösen.
   - F1 → Allgemein → „Ausrichtung“: Automatisch (nach Bildschirmbreite), Horizontal oder Vertikal.
   - Im vertikalen Layout behält die Pinnwand die Fensterhöhe, und Notizen öffnen sich oben über der Pinnwand statt links.
+- [x] **Funktionen, Zeitraumansichten, Shift+Esc, Notizblock** – 26.11.2026, noch nicht committet.
+  - Shift+Esc blendet das Fenster sofort aus (statt Strg+Esc, das Windows fürs Startmenü nutzt).
+  - F1 → Funktionen: Notizen sowie Tag, Woche, Monat, Quartal und Jahr mit ihren Bereichen (Einträge, Bewertung, Werte, Checkliste, Notiz, Auswertung, Pinnwand), mit den Standards und Regeln der App. Die letzte Ansicht und der letzte Bereich einer Ansicht bleiben an. Die Pinnwand-Schalter folgen der App, bis sie hier geändert werden.
+  - Links neben dem Kalender stehen jetzt alle eingeschalteten Ansichten. Strg+Tab bzw. Strg+Umschalt+Tab wechselt. Mit der Maus ersetzt ein Feld neben „Heute“ das „/“: Fährt der Zeiger darüber, zeigt es alle Ansichten zum Anklicken, das Mausrad dreht sie durch. Alt+←/→ blättert je Ansicht (Woche um Woche …), der Kalender markiert die Tage des Zeitraums.
+  - Notiz (Tag und Zeitraum) direkt unter dem Titel, mehrzeilig. Enter schreibt hinein, Enter im Feld macht eine neue Zeile, Esc oder Strg+Enter speichert.
+  - Woche bis Jahr: eigene Einträge (Alt+A Aufgabe, Alt+N Notiz, Leertaste hakt ab, Alt+↑/↓ verschiebt, Entf löscht), eigene Bewertung und Werte, Checkliste über alle Tage (Tage und Zeit, Haken und Timer gelten für heute), Zeilen „Auswertung öffnen“ und „Pinnwand öffnen“.
+  - Notizblock: Neue Notizen landen nur im Notizblock, nicht mehr auf der Tagespinnwand. Die Liste öffnet mit allen Zetteln und Ordnern.
+- [x] **Ansichten nachgeschärft** – 26.11.2026, noch nicht committet. Keine Zeilen „Auswertung öffnen“/„Pinnwand öffnen“ mehr in den Ansichten (das machen `/Auswertung` und `/Pinnwand-…`). Das Notizfeld ist immer ein Feld von mindestens fünf Zeilen und füllt den restlichen Platz, wenn darunter nichts mehr kommt. Neben der Suche steht für heute ein Icon, sonst der Abstand („in 5 d“, „vor 2 Wochen“), rechts daneben die Ansichtsauswahl. F1 → Funktionen hat je Ansicht den Bereich „Titel“: Woche bis Jahr bekommen damit einen Namen wie der Tag (gespeichert unter `notes["title:<key>"]`, das die App unverändert lässt).
 

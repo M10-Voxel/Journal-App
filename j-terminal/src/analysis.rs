@@ -147,7 +147,7 @@ pub fn activity_tags(data: &PeriodData) -> Vec<String> {
 }
 
 /// The activities' records of the period as shown (`withCalendarMinutes` after `activityMinutesById`).
-fn records(data: &PeriodData, calendar: &CalendarMinutes, dates: &[NaiveDate]) -> HashMap<NaiveDate, HashMap<String, Record>> {
+pub fn records(data: &PeriodData, calendar: &CalendarMinutes, dates: &[NaiveDate]) -> HashMap<NaiveDate, HashMap<String, Record>> {
     // Shared tags: the last definition wins (a JavaScript Map built in order).
     let by_tag: HashMap<&str, &str> = data.definitions.iter().filter_map(|item| item.calendar_tag_id.as_deref().map(|tag| (tag, item.id.as_str()))).collect();
     let mut result: HashMap<NaiveDate, HashMap<String, Record>> = HashMap::new();
