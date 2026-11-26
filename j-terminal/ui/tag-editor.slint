@@ -24,6 +24,8 @@ export global TagEditorUi {
     in property <[TagIcon]> icons;
     in property <string> icon-name;
     in property <int> icon-pick;
+    // The icons were scrolled: the first line in sight (every icon is drawn only near it).
+    callback icons-scrolled(int);
     in property <string> error;
     // 0 name, 1 field, 2 swatches, 3 hex, 4 icons.
     in property <int> part;
@@ -192,6 +194,7 @@ export component TagEditor inherits Rectangle {
                 // The chosen icon's line stays in view.
                 property <length> pick-top: Math.floor(TagEditorUi.icon-pick / Theme.side-icon-columns) * Theme.tag-icon-cell;
                 changed pick-top => { self.content-y = min(0px, max(min(self.content-y, -self.pick-top), self.height - self.pick-top - Theme.tag-icon-cell)); }
+                changed content-y => { TagEditorUi.icons-scrolled(Math.floor(-self.content-y / Theme.tag-icon-cell)); }
                 for line[i] in TagEditorUi.icons: Rectangle {
                     x: parent.grid-x + Math.mod(i, Theme.side-icon-columns) * Theme.tag-icon-cell;
                     y: Math.floor(i / Theme.side-icon-columns) * Theme.tag-icon-cell;

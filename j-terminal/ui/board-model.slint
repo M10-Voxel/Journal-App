@@ -1,6 +1,6 @@
 import { Theme } from "theme.slint";
 import { MenuRow, SideRow } from "actions.slint";
-import { NotepadMarkdownRow } from "notepad.slint";
+import { NotepadMarkdownRow, NotepadIndent } from "notepad.slint";
 
 export struct InkShape {commands:string,grain:string,x:float,y:float,w:float,h:float,color:color,custom:bool,selected:bool,alpha:float}
 export struct InkDocument {shapes:[InkShape],pattern:string,step:float}
@@ -32,6 +32,9 @@ export global BoardUi {
     in-out property <float> ink-move-x;
     in-out property <float> ink-move-y;
     pure callback glyph(string)->string;
+    // The same editing aids as the notebook's editor: Enter continues lists and tables, Tab indents or moves between cells.
+    pure callback indent-edit(string,int,int,bool)->NotepadIndent;
+    pure callback continue-list(string,int,int)->NotepadIndent;
     in-out property <int> editor;
     in-out property <string> heading;
     in-out property <string> title;

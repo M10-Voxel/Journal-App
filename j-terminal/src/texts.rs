@@ -673,6 +673,8 @@ pub struct ActionTexts {
     pub notes_attachments: &'static str,
     pub notes_list: &'static str,
     pub notes_close: &'static str,
+    pub notes_wide: &'static str,
+    pub notes_narrow: &'static str,
     /// The footer's main action.
     pub edit: &'static str,
     pub create: &'static str,
@@ -691,6 +693,7 @@ const ACTIONS_DE: ActionTexts = ActionTexts {
     save: "Erstellen", save_stay: "Erstellen und weiter", edit_save_stay: "Speichern und weiter", priority: "Wichtig", description: "Beschreibung", reminder: "Erinnerung", icon: "Symbol", discard: "Verwerfen",
     notes_new: "Neue Notiz", notes_edit: "Bearbeiten", notes_save: "Speichern", notes_preview: "Vorschau umschalten", notes_tag: "Tag zuweisen",
     notes_attachments: "Anhänge", notes_list: "Zettelliste", notes_close: "Schließen",
+    notes_wide: "Ganzes Fenster", notes_narrow: "Neben dem Kalender",
     edit: "Bearbeiten", create: "Erstellen",
     new_entry: "Neuer Eintrag", notepad: "Notizblock", search_title: "Titel des Eintrags …",
 };
@@ -704,6 +707,7 @@ const ACTIONS_EN: ActionTexts = ActionTexts {
     save: "Create", save_stay: "Create and continue", edit_save_stay: "Save and continue", priority: "Important", description: "Description", reminder: "Reminder", icon: "Icon", discard: "Discard",
     notes_new: "New note", notes_edit: "Edit", notes_save: "Save", notes_preview: "Toggle preview", notes_tag: "Assign a tag",
     notes_attachments: "Attachments", notes_list: "Note list", notes_close: "Close",
+    notes_wide: "Whole window", notes_narrow: "Beside the calendar",
     edit: "Edit", create: "Create",
     new_entry: "New entry", notepad: "Notebook", search_title: "Title of the entry …",
 };

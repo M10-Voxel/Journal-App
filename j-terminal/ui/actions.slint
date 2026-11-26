@@ -106,6 +106,8 @@ export component ActionPopover inherits Rectangle {
     in property <image> icon-forward;
     in property <int> focus-request;
     callback side-choose(int);
+    // The icon grid was scrolled: its first line in sight (the window draws only the icons near it).
+    callback side-scrolled(int);
     callback side-edited(string);
     callback side-day(int);
     callback side-month(int);
@@ -278,6 +280,7 @@ export component ActionPopover inherits Rectangle {
             // The chosen icon's line stays in view.
             property <length> focus-top: root.side-focus-index < 0 ? 0px : Math.floor(root.side-focus-index / Theme.side-icon-columns) * Theme.side-icon-cell;
             changed focus-top => { self.content-y = min(0px, max(min(self.content-y, -self.focus-top), self.height - self.focus-top - Theme.side-icon-cell)); }
+            changed content-y => { root.side-scrolled(Math.floor(-self.content-y / Theme.side-icon-cell)); }
             for line[i] in root.side-rows: Rectangle {
                 x: parent.grid-x + Math.mod(i, Theme.side-icon-columns) * Theme.side-icon-cell;
                 y: Math.floor(i / Theme.side-icon-columns) * Theme.side-icon-cell;

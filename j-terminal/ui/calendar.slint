@@ -4,11 +4,11 @@ import { Theme } from "theme.slint";
 // kind: 0 day, 1 month heading.
 export struct CalBand { y: length, h: length, kind: int, label: string, week: string, week-start: bool, tint: bool, weekend: bool, sunday: bool, today: bool, selected: bool, cursor: bool, open: bool }
 // A piece of time in a day. text: 0 none, 1 title, 2 title and time; cut: it goes on left of what is shown.
-export struct CalBlock { x: length, y: length, w: length, h: length, title: string, time: string, color: color, fresh: bool, done: bool, cut: bool, point: bool, caption-at-top: bool, marker: length, text: int, has-icon: bool, icon: image }
+export struct CalBlock { x: length, y: length, w: length, h: length, title: string, time: string, color: color, fresh: bool, done: bool, priority: bool, cut: bool, point: bool, caption-at-top: bool, marker: length, text: int, has-icon: bool, icon: image }
 // An entry without a time beside the date: a line with its title, or a dot while the day is closed.
-export struct CalChip { x: length, y: length, w: length, h: length, title: string, color: color, fresh: bool, done: bool, dot: bool, has-icon: bool, icon: image }
+export struct CalChip { x: length, y: length, w: length, h: length, title: string, color: color, fresh: bool, done: bool, priority: bool, dot: bool, has-icon: bool, icon: image }
 // An entry over several days in its lane at the side; its title is an image, turned to read downwards.
-export struct CalLane { x: length, y: length, w: length, h: length, color: color, fresh: bool, done: bool, title: image, title-w: length, title-h: length, has-icon: bool, icon: image }
+export struct CalLane { x: length, y: length, w: length, h: length, color: color, fresh: bool, done: bool, priority: bool, title: image, title-w: length, title-h: length, has-icon: bool, icon: image }
 // A mark of the hours.
 export struct CalTick { x: length, label: string, strong: bool }
 
@@ -96,7 +96,8 @@ export component Calendar inherits Rectangle {
             background: block.color.with-alpha(Theme.cal-fill); border-radius: min(Theme.cal-point-bar-radius, self.height / 2);
             border-width: block.fresh ? Theme.cal-fresh-border : 0px; border-color: Theme.strong;
         }
-        if !block.cut && !block.point: Rectangle { x: 0px; width: min(Theme.cal-block-edge, parent.width); background: block.color; border-radius: Theme.cal-stroke-radius; }
+        // The edge in the tag's colour; an important entry's in the strong yellow, a little wider.
+        if !block.cut && !block.point: Rectangle { x: 0px; width: min(block.priority ? Theme.cal-priority-edge : Theme.cal-block-edge, parent.width); background: block.priority ? Theme.cal-priority : block.color; border-radius: Theme.cal-stroke-radius; }
         if self.show-icon: Image {
             x: Theme.cal-text-inset + parent.point-inset; y: block.text == 2 ? Theme.cal-title-top : parent.caption-top + (parent.caption-height - self.height) / 2;
             width: Theme.cal-icon-size; height: Theme.cal-icon-size; source: block.icon; colorize: block.color;
@@ -112,17 +113,17 @@ export component Calendar inherits Rectangle {
         if block.point: Rectangle {
             x: clamp(block.marker - Theme.cal-point-line-width / 2, 0px, max(0px, parent.width - Theme.cal-point-line-width));
             y: 0px; width: min(Theme.cal-point-line-width, parent.width); height: parent.height;
-            background: block.color; border-radius: self.width / 2;
+            background: block.priority ? Theme.cal-priority : block.color; border-radius: self.width / 2;
         }
     }
     for chip in root.chips: Rectangle {
         x: chip.x; y: chip.y; width: chip.w; height: chip.h;
         background: chip.dot ? (chip.has-icon ? transparent : chip.color) : chip.color.with-alpha(Theme.cal-fill);
         border-radius: chip.dot ? chip.w / 2 : Theme.cal-stroke-radius;
-        border-width: chip.fresh ? Theme.cal-fresh-border : 0px;
-        border-color: Theme.strong;
+        border-width: chip.fresh ? Theme.cal-fresh-border : chip.dot && chip.priority ? Theme.cal-priority-ring : 0px;
+        border-color: chip.fresh ? Theme.strong : Theme.cal-priority;
         opacity: chip.done ? Theme.cal-done-opacity : 1;
-        if !chip.dot: Rectangle { x: 0px; width: Theme.cal-block-edge; background: chip.color; border-radius: Theme.cal-stroke-radius; }
+        if !chip.dot: Rectangle { x: 0px; width: chip.priority ? Theme.cal-priority-edge : Theme.cal-block-edge; background: chip.priority ? Theme.cal-priority : chip.color; border-radius: Theme.cal-stroke-radius; }
         if chip.has-icon: Image {
             x: chip.dot ? 0px : Theme.cal-text-inset; y: (parent.height - self.height) / 2;
             width: Theme.cal-icon-size; height: Theme.cal-icon-size; source: chip.icon; colorize: chip.color;
@@ -140,7 +141,7 @@ export component Calendar inherits Rectangle {
         border-color: Theme.strong;
         opacity: lane.done ? Theme.cal-done-opacity : 1;
         clip: true;
-        Rectangle { x: 0px; width: Theme.cal-lane-core; background: lane.color; }
+        Rectangle { x: 0px; width: lane.priority ? Theme.cal-priority-edge : Theme.cal-lane-core; background: lane.priority ? Theme.cal-priority : lane.color; }
         if lane.has-icon: Image {
             x: Theme.cal-lane-core + (parent.width - Theme.cal-lane-core - self.width) / 2; y: Theme.cal-lane-text-top;
             width: Theme.cal-icon-size; height: Theme.cal-icon-size; source: lane.icon; colorize: Theme.strong;
@@ -156,7 +157,20 @@ export component Calendar inherits Rectangle {
         background: Theme.cal-caret;
         border-width: Theme.focus-ring; border-color: Theme.accent; border-radius: Theme.block-radius;
     }
-    if root.has-now: Rectangle { x: root.now-x; y: root.now-y; width: Theme.cal-now-width; height: root.now-h; background: Theme.cal-now; }
+    // The time now: the line with a dark rim, so it shows over a block of its own colour, and an arrow pointing
+    // down onto it at the top of the day.
+    if root.has-now: Rectangle {
+        x: root.now-x - Theme.cal-now-rim-width; y: root.now-y; width: Theme.cal-now-width + Theme.cal-now-rim-width * 2; height: root.now-h;
+        background: Theme.cal-now-rim;
+        Rectangle { x: Theme.cal-now-rim-width; width: Theme.cal-now-width; background: Theme.cal-now; }
+    }
+    if root.has-now: Path {
+        x: root.now-x + Theme.cal-now-width / 2 - Theme.cal-now-arrow / 2; y: root.now-y - Theme.cal-now-rim-width;
+        width: Theme.cal-now-arrow; height: Theme.cal-now-arrow * 0.8;
+        viewbox-width: 10; viewbox-height: 8;
+        commands: "M 0 0 L 10 0 L 5 8 Z";
+        fill: Theme.cal-now; stroke: Theme.cal-now-rim; stroke-width: Theme.cal-now-rim-width;
+    }
     // Month boundaries stay visible over the hour grid and long entries' lanes: a lighter band, an accent line on top.
     for band in root.bands: Rectangle {
         visible: band.kind == 1;

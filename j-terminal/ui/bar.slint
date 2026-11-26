@@ -2,8 +2,8 @@ import { KeyBindings, ShortcutContext, RoutedKey } from "key-bindings.slint";
 export { KeyBindings, ShortcutContext, RoutedKey }
 import { JournalIcons } from "journal-icons.slint";
 export { JournalIcons }
-import { NotepadEditor, NotepadChoiceRow, NotepadMarkdownRow, NotepadTool, NotepadIndent, NotepadImage, NotepadLabels } from "notepad.slint";
-export { NotepadChoiceRow, NotepadMarkdownRow, NotepadTool, NotepadIndent, NotepadImage, NotepadLabels }
+import { NotepadEditor, NotepadChoiceRow, NotepadMarkdownRow, NotepadTableRow, NotepadTool, NotepadIndent, NotepadImage, NotepadLabels } from "notepad.slint";
+export { NotepadChoiceRow, NotepadMarkdownRow, NotepadTableRow, NotepadTool, NotepadIndent, NotepadImage, NotepadLabels }
 import { Theme } from "theme.slint";
 export { Theme }
 export { SettingsWindow, SettingsRow, SettingsLabels, SettingsCategory, PreferenceKey, RowControl } from "shortcuts.slint";
@@ -179,6 +179,10 @@ export component Bar inherits Window {
     callback edited(string);
     // Every key the form has a use for: the key's number and the modifiers (1 Shift, 2 Strg, 4 Alt).
     callback form-key(int, int);
+    // Strg+Esc: the window goes at once.
+    callback hide-window();
+    // Esc that no field took: back from where the window is (the form, the notepad, the day view, the search).
+    callback escape-fallback();
     // A click on a field of the form (its index).
     callback field-clicked(int);
     // The open options: 0 none, 1 tags, 2 icons, 3 reminders, 4 the repetition, 5 the clock, 6 the calendar.
@@ -291,6 +295,9 @@ export component Bar inherits Window {
     in property <[image]> footer-create-icons;
     callback footer-create(int);
     in property <int> notepad-list-mode;
+    in property <length> notepad-cursor-top;
+    in property <length> notepad-cursor-height;
+    in property <int> notepad-cursor-request;
     callback notepad-list-key(string);
     callback notepad-list-menu(string);
     callback notepad-list-drop(string, int);
@@ -366,6 +373,7 @@ export component Bar inherits Window {
     in property <string> side-text-shown;
     in property <string> side-placeholder;
     callback side-choose(int);
+    callback side-scrolled(int);
     callback side-edited(string);
     callback side-day(int);
     callback side-month(int);
@@ -395,7 +403,10 @@ export component Bar inherits Window {
     callback app-menu-clicked();
     callback footer-action(int);
     callback open-settings();
-    private property <length> value-x: Theme.padding + Theme.label-width;
+    // The form's labels take as much room as the longest of the language needs (from Rust), so the fields get the rest.
+    in property <string> longest-label;
+    out property <length> label-width: label-measure.preferred-width + Theme.gap;
+    private property <length> value-x: Theme.padding + root.label-width;
     public function focus-input() { input.focus(); }
     public function focus-line() { if root.entry-open { input.focus(); input.select-all(); } else if root.notepad-open { root.focus-notepad(); } else { search.focus(); } }
     public function focus-notepad() { root.notepad-focus-request += 1; }
@@ -406,29 +417,48 @@ export component Bar inherits Window {
     public function select-text() { input.select-all(); }
     public function select-range(from: int, to: int) { input.set-selection-offsets(from, to); }
     // Where a field of a line lies: "when" has the date, the start and the end side by side.
+    // The date's part (with the gap after it): what the times and the dash leave, so the end stays in the left part.
+    private property <length> when-date-width: max(Theme.when-date-min,
+        root.form-space - root.value-x - Theme.padding - 2 * Theme.when-time-width - Theme.when-dash-width);
     pure function cell-x(cell: int) -> length {
-        return root.value-x + (cell == 0 ? 0px : cell == 1 ? Theme.when-date-width : Theme.when-date-width + Theme.when-time-width + Theme.when-dash-width);
+        return root.value-x + (cell == 0 ? 0px : cell == 1 ? root.when-date-width : root.when-date-width + Theme.when-time-width + Theme.when-dash-width);
     }
     pure function cell-width(cell: int, multi: bool) -> length {
-        return !multi ? root.form-space - root.value-x - Theme.padding : cell == 0 ? Theme.when-date-width - Theme.gap : Theme.when-time-width;
+        return !multi ? root.form-space - root.value-x - Theme.padding : cell == 0 ? root.when-date-width - Theme.gap : Theme.when-time-width;
     }
     pure function mods(shift: bool, control: bool, alt: bool) -> int { return (shift ? 1 : 0) + (control ? 2 : 0) + (alt ? 4 : 0); }
 
     in property <length> screen-width: Theme.width + Theme.border-width;
     in property <length> screen-height: Theme.calendar-height * 4;
-    out property <bool> stacked: root.screen-width < Theme.width;
+    // The layout chosen in F1: 0 by the screen's width, 1 side by side, 2 one above the other.
+    in property <int> orientation;
+    out property <bool> stacked: root.orientation == 2 || (root.orientation == 0 && root.screen-width < Theme.width);
     out property <length> content-width: BoardUi.maximized ? root.screen-width : root.stacked ? min(root.screen-width, Theme.calendar-width) : min(root.screen-width, Theme.width);
-    out property <length> form-space: root.stacked ? root.content-width : Theme.form-width;
+    // The notepad's width beside the calendar (dragged at its edge, 0: the theme's) and whether it takes the window.
+    in-out property <length> notepad-width;
+    in property <bool> notepad-wide;
+    callback notepad-resized(length);
+    property <length> notepad-space: root.notepad-wide ? root.content-width
+        : clamp(root.notepad-width > 0px ? root.notepad-width : Theme.form-width, Theme.form-width, root.content-width - Theme.notepad-calendar-min);
+    out property <length> form-space: root.stacked ? root.content-width : root.notepad-open ? root.notepad-space : Theme.form-width;
+    // The calendar beside the left half (not while the notepad takes the whole window).
+    property <bool> calendar-shown: root.stacked || root.form-space < root.content-width;
     property <length> stacked-height: min(root.screen-height, Theme.calendar-height * 2);
     property <length> preferred-pane-height: root.stacked
         ? max(Theme.stacked-day-min-height, root.stacked-height * Theme.stacked-day-share)
         : Theme.calendar-height;
-    property <length> pane-height: max(layout.preferred-height, root.preferred-pane-height);
+    property <length> natural-pane-height: max(layout.preferred-height, root.preferred-pane-height);
+    // The notepad stays on the screen: a long list of notes (or a long note) scrolls inside it, so its cursor stays in sight.
+    property <length> pane-height: root.notepad-open && !root.stacked
+        ? min(root.natural-pane-height, max(root.preferred-pane-height, root.screen-height))
+        : root.natural-pane-height;
     property <length> calendar-height: root.stacked
         ? max(Theme.stacked-calendar-min-height, root.stacked-height - root.pane-height - Theme.border-width)
         : root.pane-height;
     property <length> full-height: root.stacked ? root.pane-height + Theme.border-width + root.calendar-height : root.pane-height;
-    out property <length> content-height: BoardUi.maximized ? root.screen-height : BoardUi.opened ? min(root.screen-height, Theme.calendar-height) : min(root.full-height, root.screen-height);
+    // The board keeps the window's height: as the calendar beside the form, or as both above each other (vertical).
+    out property <length> content-height: BoardUi.maximized ? root.screen-height
+        : BoardUi.opened && !root.stacked ? min(root.screen-height, Theme.calendar-height) : min(root.full-height, root.screen-height);
     // The top line of the form: where the title's input begins and how much room the type and the flag leave it.
     property <length> title-x: Theme.padding + Theme.back-size + Theme.gap;
     property <length> title-width: root.form-space - root.title-x - Theme.padding - type-chip.width - flag.width - Theme.accessory-gap * 2;
@@ -508,6 +538,7 @@ export component Bar inherits Window {
     width: root.content-width;
     height: root.content-height;
     default-font-family: Theme.ui-font;
+    label-measure := Text { visible: false; width: 0px; height: 0px; text: root.longest-label; font-size: Theme.label-size; }
     FocusScope {
         x: 0px; y: 0px; width: root.width; height: root.height;
         capture-key-released(event) => {
@@ -516,6 +547,11 @@ export component Bar inherits Window {
         }
         capture-key-pressed(raw-event) => {
             let event = KeyBindings.translate(ShortcutContext.window, raw-event);
+            // Strg+Esc hides the window at once, from anywhere (the board and its drawing included).
+            if raw-event.text == Key.Escape && raw-event.modifiers.control && !raw-event.modifiers.alt && !raw-event.modifiers.shift {
+                if !raw-event.repeat { root.hide-window(); }
+                return accept;
+            }
             // The tag editor keeps its keys.
             if TagEditorUi.open { return reject; }
             if BoardUi.opened && event.text != Key.F1 {
@@ -554,6 +590,14 @@ export component Bar inherits Window {
             }
             if !root.entry-open && !root.notepad-open {
                 if root.day-shortcut(raw-event.text, KeyBindings.modifier-mask(raw-event)) { return accept; }
+            }
+            reject
+        }
+        // Esc that nothing took (the keyboard was on no field, e.g. after a click on an empty spot): back as usual.
+        key-pressed(event) => {
+            if event.text == Key.Escape && !event.modifiers.control && !event.modifiers.alt && !TagEditorUi.open {
+                if !event.repeat { root.escape-fallback(); }
+                return accept;
             }
             reject
         }
@@ -781,7 +825,7 @@ export component Bar inherits Window {
                 y: Theme.gap / 2 + row.line * Theme.form-row-height;
                 height: Theme.form-row-height;
                 if row.label != "": Text {
-                    x: Theme.padding; width: Theme.label-width - Theme.gap; height: parent.height;
+                    x: Theme.padding; width: root.label-width - Theme.gap; height: parent.height;
                     text: row.label; color: row.line == root.active-line && !root.in-header ? Theme.strong : Theme.muted;
                     font-size: Theme.label-size; vertical-alignment: center; horizontal-alignment: right; overflow: elide;
                 }
@@ -974,6 +1018,7 @@ export component Bar inherits Window {
             filter(text) => { root.notepad-filter(text); }
             choose(key) => { root.notepad-choose(key); }
             list-mode: root.notepad-list-mode;
+            cursor-top: root.notepad-cursor-top; cursor-height: root.notepad-cursor-height; cursor-request: root.notepad-cursor-request;
             list-key(key) => { root.notepad-list-key(key); }
             list-menu(key) => { root.notepad-list-menu(key); }
             list-drop(key, index) => { root.notepad-list-drop(key, index); }
@@ -1072,7 +1117,7 @@ export component Bar inherits Window {
                                         if event.text == Key.Control || event.text == Key.Shift || event.text == Key.Alt || event.text == Key.Meta { return reject; }
                                         if event.text == Key.Return || event.text == Key.Escape || event.text == Key.UpArrow || event.text == Key.DownArrow || event.text == Key.Tab || event.text == Key.Backtab
                                             || (event.text == Key.Backspace && self.text == "") || event.modifiers.alt {
-                                            root.day-key(event.text, root.mods(event.modifiers.shift, event.modifiers.control, event.modifiers.alt));
+                                            root.day-key(event.text, root.mods(event.modifiers.shift, event.modifiers.control, event.modifiers.alt) + (event.repeat ? 8 : 0));
                                             return accept;
                                         }
                                         reject
@@ -1117,7 +1162,7 @@ export component Bar inherits Window {
                                     let event = KeyBindings.translate(ShortcutContext.day-edit, raw-event);
                                     if event.text == Key.Control || event.text == Key.Shift || event.text == Key.Alt || event.text == Key.Meta { return reject; }
                                     if event.text == Key.Return || event.text == Key.Escape || event.text == Key.UpArrow || event.text == Key.DownArrow || event.text == Key.Tab || event.text == Key.Backtab || event.modifiers.alt {
-                                        root.day-key(event.text, root.mods(event.modifiers.shift, event.modifiers.control, event.modifiers.alt));
+                                        root.day-key(event.text, root.mods(event.modifiers.shift, event.modifiers.control, event.modifiers.alt) + (event.repeat ? 8 : 0));
                                         return accept;
                                     }
                                     reject
@@ -1273,18 +1318,18 @@ export component Bar inherits Window {
                 }
                 if event.text == Key.F6 { root.form-key(15, 0); return accept; }
                 if event.text == Key.Tab || event.text == Key.Backtab { root.form-key(0, root.mods(event.modifiers.shift || event.text == Key.Backtab, event.modifiers.control, event.modifiers.alt)); return accept; }
-                if event.text == Key.UpArrow { root.form-key(1, root.mods(event.modifiers.shift, event.modifiers.control, event.modifiers.alt)); return accept; }
-                if event.text == Key.DownArrow { root.form-key(2, root.mods(event.modifiers.shift, event.modifiers.control, event.modifiers.alt)); return accept; }
+                if event.text == Key.UpArrow { root.form-key(1, root.mods(event.modifiers.shift, event.modifiers.control, event.modifiers.alt) + (event.repeat ? 8 : 0)); return accept; }
+                if event.text == Key.DownArrow { root.form-key(2, root.mods(event.modifiers.shift, event.modifiers.control, event.modifiers.alt) + (event.repeat ? 8 : 0)); return accept; }
                 if event.text == Key.Return { root.form-key(3, root.mods(event.modifiers.shift, event.modifiers.control, event.modifiers.alt)); return accept; }
                 if event.text == Key.Escape { root.type-list-open = false; root.form-key(4, 0); return accept; }
                 // The arrows belong to the field's switch or its options (with their modifiers).
-                if !root.native-arrows && event.text == Key.LeftArrow { root.form-key(5, root.mods(event.modifiers.shift, event.modifiers.control, false)); return accept; }
-                if !root.native-arrows && event.text == Key.RightArrow { root.form-key(6, root.mods(event.modifiers.shift, event.modifiers.control, false)); return accept; }
+                if !root.native-arrows && event.text == Key.LeftArrow { root.form-key(5, root.mods(event.modifiers.shift, event.modifiers.control, false) + (event.repeat ? 8 : 0)); return accept; }
+                if !root.native-arrows && event.text == Key.RightArrow { root.form-key(6, root.mods(event.modifiers.shift, event.modifiers.control, false) + (event.repeat ? 8 : 0)); return accept; }
                 if !root.editable {
                     if event.text == Key.Insert { root.form-key(11, 0); return accept; }
                     if event.text == Key.Delete || event.text == Key.Backspace { root.form-key(12, 0); return accept; }
-                    if event.text == Key.PageUp { root.form-key(7, root.mods(event.modifiers.shift, false, false)); return accept; }
-                    if event.text == Key.PageDown { root.form-key(8, root.mods(event.modifiers.shift, false, false)); return accept; }
+                    if event.text == Key.PageUp { root.form-key(7, root.mods(event.modifiers.shift, false, false) + (event.repeat ? 8 : 0)); return accept; }
+                    if event.text == Key.PageDown { root.form-key(8, root.mods(event.modifiers.shift, false, false) + (event.repeat ? 8 : 0)); return accept; }
                     if event.text == Key.Home || (root.cal-focus && !event.modifiers.alt && (event.text == "h" || event.text == "H")) { root.form-key(9, 0); return accept; }
                     if event.text == " " { root.form-key(10, 0); return accept; }
                     if !event.modifiers.alt && event.text >= "0" && event.text <= "9" { root.form-key(20 + event.text.to-float(), 0); return accept; }
@@ -1336,14 +1381,31 @@ export component Bar inherits Window {
             }
         }
     }
-    Rectangle {
+    if root.calendar-shown: Rectangle {
         x: root.stacked ? 0px : root.form-space;
         y: root.stacked ? root.pane-height : 0px;
         width: root.stacked ? root.content-width : Theme.border-width;
         height: root.stacked ? Theme.border-width : root.pane-height;
         background: Theme.divider;
     }
+    // The notepad's edge: dragged, the note grows and the calendar narrows.
+    if root.notepad-open && !root.stacked && !root.notepad-wide: notepad-grip := TouchArea {
+        x: root.form-space - Theme.notepad-grip / 2; width: Theme.notepad-grip;
+        y: 0px; height: root.pane-height;
+        mouse-cursor: MouseCursor.col-resize;
+        moved => {
+            if self.pressed {
+                root.notepad-width = clamp(self.x + self.mouse-x, Theme.form-width, root.content-width - Theme.notepad-calendar-min);
+            }
+        }
+        changed pressed => { if !self.pressed { root.notepad-resized(root.form-space); } }
+        Rectangle {
+            x: (parent.width - self.width) / 2; width: Theme.cal-week-line-width;
+            background: notepad-grip.pressed || notepad-grip.has-hover ? Theme.edge : transparent;
+        }
+    }
     calendar := Calendar {
+        visible: root.calendar-shown;
         background: Theme.cal-background;
         x: root.stacked ? 0px : root.form-space + Theme.border-width;
         y: root.stacked ? root.pane-height + Theme.border-width : 0px;
@@ -1409,6 +1471,7 @@ export component Bar inherits Window {
             side-confirm-text: root.side-confirm-text; side-text: root.side-text; side-placeholder: root.side-placeholder;
             icon-back: root.icon-back; icon-forward: root.icon-forward; focus-request: root.popover-focus;
             side-choose(index) => { root.side-choose(index); }
+            side-scrolled(line) => { root.side-scrolled(line); }
             side-edited(text) => { root.side-edited(text); }
             side-day(index) => { root.side-day(index); }
             side-month(by) => { root.side-month(by); }
@@ -1424,7 +1487,7 @@ export component Bar inherits Window {
         key-pressed(raw-event) => {
             let event = KeyBindings.translate(root.side-open ? ShortcutContext.side : ShortcutContext.day, raw-event);
             if event.text == Key.Control || event.text == Key.Shift || event.text == Key.Alt || event.text == Key.Meta { return reject; }
-            root.day-key(event.text, root.mods(event.modifiers.shift, event.modifiers.control, event.modifiers.alt));
+            root.day-key(event.text, root.mods(event.modifiers.shift, event.modifiers.control, event.modifiers.alt) + (event.repeat ? 8 : 0));
             accept
         }
     }
@@ -1486,7 +1549,7 @@ export component Bar inherits Window {
                 border-radius: self.width; background: Theme.muted; }
         }
     }
-    board-page := BoardView {visible: BoardUi.opened;}
+    board-page := BoardView {visible: BoardUi.opened; vertical: root.stacked;}
     // Made only while it is open (the window stays small in the background).
     if AnalysisUi.opened: AnalysisView {
         x: 0px; y: 0px; width: root.width; height: root.height;

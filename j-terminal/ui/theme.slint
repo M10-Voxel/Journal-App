@@ -272,7 +272,6 @@ export global Theme {
 
     // ── The form: a line per piece ──
     out property <length> form-row-height: 38px;
-    out property <length> label-width: 92px;
     out property <length> option-inset: 10px;
     out property <length> marker-width: 3px;
     // A field: a quiet grey area with a fine light edge.
@@ -282,8 +281,9 @@ export global Theme {
     // A line that is no text keeps the input at this width: a narrower one loses the keyboard focus.
     out property <length> idle-input-width: 40px;
     // "When": the date, the start and the end side by side.
-    out property <length> when-date-width: 172px;
-    out property <length> when-time-width: 100px;  // wide enough for "ganztägig"
+    // "Wann": the date takes what the two times and the dash leave of the line (at least this); all in the left part.
+    out property <length> when-date-min: 136px;
+    out property <length> when-time-width: 88px;  // wide enough for "ganztägig" and "Zeitpunkt"
     out property <length> when-dash-width: 14px;
     out property <length> label-icon-size: 16px;
     out property <length> more-radius: 8px;
@@ -350,6 +350,10 @@ export global Theme {
     out property <length> notepad-heading-three: 17px;
     out property <length> notepad-line-gap: 6px;
     out property <length> notepad-indent: 18px;
+    out property <length> table-cell-padding: 6px;
+    out property <length> notepad-grip: 8px;            // the edge between notepad and calendar, dragged
+    out property <length> notepad-calendar-min: 320px;  // the calendar stays at least this wide beside a wide note   // a Markdown table in a note
+    out property <length> table-radius: 4px;
     out property <length> notepad-thumb-height: 96px;
     out property <length> notepad-check-size: 16px;
 
@@ -463,6 +467,12 @@ export global Theme {
     out property <length> cal-point-bar-radius: 3px;
     out property <length> cal-fresh-border: 1.5px;
     out property <length> cal-now-width: 2px;
+    // The time now: a line with a dark rim, so it shows over blocks of its own colour, and an arrow on top.
+    out property <length> cal-now-rim-width: 1px;
+    out property <length> cal-now-arrow: 10px;
+    // Important entries: their edge in a strong yellow instead of the tag's colour, a little wider.
+    out property <length> cal-priority-edge: 5px;
+    out property <length> cal-priority-ring: 2px;
     out property <length> cal-week-line-width: 2px;
     out property <length> cal-focus-line: 2px;
     out property <float> cal-fill: 0.24;
@@ -482,10 +492,13 @@ export global Theme {
     out property <color> cal-hour-line-strong: #ffffff10;
     out property <color> cal-stroke: #8a8a8a;
     out property <color> cal-now: #ff5f57;
+    out property <color> cal-now-rim: #000000b3;
+    out property <color> cal-priority: #ffc21a;
     out property <color> cal-caret: #569eff26;
 
     // ── The analysis (/Auswertung): the app's periodNotes.css, the chart in its SVG units scaled to fit ──
     out property <length> analysis-chart-max-height: 220px;   // the chart grows with the window up to this height
+    out property <length> analysis-focus-width: 2px;  // the frame of the graph in focus (↑ / ↓, the mouse)
     out property <length> analysis-chart-font: 10px;          // .chart-label, in SVG units (scaled with the chart)
     out property <length> analysis-chart-stroke: 2px;        // .chart-line, in SVG units
     out property <length> analysis-grid-stroke: 1px;

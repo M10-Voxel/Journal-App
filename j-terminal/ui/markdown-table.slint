@@ -1,0 +1,53 @@
+// A Markdown table in a note (the notebook's reading view and the cards of the board): the header is the first row.
+// Thin lines show between the cells, as the table of the app's notes (noteBlocks.ts) draws them.
+import { Theme } from "theme.slint";
+
+export struct NotepadTableRow { cells: [styled-text] }
+
+export component MarkdownTable inherits Rectangle {
+    in property <[NotepadTableRow]> rows;
+    // Per column: 0 left, 1 centre, 2 right.
+    in property <[int]> aligns;
+    in property <color> ink;
+    in property <color> link: Theme.accent;
+    // What shows through between the cells (their lines) and what the cells are filled with.
+    in property <color> line;
+    in property <color> fill;
+    in property <color> head-fill;
+    in property <string> font-family: Theme.ui-font;
+    in property <length> font-size: Theme.notepad-text-size;
+    in property <length> pad: Theme.table-cell-padding;
+    in property <length> rule: Theme.border-width;
+    callback follow(string);
+    height: grid.preferred-height + 2 * root.rule;
+    background: root.line;
+    border-radius: Theme.table-radius;
+    clip: true;
+    grid := VerticalLayout {
+        x: root.rule; y: root.rule; width: parent.width - 2 * root.rule; height: parent.height - 2 * root.rule;
+        spacing: root.rule;
+        for row[r] in root.rows: HorizontalLayout {
+            spacing: root.rule;
+            for cell[c] in row.cells: Rectangle {
+                horizontal-stretch: 1;
+                // Every column the same width: the cell may shrink to nothing, its text wraps.
+                min-width: 0px;
+                preferred-width: 0px;
+                background: r == 0 ? root.head-fill : root.fill;
+                VerticalLayout {
+                    padding: root.pad;
+                    StyledText {
+                        text: cell;
+                        default-color: root.ink;
+                        default-font-family: root.font-family;
+                        default-font-size: root.font-size;
+                        link-color: root.link;
+                        horizontal-alignment: c < root.aligns.length && root.aligns[c] == 1 ? center
+                            : c < root.aligns.length && root.aligns[c] == 2 ? right : left;
+                        link-clicked(address) => { root.follow(address); }
+                    }
+                }
+            }
+        }
+    }
+}

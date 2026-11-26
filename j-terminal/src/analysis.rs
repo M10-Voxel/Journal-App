@@ -455,16 +455,17 @@ pub struct Input<'a> {
     pub hidden: &'a BTreeSet<String>,
 }
 
-/// The evaluation of the period around `date`. `cursor`: the day the keyboard or the mouse chose (its details show).
-pub fn build(input: &Input, date: NaiveDate, mode: Mode, cursor: Option<NaiveDate>, language: Language) -> View {
+/// The evaluation of the period around `date`. `cursor`: the day the keyboard or the mouse chose, in the graph `focus`
+/// (0 the chart, 1… the activities' cards): only that graph shows the day and its details.
+pub fn build(input: &Input, date: NaiveDate, mode: Mode, cursor: Option<NaiveDate>, focus: usize, language: Language) -> View {
     let (start, end) = mode.bounds(date);
     let days = dates(start, end);
     let shown = records(input.data, input.calendar, &days);
     let cards = input.data.definitions.iter()
         .filter(|item| item.active != Some(false) || days.iter().any(|d| shown.get(d).is_some_and(|items| items.contains_key(&item.id))))
-        .map(|item| card(item, &days, &shown, mode, cursor, language)).collect();
+        .enumerate().map(|(i, item)| card(item, &days, &shown, mode, cursor.filter(|_| focus == i + 1), language)).collect();
     View { mode, start: Some(start), end: Some(end), eyebrow: tx::EYEBROWS[at(language)][mode.index()].into(), heading: title(date, mode, language),
-        chart: chart(input.data, &days, mode, input.hidden, cursor, language), cards, no_activities: input.data.definitions.is_empty() }
+        chart: chart(input.data, &days, mode, input.hidden, cursor.filter(|_| focus == 0), language), cards, no_activities: input.data.definitions.is_empty() }
 }
 
 #[cfg(test)]
@@ -529,7 +530,7 @@ mod tests {
         let data = data();
         let calendar = CalendarMinutes::new();
         let hidden = BTreeSet::new();
-        let view = build(&Input { data: &data, calendar: &calendar, hidden: &hidden }, d("2026-11-18"), Mode::Week, None, Language::De);
+        let view = build(&Input { data: &data, calendar: &calendar, hidden: &hidden }, d("2026-11-18"), Mode::Week, None, 0, Language::De);
         let chart = &view.chart;
         assert_eq!(chart.legend.iter().map(|l| (l.label.as_str(), l.stat.as_str())).collect::<Vec<_>>(),
             [("Tagesbewertung", "Ø 8.0 / 10 · 3 Tage"), ("Stress", "Ø 3.0 / 5 · 2 Tage")], "Clamped to the span; an inactive scale without values stays out.");
@@ -540,11 +541,11 @@ mod tests {
         assert_eq!(chart.points.len(), 5);
         assert_eq!(chart.labels.iter().map(|l| l.text.as_str()).collect::<Vec<_>>(), ["16. Nov.", "17. Nov.", "18. Nov.", "19. Nov.", "20. Nov.", "21. Nov.", "22. Nov."]);
         assert!(chart.hint && chart.detail.starts_with("Tageswerte"));
-        let chosen = build(&Input { data: &data, calendar: &calendar, hidden: &hidden }, d("2026-11-18"), Mode::Week, Some(d("2026-11-19")), Language::De);
+        let chosen = build(&Input { data: &data, calendar: &calendar, hidden: &hidden }, d("2026-11-18"), Mode::Week, Some(d("2026-11-19")), 0, Language::De);
         assert_eq!(chosen.chart.detail, "19. Nov.: Tagesbewertung 10, Stress 4");
         assert!(chosen.chart.guide.is_some());
         let hidden = BTreeSet::from(["rating".to_string(), "stress".to_string()]);
-        let none = build(&Input { data: &data, calendar: &calendar, hidden: &hidden }, d("2026-11-18"), Mode::Week, Some(d("2026-11-19")), Language::En);
+        let none = build(&Input { data: &data, calendar: &calendar, hidden: &hidden }, d("2026-11-18"), Mode::Week, Some(d("2026-11-19")), 0, Language::En);
         assert!(none.chart.empty && none.chart.lines.is_empty());
         assert_eq!(none.chart.detail, "19 Nov: no lines");
     }
@@ -553,7 +554,7 @@ mod tests {
     fn quarters_and_years_show_monthly_averages() {
         let data = data();
         let (calendar, hidden) = (CalendarMinutes::new(), BTreeSet::new());
-        let view = build(&Input { data: &data, calendar: &calendar, hidden: &hidden }, d("2026-11-18"), Mode::Quarter, Some(d("2026-11-03")), Language::De);
+        let view = build(&Input { data: &data, calendar: &calendar, hidden: &hidden }, d("2026-11-18"), Mode::Quarter, Some(d("2026-11-03")), 0, Language::De);
         assert_eq!(view.chart.columns.len(), 3);
         assert_eq!(view.chart.labels.iter().map(|l| l.text.as_str()).collect::<Vec<_>>(), ["Okt", "Nov", "Dez"]);
         assert_eq!(view.chart.detail, "Nov: Tagesbewertung 8, Stress 3, Ohne Namen –");
@@ -566,7 +567,7 @@ mod tests {
         let calendar = CalendarMinutes::from([("2026-11-17".to_string(), BTreeMap::from([("sport".to_string(), 45), ("other".to_string(), 30)]))]);
         let hidden = BTreeSet::new();
         let input = Input { data: &data, calendar: &calendar, hidden: &hidden };
-        let week = build(&input, d("2026-11-18"), Mode::Week, Some(d("2026-11-17")), Language::De);
+        let week = build(&input, d("2026-11-18"), Mode::Week, Some(d("2026-11-17")), 1, Language::De);
         assert_eq!(week.cards.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(), ["Laufen", "Lesen"], "Inactive and unused activities stay out.");
         let run = &week.cards[0];
         assert_eq!((run.total.as_deref(), run.days.as_str()), (Some("1 h 5 min"), "2 / 7 Tage"));
@@ -576,8 +577,10 @@ mod tests {
         assert_eq!(run.detail, "2026-11-17 · 45 min");
         let read = &week.cards[1];
         assert_eq!((read.total.as_deref(), read.bars[0].value.as_str(), read.unit.as_str()), (None, "✓", ""));
+        // The chosen day belongs to the graph in focus (here the first card) only.
+        assert!(run.bars[1].active && !read.bars.iter().any(|b| b.active) && week.chart.guide.is_none() && week.chart.hint);
 
-        let month = build(&input, d("2026-11-18"), Mode::Month, Some(d("2026-11-16")), Language::De);
+        let month = build(&input, d("2026-11-18"), Mode::Month, Some(d("2026-11-16")), 1, Language::De);
         let run = &month.cards[0];
         assert_eq!((run.kind, run.columns, run.rows), (CardKind::Calendar, 7, 7), "November 2026: six weeks from Monday 26 October, under the weekdays.");
         let monday = run.cells.iter().find(|c| c.date == d("2026-11-16")).unwrap();
@@ -585,7 +588,7 @@ mod tests {
         assert_eq!(run.cells.first().map(|c| (c.column, c.row)), Some((6, 1)), "The 1st is a Sunday.");
         assert_eq!(run.detail, "Mo., 16. Nov. 2026 · 20 min · Park");
 
-        let year = build(&input, d("2026-11-18"), Mode::Year, None, Language::En);
+        let year = build(&input, d("2026-11-18"), Mode::Year, None, 1, Language::En);
         let run = &year.cards[0];
         assert_eq!((run.kind, run.columns, run.rows, run.cells.len()), (CardKind::Contributions, 54, 8, 365));
         assert_eq!(run.heads.iter().filter(|h| h.row == 0).map(|h| h.text.as_str()).collect::<Vec<_>>(), ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sept", "Oct", "Nov", "Dec"]);

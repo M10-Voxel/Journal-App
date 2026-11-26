@@ -87,9 +87,12 @@ pub fn save_with(store: &mut Store, outcome: &Outcome, extras: &Extras, today: N
 }
 
 /// Save the source entry and its plan in one core transaction, checking for a stale edit first.
+/// `others`: an edit of a linked entry made for a chosen scope (as the app's `ScopeChoice`): it stays with this entry
+/// and reaches exactly these others (`Store::edit_linked`, with the times when they changed). `None`: as before, the
+/// core passes text and kind on to the whole group.
 pub fn save_planned_or_edited(store: &mut Store, outcome: &Outcome, extras: &Extras, today: NaiveDate,
     editing: Option<&(NaiveDate, Entry)>, rule: &Option<repeat::Rule>, targets: &[NaiveDate],
-    labels: &crate::texts::FormTexts) -> Result<Saved, String> {
+    labels: &crate::texts::FormTexts, others: Option<&[String]>) -> Result<Saved, String> {
     if !outcome.additional.is_empty() || !outcome.copies.is_empty() { return Err(labels.plan_single.into()); }
     let source = editing.map_or(outcome.day, |(date, _)| *date);
     let mut day = store.load(&source.to_string()).map_err(|e| e.to_string())?;
@@ -122,11 +125,32 @@ pub fn save_planned_or_edited(store: &mut Store, outcome: &Outcome, extras: &Ext
     let mut dates = targets.to_vec();
     if outcome.day != source { dates.push(outcome.day); }
     if !dates.is_empty() { crate::day_ops::plan(&mut day, &id, &dates, "days")?; }
+    let edit = match (others, editing) {
+        (Some(others), Some((_, original))) => {
+            day.keep_alone = vec![id.clone()];
+            let saved = day.entries.iter().find(|e| e.id == id).ok_or(labels.entry_changed)?;
+            let moved = saved.time != original.time || saved.end != original.end;
+            let edit = journal_core::storage::LinkedEdit {
+                kind: saved.kind.clone(), text: saved.text.clone(), description: saved.description.clone(), tag: saved.tag.clone(),
+                priority: saved.priority, reminder: saved.reminder, show_in_journal: saved.show_in_journal, reminder_before: saved.reminder_before,
+                icon: saved.icon.clone(), time_grid: Some(saved.time_grid),
+                times: moved.then(|| journal_core::storage::LinkedTimes { time: saved.time.clone(), end: saved.end.clone() }),
+            };
+            (!others.is_empty()).then(|| (others.to_vec(), edit))
+        }
+        _ => None,
+    };
     store.save(day).map_err(|e| e.to_string())?;
+    let mut groups = vec![cursor(store)?];
+    if let Some((others, edit)) = edit {
+        let touched = store.edit_linked(&others, &edit).map_err(|e| e.to_string())?;
+        dates.extend(touched.iter().filter_map(|date| date.parse::<NaiveDate>().ok()));
+        groups.push(cursor(store)?);
+    }
     dates.push(source);
     dates.sort();
     dates.dedup();
-    Ok(Saved { groups: vec![cursor(store)?], text: outcome.text.clone(), days: dates })
+    Ok(Saved { groups, text: outcome.text.clone(), days: dates })
 }
 
 /// Takes the save back, as long as nothing was written after it (then that would go first). True when it did.

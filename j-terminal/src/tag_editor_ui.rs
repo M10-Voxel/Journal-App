@@ -34,9 +34,11 @@ impl App {
         ui.set_hex(editor.hex.clone().into());
         ui.set_swatches(std::rc::Rc::new(slint::VecModel::from(SWATCHES.iter().map(|s| { let [r, g, b] = calendar::parse_color(s).unwrap_or([0, 0, 0]); slint::Color::from_rgb_u8(r, g, b) }).collect::<Vec<_>>())).into());
         ui.set_swatch(editor.swatch().map_or(-1, |i| i as i32));
-        let mut icons: Vec<TagIcon> = editor.icons().into_iter().enumerate().map(|(i, icon)| TagIcon {
+        let found = editor.icons();
+        let lazy = found.len() > super::LAZY_ICONS;
+        let mut icons: Vec<TagIcon> = found.iter().enumerate().map(|(i, icon)| TagIcon {
             has_icon: icon.is_some(),
-            icon: icon.map(|name| icon_image(name, theme.get_icon_size(), scale)).unwrap_or_default(),
+            icon: if lazy { Default::default() } else { icon.map(|name| icon_image(name, theme.get_icon_size(), scale)).unwrap_or_default() },
             label: icon.unwrap_or_default().into(),
             selected: i == editor.pick,
         }).collect();
@@ -44,7 +46,15 @@ impl App {
         if editor.more() {
             icons.push(TagIcon { has_icon: true, icon: icon_image("ellipsis", theme.get_icon_size(), scale), label: texts::day_texts(lang).icon_more.into(), selected: false });
         }
-        ui.set_icons(std::rc::Rc::new(slint::VecModel::from(icons)).into());
+        if lazy {
+            // Every icon: drawn only near the lines in sight (see `LazyIcons`).
+            let names = found.iter().map(|icon| icon.unwrap_or_default().to_string()).collect();
+            let model = self.tag_icons.build(icons, names, theme.get_side_icon_columns() as usize, Some(editor.pick), theme.get_icon_size(), scale);
+            ui.set_icons(model.into());
+        } else {
+            self.tag_icons.clear();
+            ui.set_icons(std::rc::Rc::new(slint::VecModel::from(icons)).into());
+        }
         ui.set_icon_pick(editor.pick as i32);
         ui.set_icon_name(editor.icon.clone().unwrap_or_else(|| texts::tags::no_icon(lang).into()).into());
         ui.set_error(editor.error.clone().unwrap_or_default().into());
@@ -105,6 +115,10 @@ pub(super) fn connect(bar: &Bar) {
     ui.on_hex_edited(|text| with_app(|a| a.with_tag_editor(|e| e.set_hex(&text))));
     ui.on_query_edited(|text| with_app(|a| a.with_tag_editor(|e| e.set_query(&text))));
     ui.on_pick_icon(|i| with_app(|a| a.with_tag_editor(|e| e.set_icon(i.max(0) as usize))));
+    ui.on_icons_scrolled(|line| with_app(|a| {
+        let (size, scale) = (a.bar.global::<Theme>().get_icon_size(), a.bar.window().scale_factor());
+        a.tag_icons.scrolled(line, size, scale);
+    }));
     ui.on_focus_part(|part| with_app(|a| a.with_tag_editor(|e| e.focus([Part::Name, Part::Field, Part::Swatches, Part::Hex, Part::Icons][part.clamp(0, 4) as usize]))));
     ui.on_key(|key, shift| with_app(|a| {
         use slint::platform::Key as K;

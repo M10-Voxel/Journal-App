@@ -3,6 +3,8 @@ import { KeyBindings, ShortcutContext } from "key-bindings.slint";
 import { JournalIcons } from "journal-icons.slint";
 import { PreferenceKey, RowControl, SettingsRow, SettingsCategory, SettingsLabels, Emblem, CaptionButton, CaptionAction, SettingsOption } from "settings-controls.slint";
 export { PreferenceKey, RowControl, SettingsRow, SettingsCategory, SettingsLabels }
+import { PeriodPanel, PeriodRow, PeriodLabels } from "period-settings.slint";
+export { PeriodRow, PeriodLabels }
 
 enum SettingsFocus { search, categories, options }
 
@@ -47,6 +49,20 @@ export component SettingsWindow inherits Window {
     callback update-binding(string, string, int) -> string;
     callback set-preference(PreferenceKey, int) -> string;
     callback editable-row(int, int) -> int;
+    // The pages of the activities (1) and the day values (2): their own panel instead of rows of options.
+    in property <int> period-page;
+    in property <[PeriodRow]> period-rows;
+    in property <PeriodLabels> period-labels;
+    in property <[color]> swatches;
+    in property <[string]> swatch-hex;
+    in property <string> period-error;
+    private property <int> period-focus;
+    // The digits typed into a number row (cleared when another row is chosen).
+    private property <string> amount-typed;
+    changed selected => { root.amount-typed = ""; }
+    private property <bool> panel: root.period-page > 0 && !root.searching;
+    callback period-edit(string, string, string);
+    callback period-add(string);
 
     public function stop-recording() {
         root.recording-id = "";
@@ -79,6 +95,12 @@ export component SettingsWindow inherits Window {
         search.focus();
     }
     function select-option(from: int, direction: int) {
+        // The panel of activities or values takes the keyboard itself (its fields, switches and the new one).
+        if root.panel {
+            root.area = SettingsFocus.options; root.selected = -1; root.keyboard-focus = true;
+            root.period-focus += 1;
+            return;
+        }
         let candidate = root.editable-row(from, direction);
         if candidate >= 0 {
             root.area = SettingsFocus.options;
@@ -144,6 +166,17 @@ export component SettingsWindow inherits Window {
                 if !event.repeat { root.dismiss(); }
                 return accept;
             }
+            // In the panel its own fields keep the keys; Esc goes back to the pages, Alt+←/→ through the history.
+            if root.panel && root.area == SettingsFocus.options {
+                if raw.text == Key.Escape {
+                    if !raw.repeat { root.area = SettingsFocus.categories; root.keyboard-focus = true; search.focus(); }
+                    return accept;
+                }
+                if raw.modifiers.alt && (raw.text == Key.LeftArrow || raw.text == Key.RightArrow) {
+                    root.history(raw.text == Key.RightArrow); return accept;
+                }
+                return reject;
+            }
             if root.choice-row >= 0 {
                 let count = root.rows[root.choice-row].choices.length;
                 if raw.text == Key.UpArrow || raw.text == Key.DownArrow {
@@ -182,6 +215,29 @@ export component SettingsWindow inherits Window {
             }
             if root.area == SettingsFocus.categories && (raw.text == Key.RightArrow || raw.text == Key.Return || raw.text == " ") {
                 root.keyboard-focus = true; root.select-option(0, 1); return accept;
+            }
+            // A number (how long the view is kept): ←/→ by one (Shift: by ten), digits typed, Backspace takes one back.
+            if root.area == SettingsFocus.options && root.selected >= 0 && root.selected < root.rows.length && root.rows[root.selected].control == RowControl.amount
+                && !raw.modifiers.control && !raw.modifiers.alt {
+                let row = root.rows[root.selected];
+                if raw.text == Key.LeftArrow || raw.text == Key.RightArrow {
+                    let step = (raw.text == Key.RightArrow ? 1 : -1) * (raw.modifiers.shift ? 10 : 1);
+                    root.amount-typed = "";
+                    root.error = root.set-preference(row.preference, clamp(row.index + step, 1, 999));
+                    return accept;
+                }
+                if raw.text >= "0" && raw.text <= "9" && raw.text.character-count == 1 {
+                    let typed = root.amount-typed.character-count >= 3 ? raw.text : root.amount-typed + raw.text;
+                    root.amount-typed = typed;
+                    if typed.to-float() >= 1 { root.error = root.set-preference(row.preference, typed.to-float()); }
+                    return accept;
+                }
+                if raw.text == Key.Backspace {
+                    root.amount-typed = "";
+                    let shorter = Math.floor(row.index / 10);
+                    if shorter >= 1 { root.error = root.set-preference(row.preference, shorter); }
+                    return accept;
+                }
             }
             if root.area == SettingsFocus.options && raw.text == Key.LeftArrow {
                 root.keyboard-focus = true; root.area = SettingsFocus.categories; root.selected = -1; return accept;
@@ -363,6 +419,13 @@ export component SettingsWindow inherits Window {
                         }
                     }
                 }
+                if root.panel: PeriodPanel {
+                    rows: root.period-rows; labels: root.period-labels; swatches: root.swatches; swatch-hex: root.swatch-hex;
+                    error: root.period-error; focus-request: root.period-focus;
+                    entered => { root.area = SettingsFocus.options; root.selected = -1; }
+                    edit(id, field, value) => { root.period-edit(id, field, value); }
+                    add(name) => { root.period-add(name); }
+                }
                 for row[i] in root.rows: VerticalLayout {
                     if row.starts-group && i > 0: Rectangle { height: Theme.settings-padding; }
                     if row.heading != "": Rectangle {
@@ -397,7 +460,7 @@ export component SettingsWindow inherits Window {
                         reset => { root.keyboard-focus = false; root.reset-binding(i); }
                     }
                 }
-                if root.rows.length == 0: Text {
+                if root.rows.length == 0 && !root.panel: Text {
                     height: Theme.settings-row-height; vertical-alignment: center; horizontal-alignment: center;
                     text: root.labels.empty; color: Theme.settings-secondary-text;
                 }

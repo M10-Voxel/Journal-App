@@ -48,10 +48,12 @@ export global AnalysisUi {
     in-out property <bool> empty;
     in-out property <[AnalysisCard]> cards;
     in-out property <int> focus-request;
+    // The graph in focus (↑ / ↓, the mouse): 0 the chart, 1… the cards. Only it shows the chosen day.
+    in-out property <int> focus;
     // "back", "prev", "next", "mode:N", "toggle:N" (a line of the chart).
     callback command(string);
-    // The day the mouse points at ("" when it leaves the chart).
-    callback point(string);
+    // The day the mouse points at in a graph (0 the chart, 1… the cards; "" when it leaves the chart).
+    callback point(int, string);
     callback key(string, int, bool) -> bool;
 }
 
@@ -78,7 +80,7 @@ component Chart inherits Rectangle {
     width: 640 * root.u;
     height: 190 * root.u;
     hover := TouchArea {
-        changed has-hover => { if !self.has-hover { AnalysisUi.point(""); } }
+        changed has-hover => { if !self.has-hover { AnalysisUi.point(0, ""); } }
         for tick in AnalysisUi.ticks: Rectangle {
             Path {
                 x: 0; y: 0; width: root.width; height: root.height;
@@ -114,8 +116,8 @@ component Chart inherits Rectangle {
         for column in AnalysisUi.columns: TouchArea {
             x: column.x * root.u; width: column.w * root.u; y: 14 * root.u; height: 144 * root.u;
             mouse-cursor: MouseCursor.pointer;
-            changed has-hover => { if self.has-hover { AnalysisUi.point(column.date); } }
-            clicked => { AnalysisUi.point(column.date); }
+            changed has-hover => { if self.has-hover { AnalysisUi.point(0, column.date); } }
+            clicked => { AnalysisUi.point(0, column.date); }
         }
         for label in AnalysisUi.labels: Text {
             width: 120 * root.u; x: label.x * root.u - self.width / 2; y: 180 * root.u - self.height / 2;
@@ -128,10 +130,14 @@ component Chart inherits Rectangle {
 // An activity's card (ActivitySummary.tsx with ActivityHeatmap.tsx and ActivityPalette.tsx).
 component Card inherits Rectangle {
     in property <AnalysisCard> card;
+    // Its place among the graphs (1… after the chart) and whether it is the one in focus.
+    in property <int> graph;
+    in property <bool> focused;
     property <length> inner: root.width - 2 * Theme.analysis-card-padding;
     property <length> body-y: Theme.analysis-card-padding-top + Theme.analysis-card-head;
     background: Theme.analysis-box;
-    border-color: Theme.divider; border-width: 1px; border-radius: Theme.analysis-box-radius;
+    border-color: root.focused ? Theme.accent : Theme.divider; border-width: root.focused ? Theme.analysis-focus-width : 1px;
+    border-radius: Theme.analysis-box-radius;
 
     // Name at the left; the time of all days and the days with the activity at the right.
     HorizontalLayout {
@@ -186,8 +192,8 @@ component Card inherits Rectangle {
                 color: bar.active ? Theme.strong : Theme.muted; font-size: Theme.analysis-stat-size;
             }
             touch := TouchArea {
-                changed has-hover => { if self.has-hover { AnalysisUi.point(bar.date); } }
-                clicked => { AnalysisUi.point(bar.date); }
+                changed has-hover => { if self.has-hover { AnalysisUi.point(root.graph, bar.date); } }
+                clicked => { AnalysisUi.point(root.graph, bar.date); }
             }
         }
     }
@@ -237,8 +243,8 @@ component Card inherits Rectangle {
                 horizontal-alignment: center; vertical-alignment: center;
             }
             cell-touch := TouchArea {
-                changed has-hover => { if self.has-hover { AnalysisUi.point(cell.date); } }
-                clicked => { AnalysisUi.point(cell.date); }
+                changed has-hover => { if self.has-hover { AnalysisUi.point(root.graph, cell.date); } }
+                clicked => { AnalysisUi.point(root.graph, cell.date); }
             }
         }
     }
@@ -291,13 +297,22 @@ export component AnalysisView inherits Rectangle {
     function scroll(by: length) {
         flick.content-y = max(min(0px, flick.height - flick.content-height), min(0px, flick.content-y - by));
     }
+    // The graph in focus comes into sight (↑ / ↓ go from graph to graph).
+    function show-focus() {
+        let top = AnalysisUi.focus == 0 ? chart-box.y : cards-box.y + Math.floor((AnalysisUi.focus - 1) / root.cols) * (root.card-h + Theme.analysis-card-gap);
+        let tall = AnalysisUi.focus == 0 ? chart-box.height : root.card-h;
+        // The chart with the section's heading above it.
+        let from = AnalysisUi.focus == 0 ? 0px : top - Theme.gap;
+        flick.content-y = clamp(max(min(flick.content-y, -from), flick.height - top - tall - Theme.padding),
+            min(0px, flick.height - flick.content-height), 0px);
+    }
+    changed graph-in-focus => { root.show-focus(); }
+    property <int> graph-in-focus: AnalysisUi.focus;
 
-    // Up/down and the page keys scroll; everything else is AnalysisUi.key's (src/analysis_ui.rs).
+    // The page keys scroll; everything else is AnalysisUi.key's (src/analysis_ui.rs).
     keys := FocusScope {
         key-pressed(event) => {
             if event.modifiers.control || event.modifiers.alt { return reject; }
-            if event.text == Key.UpArrow { root.scroll(-Theme.row-height); return accept; }
-            if event.text == Key.DownArrow { root.scroll(Theme.row-height); return accept; }
             if event.text == Key.PageUp { root.scroll(-flick.height * 0.9); return accept; }
             if event.text == Key.PageDown { root.scroll(flick.height * 0.9); return accept; }
             if event.text == Key.End { root.scroll(flick.content-height); return accept; }
@@ -336,8 +351,9 @@ export component AnalysisView inherits Rectangle {
                 Text { text: AnalysisUi.ratings-title; color: Theme.strong; font-size: Theme.analysis-section-size; font-weight: Theme.weight-semibold; }
                 Text { text: AnalysisUi.ratings-hint; color: Theme.muted; font-size: Theme.small-size; }
             }
-            Rectangle {
-                background: Theme.analysis-box; border-color: Theme.divider; border-width: 1px; border-radius: Theme.analysis-box-radius;
+            chart-box := Rectangle {
+                background: Theme.analysis-box; border-radius: Theme.analysis-box-radius;
+                border-color: AnalysisUi.focus == 0 ? Theme.accent : Theme.divider; border-width: AnalysisUi.focus == 0 ? Theme.analysis-focus-width : 1px;
                 VerticalLayout {
                     padding: Theme.analysis-box-padding; spacing: 0px;
                     HorizontalLayout {
@@ -378,10 +394,10 @@ export component AnalysisView inherits Rectangle {
                 Text { text: AnalysisUi.activities-hint; color: Theme.muted; font-size: Theme.small-size; }
             }
             if AnalysisUi.no-activities != "": Text { text: AnalysisUi.no-activities; color: Theme.muted; font-size: Theme.small-size; }
-            Rectangle {
+            cards-box := Rectangle {
                 height: root.card-rows == 0 ? 0px : root.card-rows * (root.card-h + Theme.analysis-card-gap) - Theme.analysis-card-gap;
                 for card[i] in AnalysisUi.cards: Card {
-                    card: card;
+                    card: card; graph: i + 1; focused: AnalysisUi.focus == i + 1;
                     x: Math.mod(i, root.cols) * (root.card-w + Theme.analysis-card-gap);
                     y: Math.floor(i / root.cols) * (root.card-h + Theme.analysis-card-gap);
                     width: root.card-w; height: root.card-h;

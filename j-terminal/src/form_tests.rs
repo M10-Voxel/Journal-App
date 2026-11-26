@@ -202,11 +202,61 @@ fn editing_a_series_occurrence_preserves_its_day_status_and_series() {
     t.form.choose_command(index);
     type_in(&mut t.form, "Training");
     assert!(!t.form.key(Key::Enter, CTRL).hide_soon);
+    // As in the app (and as deleting): saving asks how far the change goes, without counting.
+    let (title, items) = t.form.menu_items();
+    assert_eq!(title, "Änderung übernehmen für …");
+    assert_eq!(items.iter().map(|item| item.label.as_str()).collect::<Vec<_>>(), ["Alle ändern", "Auch den folgenden ändern", "Nur diesen ändern"]);
+    assert_eq!(day(&t, "2026-11-30")[0].text, "Sport", "Nothing saved before the choice.");
+    t.form.menu_choose(2);
     let after = day(&t, "2026-11-30").remove(0);
     assert_eq!(after.text, "Training");
     assert!(after.done && after.plan.is_none());
     assert_eq!(after.id, before.id);
     assert_eq!(after.repeat.unwrap().series, before.repeat.unwrap().series);
+    assert_eq!((day(&t, "2026-11-23")[0].text.as_str(), day(&t, "2026-12-07")[0].text.as_str()), ("Sport", "Sport"), "Only this one.");
+}
+
+#[test]
+fn an_edit_of_a_series_reaches_the_chosen_ones() {
+    let mut t = test();
+    type_in(&mut t.form, "Kurs 24.11. 9-10");
+    let mut rule = Rule::new(d("2026-11-24"), crate::repeat::Unit::Week, 1);
+    rule.weekdays = Some(vec![1, 3]);
+    rule.end = Some(crate::repeat::End { count: None, until: Some(d("2026-12-10")) });
+    t.form.v.rule = Some(rule);
+    assert!(!t.form.key(Key::Enter, CTRL).hide_soon);
+    let open = |t: &mut Test, date: &str| {
+        let id = day(t, date)[0].id.clone();
+        t.form.edit_hit(d(date), &id);
+    };
+    let text = |t: &Test, date: &str| day(t, date).first().map(|e| (e.text.clone(), e.time.clone())).unwrap();
+    // Every Tuesday: the Thursdays stay.
+    open(&mut t, "2026-12-01");
+    type_in(&mut t.form, "Yoga");
+    t.form.key(Key::Enter, CTRL);
+    let labels: Vec<String> = t.form.menu_items().1.into_iter().map(|item| item.label).collect();
+    assert_eq!(labels, ["Alle ändern", "Auch die folgenden ändern", "Jeden Dienstag ändern", "Nur diesen ändern"]);
+    t.form.menu_choose(2);
+    assert_eq!(text(&t, "2026-11-24").0, "Yoga");
+    assert_eq!(text(&t, "2026-12-08").0, "Yoga");
+    assert_eq!(text(&t, "2026-11-26").0, "Kurs", "A Thursday stays.");
+    // Also the following, with a new time: the earlier ones keep theirs.
+    open(&mut t, "2026-12-03");
+    t.form.v.start = Some(11 * 60);
+    t.form.v.end = Some(12 * 60);
+    t.form.key(Key::Enter, CTRL);
+    let at = t.form.menu_items().1.iter().position(|item| item.label == "Auch die folgenden ändern").unwrap();
+    t.form.menu_choose(at);
+    assert_eq!(text(&t, "2026-12-08").1.as_deref(), Some("11:00"));
+    assert_eq!(text(&t, "2026-12-10").1.as_deref(), Some("11:00"));
+    assert_eq!(text(&t, "2026-12-01").1.as_deref(), Some("09:00"), "An earlier one keeps its time.");
+    // Esc on the choice: nothing saved, back in the form.
+    open(&mut t, "2026-11-24");
+    type_in(&mut t.form, "Pilates");
+    t.form.key(Key::Enter, CTRL);
+    t.form.close_menu();
+    assert!(t.form.entry_shown());
+    assert_eq!(text(&t, "2026-11-24").0, "Yoga");
 }
 
 #[test]
@@ -331,7 +381,7 @@ fn notepad_writes_a_pinned_card_and_reopens_the_same_note_with_its_tag_and_attac
     let changed_in_app = serde_json::json!("pink").to_string();
     observer.conn.execute("UPDATE settings SET value=json_set(value, '$.paper', json(?1)) WHERE key=?2",
         rusqlite::params![changed_in_app, &key]).unwrap();
-    let check = note_markdown::blocks(t.form.notepad().unwrap().body()).iter().find_map(|row| row.check).unwrap();
+    let check = note_markdown::blocks(t.form.notepad().unwrap().body(), false).iter().find_map(|row| row.check).unwrap();
     t.form.notepad_toggle_check(check.0);
     let card = read(key);
     assert_eq!(card["text"], "# Privat\n\n- [x] Erledigen");
@@ -850,6 +900,33 @@ fn icons_are_chosen_in_a_grid_in_all_directions() {
     go(&mut t.form, Field::Icon);
     type_in(&mut t.form, "kein-solches-symbol");
     assert!(row(&mut t.form, Field::Icon).error);
+}
+
+#[test]
+fn every_icon_is_offered_after_the_common_ones() {
+    let mut t = test();
+    go(&mut t.form, Field::Icon);
+    t.form.key(Key::Enter, NONE);
+    let Panel::Icons(common) = t.form.view().panel else { panic!("icons") };
+    let last = common.len() - 1;
+    assert_eq!((common[last].label.as_str(), common[last].icon.as_str()), ("Alle Symbole", "ellipsis"), "As in the day view: „Alle Symbole“ last.");
+    t.form.key(Key::End, NONE);
+    for _ in 0..10 { t.form.key(Key::Down, NONE); }
+    let Panel::Icons(grid) = t.form.view().panel else { panic!() };
+    assert!(grid[last].selected, "The keyboard stops on it without opening it.");
+    t.form.key(Key::Enter, NONE);
+    let Panel::Icons(all) = t.form.view().panel else { panic!("Enter shows every icon, the list stays open.") };
+    assert!(all.len() > 1000 && !all.iter().any(|c| c.label == "Alle Symbole"));
+    assert!(all[last].selected, "On the first icon that was not there before.");
+    t.form.key(Key::Enter, NONE);
+    assert_eq!(value(&mut t.form, Field::Icon), all[last].icon);
+    // A click works the same.
+    go(&mut t.form, Field::Icon);
+    t.form.key(Key::Enter, NONE);
+    let Panel::Icons(again) = t.form.view().panel else { panic!() };
+    t.form.choice_click(again.len() - 1);
+    let Panel::Icons(all) = t.form.view().panel else { panic!() };
+    assert!(all.len() > 1000);
 }
 
 #[test]

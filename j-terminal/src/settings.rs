@@ -10,6 +10,12 @@ use slint::ComponentHandle;
 #[serde(rename_all = "kebab-case")]
 pub enum StartView { #[default] Day, Entry }
 
+/// How the window is laid out: side by side (form and calendar beside each other), one above the other (for a
+/// screen standing upright), or chosen by the screen's width.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum Orientation { #[default] Auto, Horizontal, Vertical }
+
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub enum DisplayLanguage { #[default] Journal, German, English }
@@ -29,13 +35,24 @@ pub struct Preferences {
     pub edit_notes: bool,
     /// The calendar's day column, dragged wider or narrower with the mouse (None: the theme's width).
     pub calendar_label_width: Option<u16>,
+    /// The notepad beside the calendar, dragged wider at its edge (None: the theme's width).
+    pub notepad_width: Option<u16>,
+    /// The notepad takes the whole window (F11 or the actions); the calendar is hidden meanwhile.
+    pub notepad_wide: bool,
+    /// Opened again: where it was (false: the start view).
+    pub reopen_stay: bool,
+    /// How long it stays where it was after being hidden, in seconds or minutes (`reopen_minutes`).
+    pub reopen_after: u32,
+    pub reopen_minutes: bool,
+    pub orientation: Orientation,
 }
 
 impl Default for Preferences {
     fn default() -> Self {
         Self { start_view: StartView::Day, center_window: false, return_today: true,
             language: DisplayLanguage::Journal, keycaps: true, parse_titles: true,
-            week_numbers: true, weekends: true, now_line: true, edit_notes: false, calendar_label_width: None }
+            week_numbers: true, weekends: true, now_line: true, edit_notes: false, calendar_label_width: None,
+            notepad_width: None, notepad_wide: false, reopen_stay: false, reopen_after: 5, reopen_minutes: true, orientation: Orientation::Auto }
     }
 }
 
@@ -47,6 +64,12 @@ impl Preferences {
             Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(Self::default()),
             Err(error) => Err(error),
         }
+    }
+
+    /// Whether the window, hidden for `away`, opens where it was (else at the start view).
+    pub fn keeps_place(&self, away: Option<std::time::Duration>) -> bool {
+        let unit = if self.reopen_minutes { 60 } else { 1 };
+        self.reopen_stay && away.is_some_and(|away| away.as_secs() < u64::from(self.reopen_after) * unit)
     }
 
     pub fn effective_language(&self, journal: Language) -> Language {
@@ -66,6 +89,10 @@ impl Preferences {
             PreferenceKey::Weekends => self.weekends.into(),
             PreferenceKey::NowLine => self.now_line.into(),
             PreferenceKey::NoteMode => self.edit_notes.into(),
+            PreferenceKey::Reopen => self.reopen_stay.into(),
+            PreferenceKey::Orientation => self.orientation as i32,
+            PreferenceKey::ReopenAfter => self.reopen_after as i32,
+            PreferenceKey::ReopenUnit => self.reopen_minutes.into(),
         }
     }
 
@@ -75,6 +102,8 @@ impl Preferences {
         match key {
             K::StartView => self.start_view = *[StartView::Day, StartView::Entry].get(index as usize)?,
             K::Language => self.language = *[DisplayLanguage::Journal, DisplayLanguage::German, DisplayLanguage::English].get(index as usize)?,
+            K::Orientation => self.orientation = *[Orientation::Auto, Orientation::Horizontal, Orientation::Vertical].get(index as usize)?,
+            K::ReopenAfter => self.reopen_after = u32::try_from(index).ok().filter(|n| (1..=999).contains(n))?,
             _ if !(0..=1).contains(&index) => return None,
             K::WindowPosition => self.center_window = checked,
             K::ReturnToday => self.return_today = checked,
@@ -84,6 +113,8 @@ impl Preferences {
             K::Weekends => self.weekends = checked,
             K::NowLine => self.now_line = checked,
             K::NoteMode => self.edit_notes = checked,
+            K::Reopen => self.reopen_stay = checked,
+            K::ReopenUnit => self.reopen_minutes = checked,
             K::None => return None,
         }
         Some(())
@@ -103,8 +134,15 @@ pub fn write_json(path: &Path, values: &impl Serialize) -> io::Result<()> {
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub enum Page { #[default] General, Keyboard, Entry, Calendar, Notebook }
-const PAGES: [Page; 5] = [Page::General, Page::Keyboard, Page::Entry, Page::Calendar, Page::Notebook];
+pub enum Page { #[default] General, Keyboard, Entry, Calendar, Notebook, Activities, Values }
+const PAGES: [Page; 7] = [Page::General, Page::Keyboard, Page::Entry, Page::Calendar, Page::Notebook, Page::Activities, Page::Values];
+
+impl Page {
+    /// The page of the period data it shows (its own panel instead of options).
+    pub fn period(self) -> Option<crate::period_settings::Page> {
+        match self { Page::Activities => Some(crate::period_settings::Page::Activities), Page::Values => Some(crate::period_settings::Page::Values), _ => None }
+    }
+}
 
 #[derive(Default)]
 pub struct Location { pub page: Page, pub query: String }
@@ -160,6 +198,8 @@ pub fn rows(location: &Location, prefs: &Preferences, bindings: &shortcuts::Bind
         let heading = tr(group.heading, language);
         let mut first = true;
         for option in group.options {
+            // How long it stays only matters while it stays at all.
+            if matches!(option.key, PreferenceKey::ReopenAfter | PreferenceKey::ReopenUnit) && !prefs.reopen_stay { continue; }
             let (title, detail) = (tr(option.title, language), tr(option.detail, language));
             let index = prefs.index(option.key);
             let choices: Vec<_> = option.choices.iter().map(|t| tr(*t, language)).collect();
@@ -169,8 +209,9 @@ pub fn rows(location: &Location, prefs: &Preferences, bindings: &shortcuts::Bind
             }
             rows.push(SettingsRow { preference: option.key, starts_group: first,
                 heading: (if !first { "" } else if searching && heading.is_empty() { page } else { heading }).into(),
-                control: if choices.is_empty() { RowControl::Toggle } else { RowControl::Choice },
-                action: title.into(), detail: detail.into(), value: choices.get(index as usize).copied().unwrap_or_default().into(),
+                control: if option.key == PreferenceKey::ReopenAfter { RowControl::Amount } else if choices.is_empty() { RowControl::Toggle } else { RowControl::Choice },
+                action: title.into(), detail: detail.into(),
+                value: if option.key == PreferenceKey::ReopenAfter { index.to_string().into() } else { choices.get(index as usize).copied().unwrap_or_default().into() },
                 choices: crate::strings(choices.into_iter().map(str::to_owned)), index, ..Default::default() });
             first = false;
         }
@@ -197,6 +238,12 @@ mod tests {
         let mut prefs = Preferences::load(Some(&path)).unwrap();
         assert_eq!(prefs, Preferences { start_view: StartView::Entry, ..Default::default() });
         for option in copy::GROUPS.iter().flat_map(|group| group.options) {
+            // A number: 1–999.
+            if option.key == PreferenceKey::ReopenAfter {
+                for index in [1, 30, 999] { prefs.change(option.key, index).unwrap(); assert_eq!(prefs.index(option.key), index); }
+                assert!(prefs.change(option.key, 0).is_none() && prefs.change(option.key, 1000).is_none());
+                continue;
+            }
             let limit = option.choices.len().max(2) as i32;
             for index in 0..limit {
                 prefs.change(option.key, index).unwrap();
@@ -210,6 +257,28 @@ mod tests {
         write_json(&path, &prefs).unwrap();
         assert_eq!(Preferences::load(Some(&path)).unwrap(), prefs);
         fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn the_view_is_kept_for_the_time_set() {
+        use std::time::Duration;
+        let mut prefs = Preferences::default();
+        assert!(!prefs.keeps_place(Some(Duration::from_secs(1))), "At first it opens at the start view.");
+        prefs.reopen_stay = true;
+        assert!(prefs.keeps_place(Some(Duration::from_secs(299))) && !prefs.keeps_place(Some(Duration::from_secs(300))), "Five minutes.");
+        prefs.reopen_minutes = false;
+        prefs.reopen_after = 20;
+        assert!(prefs.keeps_place(Some(Duration::from_secs(19))) && !prefs.keeps_place(Some(Duration::from_secs(20))));
+        assert!(!prefs.keeps_place(None), "Never hidden: the start view.");
+        // The time and its unit are offered only while it stays.
+        let general = Location::default();
+        let bindings = shortcuts::Bindings::default();
+        let keys = |prefs: &Preferences| rows(&general, prefs, &bindings, Language::De).into_iter().map(|row| row.preference).collect::<Vec<_>>();
+        assert!(keys(&prefs).contains(&PreferenceKey::ReopenAfter));
+        let amount = rows(&general, &prefs, &bindings, Language::De).into_iter().find(|row| row.preference == PreferenceKey::ReopenAfter).unwrap();
+        assert_eq!((amount.control, amount.value.as_str()), (RowControl::Amount, "20"));
+        prefs.reopen_stay = false;
+        assert!(!keys(&prefs).contains(&PreferenceKey::ReopenAfter) && !keys(&prefs).contains(&PreferenceKey::ReopenUnit));
     }
 
     #[test]

@@ -79,6 +79,8 @@ pub struct Item {
     /// The entry being made in the form.
     pub fresh: bool,
     pub done: bool,
+    /// Marked important: its edge in the calendar's yellow.
+    pub priority: bool,
 }
 
 fn minutes(text: &str) -> Option<u32> {
@@ -91,6 +93,19 @@ pub fn parse_color(text: &str) -> Option<Rgb> {
     let hex = text.strip_prefix('#')?;
     if hex.len() != 6 { return None; }
     Some([u8::from_str_radix(&hex[0..2], 16).ok()?, u8::from_str_radix(&hex[2..4], 16).ok()?, u8::from_str_radix(&hex[4..6], 16).ok()?])
+}
+
+/// A tag's colour, turned a little away from `mark` (the yellow of important entries) when the two would look the
+/// same: the hue moves 30° off, so an important entry's edge still stands out from its neighbours.
+pub fn apart(color: Rgb, mark: Rgb) -> Rgb {
+    let hex = |[r, g, b]: Rgb| format!("#{r:02x}{g:02x}{b:02x}");
+    let (hue, saturation, value) = crate::tag_edit::hsv_of(&hex(color));
+    let (mark_hue, mark_saturation, mark_value) = crate::tag_edit::hsv_of(&hex(mark));
+    let turn = (hue - mark_hue + 540.0).rem_euclid(360.0) - 180.0;
+    let near = turn.abs() < 22.0 && saturation > 0.35 && (saturation - mark_saturation).abs() < 0.4 && (value - mark_value).abs() < 0.35;
+    if !near { return color; }
+    let away = if turn >= 0.0 { 30.0 - turn } else { -30.0 - turn };
+    parse_color(&crate::tag_edit::hex_of(hue + away, saturation, value)).unwrap_or(color)
 }
 
 /// Times marked with the mouse snap to quarter hours (as `snapMinutes` in the app).
@@ -109,7 +124,7 @@ impl Item {
             }
             _ => (date, None),
         };
-        Item { entry_id: None, first: date, last, start, end, title: title.to_string(), icon: String::new(), time_grid: false, color, fresh, done }
+        Item { entry_id: None, first: date, last, start, end, title: title.to_string(), icon: String::new(), time_grid: false, color, fresh, done, priority: false }
     }
 
     pub fn from_entry(date: NaiveDate, entry: &Entry, color: Option<Rgb>) -> Item {
@@ -117,6 +132,7 @@ impl Item {
         item.entry_id = Some(entry.id.clone());
         item.icon = entry.icon.clone().unwrap_or_default();
         item.time_grid = entry.time_grid;
+        item.priority = entry.priority;
         item
     }
 
@@ -170,7 +186,7 @@ pub struct Block {
     pub icon: String,
     pub time: String,
     pub color: Option<Rgb>,
-    pub fresh: bool, pub done: bool,
+    pub fresh: bool, pub done: bool, pub priority: bool,
     /// It goes on beyond the left edge of what is shown (no coloured edge there).
     pub cut: bool,
     pub point: bool,
@@ -190,7 +206,7 @@ pub struct Chip {
     pub title: String,
     pub icon: String,
     pub color: Option<Rgb>,
-    pub fresh: bool, pub done: bool,
+    pub fresh: bool, pub done: bool, pub priority: bool,
     pub dot: bool,
 }
 
@@ -202,7 +218,7 @@ pub struct Lane {
     pub title: String,
     pub icon: String,
     pub color: Option<Rgb>,
-    pub fresh: bool, pub done: bool,
+    pub fresh: bool, pub done: bool, pub priority: bool,
 }
 
 /// A mark of the hours in the header and as a line through the days.
@@ -379,19 +395,19 @@ pub fn layout(input: &Input, m: &Metrics) -> Layout {
                 (Some(_), true) => format!("{}–{}", hours(from), hours(to)),
                 (Some(start), false) => match item.end { Some(end) => format!("{}–{}", hours(start), hours(end)), None => hours(start) },
             };
-            out.blocks.push(Block { x, y: y + 4.0 + row as f32 * row_h, w, h: bh.max(2.0), item: index, title: item.title.clone(), icon: item.icon.clone(), time, color: item.color, fresh: item.fresh, done: item.done, cut: !item.point() && a < left, point: item.point(), caption_at_top, marker, text });
+            out.blocks.push(Block { x, y: y + 4.0 + row as f32 * row_h, w, h: bh.max(2.0), item: index, title: item.title.clone(), icon: item.icon.clone(), time, color: item.color, fresh: item.fresh, done: item.done, priority: item.priority, cut: !item.point() && a < left, point: item.point(), caption_at_top, marker, text });
         }
         // Entries without a time: listed under the date when the day is open, dots beside it when closed.
         let chips = all_day_of(input.items, day);
         for (n, index) in chips.iter().enumerate() {
             let item = &input.items[*index];
             let chip = if open {
-                Chip { x: label_x, y: y + m.date_h + n as f32 * m.chip_h, w: m.label_w - m.pad, h: m.chip_h - 2.0, item: *index, title: item.title.clone(), icon: item.icon.clone(), color: item.color, fresh: item.fresh, done: item.done, dot: false }
+                Chip { x: label_x, y: y + m.date_h + n as f32 * m.chip_h, w: m.label_w - m.pad, h: m.chip_h - 2.0, item: *index, title: item.title.clone(), icon: item.icon.clone(), color: item.color, fresh: item.fresh, done: item.done, priority: item.priority, dot: false }
             } else {
                 // Right of the date only: a narrow column shows fewer dots (or none) rather than covering it.
                 let room = ((m.label_w * 0.45).min(m.label_w - m.date_w - m.pad) / (m.dot + 3.0)).floor().max(0.0) as usize;
                 if n >= room { break; }
-                Chip { x: left - m.pad - (n as f32 + 1.0) * (m.dot + 3.0), y: y + (m.date_h - m.dot) / 2.0, w: m.dot, h: m.dot, item: *index, title: String::new(), icon: item.icon.clone(), color: item.color, fresh: item.fresh, done: item.done, dot: true }
+                Chip { x: left - m.pad - (n as f32 + 1.0) * (m.dot + 3.0), y: y + (m.date_h - m.dot) / 2.0, w: m.dot, h: m.dot, item: *index, title: String::new(), icon: item.icon.clone(), color: item.color, fresh: item.fresh, done: item.done, priority: item.priority, dot: true }
             };
             out.chips.push(chip);
         }
@@ -425,7 +441,7 @@ pub fn layout(input: &Input, m: &Metrics) -> Layout {
         if item.last < first || item.first > last || lane >= m.lanes { continue; }
         let top = out.rows.iter().find(|row| row.date == item.first).map_or(m.head_h, |row| row.y + 3.0);
         let bottom = out.rows.iter().find(|row| row.date == item.last).map_or(m.height, |row| row.y + row.h - 3.0);
-        out.lanes.push(Lane { x: m.pad + lane as f32 * m.lane_w, y: top, w: m.lane_w - 3.0, h: (bottom - top).max(4.0), item: index, title: item.title.clone(), icon: item.icon.clone(), color: item.color, fresh: item.fresh, done: item.done });
+        out.lanes.push(Lane { x: m.pad + lane as f32 * m.lane_w, y: top, w: m.lane_w - 3.0, h: (bottom - top).max(4.0), item: index, title: item.title.clone(), icon: item.icon.clone(), color: item.color, fresh: item.fresh, done: item.done, priority: item.priority });
     }
     out
 }
@@ -493,6 +509,22 @@ mod tests {
         layout(&input(items, &open, &none), m)
     }
     fn show(items: &[Item], open: &[&str]) -> Layout { show_with(items, open, &Metrics::default()) }
+    #[test]
+    fn tag_colours_keep_away_from_the_important_yellow() {
+        let mark = [0xff, 0xc2, 0x1a];
+        // The same yellow, or nearly: turned 30° off, so it reads as another colour.
+        let (hue, _, _) = crate::tag_edit::hsv_of("#ffc21a");
+        for near in [[0xff, 0xc2, 0x1a], [0xf5, 0xb8, 0x20], [0xff, 0xd0, 0x30]] {
+            let moved = apart(near, mark);
+            assert_ne!(moved, near);
+            let (h, _, _) = crate::tag_edit::hsv_of(&format!("#{:02x}{:02x}{:02x}", moved[0], moved[1], moved[2]));
+            let gap = ((h - hue + 540.0) % 360.0 - 180.0).abs();
+            assert!(gap >= 25.0, "{near:?} -> {moved:?}: {gap}");
+        }
+        // Other colours, and greys, stay as they are.
+        for other in [[0x56, 0x9e, 0xff], [0xff, 0x5f, 0x57], [0x8a, 0x8a, 0x8a], [0x4c, 0xaf, 0x50]] { assert_eq!(apart(other, mark), other); }
+    }
+
     fn item(date: &str, time: Option<&str>, end: Option<&str>) -> Item { Item::new(d(date), time, end, "x", None, false, false) }
     fn row<'a>(layout: &'a Layout, day: &str) -> &'a Row { layout.rows.iter().find(|row| row.date == d(day)).unwrap() }
 

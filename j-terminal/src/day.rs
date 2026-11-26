@@ -452,39 +452,50 @@ impl DayPane {
 /// The ways to delete an entry of `date` with what it is linked with (its series, its plans), as the app offers them:
 /// only this one, also the following, every same weekday, all. One way only when it stands alone.
 pub fn delete_scopes(store: &Store, id: &str, date: NaiveDate, language: Language) -> Result<Vec<DeleteScope>, String> {
-    {
-        let group = store.linked(id).map_err(|error| error.to_string())?;
-        let Some(index) = group.iter().position(|entry| entry.id == id) else { return Ok(Vec::new()); };
-        let en = language == Language::En;
-        let mut scopes = vec![DeleteScope { label: if en { "Only this one" } else { "Nur diesen" }.into(), ids: vec![id.into()], rank: 3 }];
-        let mut add = |label: String, others: Vec<String>, rank: u8| {
-            let ids = std::iter::once(id.to_owned()).chain(others).collect();
-            scopes.push(DeleteScope { label, ids, rank });
+    linked_scopes(store, id, date, language, false)
+}
+
+/// The ways an edit of an entry of `date` can reach its linked entries (the app's `editScopes`, with the following ones
+/// as well): only this one, every same weekday, also the following, all. Traces stay as they are, so they do not count.
+pub fn edit_scopes(store: &Store, id: &str, date: NaiveDate, language: Language) -> Result<Vec<DeleteScope>, String> {
+    linked_scopes(store, id, date, language, true)
+}
+
+/// The scopes in the group of `id`. Each is offered only when it reaches more than the smaller ones; no label counts.
+fn linked_scopes(store: &Store, id: &str, date: NaiveDate, language: Language, editing: bool) -> Result<Vec<DeleteScope>, String> {
+    let group = store.linked(id).map_err(|error| error.to_string())?;
+    let Some(index) = group.iter().position(|entry| entry.id == id) else { return Ok(Vec::new()); };
+    let en = language == Language::En;
+    let mut scopes = vec![DeleteScope { label: if en { "Only this one" } else { "Nur diesen" }.into(), ids: vec![id.into()], rank: 3 }];
+    let mut add = |label: String, others: Vec<String>, rank: u8| {
+        let ids = std::iter::once(id.to_owned()).chain(others).collect();
+        scopes.push(DeleteScope { label, ids, rank });
+    };
+    // An edit leaves the traces (where an entry was planned from) as they are.
+    let reached = |entry: &&journal_core::storage::LinkedEntry| entry.id != id && !(editing && entry.trace);
+    let following: Vec<String> = group[index + 1..].iter().filter(reached).map(|entry| entry.id.clone()).collect();
+    if !following.is_empty() {
+        let label = match (en, following.len()) {
+            (true, 1) => "Also the next one",
+            (false, 1) => "Auch den folgenden",
+            (true, _) => "Also the following",
+            (false, _) => "Auch die folgenden",
         };
-        let following = group.len() - index - 1;
-        if following > 0 {
-            let label = match (en, following) {
-                (true, 1) => "Also the next one".into(),
-                (false, 1) => "Auch den folgenden".into(),
-                (true, _) => format!("Also the next {following}"),
-                (false, _) => format!("Auch die {following} folgenden"),
-            };
-            add(label, group[index + 1..].iter().map(|entry| entry.id.clone()).collect(), 1);
-        }
-        let weekday = repeat::weekday_of(date);
-        let occurrences: Vec<_> = group.iter().filter(|entry| entry.id != id && !entry.trace).collect();
-        let same: Vec<_> = occurrences.iter().filter(|entry| entry.date.parse::<NaiveDate>().is_ok_and(|date| repeat::weekday_of(date) == weekday))
-            .map(|entry| entry.id.clone()).collect();
-        if !same.is_empty() && same.len() < occurrences.len() {
-            let name = day_texts(language).weekdays[weekday as usize];
-            add(if en { format!("Every {name}") } else { format!("Jeden {name}") }, same, 2);
-        }
-        if index > 0 {
-            let total = group.len();
-            add(if en { format!("All {total}") } else { format!("Alle {total}") }, group.iter().filter(|entry| entry.id != id).map(|entry| entry.id.clone()).collect(), 0);
-        }
-        Ok(scopes)
+        add(label.into(), following.clone(), 1);
     }
+    let weekday = repeat::weekday_of(date);
+    let occurrences: Vec<_> = group.iter().filter(|entry| entry.id != id && !entry.trace).collect();
+    let same: Vec<_> = occurrences.iter().filter(|entry| entry.date.parse::<NaiveDate>().is_ok_and(|date| repeat::weekday_of(date) == weekday))
+        .map(|entry| entry.id.clone()).collect();
+    if !same.is_empty() && same.len() < occurrences.len() {
+        let name = day_texts(language).weekdays[weekday as usize];
+        add(if en { format!("Every {name}") } else { format!("Jeden {name}") }, same, 2);
+    }
+    let all: Vec<String> = group.iter().filter(reached).map(|entry| entry.id.clone()).collect();
+    if all.len() > following.len() {
+        add(if en { "All" } else { "Alle" }.into(), all, 0);
+    }
+    Ok(scopes)
 }
 
 impl DayPane {

@@ -1,9 +1,10 @@
 //! The analysis over the whole window (`/Auswertung`, `ui/analysis.slint`): which period it shows, the day chosen for
 //! details and the chart's hidden lines; `analysis.rs` computes what it shows.
 //!
-//! Keys: ← / → the period before or after, Tab / Shift+Tab week → month → quarter → year, Alt+← / → a day for the
-//! details, Alt+H or Home the period of today, 1–9 a line of the chart on or off, Esc back. ↑ / ↓ and the page keys
-//! scroll (in the view itself).
+//! Keys: ← / → the period before or after, Tab / Shift+Tab week → month → quarter → year, ↑ / ↓ the graph before or
+//! after (the chart, then each activity's card), Alt+← / → a day for the details in that graph only, Alt+H or Home the
+//! period of today, 1–9 a line of the chart on or off, Esc back. The page keys and End scroll (in the view itself).
+//! The mouse on a graph makes it the graph in focus, its day the chosen one.
 use super::*;
 use crate::analysis::{CardKind, Mode};
 use crate::texts::analysis as tx;
@@ -18,6 +19,10 @@ pub struct State {
     pub mode: Mode,
     pub date: Option<NaiveDate>,
     pub cursor: Option<NaiveDate>,
+    /// The graph in focus: 0 the chart, 1… the activities' cards. Only it shows the chosen day.
+    pub focus: usize,
+    /// How many graphs there are (the chart and the cards).
+    graphs: usize,
     pub hidden: BTreeSet<String>,
     /// The chart's lines in their order (`toggle:N`, the digits).
     keys: Vec<String>,
@@ -32,6 +37,7 @@ impl App {
         self.analysis.open = true;
         self.analysis.date = Some(date);
         self.analysis.cursor = None;
+        self.analysis.focus = 0;
         self.bar.invoke_dismiss_preview();
         self.draw_analysis();
         let ui = self.bar.global::<AnalysisUi>();
@@ -65,7 +71,8 @@ impl App {
         if !self.analysis.open { return; }
         let l = usize::from(self.state.language == texts::Language::En);
         let date = self.analysis.date.unwrap_or_else(|| self.state.today());
-        let view = self.state.analysis(date, self.analysis.mode, self.analysis.cursor, &self.analysis.hidden);
+        let view = self.state.analysis(date, self.analysis.mode, self.analysis.cursor, self.analysis.focus, &self.analysis.hidden);
+        self.analysis.graphs = 1 + view.cards.len();
         self.analysis.keys = view.chart.legend.iter().map(|item| item.key.clone()).collect();
         let ui = self.bar.global::<AnalysisUi>();
         ui.set_eyebrow(view.eyebrow.into());
@@ -107,6 +114,7 @@ impl App {
             columns: card.columns as i32, rows: card.rows as i32, detail: card.detail.into(), hint: card.hint,
             palette: model(card.palette.iter().copied().map(color).collect()), track: card.track, unit: card.unit.into(),
         }).collect()));
+        ui.set_focus(self.analysis.focus as i32);
         ui.set_opened(true);
     }
 
@@ -141,11 +149,23 @@ impl App {
         self.draw_analysis();
     }
 
-    /// The mouse points at a day ("" when it leaves the chart).
-    pub(super) fn analysis_point(&mut self, date: &str) {
+    /// The mouse points at a day of the graph `graph` ("" when it leaves the chart): that graph comes into focus with
+    /// the day; the others show none.
+    pub(super) fn analysis_point(&mut self, graph: usize, date: &str) {
         let cursor = NaiveDate::parse_from_str(date, "%Y-%m-%d").ok();
-        if cursor == self.analysis.cursor { return; }
+        if cursor.is_none() && graph != self.analysis.focus { return; }
+        if cursor == self.analysis.cursor && graph == self.analysis.focus { return; }
         self.analysis.cursor = cursor;
+        if cursor.is_some() { self.analysis.focus = graph.min(self.analysis.graphs.saturating_sub(1)); }
+        self.draw_analysis();
+    }
+
+    /// ↑ / ↓: the graph before or after; the chosen day goes with it.
+    fn analysis_step_graph(&mut self, by: isize) {
+        let last = self.analysis.graphs.saturating_sub(1);
+        let next = self.analysis.focus.saturating_add_signed(by).min(last);
+        if next == self.analysis.focus { return; }
+        self.analysis.focus = next;
         self.draw_analysis();
     }
 
@@ -171,6 +191,7 @@ impl App {
             K::Escape => {}
             K::Left | K::Right if alt && !ctrl => self.analysis_step_day(if key == K::Left { -1 } else { 1 }),
             K::Left | K::Right if !shift => self.analysis_command(if key == K::Left { "prev" } else { "next" }),
+            K::Up | K::Down if !ctrl && !alt && !shift => self.analysis_step_graph(if key == K::Up { -1 } else { 1 }),
             K::Tab if !ctrl && !alt => self.analysis_command(if shift { "mode-prev" } else { "mode-next" }),
             K::BackTab if !ctrl && !alt => self.analysis_command("mode-prev"),
             K::Home if !ctrl && !alt => self.analysis_command("today"),
@@ -185,6 +206,6 @@ impl App {
 pub fn connect(bar: &Bar) {
     let ui = bar.global::<AnalysisUi>();
     ui.on_command(|command| with_app(|app| app.analysis_command(&command)));
-    ui.on_point(|date| with_app(|app| app.analysis_point(&date)));
+    ui.on_point(|graph, date| with_app(|app| app.analysis_point(graph.max(0) as usize, &date)));
     ui.on_key(|raw, mask, repeat| with_app_value(|app| app.analysis_key(&raw, mask, repeat)));
 }

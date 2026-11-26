@@ -24,8 +24,12 @@ pub enum Id {
     NoteDelete, FolderDelete, EntryDelete,
     /// One of the ways to delete an entry with a series or plans (the index among `day::delete_scopes`), at once.
     DeleteScope(u8),
+    /// One of the ways an edit of an entry with a series or plans reaches the others (the index among `day::edit_scopes`).
+    EditScope(u8),
     /// The notepad.
     NotesNew, NotesEdit, NotesSave, NotesPreview, NotesTag, NotesFolder, NotesAttachments, NotesList, NotesClose,
+    /// The notepad over the whole window, or back beside the calendar.
+    NotesWide,
 }
 
 impl Id {
@@ -66,8 +70,9 @@ impl Id {
             Id::NotesTag => "notes-tag",
             Id::NotesAttachments => "notes-attachments",
             Id::NotesList => "notes-list",
+            Id::NotesWide => "notes-wide",
             Id::NoteDelete | Id::FolderDelete | Id::EntryDelete => "day-remove",
-            Id::Repeat | Id::Plan | Id::Discard | Id::TemplateDelete | Id::FolderNew | Id::FolderSub | Id::FolderRename | Id::ListMove | Id::NotesNewHere | Id::DeleteScope(_) | Id::NotesFolder | Id::NotesClose => return None,
+            Id::Repeat | Id::Plan | Id::Discard | Id::TemplateDelete | Id::FolderNew | Id::FolderSub | Id::FolderRename | Id::ListMove | Id::NotesNewHere | Id::DeleteScope(_) | Id::EditScope(_) | Id::NotesFolder | Id::NotesClose => return None,
         })
     }
 
@@ -159,7 +164,7 @@ mod tests {
         let bindings = crate::shortcuts::Bindings::default();
         let all = [Id::NewTask, Id::NewEvent, Id::NewNote, Id::Today, Id::Notebook, Id::Undo, Id::Redo, Id::Settings, Id::Save, Id::SaveStay,
             Id::Priority, Id::Description, Id::Reminder, Id::Icon, Id::NotesNew, Id::NotesEdit, Id::NotesSave, Id::NotesPreview, Id::NotesTag,
-            Id::NotesAttachments, Id::NotesList, Id::Entry(Action::Status), Id::Entry(Action::Delete), Id::Entry(Action::Plan)];
+            Id::NotesAttachments, Id::NotesList, Id::NotesWide, Id::Entry(Action::Status), Id::Entry(Action::Delete), Id::Entry(Action::Plan)];
         for id in all {
             let keys = crate::shortcuts::keys(&bindings, id.binding().unwrap(), crate::texts::Language::De);
             assert!(!keys.is_empty(), "{id:?}");

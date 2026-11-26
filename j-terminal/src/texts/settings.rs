@@ -24,6 +24,8 @@ impl Page {
             Self::Entry => (["Eintragsformular", "Entry form"], ["Passe die Eingabe neuer Journaleinträge an.", "Choose how you enter new journal entries."], "square-pen"),
             Self::Calendar => (["Kalender", "Calendar"], ["Wähle, welche Orientierungshilfen im Kalender erscheinen.", "Choose which guides appear in the calendar."], "calendar-days"),
             Self::Notebook => (["Notizblock", "Notebook"], ["Lege fest, wie du deine Notizen öffnest und bearbeitest.", "Choose how you open and edit notes."], "book-open-text"),
+            Self::Activities => (["Aktivitäten", "Activities"], ["Deine tägliche Checkliste, wie in der Journal-App.", "Your daily checklist, as in the Journal app."], "activity"),
+            Self::Values => (["Tageswerte", "Day values"], ["Tagesbewertung und eigene Werte wie Stress oder Schlaf.", "The daily rating and values of your own such as stress or sleep."], "gauge"),
         }
     }
 }
@@ -53,6 +55,10 @@ pub const GROUPS: &[Group] = &[
     Group { page: Page::General, heading: ["Darstellung", "Appearance"], options: &[
         OptionText { key: Language, title: ["Sprache", "Language"], detail: ["Anzeigesprache für J-TerminaL.", "Display language for J-TerminaL."],
             choices: &[["Wie im Journal", "Follow Journal"], ["Deutsch", "Deutsch"], ["English", "English"]] },
+        OptionText { key: Orientation, title: ["Ausrichtung", "Orientation"],
+            detail: ["Formular und Kalender nebeneinander (horizontal), übereinander (vertikal, für einen hochkant stehenden Bildschirm) oder je nach Bildschirmbreite.",
+                "Form and calendar side by side (horizontal), one above the other (vertical, for a screen standing upright) or by the screen's width."],
+            choices: &[["Automatisch", "Automatic"], ["Horizontal", "Horizontal"], ["Vertikal", "Vertical"]] },
         OptionText { key: Keycaps, title: ["Tastenkürzel in der Fußzeile", "Shortcut hints in the footer"],
             detail: ["Zeigt neben jeder Aktion die zugehörigen Tasten.", "Show the assigned keys beside each action."], choices: &[] },
     ] },
@@ -62,6 +68,13 @@ pub const GROUPS: &[Group] = &[
             choices: &[["Tagesansicht", "Day view"], ["Eintragsformular", "Entry form"]] },
         OptionText { key: ReturnToday, title: ["Beim Öffnen zu heute springen", "Return to today when opening"],
             detail: ["Zeigt beim nächsten Aufruf den aktuellen Tag.", "Show the current day the next time you open the terminal."], choices: &[] },
+        OptionText { key: Reopen, title: ["Beim erneuten Öffnen", "When opened again"],
+            detail: ["Startansicht oder dort weitermachen, wo du warst (Formular, Notizblock, Pinnwand, Auswertung).", "The opening view, or carry on where you were (form, notebook, board, analysis)."],
+            choices: &[["Zur Startansicht", "Opening view"], ["Dort bleiben, wo ich war", "Stay where I was"]] },
+        OptionText { key: ReopenAfter, title: ["Zurück zur Startansicht nach", "Back to the opening view after"],
+            detail: ["So lange bleibt die Ansicht nach dem Schließen erhalten. ←/→ ändern, Ziffern tippen.", "How long the view is kept after closing. ←/→ to change, or type digits."], choices: &[] },
+        OptionText { key: ReopenUnit, title: ["Einheit", "Unit"], detail: ["", ""],
+            choices: &[["Sekunden", "Seconds"], ["Minuten", "Minutes"]] },
     ] },
     Group { page: Page::Entry, heading: NO_HEADING, options: &[
         OptionText { key: ParseTitles, title: ["Angaben im Titel erkennen", "Recognize details in titles"],

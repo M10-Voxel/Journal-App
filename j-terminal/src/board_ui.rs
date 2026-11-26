@@ -182,7 +182,7 @@ impl App {
             }
         }
     }
-    fn close_board(&mut self) {
+    pub(super) fn close_board(&mut self) {
         #[cfg(windows)]
         super::board_pointer::configure(&self.bar, false);
         self.board_maximize(false);
@@ -428,7 +428,7 @@ impl App {
                 is_ink,
                 id: p.id.clone().into(),
                 title: title.into(),
-                rows: model(markdown_rows(body)),
+                rows: model(markdown_rows(body, true)),
                 kind: text(c, "kind").into(),
                 auto_height: (is_link || (c["kind"] == "note" && c["mode"] != "ink"))
                     && c["boards"][b.key()]["h"].as_f64().or(c["h"].as_f64()).unwrap_or(0.) <= 0.,
@@ -1733,6 +1733,15 @@ pub fn connect(bar: &Bar) {
             .map(|i| icons[i].1.into())
             .unwrap_or_default()
     });
+    ui.on_indent_edit(|text, anchor, cursor, reverse| {
+        let edit = super::note_markdown::tab(&text, anchor.max(0) as usize, cursor.max(0) as usize, reverse);
+        NotepadIndent { text: edit.text.into(), anchor: edit.anchor as i32, cursor: edit.cursor as i32 }
+    });
+    ui.on_continue_list(|text, anchor, cursor| {
+        super::note_markdown::continue_list(&text, anchor.max(0) as usize, cursor.max(0) as usize)
+            .map(|edit| NotepadIndent { text: edit.text.into(), anchor: edit.anchor as i32, cursor: edit.cursor as i32 })
+            .unwrap_or_else(|| NotepadIndent { text, anchor: -1, cursor: -1 })
+    });
     ui.on_command(|s| {
         with_app(|a| {
             if s == "new-menu" {
@@ -1821,7 +1830,7 @@ pub fn connect(bar: &Bar) {
             let Some(mut tile) = tiles.row_data(i) else { return };
             if body {
                 b.body = s.into();
-                tile.rows = model(markdown_rows(&b.body));
+                tile.rows = model(markdown_rows(&b.body, true));
             } else {
                 b.title = s.to_string();
                 tile.title = s;

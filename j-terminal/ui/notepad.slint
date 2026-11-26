@@ -1,9 +1,11 @@
 import { KeyBindings, ShortcutContext } from "key-bindings.slint";
 import { Theme } from "theme.slint";
+import { MarkdownTable, NotepadTableRow } from "markdown-table.slint";
+export { NotepadTableRow }
 
 // `depth`, `folder`, `open`, `selected` and `icon` belong to the list of notes (a tree of folders and notes, its cursor in Rust).
 export struct NotepadChoiceRow { key: string, title: string, detail: string, has-color: bool, color: color, group: string, has-image: bool, thumbnail: image, depth: int, folder: bool, open: bool, selected: bool, has-icon: bool, icon: image }
-export struct NotepadMarkdownRow { text: styled-text, heading: int, indent: int, marker: string, offset: int, checked: bool, urls: [string], is-code: bool, code: string, language: string }
+export struct NotepadMarkdownRow { text: styled-text, heading: int, indent: int, marker: string, offset: int, checked: bool, urls: [string], is-code: bool, code: string, language: string, is-table: bool, aligns: [int], table: [NotepadTableRow] }
 export struct NotepadIndent { text: string, anchor: int, cursor: int }
 export struct NotepadImage { key: string, title: string, thumbnail: image }
 export struct NotepadTool { id: int, icon: image, label: string, active: bool }
@@ -89,6 +91,12 @@ export component NotepadEditor inherits VerticalLayout {
     in property <[NotepadChoiceRow]> choices;
     // The list of notes: 0 the tree, 1 found notes, 2 where to move something, 3 a folder's name is typed.
     in property <int> list-mode;
+    // The line of the list of notes under the cursor (from Rust, which builds the lines anew on each key): where it
+    // is, so the list scrolls to it whenever `cursor-request` changes.
+    in property <length> cursor-top;
+    in property <length> cursor-height;
+    in property <int> cursor-request;
+    changed cursor-request => { if root.panel == 1 { menu-list.show(root.cursor-top, root.cursor-height); } }
     in property <[NotepadMarkdownRow]> markdown;
     in property <[NotepadTool]> tools;
     in property <string> panel-placeholder;
@@ -183,6 +191,11 @@ export component NotepadEditor inherits VerticalLayout {
             return accept;
         }
         if root.panel == 0 && !root.editing && event.text == Key.F2 { root.tool(3); return accept; }
+        // The note over the whole window (F11 as the board's drawing), or back beside the calendar.
+        if event.text == Key.F11 && !event.modifiers.control && !event.modifiers.alt && !event.modifiers.shift {
+            if !event.repeat { root.tool(5); }
+            return accept;
+        }
         // Deleting (the note open, or the line of the list), asked first as everywhere.
         if event.modifiers.alt && !event.modifiers.control && event.text == Key.Delete { root.list-key("delete"); return accept; }
         if root.panel == 1 && event.text == Key.Tab &&
@@ -324,11 +337,12 @@ export component NotepadEditor inherits VerticalLayout {
                     if !event.modifiers.control && !event.modifiers.alt && (event.text == Key.Tab || event.text == Key.Backtab) {
                         let edit = root.indent-edit(self.text, self.anchor-position-byte-offset, self.cursor-position-byte-offset,
                             event.modifiers.shift || event.text == Key.Backtab);
+                        // A move between the cells of a table changes only the selection.
                         if edit.text != self.text {
                             self.text = edit.text;
-                            self.set-selection-offsets(edit.anchor, edit.cursor);
                             root.edited(true, self.text);
                         }
+                        self.set-selection-offsets(edit.anchor, edit.cursor);
                         return accept;
                     }
                     if event.text == Key.Return && !event.modifiers.control && !event.modifiers.shift && !event.modifiers.alt {
@@ -398,7 +412,12 @@ export component NotepadEditor inherits VerticalLayout {
                                 }
                             }
                         }
-                        if !block.is-code: HorizontalLayout {
+                        if block.is-table: MarkdownTable {
+                            rows: block.table; aligns: block.aligns;
+                            ink: Theme.strong; line: Theme.divider; fill: Theme.background; head-fill: Theme.raised;
+                            follow(address) => { root.follow(address); }
+                        }
+                        if !block.is-code && !block.is-table: HorizontalLayout {
                             spacing: Theme.gap;
                             if block.marker != "": Text {
                                 text: block.marker; font-size: Theme.notepad-text-size;
@@ -577,6 +596,12 @@ export component NotepadEditor inherits VerticalLayout {
                 content-width: self.width;
                 content-height: menu-rows.preferred-height;
                 property <int> cursor: 0;
+                function show(top: length, height: length) {
+                    self.content-y = clamp(
+                        max(min(self.content-y, -top), self.height - top - height),
+                        min(0px, self.height - self.content-height), 0px
+                    );
+                }
                 // A line dragged in the tree: where it would go.
                 property <int> drop-at: -1;
                 menu-rows := VerticalLayout {
@@ -585,14 +610,9 @@ export component NotepadEditor inherits VerticalLayout {
                     height: (item.group == "" ? 0px : Theme.choice-height)
                         + (item.has-image ? Theme.notepad-thumb-height : Theme.choice-height);
                     property <bool> selected: root.panel == 1 ? item.selected : i == menu-list.cursor;
+                    // The chosen line stays in sight (the other panels; the list of notes is shown by `cursor-request`).
                     changed selected => {
-                        if self.selected {
-                            let top = self.y;
-                            menu-list.content-y = clamp(
-                                max(min(menu-list.content-y, -top), menu-list.height - top - self.height),
-                                min(0px, menu-list.height - menu-list.content-height), 0px
-                            );
-                        }
+                        if self.selected && root.panel != 1 { menu-list.show(self.y, self.height); }
                     }
                     if item.group != "": Text {
                         x: Theme.gap; y: 0px; width: parent.width - 2 * Theme.gap;

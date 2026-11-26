@@ -1,5 +1,6 @@
 import { InkSheet, BoardGlyph } from "board-ink.slint";
 import { Theme } from "theme.slint";
+import { MarkdownTable } from "markdown-table.slint";
 import { BoardUi, BoardTile, BoardBox, BoardHit } from "board-model.slint";
 
 component Thread inherits Rectangle {
@@ -84,9 +85,17 @@ component Paper inherits Rectangle {
                 if block.marker!="" || block.offset>=0: Text {
                     text:block.offset>=0 ? (block.checked ? "☑" : "☐") : block.marker;
                     color:Theme.board-paper-ink;font-size:BoardUi.scaled(Theme.board-text-size);vertical-alignment:top;}
+                if block.is-table: MarkdownTable {
+                    rows:block.table;aligns:block.aligns;
+                    ink:Theme.board-paper-ink;link:Theme.board-group-edge;line:Theme.board-paper-ink.with-alpha(0.38);
+                    fill:root.card.paper;head-fill:root.card.paper.darker(0.14);
+                    font-family:Theme.write-font;font-size:BoardUi.scaled(Theme.board-text-size);
+                    pad:BoardUi.scaled(Theme.table-cell-padding);
+                    horizontal-stretch:1;
+                }
                 if block.is-code: Text {text:block.code;font-family:Theme.write-font;font-size:BoardUi.scaled(Theme.notepad-code-size);
                     color:Theme.board-paper-ink;wrap:word-wrap;horizontal-stretch:1;}
-                if !block.is-code: StyledText {text:block.text;horizontal-stretch:1;
+                if !block.is-code && !block.is-table: StyledText {text:block.text;horizontal-stretch:1;
                     default-color:Theme.board-paper-ink;link-color:Theme.board-group-edge;
                     default-font-family:block.heading>0 ? Theme.board-title-font : Theme.write-font;
                     default-font-size:block.heading==1 ? BoardUi.scaled(Theme.board-heading-size) : block.heading>1 ? BoardUi.scaled(Theme.notepad-heading-three) : BoardUi.scaled(Theme.board-text-size);}

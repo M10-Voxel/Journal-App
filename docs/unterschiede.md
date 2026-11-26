@@ -10,7 +10,6 @@ Die Angaben zum Terminal stammen aus einer Stichwortsuche im Quellcode, nicht au
 - Wochen-, Monats-, Quartals- und Jahresansicht. Das Terminal hat die Tagesansicht, die Zeitraum-Pinnwände über Befehle und die Auswertung der Zeiträume (`/Auswertung`).
 - Zeitraum-Notiz, Zeitraum-Bewertung, Zeitraum-Werte und Zeitraum-Checkliste.
 - Zeitraum-Einträge (eigene Liste mit Aufgaben und Notizen je Zeitraum).
-- Verwaltung der Aktivitäten und Werte: Definitionen, Skalen, Farbstufen mit Min–Max-Zeit, Palette.
 - Funktionen-Schalter (`FeatureSettings`): Ansichten und ihre Bereiche einzeln ein- und ausschalten.
 
 ### Daten rein und raus

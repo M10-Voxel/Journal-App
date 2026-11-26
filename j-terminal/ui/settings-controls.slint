@@ -1,8 +1,9 @@
 import { Theme } from "theme.slint";
 import { JournalIcons } from "journal-icons.slint";
 
-export enum PreferenceKey { none, start-view, window-position, return-today, language, keycaps, parse-titles, week-numbers, weekends, now-line, note-mode }
-export enum RowControl { fixed, toggle, choice, shortcut, featured }
+export enum PreferenceKey { none, start-view, window-position, return-today, language, keycaps, parse-titles, week-numbers, weekends, now-line, note-mode, reopen, reopen-after, reopen-unit, orientation }
+// amount: a number changed with ←/→ or typed (its digits).
+export enum RowControl { fixed, toggle, choice, shortcut, featured, amount }
 export struct SettingsRow {
     preference: PreferenceKey, control: RowControl, id: string, starts-group: bool, heading: string,
     action: string, detail: string, value: string, choices: [string], index: int, changed: bool,
@@ -166,7 +167,7 @@ export component SettingsOption inherits Rectangle {
             x: value-box.reset-width + Theme.settings-key-inset;
             width: max(0px, parent.width - self.x - value-box.indicator-width - Theme.settings-key-inset);
             height: parent.height; vertical-alignment: center; horizontal-alignment: right; wrap: word-wrap;
-            text: root.recording ? "…" : root.data.value;
+            text: root.recording ? "…" : data.control == RowControl.amount ? "‹  " + root.data.value + "  ›" : root.data.value;
             font-size: Theme.settings-row-size; font-weight: Theme.settings-label-weight;
             color: root.data.control == RowControl.fixed ? Theme.settings-secondary-text : Theme.settings-text;
         }

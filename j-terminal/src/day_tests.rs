@@ -215,7 +215,7 @@ fn deleting_linked_entries_asks_for_scope_and_can_be_undone_in_one_step() {
     t.press(K::Delete);
     let options = t.side().unwrap().rows;
     assert_eq!(options.iter().map(|row| row.label.as_str()).collect::<Vec<_>>(),
-        ["Nur diesen", "Auch die 2 folgenden", "Jeden Freitag", "Alle 4"]);
+        ["Nur diesen", "Auch die folgenden", "Jeden Freitag", "Alle"]);
     assert!(options[0].selected);
     t.press(K::Escape);
     assert_eq!(t.store.linked(&id).unwrap().len(), 4);

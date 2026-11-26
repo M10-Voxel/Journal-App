@@ -53,6 +53,16 @@ pub fn delete_scope(scope: &str, language: Language) -> String {
         format!("Delete {lower}")
     } else { format!("{scope} löschen") }
 }
+/// A way to save an edit of a series as a line of the actions: "Nur diesen ändern", "Change every Friday".
+pub fn edit_scope(scope: &str, language: Language) -> String {
+    if language == Language::En {
+        let mut chars = scope.chars();
+        let lower = chars.next().map(|c| c.to_lowercase().collect::<String>() + chars.as_str()).unwrap_or_default();
+        format!("Change {lower}")
+    } else { format!("{scope} ändern") }
+}
+/// The actions' heading while an edit of a series waits for its scope.
+pub fn apply_heading(language: Language) -> &'static str { ["Änderung übernehmen für …", "Apply the change to …"][l(language)] }
 // A tag deleted from a tag list (Alt+Entf or Strg+K on it), after asking.
 pub fn delete_tag_heading(language: Language) -> &'static str { ["Tag löschen?", "Delete the tag?"][l(language)] }
 pub fn confirm_delete_tag(name: &str, language: Language) -> String {

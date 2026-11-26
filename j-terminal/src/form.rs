@@ -238,6 +238,8 @@ pub struct Effect {
     pub board: Option<crate::board::Period>,
     /// The analysis (`/Auswertung`) is to open.
     pub analysis: bool,
+    /// The preferences changed (the notepad's width): written to the file.
+    pub save_preferences: bool,
     /// The settings window is to open.
     pub settings: bool,
     /// The search bar gets this text.
@@ -396,6 +398,11 @@ pub struct Form {
     gap_at: Option<usize>,
     /// A tag made in a picker that only hands back a choice (the notepad): the window opens the tag editor on it.
     tag_edit: Option<String>,
+    /// Saving an edited entry of a series or with plans waits for the scope (the actions list the ways; `true`: stay
+    /// in the form afterwards, as Shift+Enter).
+    applying: Option<bool>,
+    /// The icons under the form show every icon (after „Alle Symbole“), not only the common ones.
+    icons_all: bool,
     /// The notepad's list: its cursor, folders closed, what is moved or named; what is typed in it; text it is to get.
     pub(crate) notes_list: crate::notes_list::List,
     notes_query: String,
@@ -535,7 +542,7 @@ impl Form {
             metrics: Metrics::default(), options: None, options_backup: Values::default(), cal_top: repeat::shift(today, -1), cal_offset: 0.0, cal_target: None,
             cal_open: BTreeSet::from([today]), cal_clicked: None, mark: None, mark_layout: None, shown_layout: Layout::default(), shown_entries: Vec::new(), shown_metrics: Metrics::default(),
             board_scopes: None, fixed_clock: true, clock_ms: 0, kind_chosen: false, entry_open: false, hits: Vec::new(), editing: None, search: String::new(), search_cursor: 0, command_selected: 0, notepad: None, suspended_notes: Vec::new(), zoom_days: 1.0, zoom_hours: 1.0, pan: 0.0, view_day: None, cal_selected: BTreeSet::new(), pane: DayPane::default(),
-            templates: Default::default(), template: None, gap_at: None, from_template: false, tag_edit: None, notes_list: Default::default(), notes_query: String::new(), notes_query_set: None }
+            templates: Default::default(), template: None, gap_at: None, from_template: false, tag_edit: None, applying: None, icons_all: false, notes_list: Default::default(), notes_query: String::new(), notes_query_set: None }
     }
 
     fn t(&self) -> &'static Texts { texts(self.language) }
@@ -574,6 +581,49 @@ impl Form {
     }
     pub fn today(&self) -> NaiveDate { self.today }
 
+    /// Opened again after the time it keeps its place (or with "Zur Startansicht"): the start view. A notepad draft
+    /// with changes stays, everything else closes.
+    pub fn back_to_start(&mut self) -> Effect {
+        self.menu = None;
+        self.applying = None;
+        if self.suspended_notes.is_empty() && self.notepad.as_ref().is_some_and(|draft| !draft.dirty()) {
+            if let Some(draft) = self.notepad.take() { self.show_day(draft.date); }
+        }
+        self.shown()
+    }
+
+    /// Opened again within the time it keeps its place: everything as it was, only the clock goes on.
+    pub fn resumed(&mut self) -> Effect {
+        let (today, minutes) = if self.fixed_clock { (self.today, self.now) } else { now() };
+        self.set_clock(today, minutes);
+        Effect { focus: Some(if self.menu.is_some() { Pane::Menu } else { self.home_pane() }), ..Effect::default() }
+    }
+
+    /// The lines of the settings of the activities or the day values, as stored now.
+    pub fn period_settings_rows(&self, page: crate::period_settings::Page) -> Vec<crate::period_settings::Row> {
+        let data = self.journal.as_ref().and_then(|journal| journal.store.period_data().ok())
+            .and_then(|json| serde_json::from_str(&json).ok()).unwrap_or_else(|| serde_json::json!({}));
+        crate::period_settings::rows(&data, page)
+    }
+
+    /// A change in the settings of the activities or the day values: the period data (and the tags of the activities)
+    /// are read, changed and written; the day view shows it at once.
+    pub fn change_period_settings(&mut self, change: impl FnOnce(&mut serde_json::Value, &mut Vec<journal_core::storage::Tag>) -> Option<crate::period_settings::Outcome>)
+        -> Result<Option<crate::period_settings::Outcome>, String> {
+        let Some(journal) = self.journal.as_mut() else { return Err(texts(self.language).read_only.into()) };
+        let store = &mut journal.store;
+        let mut data: serde_json::Value = serde_json::from_str(&store.period_data().map_err(|e| e.to_string())?).unwrap_or_else(|_| serde_json::json!({}));
+        let mut tags = store.tags().map_err(|e| e.to_string())?;
+        let Some(outcome) = change(&mut data, &mut tags) else { return Ok(None) };
+        if outcome.tags { store.save_tags(&tags).map_err(|e| e.to_string())?; }
+        let json = serde_json::to_string(&data).map_err(|e| e.to_string())?;
+        store.save_period_data(&json).map_err(|e| e.to_string())?;
+        if let Some(snapshot) = self.snapshot.as_mut() {
+            if outcome.tags { snapshot.reload(store)?; } else { snapshot.set_period(store, &json)?; }
+        }
+        Ok(Some(outcome))
+    }
+
     /// Reads the journal again when it changed (or the day did); true when it did.
     pub fn refresh(&mut self) -> bool {
         let (today, minutes) = if self.fixed_clock { (self.today, self.now) } else { now() };
@@ -588,14 +638,14 @@ impl Form {
     }
 
     /// The analysis of the period around `date` (`/Auswertung`): the shared period data and the calendar's minutes.
-    pub fn analysis(&self, date: NaiveDate, mode: crate::analysis::Mode, cursor: Option<NaiveDate>, hidden: &BTreeSet<String>) -> crate::analysis::View {
+    pub fn analysis(&self, date: NaiveDate, mode: crate::analysis::Mode, cursor: Option<NaiveDate>, focus: usize, hidden: &BTreeSet<String>) -> crate::analysis::View {
         let empty = crate::day_view::PeriodData::default();
         let data = self.snapshot.as_ref().map_or(&empty, |snapshot| &snapshot.period);
         let (start, end) = mode.bounds(date);
         let tags = crate::analysis::activity_tags(data);
         let calendar = self.journal.as_ref().filter(|_| !tags.is_empty())
             .and_then(|journal| journal.store.activity_minutes(&start.to_string(), &end.to_string(), &tags).ok()).unwrap_or_default();
-        crate::analysis::build(&crate::analysis::Input { data, calendar: &calendar, hidden }, date, mode, cursor, self.language)
+        crate::analysis::build(&crate::analysis::Input { data, calendar: &calendar, hidden }, date, mode, cursor, focus, self.language)
     }
 
     pub fn set_clock(&mut self, today: NaiveDate, minutes: u32) {
@@ -1264,11 +1314,19 @@ impl Form {
         options
     }
 
+    /// The icons end in „Alle Symbole“ while nothing is searched and not all are shown yet (as in the day view).
+    fn more_icons(&self) -> bool { !self.icons_all && self.query.trim().is_empty() }
+
     fn icon_results(&self) -> Vec<&'static str> {
         if self.query.trim().is_empty() {
             let mut common: Vec<&'static str> = COMMON_ICONS.iter().copied().filter(|name| icons::exists(name)).collect();
             // The chosen icon is offered too, even when it is not a common one.
-            if let Some(icon) = self.v.icon.as_deref() { if let Some((name, _)) = icons::all().iter().find(|(name, _)| *name == icon) { if !common.contains(name) { common.insert(0, name); } } }
+            // (Not while every icon is shown: it is among them, and the list must not shift under the keyboard.)
+            if let (false, Some(icon)) = (self.icons_all, self.v.icon.as_deref()) { if let Some((name, _)) = icons::all().iter().find(|(name, _)| *name == icon) { if !common.contains(name) { common.insert(0, name); } } }
+            if self.icons_all {
+                let rest: Vec<&'static str> = icons::all().iter().map(|(name, _)| *name).filter(|name| !common.contains(name)).collect();
+                common.extend(rest);
+            }
             return common;
         }
         icons::search(&self.query, ICON_ROOM)
@@ -1746,6 +1804,7 @@ impl Form {
     /// Enter on a field: its options open; the values are kept for `Esc`.
     fn open_options(&mut self, field: Field) -> Effect {
         if let Err(error) = self.commit() { self.status = Some((error, true)); return Effect::default(); }
+        self.icons_all = false;
         self.entry_open = true;
         if self.field() != field { self.enter_row(field.index()); }
         self.options_backup = self.v.clone();
@@ -1839,6 +1898,7 @@ impl Form {
                         Ok(id) => { self.v.tag = Some(id.clone()); self.query.clear(); Effect { edit_tag: Some(id), ..self.take_options(1) } }
                         Err(error) => { self.status = Some((error, true)); Effect::default() }
                     },
+                    Key::Enter if self.field() == Field::Icon && self.pick == self.icon_results().len() && self.more_icons() => self.show_all_icons(),
                     Key::Enter => self.take_options(1),
                     Key::Tab => self.take_options(if mods.shift { -1 } else { 1 }),
                     Key::Escape => self.cancel_options(),
@@ -1961,7 +2021,7 @@ impl Form {
     }
 
     fn choice_count(&self) -> usize {
-        match self.field() { Field::Tag => self.tag_options().len() + usize::from(self.new_tag().is_some()), Field::Icon => self.icon_results().len(), Field::Reminder => REMINDERS.len(), _ => 0 }
+        match self.field() { Field::Tag => self.tag_options().len() + usize::from(self.new_tag().is_some()), Field::Icon => self.icon_results().len() + usize::from(self.more_icons()), Field::Reminder => REMINDERS.len(), _ => 0 }
     }
 
     /// The choice `index` under the active line is taken (`None`: none). Typed filters stay.
@@ -1978,6 +2038,8 @@ impl Form {
             }
             Field::Icon => {
                 let results = self.icon_results();
+                // „Alle Symbole“: the keyboard stops on it; Enter or a click shows every icon.
+                if index == Some(results.len()) && self.more_icons() { self.pick = results.len(); return Effect::default(); }
                 match index.and_then(|i| results.get(i)) { Some(name) => { self.pick = index.unwrap(); self.v.icon = Some(name.to_string()); } None => { self.v.icon = None; self.query.clear(); self.pick = 0; } }
             }
             Field::Reminder => {
@@ -1996,7 +2058,17 @@ impl Form {
     }
 
     /// A click on a choice under the active line.
-    pub fn choice_click(&mut self, index: usize) -> Effect { self.choose(Some(index)) }
+    pub fn choice_click(&mut self, index: usize) -> Effect {
+        if self.field() == Field::Icon && index == self.icon_results().len() && self.more_icons() { return self.show_all_icons(); }
+        self.choose(Some(index))
+    }
+
+    /// „Alle Symbole“: every icon under the form, the keyboard on the first one that was not there before.
+    fn show_all_icons(&mut self) -> Effect {
+        let first = self.icon_results().len();
+        self.icons_all = true;
+        self.choose(Some(first))
+    }
 
     /// A click on a choice of the repetition.
     pub fn repeat_click(&mut self, slot: i32, value: i32) {
@@ -2331,6 +2403,17 @@ impl Form {
     }
 
     /// A key while the day view (or its panel, or one of their inputs) has the keyboard.
+    /// Esc that no field of the window took (the keyboard was on none): what Esc means where the window is.
+    pub fn escape(&mut self) -> Effect {
+        if self.menu.is_some() || self.pane.side.is_some() { return self.close_menu(); }
+        if self.notepad.is_none() && !self.entry_open && self.options.is_none() && self.search.is_empty() && self.pane.cursor.is_some() {
+            return self.day_key(day_pane::K::Escape, day_pane::Mods::default());
+        }
+        let effect = self.key(Key::Escape, Mods::default());
+        // The keyboard goes back where it belongs, so the next keys work again.
+        Effect { focus: effect.focus.or(Some(self.home_pane())), ..effect }
+    }
+
     pub fn day_key(&mut self, key: day_pane::K, mods: day_pane::Mods) -> Effect {
         if self.entry_open || self.notepad.is_some() { return Effect::default(); }
         let clear_search = mods.alt && !self.search.is_empty();
@@ -2478,6 +2561,7 @@ impl Form {
         let mut add = |day: NaiveDate| {
             let mut item = Item::new(day, outcome.time.as_deref(), outcome.end.as_deref(), title, color, true, false);
             item.time_grid = self.v.time_grid;
+            item.priority = self.v.priority;
             item.icon = self.icon_of(self.v.icon.as_deref(), outcome.tag.as_deref()).to_string();
             items.push(item);
         };
@@ -2582,7 +2666,20 @@ impl Form {
 
     // ----- Creating -----
 
-    fn save(&mut self, stay: bool) -> Effect {
+    fn save(&mut self, stay: bool) -> Effect { self.save_scoped(stay, None) }
+
+    /// The ways an edit of the entry open can reach its linked entries; empty when there is nothing to ask (no others,
+    /// a new rule – that makes a new series –, or planned to other days).
+    fn edit_scopes(&self) -> Vec<day_pane::DeleteScope> {
+        let (Some((date, original)), Some(journal)) = (&self.editing, &self.journal) else { return Vec::new() };
+        let rule = original.repeat.as_ref().and_then(|r| r.rule.clone()).and_then(|r| serde_json::from_value::<repeat::Rule>(r).ok());
+        if self.v.rule != rule || !self.v.plan_days.is_empty() { return Vec::new(); }
+        let scopes = day_pane::edit_scopes(&journal.store, &original.id, *date, self.language).unwrap_or_default();
+        if scopes.len() < 2 { Vec::new() } else { scopes }
+    }
+
+    /// `scope`: the way chosen among `edit_scopes` (by its index); without it an edit with linked entries asks first.
+    fn save_scoped(&mut self, stay: bool, scope: Option<usize>) -> Effect {
         let t = self.t();
         if let Err(error) = self.commit() { self.status = Some((error, true)); return Effect::default(); }
         if let Some(name) = self.template.clone() { return self.save_template(&name); }
@@ -2599,10 +2696,24 @@ impl Form {
         let extras = self.extras();
         let ft = self.ft();
         let targets: Vec<_> = self.v.plan_days.iter().copied().collect();
+        // An edit that could reach linked entries: the actions ask how far (as deleting does), then save from there.
+        let scopes = self.edit_scopes();
+        let others = match scope {
+            _ if scopes.is_empty() => None,
+            Some(index) => match scopes.get(index) {
+                Some(chosen) => Some(chosen.ids.iter().skip(1).cloned().collect::<Vec<_>>()),
+                None => return Effect::default(),
+            },
+            None => {
+                self.applying = Some(stay);
+                self.menu = Some(actions::Menu::default());
+                return Effect { focus: Some(Pane::Menu), ..Effect::default() };
+            }
+        };
         let Some(journal) = &mut self.journal else { self.status = Some((t.read_only.into(), true)); return Effect::default() };
         let result = if self.editing.is_some() || !targets.is_empty() {
             save::save_planned_or_edited(&mut journal.store, &outcome, &extras, self.today,
-                self.editing.as_ref(), &self.v.rule, &targets, ft)
+                self.editing.as_ref(), &self.v.rule, &targets, ft, others.as_deref())
         } else { save::save_with(&mut journal.store, &outcome, &extras, self.today) };
         match result {
             Ok(saved) => {
@@ -2754,6 +2865,7 @@ impl Form {
     /// The actions (or a picker opened from them) close; the keyboard goes back where it was.
     pub fn close_menu(&mut self) -> Effect {
         self.menu = None;
+        self.applying = None;
         if self.pane.side.is_some() {
             let out = self.pane.close_side();
             let _ = out;
@@ -2819,8 +2931,17 @@ impl Form {
                 items.push(ActionItem::new(ActionId::NotesAttachments, 0, "paperclip", at.notes_attachments));
                 items.push(ActionItem::new(ActionId::NotesList, 0, "list", at.notes_list));
             }
+            items.push(if self.preferences.notepad_wide { ActionItem::new(ActionId::NotesWide, 0, "minimize-2", at.notes_narrow) }
+                else { ActionItem::new(ActionId::NotesWide, 0, "maximize-2", at.notes_wide) });
             items.push(ActionItem::new(ActionId::NotesClose, 0, "x", at.notes_close));
             items.push(ActionItem::new(ActionId::Settings, 1, "settings", at.settings));
+        } else if let (true, Some(_)) = (self.entry_open, self.applying) {
+            // Saving an edit of a series: how far it reaches (the largest on top, "only this one" at the bottom).
+            title = crate::texts::tags::apply_heading(self.language).to_string();
+            let mut ranked: Vec<(usize, day_pane::DeleteScope)> = self.edit_scopes().into_iter().enumerate().collect();
+            ranked.sort_by_key(|(_, scope)| scope.rank);
+            items.extend(ranked.into_iter().map(|(index, scope)|
+                ActionItem::new(ActionId::EditScope(index as u8), 0, "circle-check", &crate::texts::tags::edit_scope(&scope.label, self.language))));
         } else if let (true, Some(name)) = (self.entry_open, &self.template) {
             let l = usize::from(self.language == Language::En);
             title = format!("{} #{name}", crate::texts::templates::EDITING[l]);
@@ -2978,6 +3099,10 @@ impl Form {
             ActionId::FolderNew | ActionId::FolderSub | ActionId::FolderRename | ActionId::ListMove | ActionId::NotesNewHere | ActionId::NoteDelete | ActionId::FolderDelete => self.run_notes_action(id),
             // The entry open in the form: its day shows, and the day view deletes it there (asking which of a series).
             ActionId::DeleteScope(index) => self.delete_scope(index as usize, entry),
+            ActionId::EditScope(index) => match self.applying.take() {
+                Some(stay) => self.save_scoped(stay, Some(index as usize)),
+                None => Effect::default(),
+            },
             ActionId::EntryDelete => {
                 let Some((date, entry)) = self.editing.clone() else { return Effect::default() };
                 self.close_entry();
@@ -2989,6 +3114,7 @@ impl Form {
             ActionId::NotesEdit | ActionId::NotesPreview => { self.notepad_preview(); Effect { focus: Some(Pane::Notes), ..Effect::default() } }
             ActionId::NotesSave => { self.save_notepad_card(); Effect { focus: Some(Pane::Notes), ..Effect::default() } }
             ActionId::NotesTag => { self.notepad_panel(2); Effect { focus: Some(Pane::Notes), ..Effect::default() } }
+            ActionId::NotesWide => { self.preferences.notepad_wide = !self.preferences.notepad_wide; Effect { focus: Some(Pane::Notes), save_preferences: true, ..Effect::default() } }
             ActionId::NotesFolder => { self.notepad_panel(4); Effect { focus: Some(Pane::Notes), ..Effect::default() } }
             ActionId::NotesAttachments => { self.notepad_panel(3); Effect { focus: Some(Pane::Notes), ..Effect::default() } }
             ActionId::NotesList => { self.notepad_panel(1); Effect { focus: Some(Pane::Notes), ..Effect::default() } }
@@ -3019,8 +3145,11 @@ impl Form {
                 }
                 Field::Icon => {
                     let results = self.icon_results();
-                    let note = if results.is_empty() { ft.no_icons.to_string() } else { results.get(self.pick).map(|name| name.to_string()).unwrap_or_default() };
-                    (Panel::Icons(results.iter().enumerate().map(|(i, name)| Choice { label: name.to_string(), color: None, icon: name.to_string(), selected: i == self.pick }).collect()), note)
+                    let more = crate::texts::day_texts(self.language).icon_more;
+                    let note = if results.is_empty() { ft.no_icons.to_string() } else { results.get(self.pick).map_or_else(|| if self.more_icons() { more.to_string() } else { String::new() }, |name| name.to_string()) };
+                    let mut list: Vec<Choice> = results.iter().enumerate().map(|(i, name)| Choice { label: name.to_string(), color: None, icon: name.to_string(), selected: i == self.pick }).collect();
+                    if self.more_icons() { list.push(Choice { label: more.to_string(), color: None, icon: "ellipsis".into(), selected: self.pick == results.len() }); }
+                    (Panel::Icons(list), note)
                 }
                 Field::Reminder => (Panel::Reminders(ft.reminder_presets.iter().enumerate().map(|(i, label)| Choice { label: label.to_string(), color: None, icon: String::new(), selected: i == self.pick }).collect()), String::new()),
                 _ => (Panel::None, String::new()),

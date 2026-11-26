@@ -24,7 +24,9 @@ export component BoardView inherits Rectangle {
     background:Theme.background;
     forward-focus: focus;
     focus := FocusScope { }
-    property <bool> stacked: root.width < Theme.calendar-width;
+    // One above the other (the window is vertical, or narrow): a note opens above the board, not beside it.
+    in property <bool> vertical;
+    property <bool> stacked: root.vertical || root.width < Theme.calendar-width;
     property <length> header:Theme.line-height + (root.stacked && BoardUi.editor==2 ? Theme.row-height : 0px);
     property <length> footer:Theme.footer-height;
     property <bool> split:BoardUi.editor > 0;
@@ -77,6 +79,22 @@ export component BoardView inherits Rectangle {
                 width:edit-scroll.width;height:edit-scroll.content-height;vertical-alignment:top;wrap:word-wrap;single-line:false;
                 text <=> BoardUi.body;color:Theme.text;font-size:Theme.write-size;font-family:Theme.write-font;
                 edited=>{BoardUi.edited(true,self.text);}
+                key-pressed(event)=>{
+                    if !event.modifiers.control && !event.modifiers.alt && (event.text==Key.Tab || event.text==Key.Backtab) {
+                        let edit=BoardUi.indent-edit(self.text,self.anchor-position-byte-offset,self.cursor-position-byte-offset,event.modifiers.shift || event.text==Key.Backtab);
+                        if edit.text!=self.text {self.text=edit.text;BoardUi.edited(true,self.text);}
+                        self.set-selection-offsets(edit.anchor,edit.cursor);
+                        return accept;
+                    }
+                    if event.text==Key.Return && !event.modifiers.control && !event.modifiers.shift && !event.modifiers.alt {
+                        let edit=BoardUi.continue-list(self.text,self.anchor-position-byte-offset,self.cursor-position-byte-offset);
+                        if edit.cursor>=0 {
+                            self.text=edit.text;self.set-selection-offsets(edit.anchor,edit.cursor);BoardUi.edited(true,self.text);
+                            return accept;
+                        }
+                    }
+                    reject
+                }
             }
             if BoardUi.body=="": Text {text:BoardUi.body-label;color:Theme.muted;font-size:Theme.write-size;}
         }

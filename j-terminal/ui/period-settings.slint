@@ -1,0 +1,376 @@
+// F1 → „Aktivitäten“ and „Tageswerte“: the same settings as the Journal app's (ActivitySettings.tsx, ScaleSettings.tsx).
+// Each line is a card: the grip (drag it, or Alt+↑/↓), the colour (a click or Enter opens the picker, ←/→ the next
+// swatch), the name, the shades' minutes or the span, and the switches. src/period_settings.rs does the work.
+import { Theme } from "theme.slint";
+
+// kind: 0 an activity, 1 a day value, 2 the daily rating. `swatch`: the colour's place among the swatches (-1 none).
+export struct PeriodRow {
+    kind: int, id: string, name: string, color: color, hex: string, hue: float, sat: float, val: float, swatch: int,
+    active: bool, track: bool, text-field: bool, min: string, max: string, custom-range: bool, palette: [color],
+}
+export struct PeriodLabels {
+    hint: string, name: string, daily-rating: string, shades: string, lightest: string, darkest: string, reset: string,
+    active: string, track: string, notes: string, new-item: string, add: string, from: string, until: string,
+    delete: string, delete-ask: string, untracked: string, color: string, hex: string, move-hint: string,
+}
+
+// The keyboard's place: a light outline.
+component Ring inherits Rectangle {
+    in property <bool> on;
+    border-radius: Theme.settings-tile-radius; border-width: Theme.border-width;
+    border-color: root.on ? Theme.settings-focus-outline : transparent;
+}
+
+// A word that does something (no button chrome): click, Enter or Space.
+component Word inherits FocusScope {
+    in property <string> label;
+    in property <bool> danger;
+    callback invoke();
+    callback entered();
+    width: text.preferred-width + 2 * Theme.gap;
+    height: Theme.settings-key-height;
+    changed has-focus => { if self.has-focus { root.entered(); } }
+    key-pressed(event) => {
+        if (event.text == Key.Return || event.text == " ") && !event.modifiers.alt && !event.modifiers.control {
+            if !event.repeat { root.invoke(); }
+            return accept;
+        }
+        reject
+    }
+    Rectangle {
+        border-radius: Theme.settings-tile-radius;
+        background: hit.has-hover ? Theme.settings-key-hover : Theme.settings-key-background;
+    }
+    Ring { on: root.has-focus; }
+    text := Text {
+        text: root.label; color: root.danger ? Theme.error : Theme.settings-text; font-size: Theme.settings-detail-size;
+        horizontal-alignment: center; vertical-alignment: center;
+    }
+    hit := TouchArea { mouse-cursor: pointer; clicked => { root.focus(); root.invoke(); } }
+}
+
+// A box to tick: click, Space or Enter.
+component Check inherits FocusScope {
+    in property <string> label;
+    in property <bool> on;
+    callback toggled();
+    callback entered();
+    width: row.preferred-width + Theme.gap;
+    height: Theme.settings-key-height;
+    changed has-focus => { if self.has-focus { root.entered(); } }
+    key-pressed(event) => {
+        if (event.text == " " || event.text == Key.Return) && !event.modifiers.alt && !event.modifiers.control {
+            if !event.repeat { root.toggled(); }
+            return accept;
+        }
+        reject
+    }
+    Ring { on: root.has-focus; }
+    row := HorizontalLayout {
+        x: Theme.gap / 2; spacing: Theme.gap;
+        Rectangle {
+            width: Theme.settings-switch-height; height: self.width; y: (parent.height - self.height) / 2;
+            border-radius: Theme.calendar-gap; border-width: Theme.border-width;
+            border-color: root.on ? Theme.accent : Theme.settings-placeholder;
+            background: root.on ? Theme.accent : transparent;
+            if root.on: Path {
+                width: parent.width * 0.7; height: self.width; x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2;
+                viewbox-width: 16; viewbox-height: 16; commands: "M 2.5 8 L 6.5 12 L 13.5 4";
+                stroke: Theme.ground; stroke-width: Theme.footer-menu-stroke;
+            }
+        }
+        Text { text: root.label; color: Theme.settings-text; font-size: Theme.settings-detail-size; vertical-alignment: center; }
+    }
+    TouchArea { mouse-cursor: pointer; clicked => { root.focus(); root.toggled(); } }
+}
+
+// A text field: it shows the stored value whenever it is not being written in.
+component Field inherits Rectangle {
+    in property <string> value;
+    in property <string> placeholder;
+    in property <bool> number;
+    callback edited(string);
+    callback done(string);
+    callback entered();
+    callback submit(string);
+    out property <string> text: input.text;
+    public function grab() { input.focus(); input.select-all(); }
+    public function clear() { input.text = ""; }
+    height: Theme.settings-key-height;
+    min-width: Theme.settings-switch-width * 2;
+    border-radius: Theme.settings-tile-radius;
+    background: Theme.settings-key-background;
+    border-width: Theme.border-width; border-color: input.has-focus ? Theme.settings-focus-outline : transparent;
+    changed value => { if !input.has-focus { input.text = root.value; } }
+    if input.text == "": Text {
+        x: input.x; width: input.width; text: root.placeholder; color: Theme.settings-placeholder;
+        font-size: Theme.settings-detail-size; vertical-alignment: center; overflow: elide;
+    }
+    input := TextInput {
+        x: Theme.gap; width: parent.width - 2 * Theme.gap; height: parent.height;
+        text: root.value; single-line: true; vertical-alignment: center;
+        horizontal-alignment: root.number ? right : left;
+        color: Theme.settings-text; font-size: Theme.settings-detail-size;
+        selection-background-color: Theme.settings-selection; selection-foreground-color: Theme.settings-text;
+        input-type: root.number ? InputType.number : InputType.text;
+        changed has-focus => {
+            if self.has-focus { root.entered(); }
+            else { root.done(self.text); self.text = root.value; }
+        }
+        edited => { root.edited(self.text); }
+        accepted => { root.submit(self.text); }
+    }
+}
+
+// The colour: a field for saturation and brightness, the hue, the app's swatches and the hex code.
+component Picker inherits VerticalLayout {
+    in property <PeriodRow> data;
+    in property <[color]> swatches;
+    in property <[string]> swatch-hex;
+    in property <PeriodLabels> labels;
+    callback pick(string, string);
+    callback entered();
+    spacing: Theme.gap;
+    field := Rectangle {
+        height: Theme.settings-row-height * 2.4;
+        border-radius: Theme.settings-tile-radius; clip: true;
+        background: hsv(root.data.hue, 1, 1);
+        Rectangle { background: @linear-gradient(90deg, #ffffff 0%, #ffffff00 100%); }
+        Rectangle { background: @linear-gradient(180deg, #00000000 0%, #000000 100%); }
+        Rectangle {
+            width: Theme.settings-switch-thumb-size + 4px; height: self.width; border-radius: self.width / 2;
+            x: root.data.sat * parent.width - self.width / 2; y: (1 - root.data.val) * parent.height - self.height / 2;
+            border-width: 2px; border-color: #ffffff; background: root.data.color;
+        }
+        TouchArea {
+            function at() {
+                root.pick("hsv", "\{root.data.hue},\{clamp(self.mouse-x / self.width, 0, 1)},\{clamp(1 - self.mouse-y / self.height, 0, 1)}");
+            }
+            pointer-event(event) => { if event.kind == PointerEventKind.down { self.at(); } }
+            moved => { if self.pressed { self.at(); } }
+        }
+    }
+    Rectangle {
+        height: Theme.settings-switch-height; border-radius: self.height / 2;
+        background: @linear-gradient(90deg, hsv(0, 1, 1) 0%, hsv(60, 1, 1) 16.67%, hsv(120, 1, 1) 33.33%, hsv(180, 1, 1) 50%, hsv(240, 1, 1) 66.67%, hsv(300, 1, 1) 83.33%, hsv(360, 1, 1) 100%);
+        Rectangle {
+            width: self.height; height: parent.height + 4px; border-radius: self.width / 2;
+            x: root.data.hue / 360 * parent.width - self.width / 2; y: -2px;
+            border-width: 2px; border-color: #ffffff; background: hsv(root.data.hue, 1, 1);
+        }
+        TouchArea {
+            function at() { root.pick("hsv", "\{clamp(self.mouse-x / self.width, 0, 1) * 360},\{root.data.sat},\{root.data.val}"); }
+            pointer-event(event) => { if event.kind == PointerEventKind.down { self.at(); } }
+            moved => { if self.pressed { self.at(); } }
+        }
+    }
+    HorizontalLayout {
+        spacing: Theme.gap;
+        for swatch[i] in root.swatches: Rectangle {
+            width: Theme.settings-key-height; height: self.width; border-radius: self.width / 2; background: swatch;
+            border-width: i == root.data.swatch ? 2px : 0px; border-color: Theme.settings-text;
+            TouchArea { mouse-cursor: pointer; clicked => { root.pick("color", root.swatch-hex[i]); } }
+        }
+        Rectangle { horizontal-stretch: 1; }
+        Text { text: root.labels.hex; color: Theme.settings-secondary-text; font-size: Theme.settings-detail-size; vertical-alignment: center; }
+        Field {
+            width: Theme.settings-switch-width * 3; value: root.data.hex;
+            entered => { root.entered(); }
+            submit(text) => { root.pick("color", text); }
+            done(text) => { if text != root.data.hex { root.pick("color", text); } }
+        }
+    }
+}
+
+component Line inherits FocusScope {
+    in property <PeriodRow> data;
+    in property <PeriodLabels> labels;
+    in property <[color]> swatches;
+    in property <[string]> swatch-hex;
+    callback edit(string, string);
+    callback entered();
+    property <bool> picking;
+    property <bool> asking;
+    property <length> grab-y;
+    // A line is no stop of its own: its fields and switches are.
+    focus-on-click: false;
+    focus-on-tab-navigation: false;
+    height: card.preferred-height;
+    key-pressed(event) => {
+        if event.modifiers.alt && !event.modifiers.control && root.data.kind != 2 {
+            if event.text == Key.UpArrow { root.edit("up", ""); return accept; }
+            if event.text == Key.DownArrow { root.edit("down", ""); return accept; }
+            if event.text == Key.Delete && root.data.kind == 1 {
+                if root.asking { root.asking = false; root.edit("delete", ""); } else { root.asking = true; }
+                return accept;
+            }
+        }
+        reject
+    }
+    card := Rectangle {
+        border-radius: Theme.settings-card-radius;
+        background: Theme.settings-group-background;
+        opacity: root.data.active ? 1 : 0.62;
+        VerticalLayout {
+            padding: Theme.settings-row-inset; spacing: Theme.gap;
+            HorizontalLayout {
+                spacing: Theme.gap; height: Theme.settings-key-height;
+                if root.data.kind != 2: Rectangle {
+                    width: Theme.settings-icon-box;
+                    Text { text: "⠿"; color: grip.has-hover || grip.pressed ? Theme.settings-text : Theme.settings-placeholder;
+                        horizontal-alignment: center; vertical-alignment: center; font-size: Theme.settings-row-size; }
+                    grip := TouchArea {
+                        mouse-cursor: move;
+                        pointer-event(event) => {
+                            if event.kind == PointerEventKind.down { root.grab-y = self.mouse-y; }
+                            if event.kind == PointerEventKind.up {
+                                let lines = round((self.mouse-y - root.grab-y) / (root.height + Theme.settings-category-gap * 4));
+                                if lines != 0 { root.edit("move", lines); }
+                            }
+                        }
+                    }
+                }
+                dot := FocusScope {
+                    width: Theme.settings-key-height;
+                    changed has-focus => { if self.has-focus { root.entered(); } }
+                    key-pressed(event) => {
+                        if event.modifiers.alt || event.modifiers.control { return reject; }
+                        if event.text == Key.Return || event.text == " " { if !event.repeat { root.picking = !root.picking; } return accept; }
+                        if event.text == Key.LeftArrow || event.text == Key.RightArrow {
+                            let count = root.swatch-hex.length;
+                            let next = root.data.swatch < 0 ? 0 : Math.mod(root.data.swatch + (event.text == Key.RightArrow ? 1 : count - 1), count);
+                            root.edit("color", root.swatch-hex[next]);
+                            return accept;
+                        }
+                        if event.text == Key.Escape && root.picking { root.picking = false; return accept; }
+                        reject
+                    }
+                    Rectangle {
+                        width: Theme.settings-key-height - 6px; height: self.width; border-radius: self.width / 2;
+                        background: root.data.color; border-width: Theme.border-width; border-color: Theme.settings-frame;
+                    }
+                    Ring { on: dot.has-focus; border-radius: self.height / 2; }
+                    TouchArea { mouse-cursor: pointer; clicked => { dot.focus(); root.picking = !root.picking; } }
+                }
+                if root.data.kind == 2: Text {
+                    text: root.labels.daily-rating; color: Theme.settings-text; font-weight: Theme.settings-label-weight;
+                    vertical-alignment: center; horizontal-stretch: 1;
+                }
+                if root.data.kind != 2: Field {
+                    horizontal-stretch: 1; value: root.data.name; placeholder: root.labels.name;
+                    entered => { root.entered(); }
+                    edited(text) => { root.edit("name", text); }
+                    done(text) => { root.edit("name-done", text); }
+                }
+                if root.data.kind == 1: Check { label: root.labels.active; on: root.data.active; entered => { root.entered(); } toggled => { root.edit("active", ""); } }
+                if root.data.kind == 1: Word {
+                    label: root.asking ? root.labels.delete-ask : root.labels.delete; danger: root.asking;
+                    entered => { root.entered(); }
+                    changed has-focus => { if !self.has-focus { root.asking = false; } }
+                    invoke => { if root.asking { root.asking = false; root.edit("delete", ""); } else { root.asking = true; } }
+                }
+            }
+            if root.picking: Picker {
+                data: root.data; swatches: root.swatches; swatch-hex: root.swatch-hex; labels: root.labels;
+                entered => { root.entered(); }
+                pick(field, value) => { root.edit(field, value); }
+            }
+            // An activity: its shades and the minutes they run over.
+            if root.data.kind == 0: HorizontalLayout {
+                spacing: Theme.gap; height: Theme.settings-key-height;
+                Text { text: root.labels.shades; color: Theme.settings-secondary-text; font-size: Theme.settings-detail-size; vertical-alignment: center; }
+                HorizontalLayout {
+                    spacing: Theme.analysis-swatch-gap;
+                    for shade[i] in root.data.palette: Rectangle {
+                        width: Theme.analysis-swatch * 1.6; height: Theme.analysis-swatch * 1.4; y: (parent.height - self.height) / 2;
+                        border-radius: Theme.analysis-cell-radius; background: shade;
+                        opacity: root.data.track || i == 0 ? 1 : 0.25;
+                    }
+                }
+                if !root.data.track: Text {
+                    text: root.labels.untracked; color: Theme.settings-secondary-text; font-size: Theme.settings-detail-size;
+                    vertical-alignment: center; overflow: elide; horizontal-stretch: 1;
+                }
+                Rectangle { horizontal-stretch: 1; }
+            }
+            if root.data.kind == 0 && root.data.track: HorizontalLayout {
+                spacing: Theme.gap; height: Theme.settings-key-height;
+                if root.data.track: Text { text: root.labels.lightest; color: Theme.settings-secondary-text; font-size: Theme.settings-detail-size; vertical-alignment: center; }
+                if root.data.track: Field {
+                    width: Theme.settings-switch-width * 2; number: true; value: root.data.min;
+                    entered => { root.entered(); }
+                    edited(text) => { root.edit("min", text); }
+                }
+                if root.data.track: Text { text: "min"; color: Theme.settings-secondary-text; font-size: Theme.settings-detail-size; vertical-alignment: center; }
+                if root.data.track: Text { text: root.labels.darkest; color: Theme.settings-secondary-text; font-size: Theme.settings-detail-size; vertical-alignment: center; }
+                if root.data.track: Field {
+                    width: Theme.settings-switch-width * 2; number: true; value: root.data.max;
+                    entered => { root.entered(); }
+                    edited(text) => { root.edit("max", text); }
+                }
+                if root.data.track: Text { text: "min"; color: Theme.settings-secondary-text; font-size: Theme.settings-detail-size; vertical-alignment: center; }
+                if root.data.track && root.data.custom-range: Word { label: root.labels.reset; entered => { root.entered(); } invoke => { root.edit("reset", ""); } }
+                Rectangle { horizontal-stretch: 1; }
+            }
+            // A value or the rating: its span.
+            if root.data.kind != 0: HorizontalLayout {
+                spacing: Theme.gap; height: Theme.settings-key-height;
+                Text { text: root.labels.from; color: Theme.settings-secondary-text; font-size: Theme.settings-detail-size; vertical-alignment: center; }
+                Field {
+                    width: Theme.settings-switch-width * 2; number: true; value: root.data.min;
+                    entered => { root.entered(); }
+                    edited(text) => { root.edit("min", text); }
+                }
+                Text { text: root.labels.until; color: Theme.settings-secondary-text; font-size: Theme.settings-detail-size; vertical-alignment: center; }
+                Field {
+                    width: Theme.settings-switch-width * 2; number: true; value: root.data.max;
+                    entered => { root.entered(); }
+                    edited(text) => { root.edit("max", text); }
+                }
+                if root.data.custom-range: Word { label: root.labels.reset; entered => { root.entered(); } invoke => { root.edit("reset", ""); } }
+                Rectangle { horizontal-stretch: 1; }
+            }
+            if root.data.kind == 0: HorizontalLayout {
+                spacing: Theme.gap; alignment: start; height: Theme.settings-key-height;
+                Check { label: root.labels.active; on: root.data.active; entered => { root.entered(); } toggled => { root.edit("active", ""); } }
+                Check { label: root.labels.track; on: root.data.track; entered => { root.entered(); } toggled => { root.edit("track", ""); } }
+                Check { label: root.labels.notes; on: root.data.text-field; entered => { root.entered(); } toggled => { root.edit("text", ""); } }
+            }
+        }
+    }
+}
+
+export component PeriodPanel inherits VerticalLayout {
+    in property <[PeriodRow]> rows;
+    in property <PeriodLabels> labels;
+    in property <[color]> swatches;
+    in property <[string]> swatch-hex;
+    in property <string> error;
+    in property <int> focus-request;
+    // id, field, value.
+    callback edit(string, string, string);
+    callback add(string);
+    // A part of the panel has the keyboard (the window leaves its own keys to it).
+    callback entered();
+    changed focus-request => { first.grab(); }
+    spacing: Theme.settings-category-gap * 4;
+    Text { text: root.labels.hint; wrap: word-wrap; color: Theme.settings-secondary-text; font-size: Theme.settings-detail-size; }
+    Text { text: root.labels.move-hint; color: Theme.settings-placeholder; font-size: Theme.settings-detail-size; }
+    if root.error != "": Text { text: root.error; wrap: word-wrap; color: Theme.error; font-size: Theme.settings-detail-size; }
+    for row in root.rows: Line {
+        data: row; labels: root.labels; swatches: root.swatches; swatch-hex: root.swatch-hex;
+        entered => { root.entered(); }
+        edit(field, value) => { root.edit(row.id, field, value); }
+    }
+    // A new one at the end: its name, then Enter (or „Hinzufügen“).
+    HorizontalLayout {
+        spacing: Theme.gap; height: Theme.settings-key-height + Theme.settings-row-inset;
+        padding-top: Theme.settings-row-inset / 2; padding-bottom: Theme.settings-row-inset / 2;
+        first := Field {
+            horizontal-stretch: 1; placeholder: root.labels.new-item;
+            entered => { root.entered(); }
+            submit(text) => { if text != "" { root.add(text); self.clear(); } }
+        }
+        Word { label: root.labels.add; entered => { root.entered(); } invoke => { if first.text != "" { root.add(first.text); first.clear(); } } }
+    }
+}
